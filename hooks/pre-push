@@ -1,7 +1,6 @@
 #!/bin/bash
-# Pre-push hook for git-ai-reporter
-# Ensures all tests pass and comprehensive coverage is maintained before pushing
-# Enhanced with comprehensive security and quality validation
+# Pre-push hook
+# Ensures tests pass and quality standards are met before pushing.
 
 set -e
 

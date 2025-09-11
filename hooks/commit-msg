@@ -1,6 +1,6 @@
 #!/bin/bash
-# Commit message validation hook for git-ai-reporter
-# Ensures commit messages follow conventional commit format
+# Commit message validation hook
+# Ensures commit messages follow conventional commit format and project standards
 
 set -e
 

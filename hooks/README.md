@@ -1,6 +1,6 @@
-# Git Hooks for git-ai-reporter
+# Git Hooks
 
-This directory contains Git hooks that enforce code quality standards for the git-ai-reporter project.
+This directory contains Git hooks that enforce code quality standards.
 
 ## Installation
 

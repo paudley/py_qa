@@ -1,7 +1,6 @@
 #!/bin/bash
-# Pre-commit hook for git-ai-reporter
-# Ensures code quality by running lint checks on staged files
-# Enhanced with security scanning and quality checks
+# Pre-commit hook
+# Ensures code quality by running lint, security, and quality checks on staged files.
 
 set -e
 

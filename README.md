@@ -8,10 +8,10 @@ This repository provides a comprehensive suite of quality assurance, linting, te
 
 -   **🤖 Automated Code Quality**: Enforce consistent code style, formatting, and best practices across your project.
 -   **🚀 Comprehensive Linting**: Utilizes a powerful stack (`ruff`, `mypy`, `pylint`, `bandit`) to catch errors, bugs, and security issues early.
--   **🛡️ Git Hooks Integration**: Automates quality checks at commit and push stages, preventing bad code from entering the repository.
 -   **📦 Dependency Management**: Scripts are self-contained and manage their Python environment using `uv`, ensuring consistent execution without polluting the parent project's venv.
 -   **🔧 AI-Assisted Testing**: Includes scripts to leverage large language models (like Claude) to fix and enhance your `pytest` suite.
 -   **🔒 Security Scanning**: Built-in secret and vulnerability scanning to keep your codebase secure.
+-   **🛡️ Git Hooks**: Includes `pre-commit`, `pre-push`, and `commit-msg` hooks to automate quality checks.
 
 ##  Scripts Overview
 
