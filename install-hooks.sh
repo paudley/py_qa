@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: MIT
-# Install git hooks for the git-ai-reporter project
+# Install git hooks for the project
 # This script sets up pre-commit and pre-push hooks to ensure code quality
 
 set -e
@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 HOOKS_DIR="$PROJECT_ROOT/.git/hooks"
 
-echo "📦 Installing Git hooks for git-ai-reporter..."
+echo "📦 Installing Git hooks..."
 echo ""
 
 # Function to create a hook
