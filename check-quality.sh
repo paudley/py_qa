@@ -186,7 +186,7 @@ check_code_quality() {
     fi
     
     # Check for print statements in source (not tests)
-    if [[ ! "$file" =~ test ]] && [[ "$file" =~ ^src/ ]]; then
+    if [[ ! "$file" =~ test ]] && [[ "$file" =~ ^(src|app)/ ]]; then
         # Look for bare print( statements (not rprint, console.print, etc)
         # This checks for print( at word boundary, not preceded by letters/dots
         if grep -E "^[^#]*[^a-zA-Z.]print\(" "$file" 2>/dev/null | grep -qv "rprint\|console\.print"; then

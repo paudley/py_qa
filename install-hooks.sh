@@ -16,7 +16,7 @@ echo ""
 install_hook() {
     local hook_name=$1
     local hook_file="$HOOKS_DIR/$hook_name"
-    local template_file="$PROJECT_ROOT/scripts/hooks/$hook_name"
+    local template_file="$PROJECT_ROOT/py-qa/hooks/$hook_name"
     
     if [ -f "$hook_file" ] && [ ! -L "$hook_file" ]; then
         echo "⚠️  Existing $hook_name hook found. Creating backup..."

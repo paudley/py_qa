@@ -8,8 +8,8 @@ the UTF-8 encoding fix for SPSS SAV files.
 
 Usage:
     cd ~/Active/complexify
-    uv run python scripts/pyreadstat_patch/setup_patch_environment.py
-    uv run python scripts/pyreadstat_patch/install_patched_pyreadstat.py
+    uv run python py-qa/pyreadstat_patch/setup_patch_environment.py
+    uv run python py-qa/pyreadstat_patch/install_patched_pyreadstat.py
 """
 
 import os

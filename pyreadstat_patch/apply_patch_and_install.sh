@@ -95,7 +95,7 @@ fi
 # Step 7: Install the patched version in complexify
 echo "📦 Step 7: Installing patched pyreadstat in complexify..."
 cd ~/Active/tcomp  # Back to complexify root
-uv pip install "./scripts/pyreadstat_patch/pyreadstat_source" --force-reinstall --no-build-isolation
+uv pip install "./py-qa/pyreadstat_patch/pyreadstat_source" --force-reinstall --no-build-isolation
 
 # Step 8: Validation test
 echo "🧪 Step 8: Validation test..."
