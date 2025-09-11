@@ -1,85 +1,48 @@
-# SPECTRA Extraction Scripts
+# Python Quality Assurance and Scripting Utilities
 
-This directory contains simple wrapper scripts for easy command-line access to the SPECTRA extraction system.
+This repository contains a collection of quality assurance, testing, and utility scripts for Python projects. It is designed to be included as a git submodule to provide a standardized scripting environment.
 
 ## Scripts
 
-### `extract.py` - Python Wrapper
-Simple Python script that imports and runs the SPECTRA CLI with proper path setup.
+### `run.py` (formerly `extract.py`) - Python Runner
+A simple Python script to run the main CLI of the parent project. This should be adapted as the primary entrypoint.
 
 ```bash
 # Make executable
-chmod +x scripts/extract.py
+chmod +x scripts/run.py
 
 # Usage examples
-./scripts/extract.py --help
-./scripts/extract.py extract gwp
-./scripts/extract.py extract gpss --comprehensive
-python scripts/extract.py validate schema.json
+./scripts/run.py --help
 ```
 
-### `extract.sh` - Bash Wrapper  
-Simple bash script that calls the Python module with proper environment setup.
+### `run.sh` (formerly `extract.sh`) - Bash Wrapper
+A simple bash script that calls the Python module with proper environment setup.
 
 ```bash
 # Make executable
 chmod +x scripts/extract.sh
 
 # Usage examples
-./scripts/extract.sh --help
+./scripts/run.sh --help
 ./scripts/extract.sh extract gwp
 ./scripts/extract.sh extract gpss --comprehensive
 bash scripts/extract.sh validate schema.json
 ```
 
-### `extract_gwp.py` - GWP Legacy Wrapper
-Backwards compatibility wrapper for GWP extraction. Now uses the unified pipeline internally.
+## Core Scripts
 
-```bash
-# Traditional GWP extraction interface
-python scripts/extract_gwp.py --source-dir datasets/gwp --output-dir datasets/gwp/extracted
+This repository provides several core scripts for maintaining code quality:
 
-# For new projects, prefer the generic wrappers:
-./scripts/extract.py extract gwp --source-dir datasets/gwp --output-dir datasets/gwp/extracted
-```
+-   `lint.sh`: Runs a comprehensive suite of linters and formatters (ruff, mypy, black, etc.).
+-   `claude_test.sh`: An AI-driven script to automatically fix or enhance the pytest test suite.
+-   `check-quality.sh`: Performs checks for license headers, file sizes, and common code quality issues.
+-   `security-scan.sh`: Scans for hardcoded secrets and credentials.
+-   `install-hooks.sh`: Installs git hooks that use the above scripts to enforce quality on commit and push.
 
-## Available Commands
+## Environment Setup
 
-The wrapper scripts provide access to all SPECTRA CLI commands:
+The scripts manage their own environment to ensure consistency.
 
-- `extract <dataset>` - Extract dataset using comprehensive pipeline
-- `validate <schema.json>` - Validate SPECTRA schema
-- `score <schema.json>` - Score schema quality  
-- `enhance <schema.json>` - Enhance existing schema
-- `transform <data.xlsx>` - Transform Excel to SPECTRA
-- `create <dataset.parquet>` - Create new schema from dataset
-- `analyze <schema.json>` - Analyze schema completeness
-
-## Examples
-
-```bash
-# Extract GWP dataset
-./scripts/extract.sh extract gwp --verbose
-
-# Validate a SPECTRA schema
-./scripts/extract.py validate my_schema.json --strict
-
-# Score schema quality
-./scripts/extract.sh score my_schema.json --detailed
-
-# Transform Excel file to SPECTRA
-./scripts/extract.py transform data.xlsx -o schema.json
-
-# Create schema from Parquet file
-./scripts/extract.sh create dataset.parquet -n "My Dataset"
-```
-
-## Error Handling
-
-Both wrapper scripts include:
-- Path validation for the spectra-schema package
-- Proper error reporting and exit codes
-- Environment variable handling for Python path
-- Working directory management
-
-If you encounter import errors, ensure that all dependencies are installed in your Python environment.
+-   They use `uv` to create and manage a `.venv` virtual environment.
+-   Dependencies are automatically installed and synced when scripts are run.
+-   Path and environment validation is included.
