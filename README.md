@@ -1,48 +1,70 @@
-# Python Quality Assurance and Scripting Utilities
+# Python Quality Assurance Scripting Submodule
 
-This repository contains a collection of quality assurance, testing, and utility scripts for Python projects. It is designed to be included as a git submodule to provide a standardized scripting environment.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Scripts
+This repository provides a comprehensive suite of quality assurance, linting, testing, and utility scripts for modern Python projects. It is designed to be included as a git submodule (e.g., in a `scripts/` directory) to provide a standardized, battle-tested scripting environment.
 
-### `run.py` (formerly `extract.py`) - Python Runner
-A simple Python script to run the main CLI of the parent project. This should be adapted as the primary entrypoint.
+## ✨ Features
 
-```bash
-# Make executable
-chmod +x scripts/run.py
+-   **🤖 Automated Code Quality**: Enforce consistent code style, formatting, and best practices across your project.
+-   **🚀 Comprehensive Linting**: Utilizes a powerful stack (`ruff`, `mypy`, `pylint`, `bandit`) to catch errors, bugs, and security issues early.
+-   **🛡️ Git Hooks Integration**: Automates quality checks at commit and push stages, preventing bad code from entering the repository.
+-   **📦 Dependency Management**: Scripts are self-contained and manage their Python environment using `uv`, ensuring consistent execution without polluting the parent project's venv.
+-   **🔧 AI-Assisted Testing**: Includes scripts to leverage large language models (like Claude) to fix and enhance your `pytest` suite.
+-   **🔒 Security Scanning**: Built-in secret and vulnerability scanning to keep your codebase secure.
 
-# Usage examples
-./scripts/run.py --help
-```
+##  Scripts Overview
 
-### `run.sh` (formerly `extract.sh`) - Bash Wrapper
-A simple bash script that calls the Python module with proper environment setup.
+### Core Quality & CI Scripts
 
-```bash
-# Make executable
-chmod +x scripts/extract.sh
+-   **`lint.sh`**: The main linter orchestrator. Runs a full suite of formatters, type checkers, and linters. It's highly configurable and acts as the single source of truth for code quality.
+-   **`check-quality.sh`**: Performs repository-level checks, such as validating license headers, checking for oversized files, and other project best practices.
+-   **`security-scan.sh`**: Scans for hardcoded secrets, API keys, and other sensitive credentials in your staged files.
+-   **`install-hooks.sh`**: Sets up Git hooks (`pre-commit`, `pre-push`, `commit-msg`) that automatically run the quality scripts, enforcing standards for every contributor.
 
-# Usage examples
-./scripts/run.sh --help
-./scripts/extract.sh extract gwp
-./scripts/extract.sh extract gpss --comprehensive
-bash scripts/extract.sh validate schema.json
-```
+### AI-Enhanced Testing
 
-## Core Scripts
+-   **`claude_test.sh`**: An AI-driven script that can automatically fix failing `pytest` tests or enhance an existing test suite for better coverage and robustness.
+-   **`claude_test_all.sh`**: A wrapper to run `claude_test.sh` across multiple specified directories.
+-   **`claude_lint.sh`**: An experimental script to automatically fix linting errors using an AI model.
 
-This repository provides several core scripts for maintaining code quality:
+### Utility & Management Scripts
 
--   `lint.sh`: Runs a comprehensive suite of linters and formatters (ruff, mypy, black, etc.).
--   `claude_test.sh`: An AI-driven script to automatically fix or enhance the pytest test suite.
--   `check-quality.sh`: Performs checks for license headers, file sizes, and common code quality issues.
--   `security-scan.sh`: Scans for hardcoded secrets and credentials.
--   `install-hooks.sh`: Installs git hooks that use the above scripts to enforce quality on commit and push.
+-   **`update_packages.sh`**: A convenience script to update all Python dependencies in `pyproject.toml` files using `uv`.
+-   **`pre_run_clean.sh`**: Cleans the project directory of temporary files, caches, and build artifacts.
+-   **`gen_aider_list.sh`**: Generates a file list for the `aider` AI coding assistant, pre-populating its context with relevant project files.
 
-## Environment Setup
+### Patches
 
-The scripts manage their own environment to ensure consistency.
+-   **`pyreadstat_patch/`**: Contains a set of scripts to patch the `pyreadstat` library to handle non-UTF8 encoding in SPSS `.sav` files—a common real-world data science issue.
 
--   They use `uv` to create and manage a `.venv` virtual environment.
--   Dependencies are automatically installed and synced when scripts are run.
--   Path and environment validation is included.
+## 🚀 Quickstart: Integrating into Your Project
+
+1.  **Add as a Submodule**: In your project's root directory, add this repository as a submodule. A common location is `scripts/`.
+
+    ```bash
+    git submodule add https://github.com/your-username/qa-py.git scripts
+    ```
+
+2.  **Install Git Hooks**: Run the installation script to set up the automated quality checks.
+
+    ```bash
+    ./scripts/install-hooks.sh
+    ```
+
+3.  **Run a Full Lint Check**: Manually trigger a lint run to check your existing codebase.
+
+    ```bash
+    ./scripts/lint.sh
+    ```
+
+Now, the Git hooks will automatically run on your commits and pushes, ensuring all new code meets the defined quality standards.
+
+## ⚙️ Configuration
+
+-   **Linting Rules**: Most tool configurations (ruff, mypy, pylint) are managed in `pyproject.toml`. You can fork this repository and adjust them to fit your project's needs.
+-   **Banned Words**: Create a `.banned-words` file in your project root to add custom words or phrases that should be blocked from commit messages (e.g., internal project codenames).
+
+## 📜 License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

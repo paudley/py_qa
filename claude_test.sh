@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
 
 TEST_PROMPT="$(realpath $(dirname ${BASH_SOURCE[0]})/../docs/PYTEST_GUIDELINES.md)"
 if [[ ! -f "${TEST_PROMPT}" ]]; then

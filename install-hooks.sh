@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
 # Install git hooks for the git-ai-reporter project
 # This script sets up pre-commit and pre-push hooks to ensure code quality
 

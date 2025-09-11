@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
 # Security scanning script for git-ai-reporter
 # Detects potential secrets, credentials, and sensitive data in staged files
 

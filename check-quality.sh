@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
 # Quality checks script for git-ai-reporter
 # Validates license headers, file sizes, branch protection, and commit messages
 

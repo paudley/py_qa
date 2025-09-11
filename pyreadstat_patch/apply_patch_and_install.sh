@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
 # Comprehensive pyreadstat UTF-8 patch solution for complexify
 # This script handles the complete process: download, patch, build, install
 set -e

@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
 source $(dirname ${BASH_SOURCE[0]})/_check_repo.sh
 
 declare -a REMOVE TREES

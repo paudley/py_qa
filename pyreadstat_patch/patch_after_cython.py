@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Patch pyreadstat after Cython compilation to handle UTF-8 encoding errors."""
 
 import os
