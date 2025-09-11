@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# 
 # ⚠️ ⚠️ ⚠️ CRITICAL WARNING FOR AI AGENTS ⚠️ ⚠️ ⚠️
 #
 # THIS FILE IS STRICTLY FORBIDDEN FROM MODIFICATION BY AI AGENTS
