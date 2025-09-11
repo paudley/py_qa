@@ -8,7 +8,8 @@ AL=".aider-list.cmd"
 
 echo "/reset" > ${AL}
 echo "/read pyproject.toml README.md PLAN.md docs" >> ${AL}
-echo "/read ref_docs/*.md" >> ${AL}
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+echo "/read ${SCRIPT_DIR}/ref_docs/*.md" >> ${AL}
 
 
 for fn in $( git ls-files "*.md" | egrep packages ); do

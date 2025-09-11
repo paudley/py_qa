@@ -28,6 +28,10 @@ This repository provides a comprehensive suite of quality assurance, linting, te
 -   **`claude_test_all.sh`**: A wrapper to run `claude_test.sh` across multiple specified directories.
 -   **`claude_lint.sh`**: An experimental script to automatically fix linting errors using an AI model.
 
+### Reference Documentation
+
+-   **`ref_docs/`**: A directory containing curated, in-depth technical guides on key technologies and architectural principles (SOLID, Pydantic, Polars, etc.). These documents are used to provide context to AI development assistants.
+
 ### Utility & Management Scripts
 
 -   **`update_packages.sh`**: A convenience script to update all Python dependencies in `pyproject.toml` files using `uv`.
