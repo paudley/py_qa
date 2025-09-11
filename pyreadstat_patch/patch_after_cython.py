@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Patch pyreadstat after Cython compilation to handle UTF-8 encoding errors."""
 
 import os

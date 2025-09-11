@@ -1,5 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 
 # shellcheck disable=SC1091
 source "$(dirname "${BASH_SOURCE[0]}")"/_check_repo.sh

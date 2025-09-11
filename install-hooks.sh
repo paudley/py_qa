@@ -1,5 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 # Install git hooks for the project
 # This script sets up pre-commit and pre-push hooks to ensure code quality
 

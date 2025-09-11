@@ -1,5 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 
 TEST_PROMPT="$(realpath $(dirname ${BASH_SOURCE[0]})/../docs/PYTEST_GUIDELINES.md)"
 if [[ ! -f "${TEST_PROMPT}" ]]; then
