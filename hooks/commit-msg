@@ -1,0 +1,31 @@
+#!/bin/bash
+# Commit message validation hook for git-ai-reporter
+# Ensures commit messages follow conventional commit format
+
+set -e
+
+# Get the commit message file
+COMMIT_MSG_FILE=$1
+
+# Get the script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Run commit message validation
+if [ -f "$PROJECT_ROOT/scripts/check-quality.sh" ]; then
+    "$PROJECT_ROOT/scripts/check-quality.sh" commit-msg "$COMMIT_MSG_FILE"
+fi
+
+# Check commit message for banned words
+echo ""
+echo "🚫 Checking commit message for banned words..."
+if [ -f "$PROJECT_ROOT/scripts/check-banned-words.sh" ]; then
+    if ! "$PROJECT_ROOT/scripts/check-banned-words.sh" "$COMMIT_MSG_FILE"; then
+        echo ""
+        echo "❌ Commit aborted due to banned words in message!"
+        echo "Please revise your commit message and try again."
+        exit 1
+    fi
+fi
+
+exit 0

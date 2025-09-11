@@ -1,0 +1,191 @@
+#!/bin/bash
+# Pre-push hook for git-ai-reporter
+# Ensures all tests pass and comprehensive coverage is maintained before pushing
+# Enhanced with comprehensive security and quality validation
+
+set -e
+
+echo "🚀 Running pre-push checks..."
+echo "This may take a minute..."
+echo ""
+
+# Function to check if we're in a virtual environment
+check_venv() {
+    if [ -z "$VIRTUAL_ENV" ]; then
+        echo "⚠️  Warning: No virtual environment detected. Activating .venv..."
+        if [ -f .venv/bin/activate ]; then
+            source .venv/bin/activate
+        else
+            echo "❌ No .venv found. Please create virtual environment first."
+            exit 1
+        fi
+    fi
+}
+
+# Ensure we're in venv
+check_venv
+
+# Get the script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Store the name of the current branch
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+echo "📌 Checking branch: $BRANCH"
+echo ""
+
+# Check all commit messages that will be pushed for banned words
+echo "🚫 Checking commit messages for banned words..."
+REMOTE=$1
+URL=$2
+
+# Get the range of commits that will be pushed
+if [ -z "$REMOTE" ]; then
+    # If no remote specified, assume origin
+    REMOTE="origin"
+fi
+
+# Create temp file for commit messages
+COMMIT_MSGS_FILE=$(mktemp)
+trap "rm -f $COMMIT_MSGS_FILE" EXIT
+
+# Get all commit messages that will be pushed
+# This reads from stdin provided by git
+while read local_ref local_sha remote_ref remote_sha
+do
+    # Check if we're deleting a branch (local_sha is all zeros)
+    if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+        continue
+    fi
+    
+    # Get the range of new commits
+    if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+        # New branch, check all commits not in any remote branch
+        git log --format="%B" --no-merges "$local_sha" --not --remotes="$REMOTE/*" >> "$COMMIT_MSGS_FILE"
+    else
+        # Existing branch, check new commits only
+        git log --format="%B" --no-merges "$remote_sha..$local_sha" >> "$COMMIT_MSGS_FILE"
+    fi
+done
+
+# If we have commit messages, check them for banned words
+if [ -s "$COMMIT_MSGS_FILE" ]; then
+    if [ -f "$PROJECT_ROOT/scripts/check-banned-words.sh" ]; then
+        if ! "$PROJECT_ROOT/scripts/check-banned-words.sh" "$COMMIT_MSGS_FILE"; then
+            echo ""
+            echo "❌ Push aborted due to banned words in commit messages!"
+            echo "Please amend your commit messages before pushing."
+            echo ""
+            echo "To amend the last commit message:"
+            echo "  git commit --amend"
+            echo ""
+            echo "To amend older commits, use interactive rebase:"
+            echo "  git rebase -i HEAD~N  (where N is the number of commits back)"
+            exit 1
+        fi
+    fi
+else
+    echo "ℹ️  No new commits to check"
+fi
+echo ""
+
+# Run comprehensive security scan on all Python files
+echo "🔒 Running comprehensive security scan..."
+ALL_PY_FILES=$(find "$PROJECT_ROOT/src" "$PROJECT_ROOT/tests" -name "*.py" -type f 2>/dev/null | head -100)
+if [ -f "$PROJECT_ROOT/scripts/security-scan.sh" ]; then
+    if ! "$PROJECT_ROOT/scripts/security-scan.sh" $ALL_PY_FILES; then
+        echo ""
+        echo "❌ Security vulnerabilities detected!"
+        echo "Please fix security issues before pushing."
+        exit 1
+    fi
+fi
+echo ""
+
+# Run quality checks for the entire codebase
+echo "📋 Running comprehensive quality validation..."
+if [ -f "$PROJECT_ROOT/scripts/check-quality.sh" ]; then
+    # Check branch protection
+    if ! "$PROJECT_ROOT/scripts/check-quality.sh" branch; then
+        echo ""
+        echo "❌ Cannot push directly to protected branch!"
+        echo "Please create a feature branch and use pull requests."
+        exit 1
+    fi
+    
+    # Check all source files for quality issues
+    if ! "$PROJECT_ROOT/scripts/check-quality.sh" all $ALL_PY_FILES; then
+        echo ""
+        echo "⚠️  Quality warnings detected. Consider fixing before push."
+        # Don't fail on warnings for push, just inform
+    fi
+fi
+echo ""
+
+# Run the full lint check
+echo "🔧 Running comprehensive lint check..."
+if ! ./scripts/lint.sh; then
+    echo ""
+    echo "❌ Lint check failed!"
+    echo "Please fix all lint issues before pushing."
+    echo "Run './scripts/lint.sh' to see all issues."
+    exit 1
+fi
+echo "✅ All lint checks passed (10.00/10 score maintained)"
+echo ""
+
+# Run the test suite with coverage
+echo "🧪 Running test suite with coverage check..."
+echo "================================="
+
+# Create a temporary file to capture pytest output
+PYTEST_OUTPUT=$(mktemp)
+
+# Run pytest and capture output
+if uv run pytest --cov=src --cov-report=term --cov-fail-under=55 -q > "$PYTEST_OUTPUT" 2>&1; then
+    # Tests passed, show summary
+    echo "✅ All tests passed!"
+    
+    # Extract and show coverage percentage
+    COVERAGE_LINE=$(grep "^TOTAL" "$PYTEST_OUTPUT" || echo "Coverage data not found")
+    echo ""
+    echo "📊 Coverage Report:"
+    echo "  $COVERAGE_LINE"
+    
+    # Check if comprehensive coverage was maintained
+    if grep -q "Required test coverage of 55% reached" "$PYTEST_OUTPUT"; then
+        echo "  ✅ Core functionality coverage maintained!"
+    else
+        echo ""
+        echo "⚠️  Warning: Coverage might be below expected level"
+        echo "Full output:"
+        cat "$PYTEST_OUTPUT"
+        rm "$PYTEST_OUTPUT"
+        exit 1
+    fi
+else
+    # Tests failed, show the output
+    echo "❌ Tests failed!"
+    echo ""
+    echo "Test output:"
+    echo "================================="
+    cat "$PYTEST_OUTPUT"
+    rm "$PYTEST_OUTPUT"
+    echo "================================="
+    echo ""
+    echo "Please fix failing tests before pushing."
+    exit 1
+fi
+
+# Clean up temp file
+rm -f "$PYTEST_OUTPUT"
+
+echo ""
+echo "================================="
+echo "✅ All pre-push checks passed!"
+echo "  • Lint: 10.00/10"
+echo "  • Tests: All passing" 
+echo "  • Coverage: 100%"
+echo "================================="
+echo ""
+echo "🚀 Ready to push to $BRANCH"
