@@ -496,8 +496,8 @@ if (( USE_UV )); then
 		uv lock --quiet || true
 fi
 
-if [[ -x "scripts/gen_aider_list.sh" ]]; then
-		scripts/gen_aider_list.sh
+if [[ -x "py-qa/gen_aider_list.sh" ]]; then
+		py-qa/gen_aider_list.sh
 fi
 
 # ---------- Execute ----------

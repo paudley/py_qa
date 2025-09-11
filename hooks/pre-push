@@ -70,7 +70,7 @@ done
 
 # If we have commit messages, check them for banned words
 if [ -s "$COMMIT_MSGS_FILE" ]; then
-    if [ -f "$PROJECT_ROOT/scripts/check-banned-words.sh" ]; then
+    if [ -f "$PROJECT_ROOT/py-qa/check-banned-words.sh" ]; then
         if ! "$PROJECT_ROOT/py-qa/check-banned-words.sh" "$COMMIT_MSGS_FILE"; then
             echo ""
             echo "❌ Push aborted due to banned words in commit messages!"

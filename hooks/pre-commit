@@ -46,7 +46,7 @@ echo "🔒 Security scan for secrets and credentials..."
 if [ -f "$PROJECT_ROOT/py-qa/security-scan.sh" ]; then
     # Call security scanner without arguments to let it scan staged files automatically
     # This avoids command line length limits and runs bandit only once
-    if ! "$PROJECT_ROOT/scripts/security-scan.sh"; then
+    if ! "$PROJECT_ROOT/py-qa/security-scan.sh"; then
         echo ""
         echo "❌ Security check failed! Please remove sensitive data before committing."
         exit 1

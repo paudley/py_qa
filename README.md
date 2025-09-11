@@ -44,22 +44,22 @@ This repository provides a comprehensive suite of quality assurance, linting, te
 
 ## 🚀 Quickstart: Integrating into Your Project
 
-1.  **Add as a Submodule**: In your project's root directory, add this repository as a submodule. A common location is `scripts/`.
+1.  **Add as a Submodule**: In your project's root directory, add this repository as a submodule. A common location is `py-qa/`.
 
     ```bash
-    git submodule add https://github.com/your-username/qa-py.git scripts
+    git submodule add https://github.com/your-username/qa-py.git qa-py
     ```
 
 2.  **Install Git Hooks**: Run the installation script to set up the automated quality checks.
 
     ```bash
-    ./scripts/install-hooks.sh
+    ./py-qa/install-hooks.sh
     ```
 
 3.  **Run a Full Lint Check**: Manually trigger a lint run to check your existing codebase.
 
     ```bash
-    ./scripts/lint.sh
+    ./py-qa/lint.sh
     ```
 
 Now, the Git hooks will automatically run on your commits and pushes, ensuring all new code meets the defined quality standards.

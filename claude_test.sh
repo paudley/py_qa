@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 
-TEST_PROMPT="$(realpath $(dirname ${BASH_SOURCE[0]})/../docs/PYTEST_GUIDELINES.md)"
+TEST_PROMPT="$(realpath $(dirname ${BASH_SOURCE[0]})/py-qa/ref_docs/PYTEST_GUIDELINES.md)"
 if [[ ! -f "${TEST_PROMPT}" ]]; then
 		echo "cannot find test prompt: ${TEST_PROMPT}"
 		exit -1

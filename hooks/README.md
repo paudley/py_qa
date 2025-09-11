@@ -7,7 +7,7 @@ This directory contains Git hooks that enforce code quality standards.
 Run the installation script from the project root:
 
 ```bash
-./scripts/install-hooks.sh
+./py-qa/install-hooks.sh
 ```
 
 This will install symlinks in `.git/hooks/` pointing to these templates.
@@ -28,7 +28,7 @@ Runs before each commit to ensure code quality:
 
 Runs before pushing to ensure the codebase maintains high standards:
 
-- **Full Lint Check**: Runs `./scripts/lint.sh` to ensure 10.00/10 Pylint score
+- **Full Lint Check**: Runs `./py-qa/lint.sh` to ensure 10.00/10 Pylint score
 - **Test Suite**: Runs all tests with pytest
 - **Coverage Check**: Ensures comprehensive core functionality coverage is maintained
 
