@@ -5,55 +5,103 @@
 source $(dirname ${BASH_SOURCE[0]})/_check_repo.sh
 source $(dirname ${BASH_SOURCE[0]})/_check_venv.sh
 
+set -f
+
 AL=".aider-list.cmd"
 
+drop() {
+  echo "/drop $1" >> ${AL}
+}
+add_if() {
+  local file=$1
+  if [[ -r "${file}" ]]; then
+    echo "/add ${file}" >> ${AL}
+  fi
+}
+read_if() {
+  local file=$1
+  if [[ -r "${file}" ]]; then
+    echo "/read ${file}" >> ${AL}
+  fi
+}
+_if_recurse() {
+  local action=$1; shift
+  local verb=$1; shift
+  local dir=$1; shift
+  local pats=$@
+	local pat=""
+  if [[ ! -d "${dir}" ]]; then return; fi
+	for _pat in "${pats}"; do
+			if [[ "${pat}" != "" ]]; then pat+=" -o "; fi
+			pat+="-${verb} ${_pat}"
+	done
+  find "${dir}" -type f -a \( ${pat} \) -print | while read -r file; do
+			"$action" "${file}"
+  done
+}
+add_if_recurse() {
+  _if_recurse "add_if" "iname" "$1" "*"
+}
+add_if_recurse_pattern() {
+  _if_recurse "add_if" "iname" "$1" "$2"
+}
+add_if_recurse_path() {
+  _if_recurse "add_if" "ipath" "$1" "$2"
+}
+read_if_recurse() {
+  _if_recurse "read_if" "iname" "$1" "*"
+}
+read_if_recurse_pattern() {
+  _if_recurse "read_if" "iname" "$1" "$2"
+}
+read_if_recurse_path() {
+  _if_recurse "read_if" "ipath" "$1" "$2"
+}
+
 echo "/reset" > ${AL}
-echo "/read pyproject.toml README.md PLAN.md" >> ${AL}
-echo "/add TODO.md" >> ${AL}
-if [[ -d docs ]]; then
-  echo "/read docs" >> ${AL}
-fi
+read_if "README.md"
+read_if "PLAN.md"
+read_if "pyproject.toml"
+
+add_if "TODO.md"
+read_if_recurse "docs"
+
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-echo "/read ${SCRIPT_DIR}/ref_docs/*.md" >> ${AL}
+read_if_recurse "${SCRIPT_DIR}/ref_docs"
 
 
-for fn in $( git ls-files "*.md" | egrep packages ); do
-		echo "/read ${fn}" >> ${AL}
+for fn in $( git ls-files "*.md" | grep 'packages/|src/' ); do
+		read_if "${fn}"
 done
 
-echo "/read */*/schema_definitions" >> ${AL}
+read_if_recurse_path "schema_definitions" "*"
 
-echo "/drop LICENSE.md" >> ${AL}
-echo "/drop uv.lock" >> ${AL}
-echo "/drop __pycache__" >> ${AL}
-echo "/drop .venv" >> ${AL}
-echo "/drop snapshots" >> ${AL}
-echo "/drop cassettes" >> ${AL}
+add_if_recurse_pattern "src" "*.py"
+add_if_recurse_pattern "src" "*.typed"
+read_if_recurse_pattern "src" "*.md"
+add_if_recurse_pattern "packages" "*.py"
+add_if_recurse_pattern "packages" "*.typed"
+read_if_recurse_pattern "packages" "*.md"
 
-if [[ -d src ]]; then
-  echo "/add src/*/*.py" >> ${AL}
-  echo "/add src/*/*/*.py" >> ${AL}
-  echo "/add src/*/*/*/*.py" >> ${AL}
-  echo "/add src/*/*/*/*/*.py" >> ${AL}
-  echo "/read src/*/*.md" >> ${AL}
-  echo "/read src/*/*/*.md" >> ${AL}
-  echo "/read src/*/*/*/*.md" >> ${AL}
-  echo "/read src/*/*/*/*/*.md" >> ${AL}
+add_if "tests"
+
+if [[ -r ".mostly-read-only" ]]; then
+		cat .mostly-read-only | while read -r file; do
+				drop "${file}";
+				if [[ -d "${file}" ]]; then
+						read_if_recurse "${file}"
+				else
+						read_if "${file}";
+				fi
+		done
 fi
 
-if [[ -d packages ]]; then
-  echo "/add packages/*/src/*/*.py" >> ${AL}
-  echo "/add packages/*/src/*/*/*.py" >> ${AL}
-  echo "/add packages/*/src/*/*/*/*.py" >> ${AL}
-  echo "/add packages/*/src/*/*/*/*/*.py" >> ${AL}
-  echo "/read packages/*/src/*/*.md" >> ${AL}
-  echo "/read packages/*/src/*/*/*.md" >> ${AL}
-  echo "/read packages/*/src/*/*/*/*.md" >> ${AL}
-  echo "/read packages/*/src/*/*/*/*/*.md" >> ${AL}
-fi
-
-echo "/drop __pycache__" >> ${AL}
-
-echo "/add tests" >> ${AL}
+drop "*.cache"
+drop "__pycache__"
+drop "LICENSE.md"
+drop "uv.lock"
+drop ".venv"
+drop "snapshots"
+drop "cassettes"
 
 echo "/model" >> ${AL}

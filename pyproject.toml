@@ -1,0 +1,53 @@
+[project]
+name = "py-qa"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "autopep8>=2.3.2",
+    "bandit[baseline,sarif,toml]>=1.8.6",
+    "black>=25.1.0",
+    "botocore-stubs>=1.40.32",
+    "bs4>=0.0.2",
+    "isort>=6.0.1",
+    "markdown>=3.9",
+    "mdformat>=0.7.22",
+    "mdformat-footnote>=0.1.1",
+    "mdformat-frontmatter>=2.0.8",
+    "mdformat-gfm>=0.4.1",
+    "mdformat-gfm-alerts>=2.0.0",
+    "mdformat-myst>=0.2.2",
+    "mypy>=1.18.1",
+    "mypy-extensions>=1.1.0",
+    "pycodestyle>=2.14.0",
+    "pyflakes>=3.4.0",
+    "pylint>=3.3.8",
+    "pylint-htmf>=0.1.1",
+    "pylint-plugin-utils>=0.9.0",
+    "pylint-pydantic>=0.3.5",
+    "pylint-pytest>=1.1.7",
+    "pylint-sqlalchemy>=0.3.0",
+    "pylint-venv>=3.0.4",
+    "pyright>=1.1.405",
+    "pytest>=8.2.0",
+    "pyupgrade>=3.20.0",
+    "ruff>=0.13.0",
+    "sqlalchemy-stubs>=0.4",
+    "twine>=6.2.0",
+    "types-aiofiles>=24.1.0.20250822",
+    "types-click>=7.1.8",
+    "types-decorator>=5.2.0.20250324",
+    "types-jinja2>=2.11.9",
+    "types-markdown>=3.9.0.20250906",
+    "types-pexpect>=4.9.0.20250916",
+    "types-regex>=2025.9.1.20250903",
+    "types-setuptools>=80.9.0.20250822",
+    "typing-extensions>=4.15.0",
+    "typing-inspection>=0.4.1",
+    "uv>=0.8.17",
+    "vulture>=2.14",
+]

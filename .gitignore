@@ -61,3 +61,4 @@ config.yaml
 .serena
 datasets/*
 scripts/pyreadstat_patch/pyreadstat_source
+.lint-cache
