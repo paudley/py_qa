@@ -47,7 +47,7 @@ This repository provides a comprehensive suite of quality assurance, linting, te
 1.  **Add as a Submodule**: In your project's root directory, add this repository as a submodule. A common location is `py-qa/`.
 
     ```bash
-    git submodule add https://github.com/your-username/qa-py.git qa-py
+    git submodule add https://github.com/paudley/qa-py.git qa-py
     ```
 
 2.  **Install Git Hooks**: Run the installation script to set up the automated quality checks.
