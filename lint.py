@@ -1,6 +1,37 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 # pylint: disable=bad-builtin
+"""Spectra Lint Orchestrator (stdlib-only).
+
+This script is the heart of the Spectra lint pipeline. It coordinates discovery,
+installation, and execution of a polyglot tool suite across a monorepo without
+relying on third-party Python dependencies. If you are extending or debugging
+`lint.py`, keep these design pillars in mind:
+
+* **stdlib only** – Every feature must use Python's standard library so the
+  script can ship as a standalone executable. Adding external imports breaks
+  our packaging assumptions.
+* **Workspace aware** – The code enumerates logical "workspaces" (Python
+  package, React app, Go service, etc.) and runs only the tools that make sense
+  for that subtree. When introducing new language support, hook into the
+  workspace detection first so installs, caching, and output grouping remain
+  consistent.
+* **Agent friendly** – Output defaults to a concise, deterministic format so
+  humans and automation can iterate quickly. Preserve the `output` modes and
+  ensure new logging stays terse.
+* **Safe by default** – Directories such as `node_modules`, `.venv`, `build/`
+  are globally excluded. Tools inherit these exclusions where supported. Any
+  new integration should extend the same safety posture.
+* **Respect local workflows** – `--gitignore` mirrors developers' Git ignore
+  rules, `--pre-commit` surfaces staged-only changes, and installers prefer the
+  project's virtual environment. When modifying discovery or execution, double
+  check that these knobs still behave.
+
+The script is large; the section headers that follow group related behaviour.
+If you are adding a sizeable subsystem, introduce a new header and document the
+intent so future maintainers (or automation) can navigate quickly.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -11,6 +42,7 @@ from dataclasses import asdict
 from dataclasses import dataclass
 from dataclasses import field
 from enum import Enum
+from functools import lru_cache
 import hashlib
 import importlib.util
 import json
@@ -62,11 +94,7 @@ if _vb and _vb.exists():
 def _install_with_preferred_pip(
     args_list: list[str],
 ) -> subprocess.CompletedProcess[str]:
-    vb = _venv_bin(
-        _pathlib.Path(__file__).resolve().parent
-        if "__file__" in globals()
-        else _pathlib.Path(".")
-    )
+    vb = _venv_bin(_pathlib.Path(__file__).resolve().parent if "__file__" in globals() else _pathlib.Path("."))
     try:
         from shutil import which as _which
     except Exception:
@@ -123,6 +151,7 @@ class FileDiscoveryConfig:
     include_untracked: bool = True
     base_branch: str | None = None
     pre_commit: bool = False
+    respect_gitignore: bool = False
 
 
 @dataclass
@@ -133,7 +162,7 @@ class OutputConfig:
     emoji: bool = True
     color: bool = True
     show_passing: bool = False
-    output: Literal["pretty", "raw"] = "pretty"
+    output: Literal["pretty", "raw", "concise"] = "concise"
     pretty_format: Literal["text", "jsonl", "markdown"] = "text"
     group_by_code: bool = False
     # Machine-readable reports
@@ -192,6 +221,81 @@ ROOT = Path.cwd()
 TOP_ROOT = ROOT  # original project root (set in main)
 GLOBAL_CFG = None
 
+NODE_ENV_DEFAULTS: Final[dict[str, str]] = {
+    "CI": "1",
+    "npm_config_yes": "true",
+    "npm_config_fund": "false",
+    "npm_config_audit": "false",
+    "npm_config_progress": "false",
+    "NPX_SILENT": "1",
+}
+
+NODE_EXECUTABLE_HINTS: Final[tuple[str, ...]] = (
+    "node",
+    "npm",
+    "npx",
+    "yarn",
+    "pnpm",
+    "bun",
+    "prettier",
+    "eslint",
+    "tsc",
+    "jest",
+)
+
+
+_PY_DEF_RE: Final[re.Pattern[str]] = re.compile(r"^\s*(?:async\s+)?def\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(")
+_PY_CLASS_RE: Final[re.Pattern[str]] = re.compile(r"^\s*class\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\(|:)?")
+_TS_CLASS_RE: Final[re.Pattern[str]] = re.compile(r"^\s*(?:export\s+)?class\s+(?P<name>[A-Za-z0-9_$]+)")
+_TS_FUNC_RE: Final[re.Pattern[str]] = re.compile(r"^\s*(?:export\s+)?(?:async\s+)?function\s+(?P<name>[A-Za-z0-9_$]+)")
+_TS_METHOD_RE: Final[re.Pattern[str]] = re.compile(
+    r"^\s*(?:public\s+|private\s+|protected\s+|static\s+|readonly\s+|async\s+)*([A-Za-z0-9_$]+)\s*\("
+)
+_TS_CONST_FUNC_RE: Final[re.Pattern[str]] = re.compile(
+    r"^\s*(?:export\s+)?(?:const|let|var)\s+(?P<name>[A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?(?:function\b|\()"
+)
+
+ALWAYS_EXCLUDE_DIRS: Final[set[str]] = {
+    ".git",
+    "node_modules",
+    ".venv",
+    "venv",
+    "dist",
+    "build",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".tox",
+    "coverage",
+}
+
+LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
+    "python": {
+        "pyproject.toml",
+        "setup.cfg",
+        "requirements.txt",
+        "pipfile",
+        "poetry.lock",
+    },
+    "javascript": {
+        "package.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "tsconfig.json",
+    },
+    "go": {"go.mod"},
+    "rust": {"Cargo.toml"},
+}
+
+LANGUAGE_EXTENSIONS: Final[dict[str, set[str]]] = {
+    "python": {".py", ".pyi"},
+    "javascript": {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"},
+    "go": {".go"},
+    "rust": {".rs"},
+    "markdown": {".md", ".mdx", ".markdown"},
+}
+
 
 def is_tty() -> bool:
     try:
@@ -220,9 +324,7 @@ def emoji(sym: str, enable: bool) -> str:
 
 
 def section(title: str, *, use_color: bool) -> None:
-    print(
-        f"\n{colorize('───','blue',use_color)} {colorize(title,'cyan',use_color)} {colorize('───','blue',use_color)}"
-    )
+    print(f"\n{colorize('───','blue',use_color)} {colorize(title,'cyan',use_color)} {colorize('───','blue',use_color)}")
 
 
 def info(msg: str, *, use_emoji: bool) -> None:
@@ -246,16 +348,44 @@ def which(cmd: str) -> str | None:
 
 
 def run(
-    cmd: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None
+    cmd: list[str],
+    *,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    timeout: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        cmd,
-        cwd=str(cwd) if cwd else None,
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    full_env: dict[str, str] | None = None
+    if env:
+        full_env = os.environ.copy()
+        full_env.update(env)
+
+    def _ensure_text(data: str | bytes | None) -> str:
+        if isinstance(data, bytes):
+            return data.decode(errors="ignore")
+        return data or ""
+
+    try:
+        return subprocess.run(
+            cmd,
+            cwd=str(cwd) if cwd else None,
+            env=full_env,
+            text=True,
+            capture_output=True,
+            check=False,
+            stdin=subprocess.DEVNULL,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:  # pragma: no cover - defensive
+        stdout = _ensure_text(exc.stdout)
+        stderr_base = _ensure_text(exc.stderr)
+        timeout_msg = f"Command timed out after {timeout:.1f}s" if timeout is not None else "Command timed out"
+        stderr = f"{stderr_base}\n{timeout_msg}" if stderr_base else timeout_msg
+        return subprocess.CompletedProcess(
+            args=exc.cmd if isinstance(exc.cmd, list) else cmd,
+            returncode=124,
+            stdout=stdout,
+            stderr=stderr,
+        )
 
 
 def _has_any(path: Path, names: Iterable[str]) -> bool:
@@ -288,49 +418,100 @@ def respect_config_cmd(tool_name: str, base_cmd: list[str], root: Path) -> list[
 
 
 # ---------------- File discovery & git ----------------
+def _contains_forbidden_dir(path: Path) -> bool:
+    return any(part in ALWAYS_EXCLUDE_DIRS for part in path.parts)
+
+
 def list_repo_files(
-    roots: list[Path], *, excludes: list[Path], prefer_git: bool = True
+    roots: list[Path],
+    *,
+    excludes: list[Path],
+    prefer_git: bool = True,
+    respect_gitignore: bool = False,
 ) -> list[Path]:
     excludes_set = {p.resolve() for p in excludes}
-    results: list[Path] = []
+    repo_root: Path | None = None
+    results: set[Path] = set()
 
-    def skip(p: Path) -> bool:
-        if any(str(p).startswith(str(e)) for e in excludes_set):
+    def _is_excluded(path: Path) -> bool:
+        if _contains_forbidden_dir(path):
             return True
-        parts = p.parts
-        return any(part.startswith(".") for part in parts if part not in (".",))
+        if any(part.startswith(".") and part not in {".", ".."} for part in path.parts):
+            return True
+        try:
+            resolved = path.resolve()
+        except OSError:
+            resolved = (Path.cwd() / path).resolve()
+        for exc in excludes_set:
+            try:
+                resolved.relative_to(exc)
+            except ValueError:
+                continue
+            else:
+                return True
+        return False
 
-    if (
-        prefer_git
-        and len(roots) == 1
-        and roots[0].resolve() == Path.cwd().resolve()
-        and which("git")
-    ):
-        cp = run(["git", "ls-files"])
-        if cp.returncode == 0:
-            for line in cp.stdout.splitlines():
-                p = Path(line.strip())
-                if p.is_file() and not skip(p):
-                    results.append(p)
-            return results
+    def _within_roots(path: Path, file_roots: set[Path], dir_roots: set[Path]) -> bool:
+        if path in file_roots:
+            return True
+        for d in dir_roots:
+            try:
+                path.relative_to(d)
+            except ValueError:
+                continue
+            else:
+                return True
+        return False
+
+    try:
+        file_roots = {r.resolve() for r in roots if r.is_file()}
+    except Exception:
+        file_roots = set()
+    try:
+        dir_roots = {r.resolve() for r in roots if r.is_dir()}
+    except Exception:
+        dir_roots = set()
+
+    if prefer_git and which("git"):
+        cp_root = run(["git", "rev-parse", "--show-toplevel"])
+        if cp_root.returncode == 0:
+            repo_root = Path(cp_root.stdout.strip())
+            cmd = ["git", "ls-files", "--cached"]
+            if respect_gitignore:
+                cmd.extend(["--others", "--exclude-standard"])
+            cp = run(cmd, cwd=repo_root)
+            if cp.returncode == 0:
+                for line in cp.stdout.splitlines():
+                    rel = Path(line.strip())
+                    abs_path = repo_root / rel
+                    if not abs_path.exists():
+                        continue
+                    if not _within_roots(abs_path.resolve(), file_roots, dir_roots):
+                        continue
+                    if _is_excluded(abs_path):
+                        continue
+                    if abs_path.is_file():
+                        results.add(abs_path)
+                if results or respect_gitignore:
+                    return sorted(results)
 
     for root in roots:
         if root.is_file():
-            if not skip(root):
-                results.append(root)
+            if not _is_excluded(root):
+                results.add(root.resolve())
             continue
         for dirpath, dirnames, filenames in os.walk(root):
-            dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+            current_dir = Path(dirpath)
+            dirnames[:] = [d for d in dirnames if d not in ALWAYS_EXCLUDE_DIRS and not _is_excluded(current_dir / d)]
             for fn in filenames:
-                p = Path(dirpath) / fn
-                if not skip(p):
-                    results.append(p)
-    return sorted(set(results))
+                p = current_dir / fn
+                if _is_excluded(p):
+                    continue
+                results.add(p.resolve())
+    return sorted(results)
 
 
-def git_changed_paths(
-    diff_ref: str = "HEAD", include_untracked: bool = True
-) -> list[Path]:
+def git_changed_paths(diff_ref: str = "HEAD", include_untracked: bool = True) -> list[Path]:
     paths: set[Path] = set()
     cp1 = run(["git", "diff", "--name-only", diff_ref])
     if cp1.returncode == 0:
@@ -342,22 +523,47 @@ def git_changed_paths(
         cp3 = run(["git", "ls-files", "--others", "--exclude-standard"])
         if cp3.returncode == 0:
             paths.update(Path(x.strip()) for x in cp3.stdout.splitlines() if x.strip())
-    return sorted({p for p in paths if p.exists()})
+    filtered: set[Path] = set()
+    for p in paths:
+        absolute = p if p.is_absolute() else (Path.cwd() / p)
+        try:
+            resolved = absolute.resolve()
+        except OSError:
+            continue
+        if not resolved.exists():
+            continue
+        if _contains_forbidden_dir(resolved):
+            continue
+        if any(part.startswith(".") and part not in {".", ".."} for part in resolved.parts):
+            continue
+        filtered.add(resolved)
+    return sorted(filtered)
 
 
 def git_staged_paths() -> list[Path]:
     if not which("git"):
         return []
     cp = run(["git", "diff", "--name-only", "--cached"])
-    return (
-        [
-            Path(x.strip())
-            for x in cp.stdout.splitlines()
-            if x.strip() and Path(x.strip()).exists()
-        ]
-        if cp.returncode == 0
-        else []
-    )
+    if cp.returncode != 0:
+        return []
+    results: list[Path] = []
+    for line in cp.stdout.splitlines():
+        if not line.strip():
+            continue
+        candidate = Path(line.strip())
+        absolute = candidate if candidate.is_absolute() else (Path.cwd() / candidate)
+        try:
+            resolved = absolute.resolve()
+        except OSError:
+            continue
+        if not resolved.exists():
+            continue
+        if _contains_forbidden_dir(resolved):
+            continue
+        if any(part.startswith(".") and part not in {".", ".."} for part in resolved.parts):
+            continue
+        results.append(resolved)
+    return results
 
 
 def git_merge_base(base_branch: str) -> str | None:
@@ -374,9 +580,7 @@ def git_merge_base(base_branch: str) -> str | None:
 @dataclass
 class OutputFilter:
     patterns: Iterable[str] = field(default_factory=tuple)
-    _compiled_patterns: list[re.Pattern[str]] = field(
-        init=False, repr=False, default_factory=list
-    )
+    _compiled_patterns: list[re.Pattern[str]] = field(init=False, repr=False, default_factory=list)
 
     def __post_init__(self) -> None:
         self._compiled_patterns = [re.compile(p) for p in self.patterns]
@@ -384,11 +588,7 @@ class OutputFilter:
     def apply(self, text: str) -> str:
         if not text or not self._compiled_patterns:
             return text
-        return "\n".join(
-            line
-            for line in text.splitlines()
-            if not any(p.search(line) for p in self._compiled_patterns)
-        )
+        return "\n".join(line for line in text.splitlines() if not any(p.search(line) for p in self._compiled_patterns))
 
 
 # ---------------- Data structures ----------------
@@ -444,9 +644,11 @@ class ToolAction:
     ignore_exit: bool = False
     description: str = ""
     failure_on_output_regex: str | None = None
+    timeout_s: float | None = None
+    env: dict[str, str] = field(default_factory=dict)
 
     def build_cmd(self, files: list[Path], cfg: Config, root: Path) -> list[str]:
-        out = self.cmd.realize(cfg, root)
+        out = list(self.cmd.realize(cfg, root))
         if self.append_files and files:
             out += [str(p) for p in files]
         return out
@@ -473,9 +675,7 @@ class Parser(Protocol):
 class JsonParser:
     """A concrete parser for JSON output, implementing the Parser protocol."""
 
-    def __init__(
-        self, transform_func: Callable[[Any, str], list[RawDiagnostic]], tool_name: str
-    ):
+    def __init__(self, transform_func: Callable[[Any, str], list[RawDiagnostic]], tool_name: str):
         self.transform_func = transform_func
         self.tool_name = tool_name
 
@@ -522,9 +722,7 @@ class TextParser:
 class CompositeParser:
     """A parser that holds and can choose between a JSON and a text parser."""
 
-    def __init__(
-        self, json_parser: Parser | None = None, text_parser: Parser | None = None
-    ):
+    def __init__(self, json_parser: Parser | None = None, text_parser: Parser | None = None):
         self.json_parser = json_parser
         self.text_parser = text_parser
 
@@ -584,11 +782,198 @@ class Tool:
         return which(self.actions[0].cmd.base_cmd[0]) is not None
 
     def select_files(self, files: list[Path]) -> list[Path]:
-        return [
-            f
-            for f in files
-            if (not self.file_extensions or f.suffix in self.file_extensions)
-        ]
+        return [f for f in files if (not self.file_extensions or f.suffix in self.file_extensions)]
+
+
+def _looks_like_node_command(executable: str) -> bool:
+    name = Path(executable).name.lower()
+    return any(name == hint or name.startswith(f"{hint}.") for hint in NODE_EXECUTABLE_HINTS)
+
+
+def _ensure_npx_noninteractive(cmd: list[str]) -> list[str]:
+    if not cmd:
+        return cmd
+    exe = Path(cmd[0]).name.lower()
+    if exe != "npx":
+        return cmd
+    flags = {arg for arg in cmd[1:] if arg.startswith("-")}
+    extras: list[str] = []
+    if not ({"--yes", "-y"} & flags):
+        extras.append("--yes")
+    if "--no-install" not in flags:
+        extras.append("--no-install")
+    if not extras:
+        return cmd
+    return [cmd[0], *extras, *cmd[1:]]
+
+
+def _find_local_node_binary(tool_name: str, files: Iterable[Path]) -> Path | None:
+    suffixes = ("", ".cmd", ".ps1", ".exe")
+    seen: set[Path] = set()
+
+    def check_dir(directory: Path) -> Path | None:
+        node_bin = directory / "node_modules" / ".bin"
+        for suff in suffixes:
+            candidate = node_bin / f"{tool_name}{suff}"
+            if candidate.exists():
+                return candidate
+        return None
+
+    for candidate_path in files:
+        current = candidate_path if candidate_path.is_dir() else candidate_path.parent
+        while True:
+            current = current.resolve()
+            if current in seen:
+                break
+            seen.add(current)
+            if local := check_dir(current):
+                return local
+            if current == ROOT or current.parent == current:
+                break
+            current = current.parent
+
+    if local := check_dir(ROOT):
+        return local
+    return None
+
+
+def _normalize_command(cmd: list[str], files: list[Path]) -> tuple[list[str], dict[str, str] | None]:
+    normalized = list(cmd)
+    env_overrides: dict[str, str] = {}
+    if normalized:
+        exe = normalized[0]
+        if Path(exe).name.lower() == "npx":
+            tool_arg_idx = None
+            for idx, token in enumerate(normalized[1:], start=1):
+                if not token.startswith("-"):
+                    tool_arg_idx = idx
+                    break
+            if tool_arg_idx is not None:
+                tool_name = Path(normalized[tool_arg_idx]).name
+                if local_bin := _find_local_node_binary(tool_name, files):
+                    normalized = [str(local_bin), *normalized[tool_arg_idx + 1 :]]
+                else:
+                    normalized = _ensure_npx_noninteractive(normalized)
+        if _looks_like_node_command(normalized[0]):
+            for key, value in NODE_ENV_DEFAULTS.items():
+                env_overrides.setdefault(key, value)
+
+    return normalized, (env_overrides or None)
+
+
+@lru_cache(maxsize=512)
+def _cached_source_lines(path_str: str) -> tuple[str, ...]:
+    try:
+        text = Path(path_str).read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return ()
+    return tuple(text.splitlines())
+
+
+def _scan_python_symbols(lines: tuple[str, ...]) -> list[tuple[int, str]]:
+    records: list[tuple[int, str]] = []
+    stack: list[tuple[int, str]] = []
+    for lineno, raw_line in enumerate(lines, start=1):
+        if not raw_line.strip() or raw_line.strip().startswith("#"):
+            continue
+        indent = len(raw_line) - len(raw_line.lstrip(" "))
+        while stack and indent <= stack[-1][0]:
+            stack.pop()
+        if m_cls := _PY_CLASS_RE.match(raw_line):
+            stack.append((indent, m_cls.group("name")))
+            continue
+        if m_def := _PY_DEF_RE.match(raw_line):
+            qual = [entry[1] for entry in stack] + [m_def.group("name")]
+            records.append((lineno, ".".join(qual)))
+    return records
+
+
+def _scan_typescript_symbols(lines: tuple[str, ...]) -> list[tuple[int, str]]:
+    records: list[tuple[int, str]] = []
+    class_stack: list[tuple[int, str]] = []
+    brace_depth = 0
+    for lineno, raw_line in enumerate(lines, start=1):
+        stripped = raw_line.strip()
+        class_match = _TS_CLASS_RE.match(raw_line)
+        func_name: str | None = None
+        if not stripped or stripped.startswith("//"):
+            open_braces = raw_line.count("{")
+            close_braces = raw_line.count("}")
+            brace_depth += open_braces - close_braces
+            while class_stack and brace_depth < class_stack[-1][0]:
+                class_stack.pop()
+            if class_match:
+                class_stack.append((brace_depth, class_match.group("name")))
+            continue
+        if m := _TS_FUNC_RE.match(raw_line):
+            func_name = m.group("name")
+        elif m := _TS_CONST_FUNC_RE.match(raw_line):
+            func_name = m.group("name")
+        elif class_stack and (m := _TS_METHOD_RE.match(raw_line)):
+            func_name = m.group(1)
+        if func_name:
+            prefix = ".".join(name for _, name in class_stack)
+            symbol = f"{prefix}.{func_name}" if prefix else func_name
+            records.append((lineno, symbol))
+        open_braces = raw_line.count("{")
+        close_braces = raw_line.count("}")
+        brace_depth += open_braces - close_braces
+        while class_stack and brace_depth < class_stack[-1][0]:
+            class_stack.pop()
+        if class_match:
+            class_stack.append((brace_depth, class_match.group("name")))
+    return records
+
+
+@lru_cache(maxsize=512)
+def _symbol_index(path_str: str) -> tuple[tuple[int, str], ...]:
+    lines = _cached_source_lines(path_str)
+    if not lines:
+        return ()
+    suffix = Path(path_str).suffix.lower()
+    if suffix == ".py":
+        records = _scan_python_symbols(lines)
+    elif suffix in {".ts", ".tsx", ".js", ".jsx"}:
+        records = _scan_typescript_symbols(lines)
+    else:
+        records = []
+    return tuple(records)
+
+
+def _resolve_source_path(file_name: str | None) -> Path | None:
+    if not file_name:
+        return None
+    candidate = Path(file_name)
+    possible: list[Path] = []
+    if candidate.is_absolute():
+        possible.append(candidate)
+    else:
+        possible.extend([candidate, ROOT / candidate])
+    for option in possible:
+        try:
+            if option.exists():
+                return option.resolve()
+        except Exception:
+            continue
+    try:
+        return candidate.resolve()
+    except Exception:
+        return None
+
+
+def _symbol_for_location(file_name: str | None, line: int | None) -> str | None:
+    if not file_name or not isinstance(line, int) or line <= 0:
+        return None
+    path = _resolve_source_path(file_name)
+    if not path:
+        return None
+    entries = _symbol_index(str(path))
+    symbol: str | None = None
+    for entry_line, entry_symbol in entries:
+        if entry_line > line:
+            break
+        symbol = entry_symbol
+    return symbol
 
 
 @dataclass
@@ -745,6 +1130,7 @@ class ToolRunContext:
 
     suite_name: str
     files: list[Path]
+    workspace_path: Path
     exec_cfg: ExecutionConfig
     output_cfg: OutputConfig
     cfg: Config
@@ -798,10 +1184,27 @@ class CacheSaveArgs:
 
 
 @dataclass
+class Workspace:
+    """Represents a logical project workspace within the repository."""
+
+    path: Path
+    languages: set[str]
+    markers: set[str] = field(default_factory=set)
+    files: list[Path] = field(default_factory=list)
+
+    def display_name(self) -> str:
+        try:
+            rel = str(self.path.resolve().relative_to(TOP_ROOT.resolve()))
+        except Exception:
+            rel = str(self.path)
+        return rel or "."
+
+
+@dataclass
 class LintingContext:
     """Context for a full linting run across workspaces."""
 
-    workspaces: list[Path]
+    workspaces: list[Workspace]
     all_files: list[Path]
     suites: list[LanguageSuite]
     exec_cfg: ExecutionConfig
@@ -836,10 +1239,12 @@ register_tool(
                 DeferredCommand(["npx", "prettier", "--write"], "prettier"),
                 is_fix=True,
                 ignore_exit=True,
+                timeout_s=180.0,
             ),
             ToolAction(
                 "check",
                 DeferredCommand(["npx", "prettier", "--check"], "prettier"),
+                timeout_s=180.0,
             ),
         ],
         languages=("python", "javascript", "markdown"),
@@ -948,11 +1353,7 @@ def transform_json_mypy(payload: Any, tool_name: str) -> list[RawDiagnostic]:
     records = []
     for item in _ensure_list(payload):
         sev_str = item.get("severity", "error")
-        sev = (
-            Severity(sev_str)
-            if sev_str in Severity.__members__.values()
-            else Severity.NOTICE
-        )
+        sev = Severity(sev_str) if sev_str in Severity.__members__.values() else Severity.NOTICE
         records.append(
             RawDiagnostic(
                 file=item.get("path") or item.get("filename"),
@@ -1147,11 +1548,7 @@ def transform_json_cargo(payload: Any, tool_name: str) -> list[RawDiagnostic]:
         if not isinstance(msg, dict):
             continue
         level = msg.get("level", "warning")
-        sev = (
-            Severity.ERROR
-            if level == "error"
-            else (Severity.WARNING if level == "warning" else Severity.NOTICE)
-        )
+        sev = Severity.ERROR if level == "error" else (Severity.WARNING if level == "warning" else Severity.NOTICE)
         code_obj = msg.get("code")
         code = code_obj.get("code") if isinstance(code_obj, dict) else None
         if not (spans := msg.get("spans") or []):
@@ -1248,9 +1645,7 @@ register_tool(
             ToolAction(
                 "fix",
                 DeferredCommand(
-                    ["ruff", "check"]
-                    + ruff_common
-                    + ["--fix", "--no-unsafe-fixes", "--fix-only", "--silent"],
+                    ["ruff", "check"] + ruff_common + ["--fix", "--no-unsafe-fixes", "--fix-only", "--silent"],
                     "ruff",
                 ),
                 is_fix=True,
@@ -1259,9 +1654,7 @@ register_tool(
             ToolAction(
                 "check",
                 DeferredCommand(
-                    ["ruff", "check"]
-                    + ruff_common
-                    + ["--fix", "--no-unsafe-fixes", "--no-show-fixes", "--quiet"],
+                    ["ruff", "check"] + ruff_common + ["--fix", "--no-unsafe-fixes", "--no-show-fixes", "--quiet"],
                     "ruff",
                 ),
             ),
@@ -1507,9 +1900,7 @@ register_tool(
         [
             ToolAction(
                 "smoke",
-                DeferredCommand(
-                    ["pytest", "-q", "-m", "smoke", "-c", "/dev/null"], "pytest"
-                ),
+                DeferredCommand(["pytest", "-q", "-m", "smoke", "-c", "/dev/null"], "pytest"),
                 append_files=True,
             )
         ],
@@ -1535,10 +1926,12 @@ register_tool(
                 DeferredCommand(["npx", "eslint", "--fix"], "eslint"),
                 is_fix=True,
                 ignore_exit=True,
+                timeout_s=240.0,
             ),
             ToolAction(
                 "check",
                 DeferredCommand(["npx", "eslint"], "eslint"),
+                timeout_s=240.0,
             ),
         ],
         languages=("javascript",),
@@ -1567,6 +1960,7 @@ register_tool(
                 "project",
                 DeferredCommand(["npx", "tsc", "--noEmit"], "tsc"),
                 append_files=False,
+                timeout_s=420.0,
             )
         ],
         languages=("javascript",),
@@ -1594,6 +1988,7 @@ register_tool(
                 "tests",
                 DeferredCommand(["npx", "jest", "--passWithNoTests"], "jest"),
                 append_files=False,
+                timeout_s=420.0,
             )
         ],
         languages=("javascript",),
@@ -1628,15 +2023,9 @@ register_tool(
 
 
 # ---------------- Parsers ----------------
-_RE_RUST_LOC: Final[re.Pattern[str]] = re.compile(
-    r"^\s*-->\s*(?P<file>[^:\n]+):(?P<line>\d+):(?P<col>\d+)\s*$"
-)
-_RE_RUSTFMT_DIFF: Final[re.Pattern[str]] = re.compile(
-    r"^Diff in (?P<file>[^:\n]+):(?P<line>\d+):(?P<col>\d+)"
-)
-_RE_RUST_PANIC_AT: Final[re.Pattern[str]] = re.compile(
-    r"\b(?P<file>[^:\n]+):(?P<line>\d+):(?P<col>\d+)\b"
-)
+_RE_RUST_LOC: Final[re.Pattern[str]] = re.compile(r"^\s*-->\s*(?P<file>[^:\n]+):(?P<line>\d+):(?P<col>\d+)\s*$")
+_RE_RUSTFMT_DIFF: Final[re.Pattern[str]] = re.compile(r"^Diff in (?P<file>[^:\n]+):(?P<line>\d+):(?P<col>\d+)")
+_RE_RUST_PANIC_AT: Final[re.Pattern[str]] = re.compile(r"\b(?P<file>[^:\n]+):(?P<line>\d+):(?P<col>\d+)\b")
 _RE_TSC: Final[re.Pattern[str]] = re.compile(
     r"^(?P<file>[^:(\n]+)\((?P<line>\d+),(?P<col>\d+)\):\s*(?P<sev>error|warning)\s*(?P<code>[A-Za-z]+\d+)?:?\s*(?P<msg>.+)$"
 )
@@ -1685,11 +2074,7 @@ def _map_to_diagnostic(data: RawDiagnostic) -> Diagnostic:
     """Maps a standardized dictionary to a Diagnostic object, applying enrichment."""
     msg = data.message
     code = data.code
-    sev = (
-        data.severity
-        if isinstance(data.severity, Severity)
-        else Severity(data.severity)
-    )
+    sev = data.severity if isinstance(data.severity, Severity) else Severity(data.severity)
     tool_name = data.source or "unknown"
 
     # Apply tool-specific severity rules and message formatting
@@ -1713,9 +2098,7 @@ def _map_to_diagnostic(data: RawDiagnostic) -> Diagnostic:
     )
 
 
-def transform_text_regex(
-    payload: Any, tool_name: str, regex: re.Pattern[str]
-) -> list[RawDiagnostic]:
+def transform_text_regex(payload: Any, tool_name: str, regex: re.Pattern[str]) -> list[RawDiagnostic]:
     """Transforms generic regex-based text output to a standardized list of RawDiagnostics."""
     diags: list[RawDiagnostic] = []
     # Generic fallback regex, now defined locally.
@@ -1822,11 +2205,7 @@ class AnnotationFormat:
 ANNOTATION_FORMATS: Final[dict[str, AnnotationFormat]] = {
     "eslint": AnnotationFormat(augment=lambda cmd: cmd + ["-f", "json"]),
     "ruff": AnnotationFormat(
-        augment=lambda cmd: (
-            (cmd[:2] + ["--output-format", "json"] + cmd[2:])
-            if cmd[:2] == ["ruff", "check"]
-            else cmd
-        )
+        augment=lambda cmd: ((cmd[:2] + ["--output-format", "json"] + cmd[2:]) if cmd[:2] == ["ruff", "check"] else cmd)
     ),
     "mypy": AnnotationFormat(augment=lambda cmd: cmd + ["--error-format=json"]),
     "pylint": AnnotationFormat(augment=lambda cmd: cmd + ["--output-format=json"]),
@@ -1884,9 +2263,7 @@ _GROUP_PATTERNS: Final[dict[str, re.Pattern[str]]] = {
     "import": _IMPORT_PAT,
     "undefined": _UNDEF_PAT,
     "unused-import": _UNUSED_IMPORT_PAT,
-    "unused-variable": re.compile(
-        r"(unused variable|F841|W0612|no-unused-vars|TS6133)", re.I
-    ),
+    "unused-variable": re.compile(r"(unused variable|F841|W0612|no-unused-vars|TS6133)", re.I),
     "type": re.compile(
         r"(incompatible type|typed? mismatch|not assignable|reportGeneralTypeIssues|TS(2322|2345|2532|18047))",
         re.I,
@@ -1912,9 +2289,7 @@ _GROUP_PATTERNS: Final[dict[str, re.Pattern[str]]] = {
         re.I,
     ),
     "deadcode": re.compile(r"(vulture|unused code|unreachable code|dead code)", re.I),
-    "complexity": re.compile(
-        r"(too many branches|too complex|cyclomatic|C901|R(126|127|1702|1720))", re.I
-    ),
+    "complexity": re.compile(r"(too many branches|too complex|cyclomatic|C901|R(126|127|1702|1720))", re.I),
     "performance": re.compile(
         r"(perf|performance|inefficient|unnecessary list comprehension|unnecessary call)",
         re.I,
@@ -2009,9 +2384,7 @@ def _tool_rank(tool: str, prefer: list[str]) -> int:
         return len(prefer) + 100
 
 
-def dedupe_outcomes(
-    outcomes: list[ToolOutcome], cfg: DedupeConfig
-) -> list[ToolOutcome]:
+def dedupe_outcomes(outcomes: list[ToolOutcome], cfg: DedupeConfig) -> list[ToolOutcome]:
     flat: list[FlatDiagnostic] = []
     seq = 0
     for o in outcomes:
@@ -2065,11 +2438,7 @@ def dedupe_outcomes(
 
     for o in outcomes:
         for si, s in enumerate(o.steps):
-            s.diagnostics = [
-                d
-                for i, d in enumerate(s.diagnostics or [])
-                if (o.suite, o.tool, si, i) in to_keep
-            ]
+            s.diagnostics = [d for i, d in enumerate(s.diagnostics or []) if (o.suite, o.tool, si, i) in to_keep]
     return outcomes
 
 
@@ -2125,6 +2494,62 @@ def _print_raw_tool_failures(outcomes: list[ToolOutcome], cfg: OutputConfig) -> 
                 if s.rc != 0 and not s.skipped:
                     failure_log = f"[{o.tool}:{s.action}]\n{(s.raw_stdout or s.raw_stderr or s.stdout or s.stderr or '(no output)')}"
                     sys.stdout.write(failure_log + "\n")
+
+
+def print_concise(outcomes: list[ToolOutcome], cfg: OutputConfig) -> list[Diagnostic]:
+    section("Concise Findings", use_color=cfg.color)
+    items = sorted(
+        _deduped_items(outcomes),
+        key=lambda d: (
+            _relpath(d.file or ""),
+            d.line or 0,
+            d.col or 0,
+            d.message or "",
+        ),
+    )
+    seen: set[tuple[str, int, int, str, str]] = set()
+    unique_items: list[Diagnostic] = []
+    for diag in items:
+        rel_path = _relpath(diag.file or "")
+        key = (
+            rel_path,
+            diag.line or 0,
+            diag.col or 0,
+            diag.code or diag.group or "",
+            diag.message or "",
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_items.append(diag)
+
+    if not unique_items:
+        ok("No diagnostics after dedupe.", use_emoji=cfg.emoji)
+        return []
+
+    severity_tag = {
+        Severity.ERROR: "E",
+        Severity.WARNING: "W",
+        Severity.NOTICE: "N",
+        Severity.NOTE: "N",
+    }
+
+    for diag in unique_items:
+        rel_path = _relpath(diag.file or "")
+        line = diag.line or 1
+        col = diag.col or 0
+        location = f"{rel_path}:{line}"
+        if col:
+            location += f":{col}"
+        symbol = _symbol_for_location(diag.file, diag.line)
+        symbol_part = f" · {symbol}" if symbol else ""
+        sev = severity_tag.get(diag.severity, "W")
+        tool = diag.title or "unknown"
+        key = diag.code or diag.group or "generic"
+        message = (diag.message or "").replace("\n", " ").strip()
+        line_out = f"{location}{symbol_part} [{sev}] {tool}:{key} - {message}"
+        print(line_out)
+    return unique_items
 
 
 def print_pretty_text(outcomes: list[ToolOutcome], cfg: OutputConfig) -> None:
@@ -2288,9 +2713,7 @@ def emit_pretty(outcomes: list[ToolOutcome], cfg: OutputConfig) -> None:
         print_pretty_text(outcomes, cfg)
 
 
-def outcomes_to_report(
-    outcomes: list[ToolOutcome], *, files_scanned: int, include_raw: bool
-) -> dict[str, Any]:
+def outcomes_to_report(outcomes: list[ToolOutcome], *, files_scanned: int, include_raw: bool) -> dict[str, Any]:
     """Converts a list of tool outcomes into a structured dictionary report."""
     suites: dict[str, dict[str, ToolReport]] = {}
     failed_tools = 0
@@ -2329,15 +2752,11 @@ def outcomes_to_report(
         skipped_missing=skipped_missing,
         total_tools=total_tools,
     )
-    report = Report(
-        version=1, files_scanned=files_scanned, suites=suites, summary=summary
-    )
+    report = Report(version=1, files_scanned=files_scanned, suites=suites, summary=summary)
     return asdict(report)
 
 
-_SEVERITY_TO_SARIF_LEVEL: Final[
-    dict[Severity, Literal["error", "warning", "notice"]]
-] = {
+_SEVERITY_TO_SARIF_LEVEL: Final[dict[Severity, Literal["error", "warning", "notice"]]] = {
     Severity.ERROR: "error",
     Severity.WARNING: "warning",
     Severity.NOTICE: "notice",
@@ -2392,9 +2811,7 @@ def build_sarif(outcomes: list[ToolOutcome]) -> dict[str, Any]:
                         locations=[
                             SarifLocation(
                                 physical_location=SarifPhysicalLocation(
-                                    artifact_location=SarifArtifactLocation(
-                                        uri=str(d.file or "")
-                                    ),
+                                    artifact_location=SarifArtifactLocation(uri=str(d.file or "")),
                                     region=SarifRegion(
                                         start_line=d.line or 1,
                                         start_column=d.col or 1,
@@ -2418,9 +2835,7 @@ def build_sarif(outcomes: list[ToolOutcome]) -> dict[str, Any]:
         version="2.1.0",
         runs=[
             SarifRun(
-                tool=SarifTool(
-                    driver={"name": "lint.py", "rules": list(rules.values())}
-                ),
+                tool=SarifTool(driver={"name": "lint.py", "rules": list(rules.values())}),
                 results=results,
             )
         ],
@@ -2517,11 +2932,7 @@ def _tool_version(cmd: list[str]) -> str:
     args = candidates.get(prog, ["--version"])
     try:
         cp = run([prog] + args)
-        out = (
-            cp.stdout.strip().splitlines()[0]
-            if cp.returncode == 0 and cp.stdout
-            else ""
-        )
+        out = cp.stdout.strip().splitlines()[0] if cp.returncode == 0 and cp.stdout else ""
     except Exception:
         out = ""
     _VERSION_CACHE[prog] = out
@@ -2635,9 +3046,7 @@ def _cache_save(args: CacheSaveArgs) -> None:
     try:
         args.cache_dir.mkdir(parents=True, exist_ok=True)
         args.payload.files_meta = _files_meta(args.files)
-        (args.cache_dir / f"{args.key}.json").write_text(
-            json.dumps(asdict(args.payload)), encoding="utf-8"
-        )
+        (args.cache_dir / f"{args.key}.json").write_text(json.dumps(asdict(args.payload)), encoding="utf-8")
     except Exception:
         pass
 
@@ -2743,9 +3152,7 @@ def detect_pylint_plugins() -> tuple[str, ...]:
 
 # ---------------- Suites ----------------
 def detect_python(root: Path) -> bool:
-    return (root / "pyproject.toml").is_file() or any(
-        p.suffix == ".py" for p in root.glob("**/*.py")
-    )
+    return (root / "pyproject.toml").is_file() or any(p.suffix == ".py" for p in root.glob("**/*.py"))
 
 
 def python_tools(_: Path) -> list[Tool]:
@@ -2761,12 +3168,14 @@ def detect_js(root: Path) -> bool:
     )
 
 
-def js_tools(_: Path) -> list[Tool]:
+def js_tools(root: Path) -> list[Tool]:
     tools = [t for t in ALL_TOOLS if "javascript" in t.languages]
     # The special logic for multiple tsconfigs remains, but it acts on the filtered list.
-    if tsconfigs := [
-        p for p in Path(".").rglob("tsconfig*.json") if "node_modules" not in str(p)
-    ]:
+    try:
+        tsconfigs = [p for p in root.rglob("tsconfig*.json") if "node_modules" not in str(p)]
+    except Exception:
+        tsconfigs = []
+    if tsconfigs:
         for t in tools:
             if t.name == "tsc":
                 per_cfg_actions = []
@@ -2791,9 +3200,7 @@ register_suite(LanguageSuite("javascript", detect_js, js_tools))
 
 
 def detect_go(root: Path) -> bool:
-    return (root / "go.mod").is_file() or any(
-        p.suffix == ".go" for p in root.glob("**/*.go")
-    )
+    return (root / "go.mod").is_file() or any(p.suffix == ".go" for p in root.glob("**/*.go"))
 
 
 def go_tools(_: Path) -> list[Tool]:
@@ -2867,9 +3274,7 @@ register_suite(LanguageSuite("go", detect_go, go_tools))
 
 
 def detect_rust(root: Path) -> bool:
-    return (root / "Cargo.toml").is_file() or any(
-        p.suffix == ".rs" for p in root.glob("**/*.rs")
-    )
+    return (root / "Cargo.toml").is_file() or any(p.suffix == ".rs" for p in root.glob("**/*.rs"))
 
 
 def rust_tools(_: Path) -> list[Tool]:
@@ -2943,9 +3348,7 @@ def rust_tools(_: Path) -> list[Tool]:
             [
                 ToolAction(
                     "tests",
-                    DeferredCommand(
-                        ["cargo", "test", "--all-targets", "--quiet"], "cargo-test"
-                    ),
+                    DeferredCommand(["cargo", "test", "--all-targets", "--quiet"], "cargo-test"),
                     append_files=False,
                     filter_key="cargo_test",
                 )
@@ -3011,9 +3414,7 @@ def security_tools(_: Path) -> list[Tool]:
             [
                 ToolAction(
                     "audit",
-                    DeferredCommand(
-                        ["pip-audit", "-r", "requirements.txt"], "pip-audit"
-                    ),
+                    DeferredCommand(["pip-audit", "-r", "requirements.txt"], "pip-audit"),
                     append_files=False,
                     filter_key="",
                 ),
@@ -3039,9 +3440,7 @@ def security_tools(_: Path) -> list[Tool]:
             [
                 ToolAction(
                     "audit",
-                    DeferredCommand(
-                        ["npm", "audit", "--audit-level=moderate"], "npm-audit"
-                    ),
+                    DeferredCommand(["npm", "audit", "--audit-level=moderate"], "npm-audit"),
                     append_files=False,
                     filter_key="",
                 ),
@@ -3060,9 +3459,7 @@ def _count_loc(files: list[Path]) -> int:
     total_lines = 0
     for f in files:
         try:
-            total_lines += len(
-                f.read_text(encoding="utf-8", errors="ignore").splitlines()
-            )
+            total_lines += len(f.read_text(encoding="utf-8", errors="ignore").splitlines())
         except Exception:
             pass  # Ignore files that can't be read
     return total_lines
@@ -3098,9 +3495,7 @@ FRONTEND_DIR_HINTS: Final[set[str]] = {
 
 
 def _only_docs(files: list[Path]) -> bool:
-    return bool(files) and all(
-        (f.suffix.lower() in DOC_EXTS or "docs" in str(f.parent).lower()) for f in files
-    )
+    return bool(files) and all((f.suffix.lower() in DOC_EXTS or "docs" in str(f.parent).lower()) for f in files)
 
 
 def _frontend_only(files: list[Path]) -> bool:
@@ -3124,9 +3519,7 @@ def _frontend_only(files: list[Path]) -> bool:
     return hits > 0
 
 
-def apply_skip_heuristics(
-    suites: list[LanguageSuite], files: list[Path], cfg: ExecutionConfig
-) -> list[LanguageSuite]:
+def apply_skip_heuristics(suites: list[LanguageSuite], files: list[Path], cfg: ExecutionConfig) -> list[LanguageSuite]:
     if cfg.force_all:
         return suites
     if _only_docs(files):
@@ -3136,8 +3529,16 @@ def apply_skip_heuristics(
     return suites
 
 
-def discover_workspaces(root: Path) -> list[Path]:
-    markers = ("pyproject.toml", "package.json", "go.mod", "Cargo.toml")
+def _language_from_extension(path: Path) -> str | None:
+    ext = path.suffix.lower()
+    for lang, exts in LANGUAGE_EXTENSIONS.items():
+        if ext in exts:
+            return lang
+    return None
+
+
+def discover_workspaces(root: Path, files: list[Path]) -> list[Workspace]:
+    marker_lookup = {marker.lower(): lang for lang, markers in LANGUAGE_MARKERS.items() for marker in markers}
     ignore = {
         ".git",
         "node_modules",
@@ -3148,13 +3549,93 @@ def discover_workspaces(root: Path) -> list[Path]:
         ".tox",
         ".mypy_cache",
     }
-    workspaces = {root.resolve()}
-    for dirpath, dirnames, _ in os.walk(root):
+    ignore.update(ALWAYS_EXCLUDE_DIRS)
+
+    root_resolved = root.resolve()
+    candidate_info: dict[Path, dict[str, Any]] = {}
+
+    for dirpath, dirnames, filenames in os.walk(root):
         dn = Path(dirpath)
         dirnames[:] = [d for d in dirnames if d not in ignore and not d.startswith(".")]
-        if any((dn / m).exists() for m in markers):
-            workspaces.add(dn.resolve())
-    return sorted(workspaces)
+        langs: set[str] = set()
+        markers: set[str] = set()
+        for fname in filenames:
+            lang = marker_lookup.get(fname.lower())
+            if lang:
+                langs.add(lang)
+                markers.add(fname)
+        if langs:
+            candidate_info[dn.resolve()] = {
+                "languages": set(langs),
+                "markers": set(markers),
+            }
+
+    if root_resolved not in candidate_info:
+        candidate_info[root_resolved] = {"languages": set(), "markers": set()}
+
+    workspace_files: dict[Path, list[Path]] = {path: [] for path in candidate_info}
+    candidate_paths = sorted(candidate_info.keys(), key=lambda p: len(p.parts), reverse=True)
+
+    for file_path in files:
+        try:
+            resolved = file_path.resolve()
+        except Exception:
+            resolved = (root / file_path).resolve()
+        owner = root_resolved
+        for candidate in candidate_paths:
+            if candidate == root_resolved:
+                continue
+            try:
+                resolved.relative_to(candidate)
+            except ValueError:
+                continue
+            else:
+                owner = candidate
+                break
+        workspace_files.setdefault(owner, []).append(file_path)
+        if lang := _language_from_extension(file_path):
+            candidate_info[owner]["languages"].add(lang)
+
+    workspaces: list[Workspace] = []
+    for path, info in candidate_info.items():
+        markers = set(info.get("markers", set()))
+        languages = set(info.get("languages", set()))
+        assigned_files = workspace_files.get(path, [])
+        workspaces.append(
+            Workspace(
+                path=path,
+                languages=languages,
+                markers=markers,
+                files=list(assigned_files),
+            )
+        )
+
+    def _has_language_files(ws: Workspace, lang: str) -> bool:
+        exts = LANGUAGE_EXTENSIONS.get(lang, set())
+        if not exts:
+            return False
+        return any(f.suffix.lower() in exts for f in ws.files)
+
+    for lang in LANGUAGE_EXTENSIONS:
+        candidates = [ws for ws in workspaces if lang in ws.languages]
+        if len(candidates) <= 1:
+            continue
+        candidates.sort(key=lambda ws: len(ws.path.parts))
+        for idx, ws in enumerate(candidates):
+            for child in candidates[idx + 1 :]:
+                try:
+                    child.path.relative_to(ws.path)
+                except ValueError:
+                    continue
+                marker_names = {marker.lower() for marker in LANGUAGE_MARKERS.get(lang, set())}
+                if any(m.lower() in marker_names for m in ws.markers):
+                    break
+                if not _has_language_files(ws, lang):
+                    ws.languages.discard(lang)
+                break
+
+    workspaces.sort(key=lambda ws: str(ws.path))
+    return workspaces
 
 
 # ---------------- Install helpers (unchanged high-level behavior) ----------------
@@ -3182,9 +3663,7 @@ def _pkg_installed(name: str, installed: set[str]) -> bool:
 
 def _scan_python_imports(files: list[Path]) -> list[str]:
     imps = set()
-    imp_re = re.compile(
-        r"^\s*(?:from\s+([A-Za-z0-9_\.]+)\s+import|import\s+([A-Za-z0-9_\.]+))"
-    )
+    imp_re = re.compile(r"^\s*(?:from\s+([A-Za-z0-9_\.]+)\s+import|import\s+([A-Za-z0-9_\.]+))")
     for f in files:
         if f.suffix != ".py":
             continue
@@ -3304,19 +3783,21 @@ def _install_python_toolchain(files: list[Path], cfg: OutputConfig) -> None:
 
 
 def perform_install(
-    suites: list[LanguageSuite], files: list[Path], cfg: OutputConfig
+    workspaces: list[Workspace],
+    suites: list[LanguageSuite],
+    files: list[Path],
+    cfg: OutputConfig,
 ) -> None:
     section(
         "Installing toolchains (detected-only)",
         use_color=cfg.color,
     )
-    workspaces = discover_workspaces(ROOT)
     enabled_set = {s.name for s in (suites or [])}
-    py_ws = [ws for ws in workspaces if detect_python(ws)]
-    js_ws = [ws for ws in workspaces if (ws / "package.json").is_file()]
-    go_ws = [ws for ws in workspaces if (ws / "go.mod").is_file()]
-    rs_ws = [ws for ws in workspaces if (ws / "Cargo.toml").is_file()]
-    md_ws = [ws for ws in workspaces if detect_markdown(ws)]
+    py_ws = sorted({ws.path for ws in workspaces if "python" in ws.languages})
+    js_ws = sorted({ws.path for ws in workspaces if "javascript" in ws.languages})
+    go_ws = sorted({ws.path for ws in workspaces if "go" in ws.languages})
+    rs_ws = sorted({ws.path for ws in workspaces if "rust" in ws.languages})
+    md_ws = sorted({ws.path for ws in workspaces if "markdown" in ws.languages})
     if not any([py_ws, js_ws, go_ws, rs_ws, md_ws]):
         warn(
             "Nothing to install: no detected languages (JS requires package.json).",
@@ -3386,17 +3867,23 @@ def perform_install(
 def _install_javascript_toolchain(js_workspaces: list[Path], cfg: OutputConfig) -> None:
     """Handle installation of JavaScript tools in each relevant workspace."""
     if not which("npm"):
-        warn(
-            "JavaScript: npm not found; skipping JS tool installs", use_emoji=cfg.emoji
-        )
+        warn("JavaScript: npm not found; skipping JS tool installs", use_emoji=cfg.emoji)
         return
 
     devs = ["eslint", "prettier", "typescript", "jest", "@types/node"]
     for ws in js_workspaces:
         info(f"JavaScript: installing dev tools in {ws}", use_emoji=cfg.emoji)
         if (ws / "package-lock.json").is_file():
-            run(["npm", "ci", "--no-audit", "--fund=false"], cwd=ws)
-        cp = run(["npm", "install", "--no-audit", "--fund=false", "-D"] + devs, cwd=ws)
+            run(
+                ["npm", "ci", "--no-audit", "--fund=false"],
+                cwd=ws,
+                env=NODE_ENV_DEFAULTS,
+            )
+        cp = run(
+            ["npm", "install", "--no-audit", "--fund=false", "-D"] + devs,
+            cwd=ws,
+            env=NODE_ENV_DEFAULTS,
+        )
         if cp.returncode == 0:
             ok(f"JS tools installed in {ws}", use_emoji=cfg.emoji)
         else:
@@ -3404,36 +3891,37 @@ def _install_javascript_toolchain(js_workspaces: list[Path], cfg: OutputConfig) 
 
 
 # ---------------- Runner ----------------
-def discover_suites(cfg: ExecutionConfig) -> list[LanguageSuite]:
-    selected = []
-    wanted = set(cfg.languages) | set(cfg.enable)
+def discover_suites(cfg: ExecutionConfig, workspaces: list[Workspace]) -> list[LanguageSuite]:
+    selected: list[LanguageSuite] = []
+    requested = {name.lower() for name in cfg.languages}
+    enabled = {name.lower() for name in cfg.enable}
+    available: set[str] = set()
+    for ws in workspaces:
+        available.update(lang.lower() for lang in ws.languages)
+
     for suite in SUITES:
-        if cfg.languages and suite.name not in wanted:
+        name = suite.name.lower()
+        if requested:
+            if name in requested or name in enabled:
+                selected.append(suite)
             continue
-        try:
-            if suite.detector(ROOT) or suite.name in wanted:
-                selected.append(suite)
-        except Exception:
-            if suite.name in wanted:
-                selected.append(suite)
+        if name in enabled or name in available:
+            selected.append(suite)
+            continue
+        if suite.detector(ROOT):
+            selected.append(suite)
     return selected
 
 
-def _get_cached_step(
-    tool: Tool, cmd: list[str], footprint: list[Path], ctx: ToolRunContext
-) -> CachePayload | None:
+def _get_cached_step(tool: Tool, cmd: list[str], footprint: list[Path], ctx: ToolRunContext) -> CachePayload | None:
     if not ctx.exec_cfg.cache_enabled:
         return None
     _prune_cache(ctx.exec_cfg.cache_dir)
     ver = _tool_version(cmd)
     conf_hash = _hash_configs(_config_files_for_tool(tool.name, ROOT))
-    key_args = CacheKeyArgs(
-        cmd=cmd, files=footprint, version=ver, config_hash=conf_hash
-    )
+    key_args = CacheKeyArgs(cmd=cmd, files=footprint, version=ver, config_hash=conf_hash)
     key = _cache_key(key_args)
-    load_args = CacheLoadArgs(
-        cache_dir=ctx.exec_cfg.cache_dir, key=key, files=footprint
-    )
+    load_args = CacheLoadArgs(cache_dir=ctx.exec_cfg.cache_dir, key=key, files=footprint)
     cached_step: CachePayload | None = _cache_load(load_args)
     if cached_step and ctx.output_cfg.verbose:
         info(f"cache hit: {key[:8]} for {tool.name}", use_emoji=ctx.output_cfg.emoji)
@@ -3452,13 +3940,9 @@ def _save_step_to_cache(
     try:
         ver = _tool_version(cmd)
         conf_hash = _hash_configs(_config_files_for_tool(tool.name, ROOT))
-        key_args = CacheKeyArgs(
-            cmd=cmd, files=footprint, version=ver, config_hash=conf_hash
-        )
+        key_args = CacheKeyArgs(cmd=cmd, files=footprint, version=ver, config_hash=conf_hash)
         key = _cache_key(key_args)
-        save_args = CacheSaveArgs(
-            cache_dir=ctx.exec_cfg.cache_dir, key=key, files=footprint, payload=payload
-        )
+        save_args = CacheSaveArgs(cache_dir=ctx.exec_cfg.cache_dir, key=key, files=footprint, payload=payload)
         _cache_save(save_args)
     except Exception:
         pass  # Never crash on cache-related errors
@@ -3528,9 +4012,7 @@ def run_tool(args: RunToolArgs) -> ToolOutcome:
 
     relevant = tool.select_files(ctx.files)
     if tool.file_extensions and not relevant:
-        warn(
-            f"{tool.name}: skipped (no relevant files)", use_emoji=ctx.output_cfg.emoji
-        )
+        warn(f"{tool.name}: skipped (no relevant files)", use_emoji=ctx.output_cfg.emoji)
         outcome.steps.append(
             ToolOutcomeStep(
                 action="__init__",
@@ -3548,15 +4030,17 @@ def run_tool(args: RunToolArgs) -> ToolOutcome:
 
     failed = False
     for action in actions:
-        files_to_pass = (
-            relevant
-            if relevant
-            else ([ROOT] if tool.run_on_project_if_no_files else [])
-        )
-        cmd_args = BuildCmdArgs(
-            action=action, files=files_to_pass, cfg=ctx.cfg, root=ROOT
-        )
+        files_to_pass = relevant if relevant else ([ctx.workspace_path] if tool.run_on_project_if_no_files else [])
+        cmd_args = BuildCmdArgs(action=action, files=files_to_pass, cfg=ctx.cfg, root=ctx.workspace_path)
         cmd = tool.runner.build_cmd(cmd_args)
+        normalized_cmd, inferred_env = _normalize_command(cmd, files_to_pass or ctx.files)
+        cmd = normalized_cmd
+        env_for_cmd: dict[str, str] | None = None
+        if inferred_env:
+            env_for_cmd = dict(inferred_env)
+        if action.env:
+            env_for_cmd = env_for_cmd or {}
+            env_for_cmd.update(action.env)
         if ctx.output_cfg.verbose:
             info(
                 f"▶ {ctx.suite_name}:{tool.name}:{action.name} {shlex.join(cmd)}",
@@ -3566,12 +4050,10 @@ def run_tool(args: RunToolArgs) -> ToolOutcome:
         cached_step = _get_cached_step(tool, cmd, footprint, ctx)
         diags: list[Diagnostic] = []
         if cached_step:
-            cp = subprocess.CompletedProcess(
-                cmd, cached_step.rc, cached_step.raw_stdout, cached_step.raw_stderr
-            )
+            cp = subprocess.CompletedProcess(cmd, cached_step.rc, cached_step.raw_stdout, cached_step.raw_stderr)
             diags = cached_step.diagnostics
         else:
-            cp = run(cmd)
+            cp = run(cmd, env=env_for_cmd, timeout=action.timeout_s)
             output_text = (cp.stdout or "") + "\n" + (cp.stderr or "")
             use_json = ctx.output_cfg.annotations_use_json or tool.force_json_for_diags
             diags = _parse_tool_output(tool, cmd, output_text, use_json, ctx)
@@ -3582,9 +4064,7 @@ def run_tool(args: RunToolArgs) -> ToolOutcome:
         if (
             rc == 0
             and action.failure_on_output_regex
-            and re.search(
-                action.failure_on_output_regex, cp.stdout + cp.stderr, re.MULTILINE
-            )
+            and re.search(action.failure_on_output_regex, cp.stdout + cp.stderr, re.MULTILINE)
         ):
             rc = 1
         if rc != 0 and not action.ignore_exit:
@@ -3596,19 +4076,13 @@ def run_tool(args: RunToolArgs) -> ToolOutcome:
                 use_emoji=ctx.output_cfg.emoji,
             )
             if ctx.output_cfg.output == "raw":
-                print(
-                    out or err or "(no output)", file=sys.stderr if err else sys.stdout
-                )
+                print(out or err or "(no output)", file=sys.stderr if err else sys.stdout)
         else:
             ok(
                 f"{ctx.suite_name}:{tool.name}:{action.name}",
                 use_emoji=ctx.output_cfg.emoji,
             )
-            if (
-                ctx.output_cfg.show_passing
-                and ctx.output_cfg.output == "raw"
-                and (out or err)
-            ):
+            if ctx.output_cfg.show_passing and ctx.output_cfg.output == "raw" and (out or err):
                 print(out or err, file=sys.stderr if err else sys.stdout)
 
         if cached_step is None:
@@ -3657,9 +4131,7 @@ def run_tool(args: RunToolArgs) -> ToolOutcome:
     return outcome
 
 
-def _run_tools_parallel(
-    suite: LanguageSuite, tools: list[Tool], ctx: ToolRunContext
-) -> list[ToolOutcome]:
+def _run_tools_parallel(suite: LanguageSuite, tools: list[Tool], ctx: ToolRunContext) -> list[ToolOutcome]:
     results = []
     crashed_tools: list[ToolException] = []
     max_workers = max(1, int(ctx.exec_cfg.jobs or (os.cpu_count() or 4)))
@@ -3690,11 +4162,7 @@ def _run_tools_parallel(
         # If all tools in the suite crashed with the same error, show one critical message.
         first_error_msg = str(crashed_tools[0].original_exc)
         if len(crashed_tools) == len(
-            [
-                t
-                for t in tools
-                if not ctx.exec_cfg.only or t.name.lower() in ctx.exec_cfg.only
-            ]
+            [t for t in tools if not ctx.exec_cfg.only or t.name.lower() in ctx.exec_cfg.only]
         ) and all(str(e.original_exc) == first_error_msg for e in crashed_tools):
             fail(
                 f"CRITICAL: All tools in suite '{suite.name}' crashed with the same error:\n  {first_error_msg}",
@@ -3755,11 +4223,7 @@ def emit_hints(outcomes: list[ToolOutcome], cfg: OutputConfig) -> None:
                 g = d.group or _classify_issue(d.title, d.code, d.message)
                 if g:
                     present.add(g)
-    if tips := [
-        f"- **{g}**: {QUICK_FIX_HINTS[g]}"
-        for g in sorted(QUICK_FIX_HINTS)
-        if g in present
-    ]:
+    if tips := [f"- **{g}**: {QUICK_FIX_HINTS[g]}" for g in sorted(QUICK_FIX_HINTS) if g in present]:
         section("Quick Fix Hints", use_color=cfg.color)
         for t in tips[:10]:
             print(t)
@@ -3784,16 +4248,10 @@ def write_pr_summary(outcomes: list[ToolOutcome], path: Path, limit: int = 100) 
     lines.append("### Lint Summary (deduped)")
     lines.append(f"- **Total**: {len(items)}")
     lines.append(
-        "- **Top groups**: "
-        + ", ".join(
-            f"{g}:{n}" for g, n in sorted(by_group.items(), key=lambda x: -x[1])[:8]
-        )
+        "- **Top groups**: " + ", ".join(f"{g}:{n}" for g, n in sorted(by_group.items(), key=lambda x: -x[1])[:8])
     )
     lines.append(
-        "- **Top files**: "
-        + ", ".join(
-            f"{f}:{n}" for f, n in sorted(by_file.items(), key=lambda x: -x[1])[:8]
-        )
+        "- **Top files**: " + ", ".join(f"{f}:{n}" for f, n in sorted(by_file.items(), key=lambda x: -x[1])[:8])
     )
     lines.append("")
     lines.append("| Severity | Group | File | Line | Col | Tool | Code | Message |")
@@ -3809,15 +4267,11 @@ def write_pr_summary(outcomes: list[ToolOutcome], path: Path, limit: int = 100) 
 EXECUTABLE_MODE = 0o755
 
 
-def _get_changed_files(
-    cfg: FileDiscoveryConfig, all_files: list[Path], emoji: bool
-) -> list[Path]:
+def _get_changed_files(cfg: FileDiscoveryConfig, all_files: list[Path], emoji: bool) -> list[Path]:
     if cfg.pre_commit:
         changed = set(git_staged_paths())
         if not changed:
-            warn(
-                "No staged files detected; skipping file-scoped tools.", use_emoji=emoji
-            )
+            warn("No staged files detected; skipping file-scoped tools.", use_emoji=emoji)
         info(f"Staged files: {len(changed)}", use_emoji=emoji)
         return [p for p in all_files if p in changed]
 
@@ -3830,7 +4284,12 @@ def _get_changed_files(
 
 def _setup_and_discover_files(cfg: FileDiscoveryConfig) -> list[Path]:
     section("Discovering files", use_color=True)  # Color/emoji not available here yet
-    all_files = list_repo_files(cfg.roots, excludes=cfg.excludes, prefer_git=True)
+    all_files = list_repo_files(
+        cfg.roots,
+        excludes=cfg.excludes,
+        prefer_git=True,
+        respect_gitignore=cfg.respect_gitignore,
+    )
 
     if cfg.paths_from_stdin:
         if stdin_paths := {Path(line.strip()) for line in sys.stdin if line.strip()}:
@@ -3859,8 +4318,7 @@ def _setup_and_discover_files(cfg: FileDiscoveryConfig) -> list[Path]:
 
 def _run_suite_tools(
     suite: LanguageSuite,
-    ws_files: list[Path],
-    all_files: list[Path],
+    workspace: Workspace,
     ctx: LintingContext,
 ) -> list[ToolOutcome]:
     """Prepares and runs all tools for a given suite in the current workspace context."""
@@ -3871,22 +4329,28 @@ def _run_suite_tools(
         fail("pytest: skipped (no smoke tests found)", use_emoji=ctx.output_cfg.emoji)
     else:
         # propagate excludes to ruff/mypy
-        exclude_flags = [
-            flag for pth in ctx.file_cfg.excludes for flag in ("--exclude", str(pth))
-        ]
+        exclude_flags: list[str] = []
+        for pth in ctx.file_cfg.excludes:
+            candidate = Path(pth)
+            try:
+                rel = candidate.resolve().relative_to(workspace.path.resolve())
+                target = str(rel)
+            except Exception:
+                target = str(candidate)
+            exclude_flags.extend(["--exclude", target])
         for t in tools:
             if t.name in {"ruff", "mypy"}:
                 for a in t.actions:
                     if a.cmd.base_cmd[:2] == ["ruff", "check"]:
-                        a.cmd.base_cmd = (
-                            a.cmd.base_cmd[:2] + exclude_flags + a.cmd.base_cmd[2:]
-                        )
+                        a.cmd.base_cmd = a.cmd.base_cmd[:2] + exclude_flags + a.cmd.base_cmd[2:]
                     if a.cmd.base_cmd and a.cmd.base_cmd[0] == "mypy":
                         a.cmd.base_cmd = a.cmd.base_cmd + exclude_flags
 
+    files_for_ctx = workspace.files if workspace.files else ctx.all_files
     run_ctx = ToolRunContext(
         suite_name=suite.name,
-        files=ws_files if ws_files else all_files,
+        files=files_for_ctx,
+        workspace_path=workspace.path,
         exec_cfg=ctx.exec_cfg,
         output_cfg=ctx.output_cfg,
         cfg=ctx.cfg,
@@ -3899,75 +4363,114 @@ def _run_linters_in_workspaces(ctx: LintingContext) -> list[ToolOutcome]:
     orig_root = ROOT
 
     for workspace in ctx.workspaces:
-        globals()["ROOT"] = workspace
-        section(f"Workspace: {workspace}", use_color=ctx.output_cfg.color)
-        ws_files = [
-            p
-            for p in ctx.all_files
-            if str(p.resolve()).startswith(str(workspace.resolve()))
-        ]
-        suites_ws = apply_skip_heuristics(
-            ctx.suites,
-            (
-                ws_files
-                if (ctx.file_cfg.changed_only or ctx.file_cfg.pre_commit)
-                else ctx.all_files
-            ),
-            ctx.exec_cfg,
+        ws_path = workspace.path
+        lang_display = ", ".join(sorted(workspace.languages)) or "default"
+        section(
+            f"Workspace: {workspace.display_name()} [{lang_display}]",
+            use_color=ctx.output_cfg.color,
         )
+        globals()["ROOT"] = ws_path
+
+        if (
+            not ctx.exec_cfg.force_all
+            and ws_path == ROOT
+            and not workspace.files
+            and not workspace.languages
+            and len(ctx.workspaces) > 1
+        ):
+            continue
+
+        suites_ws = ctx.suites
+        if not ctx.exec_cfg.force_all:
+            if workspace.languages:
+                suites_ws = [s for s in ctx.suites if s.name in workspace.languages]
+            elif ws_path != ROOT:
+                suites_ws = []
+        if not suites_ws:
+            continue
+
+        if ctx.file_cfg.changed_only or ctx.file_cfg.pre_commit:
+            heuristic_files = workspace.files
+        else:
+            heuristic_files = workspace.files if workspace.files else ctx.all_files
+        suites_ws = apply_skip_heuristics(suites_ws, heuristic_files, ctx.exec_cfg)
 
         # Per-workspace cache dir
-        ws_hash = hashlib.sha256(
-            str(workspace.resolve()).encode(), usedforsecurity=False
-        ).hexdigest()[:8]
+        ws_hash = hashlib.sha256(str(ws_path.resolve()).encode(), usedforsecurity=False).hexdigest()[:8]
         exec_cfg_ws = ctx.exec_cfg
         exec_cfg_ws.cache_dir = Path(".lint-cache") / ws_hash
 
         for suite in suites_ws:
-            all_outcomes.extend(_run_suite_tools(suite, ws_files, ctx.all_files, ctx))
+            all_outcomes.extend(_run_suite_tools(suite, workspace, ctx))
 
     globals()["ROOT"] = orig_root
     return all_outcomes
 
 
 def _process_results_and_artifacts(ctx: ProcessingContext) -> int:
-    if ctx.output_cfg.output == "pretty" and not ctx.dedupe_cfg.dedupe:
+    wants_compact = ctx.output_cfg.output in {"pretty", "concise"}
+    if wants_compact and not ctx.dedupe_cfg.dedupe:
         ctx.dedupe_cfg.dedupe = True
+
+    concise_snapshot: list[Diagnostic] | None = None
     if ctx.output_cfg.output == "pretty":
-        processed_outcomes = (
-            dedupe_outcomes(ctx.outcomes, ctx.dedupe_cfg)
-            if ctx.dedupe_cfg.dedupe
-            else ctx.outcomes
-        )
+        processed_outcomes = dedupe_outcomes(ctx.outcomes, ctx.dedupe_cfg) if ctx.dedupe_cfg.dedupe else ctx.outcomes
         emit_pretty(processed_outcomes, ctx.output_cfg)
         emit_hints(processed_outcomes, ctx.output_cfg)
+    elif ctx.output_cfg.output == "concise":
+        processed_outcomes = dedupe_outcomes(ctx.outcomes, ctx.dedupe_cfg) if ctx.dedupe_cfg.dedupe else ctx.outcomes
+        concise_snapshot = print_concise(processed_outcomes, ctx.output_cfg)
     else:
         processed_outcomes = ctx.outcomes
 
-    section("Summary", use_color=ctx.output_cfg.color)
+    if ctx.output_cfg.output != "concise":
+        section("Summary", use_color=ctx.output_cfg.color)
     inv = waiver_inventory(ctx.files)
-    info(
-        f"Waivers → noqa:{inv['noqa']} | pylint:disable:{inv['pylint_disable']} | eslint-disable-next-line:{inv['eslint_disable_next']} | eslint-disable:{inv['eslint_disable']} | @ts-ignore:{inv['ts_ignore']} | @ts-expect-error:{inv['ts_expect_error']}",
-        use_emoji=ctx.output_cfg.emoji,
-    )
 
-    # --- New Metrics Calculation ---
-    all_diags = _deduped_items(processed_outcomes)
+    all_diags = concise_snapshot or _deduped_items(processed_outcomes)
     error_count = sum(1 for d in all_diags if d.severity == Severity.ERROR)
-    by_group: dict[str, int] = {}
-    for d in all_diags:
-        if d.group:
-            by_group[d.group] = by_group.get(d.group, 0) + 1
+    warning_count = sum(1 for d in all_diags if d.severity == Severity.WARNING)
+    notice_count = sum(1 for d in all_diags if d.severity in {Severity.NOTICE, Severity.NOTE})
 
-    total_loc = _count_loc(ctx.files)
-    errors_per_kloc = (error_count / total_loc * 1000) if total_loc > 0 else 0
+    go_message: str | None = None
+    if ctx.output_cfg.output == "concise":
+        summary_line = (
+            f"Summary: files={len(ctx.files)} diagnostics={len(all_diags)} "
+            f"errors={error_count} warnings={warning_count} notices={notice_count} "
+            f"waivers=noqa:{inv['noqa']},pylint-disable:{inv['pylint_disable']}"
+        )
+        print(summary_line)
+        go = error_count == 0 and warning_count == 0
+        if go:
+            go_message = "GO — lint checks are clean"
+        else:
+            detail_parts: list[str] = []
+            if error_count:
+                detail_parts.append(f"{error_count} error(s)")
+            if warning_count:
+                detail_parts.append(f"{warning_count} warning(s)")
+            go_message = f"NO GO — fix {' and '.join(detail_parts)}"
+    else:
+        info(
+            f"Waivers → noqa:{inv['noqa']} | pylint:disable:{inv['pylint_disable']} | "
+            f"eslint-disable-next-line:{inv['eslint_disable_next']} | eslint-disable:{inv['eslint_disable']} | "
+            f"@ts-ignore:{inv['ts_ignore']} | @ts-expect-error:{inv['ts_expect_error']}",
+            use_emoji=ctx.output_cfg.emoji,
+        )
 
-    group_stats = ", ".join(f"{k}:{v}" for k, v in sorted(by_group.items()))
-    metrics_line = f"Metrics → Errors: {error_count} | By group: {group_stats} | Errors/kLOC: {errors_per_kloc:.2f}"
-    info(metrics_line, use_emoji=ctx.output_cfg.emoji)
-    # --- End New Metrics Calculation ---
+        by_group: dict[str, int] = {}
+        for d in all_diags:
+            if d.group:
+                by_group[d.group] = by_group.get(d.group, 0) + 1
 
-    if ctx.dedupe_cfg.dedupe and ctx.output_cfg.output != "pretty":
+        total_loc = _count_loc(ctx.files)
+        errors_per_kloc = (error_count / total_loc * 1000) if total_loc > 0 else 0
+
+        group_stats = ", ".join(f"{k}:{v}" for k, v in sorted(by_group.items()))
+        metrics_line = f"Metrics → Errors: {error_count} | By group: {group_stats} | Errors/kLOC: {errors_per_kloc:.2f}"
+        info(metrics_line, use_emoji=ctx.output_cfg.emoji)
+
+    if ctx.dedupe_cfg.dedupe and ctx.output_cfg.output not in {"pretty", "concise"}:
         processed_outcomes = dedupe_outcomes(ctx.outcomes, ctx.dedupe_cfg)
         ok("Deduped diagnostics across tools", use_emoji=ctx.output_cfg.emoji)
 
@@ -4009,9 +4512,7 @@ def _process_results_and_artifacts(ctx: ProcessingContext) -> int:
 
     if ctx.output_cfg.sarif_out:
         sarif_obj = build_sarif(processed_outcomes)
-        ctx.output_cfg.sarif_out.write_text(
-            json.dumps(sarif_obj, indent=2), encoding="utf-8"
-        )
+        ctx.output_cfg.sarif_out.write_text(json.dumps(sarif_obj, indent=2), encoding="utf-8")
         ok(f"Wrote SARIF to {ctx.output_cfg.sarif_out}", use_emoji=ctx.output_cfg.emoji)
     if ctx.output_cfg.pr_summary_out:
         write_pr_summary(
@@ -4026,8 +4527,7 @@ def _process_results_and_artifacts(ctx: ProcessingContext) -> int:
 
     failed = [o for o in processed_outcomes if o.failed]
     skipped_missing = any(
-        any(s.skipped and s.skip_reason == "missing executable" for s in o.steps)
-        for o in processed_outcomes
+        any(s.skipped and s.skip_reason == "missing executable" for s in o.steps) for o in processed_outcomes
     )
 
     if failed:
@@ -4037,6 +4537,8 @@ def _process_results_and_artifacts(ctx: ProcessingContext) -> int:
             "FAILED running linters. Treat all warnings as errors.",
             use_emoji=ctx.output_cfg.emoji,
         )
+        if go_message:
+            print(go_message)
         return 1
 
     if ctx.exec_cfg.strict and skipped_missing:
@@ -4044,9 +4546,13 @@ def _process_results_and_artifacts(ctx: ProcessingContext) -> int:
             "STRICT mode: missing required tools detected.",
             use_emoji=ctx.output_cfg.emoji,
         )
+        if go_message:
+            print(go_message)
         return 1
 
     ok("All lint checks passed!", use_emoji=ctx.output_cfg.emoji)
+    if go_message:
+        print(go_message)
     return 0
 
 
@@ -4059,9 +4565,7 @@ def _parse_args_and_build_config(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     # --- Add all arguments (this part remains the same) ---
-    parser.add_argument(
-        "paths", nargs="*", default=["."], help="Files or directories to lint."
-    )
+    parser.add_argument("paths", nargs="*", default=["."], help="Files or directories to lint.")
     # Output & Display
     parser.add_argument("--no-emoji", action="store_true")
     parser.add_argument("--no-color", action="store_true")
@@ -4069,9 +4573,9 @@ def _parse_args_and_build_config(
     parser.add_argument("--show-passing", action="store_true")
     parser.add_argument(
         "--output",
-        choices=["pretty", "raw"],
-        default="pretty",
-        help="Pretty (deduped, grouped) stdout vs raw per-tool logs.",
+        choices=["pretty", "raw", "concise"],
+        default="concise",
+        help="Pretty (grouped) stdout, raw per-tool logs, or concise agent-friendly summary.",
     )
     parser.add_argument(
         "--pretty-format",
@@ -4084,10 +4588,13 @@ def _parse_args_and_build_config(
         action="store_true",
         help="Group pretty text output by tool/code instead of by file.",
     )
-    # File Discovery
     parser.add_argument(
-        "--exclude", action="append", default=[], help="Path to exclude. Repeatable."
+        "--gitignore",
+        action="store_true",
+        help="Respect .gitignore entries during file discovery.",
     )
+    # File Discovery
+    parser.add_argument("--exclude", action="append", default=[], help="Path to exclude. Repeatable.")
     parser.add_argument(
         "--paths-from-stdin",
         action="store_true",
@@ -4099,9 +4606,7 @@ def _parse_args_and_build_config(
         action="store_true",
         help="Lint only files changed vs --diff-ref (and untracked by default).",
     )
-    parser.add_argument(
-        "--diff-ref", default="HEAD", help="Git ref for --changed-only."
-    )
+    parser.add_argument("--diff-ref", default="HEAD", help="Git ref for --changed-only.")
     parser.add_argument(
         "--no-include-untracked",
         action="store_true",
@@ -4112,9 +4617,7 @@ def _parse_args_and_build_config(
         default=None,
         help="Compute merge-base with this branch and use as --diff-ref (implies --changed-only).",
     )
-    parser.add_argument(
-        "--pre-commit", action="store_true", help="Run on staged files only."
-    )
+    parser.add_argument("--pre-commit", action="store_true", help="Run on staged files only.")
     # Execution Control
     parser.add_argument(
         "--only",
@@ -4139,15 +4642,9 @@ def _parse_args_and_build_config(
         action="store_true",
         help="Fail if any tool is skipped due to missing executable.",
     )
-    parser.add_argument(
-        "--jobs", type=int, default=None, help="Max parallel tools (default: CPUs)."
-    )
-    parser.add_argument(
-        "--fix-only", action="store_true", help="Run only fixers across all tools."
-    )
-    parser.add_argument(
-        "--check-only", action="store_true", help="Run only checkers across all tools."
-    )
+    parser.add_argument("--jobs", type=int, default=None, help="Max parallel tools (default: CPUs).")
+    parser.add_argument("--fix-only", action="store_true", help="Run only fixers across all tools.")
+    parser.add_argument("--check-only", action="store_true", help="Run only checkers across all tools.")
     parser.add_argument(
         "--force-all",
         action="store_true",
@@ -4165,9 +4662,7 @@ def _parse_args_and_build_config(
         help="Disable on-disk caching in .lint-cache (1h TTL).",
     )
     # Reporting & Artifacts
-    parser.add_argument(
-        "--report", choices=["json"], default=None, help="Emit machine-readable report."
-    )
+    parser.add_argument("--report", choices=["json"], default=None, help="Emit machine-readable report.")
     parser.add_argument(
         "--report-out",
         default=None,
@@ -4188,9 +4683,7 @@ def _parse_args_and_build_config(
         default=None,
         help="Write a short PR-ready Markdown summary here.",
     )
-    parser.add_argument(
-        "--pr-summary-limit", type=int, default=100, help="Max issues in PR summary."
-    )
+    parser.add_argument("--pr-summary-limit", type=int, default=100, help="Max issues in PR summary.")
     # GHA Integration
     parser.add_argument(
         "--gha-annotations",
@@ -4256,16 +4749,24 @@ def _parse_args_and_build_config(
 
     args = parser.parse_args(argv)
 
+    if args.install and not args.lang:
+        parser.error("--install now requires at least one --lang suite to target.")
+
     # --- Build the composed Config object from args ---
+    exclude_paths: set[Path] = {Path("pyreadstat_patch")}
+    exclude_paths.update(Path(p) for p in args.exclude)
+    exclude_paths.update(Path(name) for name in ALWAYS_EXCLUDE_DIRS)
+
     file_discovery_cfg = FileDiscoveryConfig(
         roots=[Path(p) for p in (args.paths or ["."])],
-        excludes=[Path(p) for p in args.exclude] + [Path("pyreadstat_patch")],
+        excludes=sorted(exclude_paths),
         paths_from_stdin=args.paths_from_stdin,
         changed_only=args.changed_only,
         diff_ref=args.diff_ref,
         include_untracked=not args.no_include_untracked,
         base_branch=args.base_branch,
         pre_commit=args.pre_commit,
+        respect_gitignore=args.gitignore,
     )
 
     output_cfg = OutputConfig(
@@ -4302,9 +4803,7 @@ def _parse_args_and_build_config(
     dedupe_cfg = DedupeConfig(
         dedupe=args.dedupe,
         dedupe_by=args.dedupe_by,
-        dedupe_prefer=[
-            t.strip() for t in (args.dedupe_prefer or "").split(",") if t.strip()
-        ],
+        dedupe_prefer=[t.strip() for t in (args.dedupe_prefer or "").split(",") if t.strip()],
         dedupe_line_fuzz=args.dedupe_line_fuzz,
         dedupe_same_file_only=args.dedupe_same_file_only,
     )
@@ -4348,11 +4847,17 @@ def main(argv: list[str] | None = None) -> int:
 
     all_files = _setup_and_discover_files(cfg.file_discovery)
 
+    workspaces = discover_workspaces(ROOT, all_files)
+
     section("Detecting language suites", use_color=cfg.output.color)
-    suites = discover_suites(cfg.execution)
+    suites = discover_suites(cfg.execution, workspaces)
     if args.install or args.install_and_run:
         r = perform_install_entrypoint(
-            suites, all_files, cfg.output, install_and_run=args.install_and_run
+            workspaces,
+            suites,
+            all_files,
+            cfg.output,
+            install_and_run=args.install_and_run,
         )
         if r is not None:
             return r
@@ -4363,7 +4868,6 @@ def main(argv: list[str] | None = None) -> int:
     for s in suites:
         ok(f"Enabled suite: {s.name}", use_emoji=cfg.output.emoji)
 
-    workspaces = discover_workspaces(ROOT)
     lint_ctx = LintingContext(
         workspaces=workspaces,
         all_files=all_files,
@@ -4387,6 +4891,7 @@ def main(argv: list[str] | None = None) -> int:
 
 # Install entrypoint wrapper kept from previous design
 def perform_install_entrypoint(
+    workspaces: list[Workspace],
     suites: list[LanguageSuite],
     files: list[Path],
     cfg: OutputConfig,
@@ -4399,7 +4904,7 @@ def perform_install_entrypoint(
     else:
         warn("No language suites detected — nothing to install.", use_emoji=cfg.emoji)
         return 0
-    perform_install(suites, files, cfg)
+    perform_install(workspaces, suites, files, cfg)
     if not install_and_run:
         ok("Install-only mode complete.", use_emoji=cfg.emoji)
         return 0
