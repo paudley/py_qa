@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import typer
 
+from .banned import check_banned_words
 from .config_cmd import config_app
 from .security import security_scan_command
 from .install import install_command
@@ -16,5 +17,6 @@ app.command("lint")(lint_command)
 app.command("install")(install_command)
 app.add_typer(config_app, name="config")
 app.command("security-scan")(security_scan_command)
+app.command("check-banned-words")(check_banned_words)
 
 __all__ = ["app"]
