@@ -12,6 +12,7 @@ from pyqa.parsers import (
     JsonParser,
     TextParser,
     parse_actionlint,
+    parse_sqlfluff,
     parse_bandit,
     parse_cargo_clippy,
     parse_eslint,
@@ -94,6 +95,21 @@ def test_parse_actionlint() -> None:
     assert diag.line == 12
     assert diag.code == "shellcheck"
     assert diag.tool == "actionlint"
+
+
+def test_parse_sqlfluff() -> None:
+    parser = JsonParser(parse_sqlfluff)
+    stdout = """
+    [{"filepath": "queries/report.sql", "violations": [{"line_no": 4, "line_pos": 10, "description": "lint issue", "code": "L001", "severity": "error"}]}]
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == "queries/report.sql"
+    assert diag.code == "L001"
+    assert diag.line == 4
+    assert diag.column == 10
+    assert diag.tool == "sqlfluff"
 
 
 def test_parse_bandit() -> None:

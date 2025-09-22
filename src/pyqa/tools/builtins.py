@@ -1158,6 +1158,33 @@ def _builtin_tools() -> Iterable[Tool]:
     )
 
     yield Tool(
+        name="sqlfluff",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=DeferredCommand(["sqlfluff", "lint", "--format", "json"]),
+                append_files=True,
+                description="Lint SQL files using sqlfluff.",
+                parser=JsonParser(parse_sqlfluff),
+            ),
+            ToolAction(
+                name="fix",
+                command=DeferredCommand(["sqlfluff", "fix", "--force"]),
+                append_files=True,
+                is_fix=True,
+                description="Autofix SQL files via sqlfluff fix.",
+            ),
+        ),
+        languages=("sql",),
+        file_extensions=(".sql",),
+        description="SQL linter and formatter using sqlfluff.",
+        runtime="python",
+        package="sqlfluff",
+        min_version="3.1.0",
+        version_command=("sqlfluff", "--version"),
+    )
+
+    yield Tool(
         name="actionlint",
         actions=(
             ToolAction(
