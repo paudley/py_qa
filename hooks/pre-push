@@ -105,9 +105,9 @@ echo ""
 
 # Run quality checks for the entire codebase
 echo "📋 Running comprehensive quality validation..."
-if [ -f "$PROJECT_ROOT/py-qa/check-quality.sh" ]; then
+if [ -f "$PROJECT_ROOT/py-qa/check-quality" ]; then
     # Check branch protection
-    if ! "$PROJECT_ROOT/py-qa/check-quality.sh" branch; then
+    if ! "$PROJECT_ROOT/py-qa/check-quality" branch --root "$PROJECT_ROOT"; then
         echo ""
         echo "❌ Cannot push directly to protected branch!"
         echo "Please create a feature branch and use pull requests."
@@ -115,7 +115,7 @@ if [ -f "$PROJECT_ROOT/py-qa/check-quality.sh" ]; then
     fi
     
     # Check all source files for quality issues
-    if ! "$PROJECT_ROOT/py-qa/check-quality.sh" all $ALL_PY_FILES; then
+    if ! "$PROJECT_ROOT/py-qa/check-quality" --root "$PROJECT_ROOT"; then
         echo ""
         echo "⚠️  Quality warnings detected. Consider fixing before push."
         # Don't fail on warnings for push, just inform

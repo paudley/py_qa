@@ -80,3 +80,18 @@ class GitDiscovery(DiscoveryStrategy):
         if cp.returncode != 0:
             return []
         return cp.stdout.splitlines()
+
+
+def list_tracked_files(root: Path) -> list[Path]:
+    """Return all tracked files for the repository rooted at *root*."""
+
+    cp = run_command(["git", "ls-files"], cwd=root)
+    if cp.returncode != 0:
+        return []
+    files: list[Path] = []
+    for line in cp.stdout.splitlines():
+        candidate = line.strip()
+        if not candidate:
+            continue
+        files.append((root / candidate).resolve())
+    return files

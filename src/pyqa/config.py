@@ -97,6 +97,37 @@ class DedupeConfig:
     dedupe_same_file_only: bool = True
 
 
+DEFAULT_QUALITY_CHECKS: list[str] = ["license", "file-size", "schema", "python"]
+DEFAULT_SCHEMA_TARGETS = [Path("ref_docs/tool-schema.json")]
+DEFAULT_PROTECTED_BRANCHES = ["main", "master"]
+
+
+@dataclass(slots=True)
+class LicenseConfig:
+    """Project-wide licensing policy configuration."""
+
+    spdx: str | None = None
+    notice: str | None = None
+    copyright: str | None = None
+    year: str | None = None
+    require_spdx: bool = True
+    require_notice: bool = True
+    allow_alternate_spdx: list[str] = field(default_factory=list)
+    exceptions: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class QualityConfigSection:
+    """Quality enforcement configuration shared across commands."""
+
+    checks: list[str] = field(default_factory=lambda: list(DEFAULT_QUALITY_CHECKS))
+    skip_globs: list[str] = field(default_factory=list)
+    schema_targets: list[Path] = field(default_factory=lambda: list(DEFAULT_SCHEMA_TARGETS))
+    warn_file_size: int = 5 * 1024 * 1024
+    max_file_size: int = 10 * 1024 * 1024
+    protected_branches: list[str] = field(default_factory=lambda: list(DEFAULT_PROTECTED_BRANCHES))
+
+
 @dataclass(slots=True)
 class Config:
     """Primary configuration container used by the orchestrator."""
@@ -107,6 +138,8 @@ class Config:
     dedupe: DedupeConfig = field(default_factory=DedupeConfig)
     severity_rules: list[str] = field(default_factory=list)
     tool_settings: dict[str, dict[str, object]] = field(default_factory=dict)
+    license: LicenseConfig = field(default_factory=LicenseConfig)
+    quality: QualityConfigSection = field(default_factory=QualityConfigSection)
 
     def to_dict(self) -> dict[str, object]:
         """Return a dictionary representation suitable for serialization."""
@@ -119,5 +152,10 @@ class Config:
             "severity_rules": list(self.severity_rules),
             "tools": {
                 tool: dict(settings) for tool, settings in self.tool_settings.items()
+            },
+            "license": asdict(self.license),
+            "quality": {
+                **asdict(self.quality),
+                "schema_targets": [str(path) for path in self.quality.schema_targets],
             },
         }

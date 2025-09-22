@@ -28,9 +28,7 @@ jobs:
         run: uv run pytest
 
       - name: Run quality checks
-        run: |
-          chmod +x check-quality.sh
-          ./check-quality.sh
+        run: uv run pyqa check-quality
 
       - name: Verify tool schema
         run: |

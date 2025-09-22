@@ -59,10 +59,8 @@ fi
 # Run quality checks (license headers, file sizes, etc.)
 echo ""
 echo "📋 Running quality checks..."
-if [ -f "$PROJECT_ROOT/py-qa/check-quality.sh" ]; then
-    # Run quality checks but only fail on errors, not warnings
-    if ! "$PROJECT_ROOT/py-qa/check-quality.sh" all $STAGED_FILES; then
-        # check-quality.sh returns 1 only for errors, 0 for warnings
+if [ -f "$PROJECT_ROOT/py-qa/check-quality" ]; then
+    if ! "$PROJECT_ROOT/py-qa/check-quality" --root "$PROJECT_ROOT" --staged --emoji; then
         echo ""
         echo "❌ Quality check failed! Please fix errors before committing."
         exit 1
