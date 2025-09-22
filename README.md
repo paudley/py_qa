@@ -39,7 +39,8 @@ This repository provides a comprehensive suite of quality assurance, linting, te
 
 ### Utility & Management Scripts
 
-- **`update_packages.sh`**: A convenience script to update all Python dependencies in `pyproject.toml` files using `uv`.
+- **`update-packages`**: Python CLI shim for `pyqa update`, which scans the repository and refreshes dependencies for Python (uv), Node (npm/yarn/pnpm), Go modules, and Cargo workspaces in one pass.
+- **`sparkly-clean`**: Wipes cache/coverage artefacts (`__pycache__`, `.venv`, logs, coverage files, dist/, etc.) while leaving real source changes intact—great before packaging or switching branches.
 - **`pre_run_clean.sh`**: Cleans the project directory of temporary files, caches, and build artifacts.
 - **`gen_aider_list.sh`**: Generates a file list for the `aider` AI coding assistant, pre-populating its context with relevant project files.
 
@@ -91,6 +92,7 @@ The new Typer application exposes a `lint` command with a modular configuration 
 ./py-qa/security-scan --no-bandit --no-staged ./path/to/file
 ./py-qa/check-quality --staged
 uv run pyqa check-quality commit-msg .git/COMMIT_EDITMSG
+uv run pyqa update --dry-run
 ```
 
 Run `./py-qa/lint install` to install the preferred development dependencies, optional type stubs, and generated `stubgen` packages used by the workflow.

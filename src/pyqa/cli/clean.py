@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: MIT
+"""CLI command for sparkling clean cleanup."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import List
+
+import typer
+
+from ..clean import DEFAULT_PATTERNS, DEFAULT_TREES, sparkly_clean
+from ..logging import fail, warn
+
+clean_app = typer.Typer(name="sparkly-clean", help="Remove temporary build/cache artefacts.")
+
+
+@clean_app.callback(invoke_without_command=True)
+def main(
+    ctx: typer.Context,
+    root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
+    pattern: List[str] = typer.Option(  # type: ignore[assignment]
+        None,
+        "--pattern",
+        "-p",
+        help="Additional glob pattern to remove (can be repeated).",
+    ),
+    include_tree: List[str] = typer.Option(
+        None,
+        "--tree",
+        help="Additional directory to clean recursively (can be repeated).",
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be removed."),
+    emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji output."),
+) -> None:
+    if ctx.invoked_subcommand:
+        return
+
+    root = root.resolve()
+    extra_patterns = tuple(pattern or [])
+    extra_trees = tuple(include_tree or [])
+    patterns = tuple(DEFAULT_PATTERNS) + extra_patterns
+    trees = tuple(DEFAULT_TREES) + extra_trees
+
+    result = sparkly_clean(root, patterns=patterns, trees=trees, dry_run=dry_run)
+
+    if dry_run:
+        for path in sorted(result.skipped):
+            warn(f"DRY RUN: would remove {path}", use_emoji=emoji)
+        raise typer.Exit(code=0)
+
+    raise typer.Exit(code=0)
+
+
+__all__ = ["clean_app"]
