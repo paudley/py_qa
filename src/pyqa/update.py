@@ -3,24 +3,33 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
-from typing import Iterable, List, Mapping, Protocol, Sequence
+from typing import Iterable, Mapping, Protocol, Sequence
 
 from .config import UpdateConfig
 from .constants import ALWAYS_EXCLUDE_DIRS
 from .logging import fail, info, ok, warn
 
 
-class WorkspaceKind(str):
+class WorkspaceKind(Enum):
     PYTHON = "python"
     PNPM = "pnpm"
     YARN = "yarn"
     NPM = "npm"
     GO = "go"
     RUST = "rust"
+
+    @classmethod
+    def from_str(cls, value: str) -> "WorkspaceKind":
+        for member in cls:
+            if member.value == value:
+                return member
+        raise ValueError(value)
 
 
 @dataclass(slots=True)
@@ -38,9 +47,22 @@ class CommandSpec:
 
 
 @dataclass(slots=True)
+class PlanCommand:
+    spec: CommandSpec
+    reason: str | None = None
+
+
+@dataclass(slots=True)
+class ExecutionDetail:
+    command: CommandSpec
+    status: str  # "ran", "skipped", "failed"
+    message: str | None = None
+
+
+@dataclass(slots=True)
 class UpdatePlanItem:
     workspace: Workspace
-    commands: list[CommandSpec]
+    commands: list[PlanCommand]
     warnings: list[str] = field(default_factory=list)
 
 
@@ -54,15 +76,19 @@ class UpdateResult:
     successes: list[Workspace] = field(default_factory=list)
     failures: list[tuple[Workspace, str]] = field(default_factory=list)
     skipped: list[Workspace] = field(default_factory=list)
+    details: list[tuple[Workspace, list[ExecutionDetail]]] = field(default_factory=list)
 
-    def register_success(self, workspace: Workspace) -> None:
+    def register_success(self, workspace: Workspace, executions: list[ExecutionDetail]) -> None:
         self.successes.append(workspace)
+        self.details.append((workspace, executions))
 
-    def register_failure(self, workspace: Workspace, message: str) -> None:
+    def register_failure(self, workspace: Workspace, message: str, executions: list[ExecutionDetail]) -> None:
         self.failures.append((workspace, message))
+        self.details.append((workspace, executions))
 
-    def register_skip(self, workspace: Workspace) -> None:
+    def register_skip(self, workspace: Workspace, executions: list[ExecutionDetail]) -> None:
         self.skipped.append(workspace)
+        self.details.append((workspace, executions))
 
     def exit_code(self) -> int:
         return 1 if self.failures else 0
@@ -201,8 +227,6 @@ class WorkspaceDiscovery:
         self._skip_patterns = set(skip_patterns or [])
 
     def discover(self, root: Path) -> list[Workspace]:
-        import os
-
         root = root.resolve()
         workspaces: list[Workspace] = []
         for dirpath, dirnames, filenames in os.walk(root):
@@ -216,7 +240,7 @@ class WorkspaceDiscovery:
                     manifest = _manifest_for(strategy.kind, directory)
                     workspaces.append(Workspace(directory=directory, kind=strategy.kind, manifest=manifest))
                     break
-        workspaces.sort(key=lambda ws: (ws.directory, ws.kind))
+        workspaces.sort(key=lambda ws: (ws.directory, ws.kind.value))
         return workspaces
 
     def _should_skip(self, directory: Path, root: Path) -> bool:
@@ -244,7 +268,7 @@ class WorkspacePlanner:
         *,
         enabled_managers: Iterable[str] | None = None,
     ) -> UpdatePlan:
-        allowed = {WorkspaceKind(kind) for kind in enabled_managers} if enabled_managers else None
+        allowed = {WorkspaceKind.from_str(kind) for kind in enabled_managers} if enabled_managers else None
         items: list[UpdatePlanItem] = []
         for workspace in workspaces:
             if allowed and workspace.kind not in allowed:
@@ -253,7 +277,12 @@ class WorkspacePlanner:
             if strategy is None:
                 continue
             commands = strategy.plan(workspace)
-            items.append(UpdatePlanItem(workspace=workspace, commands=list(commands)))
+            items.append(
+                UpdatePlanItem(
+                    workspace=workspace,
+                    commands=[PlanCommand(spec=command) for command in commands],
+                )
+            )
         return UpdatePlan(items=items)
 
 
@@ -277,27 +306,31 @@ class WorkspaceUpdater:
             workspace = item.workspace
             rel_path = _format_relative(workspace.directory, root)
             info(
-                f"Updating {workspace.kind} workspace at {rel_path}",
+                f"Updating {workspace.kind.value} workspace at {rel_path}",
                 use_emoji=self._use_emoji,
             )
             if not item.commands:
                 warn("No update strategy available", use_emoji=self._use_emoji)
-                result.register_skip(workspace)
+                result.register_skip(workspace, [])
                 continue
-            failed = False
-            for spec in item.commands:
+            executions: list[ExecutionDetail] = []
+            for cmd in item.commands:
+                spec = cmd.spec
                 missing = [tool for tool in spec.requires if shutil.which(tool) is None]
                 if missing:
+                    message = f"missing {', '.join(missing)}"
                     warn(
-                        f"Skipping command {' '.join(spec.args)} (missing {', '.join(missing)})",
+                        f"Skipping command {' '.join(spec.args)} ({message})",
                         use_emoji=self._use_emoji,
                     )
+                    executions.append(ExecutionDetail(command=spec, status="skipped", message=message))
                     continue
                 if self._dry_run:
                     info(
                         f"DRY RUN: {' '.join(spec.args)}",
                         use_emoji=self._use_emoji,
                     )
+                    executions.append(ExecutionDetail(command=spec, status="skipped", message="dry-run"))
                     continue
                 cp = self._runner(spec.args, workspace.directory)
                 if cp.returncode != 0:
@@ -305,16 +338,22 @@ class WorkspaceUpdater:
                         f"Command '{' '.join(spec.args)}' failed with exit code {cp.returncode}"
                     )
                     fail(message, use_emoji=self._use_emoji)
-                    result.register_failure(workspace, f"{rel_path}: {message}")
-                    failed = True
+                    executions.append(ExecutionDetail(command=spec, status="failed", message=message))
+                    result.register_failure(workspace, f"{rel_path}: {message}", executions)
                     break
-            if failed:
-                continue
-            if self._dry_run:
-                result.register_skip(workspace)
+                executions.append(ExecutionDetail(command=spec, status="ran"))
             else:
-                ok("Workspace updated", use_emoji=self._use_emoji)
-                result.register_success(workspace)
+                if self._dry_run:
+                    result.register_skip(workspace, executions)
+                elif all(detail.status == "skipped" for detail in executions):
+                    warn(
+                        f"No commands executed for {workspace.kind.value} workspace at {rel_path}",
+                        use_emoji=self._use_emoji,
+                    )
+                    result.register_skip(workspace, executions)
+                else:
+                    ok("Workspace updated", use_emoji=self._use_emoji)
+                    result.register_success(workspace, executions)
         return result
 
 
@@ -370,6 +409,8 @@ __all__ = [
     "UpdatePlanItem",
     "UpdateResult",
     "CommandSpec",
+    "PlanCommand",
+    "ExecutionDetail",
     "DEFAULT_STRATEGIES",
     "ensure_lint_install",
 ]

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 from .config import CleanConfig
+from .discovery.utils import iter_paths
 from .logging import info, ok, warn
 
 
@@ -58,16 +59,20 @@ class CleanPlanner:
         collected: dict[Path, CleanPlanItem] = {}
 
         info("✨ Cleaning repository temporary files...", use_emoji=True)
-        for path in _glob_once(root, patterns, recursive=False):
-            collected[path] = CleanPlanItem(path=path)
+        for directory, dirnames, filenames in iter_paths(root):
+            matches = _match_patterns(directory, filenames, patterns)
+            for path in matches:
+                collected[path] = CleanPlanItem(path=path)
 
         for tree in trees:
             directory = (root / tree).resolve()
             if not directory.exists():
                 continue
             info(f"🧹 Cleaning {tree}/ ...", use_emoji=True)
-            for path in _glob_once(directory, patterns, recursive=True):
-                collected[path] = CleanPlanItem(path=path)
+            for subdir, dirnames, filenames in iter_paths(directory):
+                matches = _match_patterns(subdir, filenames, patterns)
+                for path in matches:
+                    collected[path] = CleanPlanItem(path=path)
 
         items = sorted(collected.values(), key=lambda item: item.path)
         return CleanPlan(items=items)
@@ -118,10 +123,19 @@ def _merge_unique(primary: Sequence[str], extras: Sequence[str]) -> list[str]:
     return merged
 
 
-def _glob_once(base: Path, patterns: Iterable[str], *, recursive: bool) -> set[Path]:
+def _is_protected(path: Path, root: Path) -> bool:
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        relative = path
+    protected_names = {".git", ".hg", ".svn"}
+    return any(part in protected_names for part in relative.parts)
+
+
+def _match_patterns(base: Path, filenames: Iterable[str], patterns: Iterable[str]) -> set[Path]:
     matches: set[Path] = set()
     for pattern in patterns:
-        iterator = base.rglob(pattern) if recursive else base.glob(pattern)
+        iterator = base.glob(pattern)
         for candidate in iterator:
             candidate = candidate.resolve()
             if candidate == base:
@@ -132,15 +146,6 @@ def _glob_once(base: Path, patterns: Iterable[str], *, recursive: bool) -> set[P
                 continue
             matches.add(candidate)
     return matches
-
-
-def _is_protected(path: Path, root: Path) -> bool:
-    try:
-        relative = path.relative_to(root)
-    except ValueError:
-        relative = path
-    protected_names = {".git", ".hg", ".svn"}
-    return any(part in protected_names for part in relative.parts)
 
 
 def _remove_path(path: Path) -> None:
