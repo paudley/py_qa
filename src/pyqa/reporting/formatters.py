@@ -58,18 +58,12 @@ def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
         )
 
     if entries:
-        for file_path, line_no, function, tool_name, code, message in sorted(
-            entries, key=sort_key
-        ):
+        for file_path, line_no, function, tool_name, code, message in sorted(entries, key=sort_key):
             location = file_path
             if line_no >= 0:
                 location = f"{file_path}:{line_no}"
             if function:
-                location = (
-                    f"{location}:{function}"
-                    if line_no >= 0
-                    else f"{location}:{function}"
-                )
+                location = f"{location}:{function}" if line_no >= 0 else f"{location}:{function}"
             print(f"{tool_name}, {location}, {code}, {message}")
 
     symbol = "❌" if failed_actions else "✅"
@@ -108,11 +102,7 @@ def _render_pretty(result: RunResult, cfg: OutputConfig) -> None:
     root_display = colorize(str(Path(result.root).resolve()), "blue", cfg.color)
     print(f"Root: {root_display}")
     for outcome in result.outcomes:
-        status = (
-            colorize("PASS", "green", cfg.color)
-            if outcome.ok
-            else colorize("FAIL", "red", cfg.color)
-        )
+        status = colorize("PASS", "green", cfg.color) if outcome.ok else colorize("FAIL", "red", cfg.color)
         print(f"\n{outcome.tool}:{outcome.action} — {status}")
         if outcome.stdout:
             print(colorize("stdout:", "cyan", cfg.color))

@@ -35,22 +35,16 @@ class RecordingRunner:
 def _write_repo(root: Path) -> None:
     # Python project
     (root / "service").mkdir(parents=True, exist_ok=True)
-    (root / "service" / "pyproject.toml").write_text(
-        "[project]\nname='demo'\n", encoding="utf-8"
-    )
+    (root / "service" / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
 
     # Node project with pnpm
     (root / "ui").mkdir(parents=True, exist_ok=True)
     (root / "ui" / "package.json").write_text("{}\n", encoding="utf-8")
-    (root / "ui" / "pnpm-lock.yaml").write_text(
-        "lockfileVersion: '9.0'\n", encoding="utf-8"
-    )
+    (root / "ui" / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n", encoding="utf-8")
 
     # Go project
     (root / "tooling").mkdir(parents=True, exist_ok=True)
-    (root / "tooling" / "go.mod").write_text(
-        "module example.com/tooling\n", encoding="utf-8"
-    )
+    (root / "tooling" / "go.mod").write_text("module example.com/tooling\n", encoding="utf-8")
 
 
 def test_workspace_discovery_identifies_managers(tmp_path: Path) -> None:

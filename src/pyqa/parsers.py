@@ -227,6 +227,47 @@ def parse_actionlint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnos
     return results
 
 
+def parse_sqlfluff(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse sqlfluff JSON diagnostics."""
+
+    items = payload if isinstance(payload, list) else []
+    results: list[RawDiagnostic] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        violations = item.get("violations")
+        path = item.get("filepath")
+        if not isinstance(violations, list):
+            continue
+        for violation in violations:
+            if not isinstance(violation, dict):
+                continue
+            message = str(violation.get("description", "")).strip()
+            code = violation.get("code")
+            line = violation.get("line_no")
+            column = violation.get("line_pos")
+            severity = str(violation.get("severity", "error")).lower()
+            sev_enum = {
+                "error": Severity.ERROR,
+                "critical": Severity.ERROR,
+                "warn": Severity.WARNING,
+                "warning": Severity.WARNING,
+                "info": Severity.NOTICE,
+            }.get(severity, Severity.WARNING)
+            results.append(
+                RawDiagnostic(
+                    file=path,
+                    line=line,
+                    column=column,
+                    severity=sev_enum,
+                    message=message,
+                    code=str(code) if code else None,
+                    tool="sqlfluff",
+                )
+            )
+    return results
+
+
 def parse_bandit(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse Bandit security findings."""
     if not isinstance(payload, dict):
@@ -408,6 +449,7 @@ __all__ = [
     "parse_pyright",
     "parse_mypy",
     "parse_actionlint",
+    "parse_sqlfluff",
     "parse_bandit",
     "parse_eslint",
     "parse_tsc",

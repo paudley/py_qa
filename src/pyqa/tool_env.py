@@ -52,9 +52,7 @@ class CommandPreparer:
     ) -> PreparedCommand:
         """Compute the concrete command used to execute *tool*."""
 
-        project_mode = (
-            cache_dir / PROJECT_MARKER.name
-        ).is_file() or PROJECT_MARKER.is_file()
+        project_mode = (cache_dir / PROJECT_MARKER.name).is_file() or PROJECT_MARKER.is_file()
         env: dict[str, str] = {}
 
         if use_local_override or tool.prefer_local:
@@ -64,18 +62,14 @@ class CommandPreparer:
         else:
             system_ok, version = self._system_version(tool)
             if system_preferred and system_ok:
-                return PreparedCommand(
-                    cmd=list(base_cmd), env={}, version=version, source="system"
-                )
+                return PreparedCommand(cmd=list(base_cmd), env={}, version=version, source="system")
             source = "local"
 
         if source == "project":
             version = None
             if tool.version_command:
                 version = self._capture_version(tool.version_command)
-            return PreparedCommand(
-                cmd=list(base_cmd), env={}, version=version, source="project"
-            )
+            return PreparedCommand(cmd=list(base_cmd), env={}, version=version, source="project")
 
         if tool.runtime == "python":
             cmd = self._python_local_command(tool, base_cmd)

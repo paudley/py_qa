@@ -25,6 +25,7 @@ from ..parsers import (
     parse_eslint,
     parse_golangci_lint,
     parse_actionlint,
+    parse_sqlfluff,
     parse_mypy,
     parse_pylint,
     parse_pyright,

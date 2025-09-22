@@ -65,15 +65,10 @@ class Orchestrator:
         inject_node_defaults()
 
         matched_files = self._discovery.run(cfg.file_discovery, root)
-        limits = [
-            entry if entry.is_absolute() else (root / entry)
-            for entry in cfg.file_discovery.limit_to
-        ]
+        limits = [entry if entry.is_absolute() else (root / entry) for entry in cfg.file_discovery.limit_to]
         limits = [limit.resolve() for limit in limits]
         if limits:
-            matched_files = [
-                path for path in matched_files if self._is_within_limits(path, limits)
-            ]
+            matched_files = [path for path in matched_files if self._is_within_limits(path, limits)]
         info(
             f"Discovered {len(matched_files)} file(s) to lint",
             use_emoji=cfg.output.emoji,
@@ -81,11 +76,7 @@ class Orchestrator:
 
         tool_names = self._select_tools(cfg, matched_files, root)
         severity_rules: SeverityRuleView = build_severity_rules(cfg.severity_rules)
-        cache_dir = (
-            cfg.execution.cache_dir
-            if cfg.execution.cache_dir.is_absolute()
-            else root / cfg.execution.cache_dir
-        )
+        cache_dir = cfg.execution.cache_dir if cfg.execution.cache_dir.is_absolute() else root / cfg.execution.cache_dir
         cache = ResultCache(cache_dir) if cfg.execution.cache_enabled else None
         token = self._cache_token(cfg) if cache else ""
         tool_versions = load_versions(cache_dir) if cache else {}
@@ -100,9 +91,7 @@ class Orchestrator:
             if not tool:
                 warn(f"Unknown tool '{name}'", use_emoji=cfg.output.emoji)
                 continue
-            tool_files = self._filter_files_for_tool(
-                tool.file_extensions, matched_files
-            )
+            tool_files = self._filter_files_for_tool(tool.file_extensions, matched_files)
             settings_view = MappingProxyType(dict(cfg.tool_settings.get(tool.name, {})))
             context = ToolContext(
                 cfg=cfg,
@@ -128,10 +117,7 @@ class Orchestrator:
                 )
                 actual_cmd = prepared.cmd
                 extra_env = prepared.env
-                if (
-                    prepared.version
-                    and tool_versions.get(tool.name) != prepared.version
-                ):
+                if prepared.version and tool_versions.get(tool.name) != prepared.version:
                     tool_versions[tool.name] = prepared.version
                     versions_dirty = True
 
@@ -311,9 +297,7 @@ class Orchestrator:
         parsed: Sequence = ()
         if action.parser:
             parsed = action.parser.parse(stdout, stderr, context=context)
-        diagnostics = normalize_diagnostics(
-            parsed, tool_name=tool_name, severity_rules=severity_rules
-        )
+        diagnostics = normalize_diagnostics(parsed, tool_name=tool_name, severity_rules=severity_rules)
         if diagnostics:
             CONTEXT_RESOLVER.annotate(diagnostics, root=root)
         if cp.returncode != 0 and not action.ignore_exit and context.cfg.output.verbose:
@@ -330,31 +314,23 @@ class Orchestrator:
             diagnostics=diagnostics,
         )
 
-    def _select_tools(
-        self, cfg: Config, files: Sequence[Path], root: Path
-    ) -> Sequence[str]:
+    def _select_tools(self, cfg: Config, files: Sequence[Path], root: Path) -> Sequence[str]:
         exec_cfg = cfg.execution
         if exec_cfg.only:
             return list(dict.fromkeys(exec_cfg.only))
-        languages = (
-            list(dict.fromkeys(exec_cfg.languages)) if exec_cfg.languages else []
-        )
+        languages = list(dict.fromkeys(exec_cfg.languages)) if exec_cfg.languages else []
         if not languages:
             languages = sorted(detect_languages(root, files))
         if languages:
             tool_names: list[str] = []
             for lang in languages:
-                tool_names.extend(
-                    tool.name for tool in self._registry.tools_for_language(lang)
-                )
+                tool_names.extend(tool.name for tool in self._registry.tools_for_language(lang))
             if tool_names:
                 return list(dict.fromkeys(tool_names))
         return [tool.name for tool in self._registry.tools() if tool.default_enabled]
 
     @staticmethod
-    def _filter_files_for_tool(
-        extensions: Sequence[str], files: Sequence[Path]
-    ) -> list[Path]:
+    def _filter_files_for_tool(extensions: Sequence[str], files: Sequence[Path]) -> list[Path]:
         if not extensions:
             return list(files)
         allowed = {ext.lower() for ext in extensions}
@@ -374,9 +350,7 @@ class Orchestrator:
         ]
         if cfg.tool_settings:
             serialized = json.dumps(cfg.tool_settings, sort_keys=True)
-            digest = hashlib.sha1(
-                serialized.encode("utf-8"), usedforsecurity=False
-            ).hexdigest()
+            digest = hashlib.sha1(serialized.encode("utf-8"), usedforsecurity=False).hexdigest()
             components.append(digest)
         return "|".join(components)
 

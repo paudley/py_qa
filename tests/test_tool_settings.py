@@ -185,9 +185,7 @@ def test_pyright_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert (
-        "--project" in cmd and str((tmp_path / "pyprojectconfig.json").resolve()) in cmd
-    )
+    assert "--project" in cmd and str((tmp_path / "pyprojectconfig.json").resolve()) in cmd
     assert "--pythonversion" in cmd and "3.11" in cmd
     assert "--warnings" in cmd
 
@@ -243,9 +241,7 @@ def test_prettier_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert (
-        "--config" in cmd and str((tmp_path / "prettier.config.cjs").resolve()) in cmd
-    )
+    assert "--config" in cmd and str((tmp_path / "prettier.config.cjs").resolve()) in cmd
     assert "--single-quote" in cmd
     assert "--tab-width" in cmd and "2" in cmd
     assert "--parser" in cmd and "typescript" in cmd

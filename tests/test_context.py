@@ -45,9 +45,7 @@ def test_python_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     def fail_fallback(path: Path, line: int) -> str:
         raise AssertionError("fallback should not be used")
 
-    monkeypatch.setattr(
-        TreeSitterContextResolver, "_python_fallback", staticmethod(fail_fallback)
-    )
+    monkeypatch.setattr(TreeSitterContextResolver, "_python_fallback", staticmethod(fail_fallback))
 
     resolver.annotate([diag], root=tmp_path)
 

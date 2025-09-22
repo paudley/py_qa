@@ -74,10 +74,7 @@ class ResultCache:
             )
             if not matched:
                 return None
-            if (
-                safe_int(matched.get("mtime_ns")) != state.mtime_ns
-                or safe_int(matched.get("size")) != state.size
-            ):
+            if safe_int(matched.get("mtime_ns")) != state.mtime_ns or safe_int(matched.get("size")) != state.size:
                 return None
 
         return deserialize_outcome(data)
@@ -124,9 +121,7 @@ class ResultCache:
         return self._dir / f"{digest}.json"
 
 
-def _outcome_to_payload(
-    outcome: ToolOutcome, states: Iterable[FileState]
-) -> dict[str, object]:
+def _outcome_to_payload(outcome: ToolOutcome, states: Iterable[FileState]) -> dict[str, object]:
     payload = serialize_outcome(outcome)
     payload["files"] = [
         {

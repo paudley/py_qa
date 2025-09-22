@@ -31,9 +31,7 @@ line-length = 88
         encoding="utf-8",
     )
 
-    result = runner.invoke(
-        app, ["config", "show", "--root", str(project_root), "--no-trace"]
-    )
+    result = runner.invoke(app, ["config", "show", "--root", str(project_root), "--no-trace"])
 
     assert result.exit_code == 0
     stdout = result.stdout.split("\n\n# Warnings", 1)[0]
@@ -129,9 +127,7 @@ line-length = 90
         encoding="utf-8",
     )
 
-    result = runner.invoke(
-        app, ["config", "show", "--root", str(project_root), "--trace"]
-    )
+    result = runner.invoke(app, ["config", "show", "--root", str(project_root), "--trace"])
 
     assert result.exit_code == 0
     assert "tool_settings.black" in result.stdout
@@ -178,9 +174,7 @@ unknown = true
         encoding="utf-8",
     )
 
-    result = runner.invoke(
-        app, ["config", "show", "--root", str(project_root), "--strict"]
-    )
+    result = runner.invoke(app, ["config", "show", "--root", str(project_root), "--strict"])
 
     assert result.exit_code != 0
     assert "Unknown option 'unknown'" in result.stdout

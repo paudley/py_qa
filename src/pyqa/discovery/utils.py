@@ -26,9 +26,7 @@ def iter_paths(
         yield directory, dirnames, filenames
 
 
-def _should_skip(
-    directory: Path, root: Path, skip_patterns: Iterable[str] | None
-) -> bool:
+def _should_skip(directory: Path, root: Path, skip_patterns: Iterable[str] | None) -> bool:
     try:
         relative = directory.relative_to(root)
     except ValueError:

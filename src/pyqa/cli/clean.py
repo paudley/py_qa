@@ -12,9 +12,7 @@ from ..clean import sparkly_clean
 from ..config_loader import ConfigError, ConfigLoader
 from ..logging import fail, warn
 
-clean_app = typer.Typer(
-    name="sparkly-clean", help="Remove temporary build/cache artefacts."
-)
+clean_app = typer.Typer(name="sparkly-clean", help="Remove temporary build/cache artefacts.")
 
 
 @clean_app.callback(invoke_without_command=True)
@@ -32,9 +30,7 @@ def main(
         "--tree",
         help="Additional directory to clean recursively (can be repeated).",
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="Show what would be removed."
-    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be removed."),
     emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji output."),
 ) -> None:
     if ctx.invoked_subcommand:

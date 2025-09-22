@@ -38,9 +38,7 @@ def find_venv_bin(root: Path | None = None) -> Path | None:
     return None
 
 
-def prepend_venv_to_path(
-    root: Path | None = None, env: MutableMapping[str, str] | None = None
-) -> Path | None:
+def prepend_venv_to_path(root: Path | None = None, env: MutableMapping[str, str] | None = None) -> Path | None:
     """Ensure the virtualenv ``bin`` directory is first on PATH.
 
     Returns the resolved bin path if one was added, otherwise ``None``.

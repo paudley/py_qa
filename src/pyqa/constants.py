@@ -29,6 +29,7 @@ LANGUAGE_EXTENSIONS: Final[dict[str, set[str]]] = {
     "rust": {".rs"},
     "markdown": {".md", ".mdx", ".markdown"},
     "github-actions": {".yml", ".yaml"},
+    "sql": {".sql"},
 }
 
 LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {

@@ -204,8 +204,7 @@ def verify_file_license(
         tag = f"SPDX-License-Identifier: {policy.spdx_id}"
         if tag not in content:
             if not any(
-                alt and f"SPDX-License-Identifier: {alt}" in content
-                for alt in (policy.allow_alternate_spdx or ())
+                alt and f"SPDX-License-Identifier: {alt}" in content for alt in (policy.allow_alternate_spdx or ())
             ) and not _matches_snippet(lower_content, policy.license_snippet):
                 issues.append(f"Missing SPDX license tag '{tag}'")
 
@@ -214,9 +213,7 @@ def verify_file_license(
         if not observed:
             issues.append(f"Missing copyright notice '{policy.canonical_notice}'")
         elif not _notices_equal(observed, policy.canonical_notice):
-            issues.append(
-                f"Mismatched copyright notice. Found '{observed}' but expected '{policy.canonical_notice}'."
-            )
+            issues.append(f"Mismatched copyright notice. Found '{observed}' but expected '{policy.canonical_notice}'.")
 
     return issues
 
@@ -236,9 +233,7 @@ def normalise_notice(value: str) -> str:
     return re.sub(r"\s+", " ", stripped).strip().lower()
 
 
-def _build_canonical_notice(
-    config: Mapping[str, object], metadata: LicenseMetadata
-) -> Optional[str]:
+def _build_canonical_notice(config: Mapping[str, object], metadata: LicenseMetadata) -> Optional[str]:
     explicit_notice = _coerce_optional_str(config.pop("notice", None))
     if explicit_notice:
         return explicit_notice.strip()

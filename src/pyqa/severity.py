@@ -41,9 +41,7 @@ def apply_severity_rules(
 ) -> Severity:
     """Apply tool-specific overrides to a diagnostic severity."""
 
-    active_rules: SeverityRuleView = (
-        rules if rules is not None else DEFAULT_SEVERITY_RULES
-    )
+    active_rules: SeverityRuleView = rules if rules is not None else DEFAULT_SEVERITY_RULES
     candidates = active_rules.get(tool, cast(Iterable[SeverityRule], ()))
     for pattern, sev in candidates:
         if pattern.search(code_or_message or ""):
@@ -70,9 +68,7 @@ def add_custom_rule(
     return None
 
 
-def severity_from_code(
-    code: str | None, default: Severity = Severity.ERROR
-) -> Severity:
+def severity_from_code(code: str | None, default: Severity = Severity.ERROR) -> Severity:
     """Infer severity from conventional code prefixes (e.g. E, W)."""
 
     if not code:

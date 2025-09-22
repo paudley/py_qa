@@ -57,6 +57,4 @@ def install_with_preferred_manager(
     if pip_exe:
         return runner([pip_exe, "install", "-U", *args_list])
 
-    return subprocess.CompletedProcess(
-        args=[], returncode=1, stdout="", stderr="pip not found"
-    )
+    return subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="pip not found")

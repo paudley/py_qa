@@ -21,11 +21,7 @@ def load_versions(cache_dir: Path) -> dict[str, str]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return {}
-    return {
-        str(k): str(v)
-        for k, v in data.items()
-        if isinstance(k, str) and isinstance(v, str)
-    }
+    return {str(k): str(v) for k, v in data.items() if isinstance(k, str) and isinstance(v, str)}
 
 
 def save_versions(cache_dir: Path, versions: Mapping[str, str]) -> None:

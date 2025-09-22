@@ -139,15 +139,11 @@ report_out = "reports/output.json"
 
     assert cfg.execution.jobs == 4
     assert not cfg.execution.cache_enabled
-    assert (project_root / "build").resolve() in {
-        path.resolve() for path in cfg.file_discovery.excludes
-    }
+    assert (project_root / "build").resolve() in {path.resolve() for path in cfg.file_discovery.excludes}
     assert cfg.output.report_out == (project_root / "reports/output.json").resolve()
 
 
-def test_config_loader_expands_environment(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_config_loader_expands_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project_root = tmp_path / "workspace"
     project_root.mkdir()
 
@@ -164,9 +160,7 @@ pr_summary_out = "${REPORT_DIR}/summary.md"
 
     cfg = ConfigLoader.for_root(project_root).load()
 
-    assert (
-        cfg.output.pr_summary_out == (project_root / "artifacts/summary.md").resolve()
-    )
+    assert cfg.output.pr_summary_out == (project_root / "artifacts/summary.md").resolve()
 
 
 def test_pyproject_tool_section_is_loaded(tmp_path: Path) -> None:
@@ -204,9 +198,7 @@ jobs = 11
         encoding="utf-8",
     )
 
-    result = ConfigLoader.for_root(
-        project_root, project_config=project_config
-    ).load_with_trace()
+    result = ConfigLoader.for_root(project_root, project_config=project_config).load_with_trace()
 
     assert result.config.execution.jobs == 11
     assert result.config.execution.line_length == 120

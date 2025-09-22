@@ -29,11 +29,7 @@ def installed_packages() -> set[str]:
         data = json.loads(completed.stdout)
     except json.JSONDecodeError:
         return set()
-    return {
-        str(item.get("name", "")).lower()
-        for item in data
-        if isinstance(item, dict) and item.get("name")
-    }
+    return {str(item.get("name", "")).lower() for item in data if isinstance(item, dict) and item.get("name")}
 
 
 def run_uv(args: List[str], *, check: bool = True) -> None:
