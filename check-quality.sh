@@ -37,6 +37,7 @@ check_license_header() {
     fi
     
     # Check for SPDX identifier (preferred) or MIT header
+    if ! head -n 5 "$file" | grep -q "SPDX-License-Identifier: MIT" && \
        ! head -n 10 "$file" | grep -qi "MIT License\|MIT license"; then
         echo -e "${YELLOW}⚠️  Missing MIT license header: $file${NC}"
         ((WARNINGS++))
@@ -218,7 +219,7 @@ check_required_files() {
 }
 
 check_tool_schema() {
-    if ! [ "$CHECK_TYPE" = "all" ]; then
+    if [ "$CHECK_TYPE" != "all" ]; then
         return 0
     fi
 

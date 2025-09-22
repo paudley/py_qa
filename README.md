@@ -16,6 +16,7 @@ This repository provides a comprehensive suite of quality assurance, linting, te
 - **🛡️ Git Hooks**: Includes `pre-commit`, `pre-push`, and `commit-msg` hooks to automate quality checks.
 - **📄 Reporting Outputs**: Export machine-readable JSON, SARIF 2.1.0, and Markdown summaries for CI/CD and PR annotations.
 - **🧰 Turnkey Install**: `pyqa install` mirrors the legacy shell workflow, installing dev dependencies, optional type stubs, and generated typing shims.
+- **🛡️ Security Scan**: `pyqa security-scan` finds high-risk secrets/PII in your files (or staged changes) and runs Bandit for Python vulnerability checks.
 
 ## Scripts Overview
 
@@ -88,6 +89,7 @@ The new Typer application exposes a `lint` command with a modular configuration 
 ./py-qa/lint --jobs 8 --cache-dir .lint-cache --pr-summary-out reports/summary.md
 ./py-qa/lint --pr-summary-min-severity error --pr-summary-template "* [{severity}] {message}"
 ./py-qa/lint --bail --quiet
+./py-qa/security-scan --no-bandit --no-staged ./path/to/file
 ```
 
 Run `./py-qa/lint install` to install the preferred development dependencies, optional type stubs, and generated `stubgen` packages used by the workflow.
