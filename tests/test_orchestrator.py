@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.execution.orchestrator import Orchestrator
-from pyqa.tools.base import DeferredCommand, Tool, ToolAction
+from pyqa.tools.base import Tool, ToolAction, ToolContext
 from pyqa.tools.registry import ToolRegistry
 
 
@@ -22,18 +22,35 @@ class FakeDiscovery:
         return self._files
 
 
+class SettingsCommand:
+    """Command builder used in tests to verify settings propagation."""
+
+    def build(self, ctx: ToolContext) -> list[str]:
+        cmd = ["dummy"]
+        args = ctx.settings.get("args")
+        if args is None:
+            args_list: list[str] = []
+        elif isinstance(args, (list, tuple, set)):
+            args_list = [str(arg) for arg in args]
+        else:
+            args_list = [str(args)]
+        cmd.extend(args_list)
+        return cmd
+
+
 def test_orchestrator_runs_registered_tool(tmp_path: Path) -> None:
     target = tmp_path / "module.py"
     target.write_text("print('ok')\n", encoding="utf-8")
 
     registry = ToolRegistry()
+
     registry.register(
         Tool(
             name="dummy",
             actions=(
                 ToolAction(
                     name="lint",
-                    command=DeferredCommand(["dummy"]),
+                    command=SettingsCommand(),
                 ),
             ),
             file_extensions=(".py",),
@@ -41,9 +58,12 @@ def test_orchestrator_runs_registered_tool(tmp_path: Path) -> None:
         )
     )
 
-    def runner(cmd, **_kwargs):
+    def runner(cmd, **kwargs):
         assert cmd[0] == "dummy"
-        assert Path(cmd[1]) == target
+        assert cmd[1] == "--flag"
+        assert Path(cmd[2]) == target
+        env = kwargs.get("env", {})
+        assert env.get("DUMMY_ENV") == "1"
         return subprocess.CompletedProcess(
             cmd, returncode=0, stdout="output", stderr=""
         )
@@ -54,7 +74,13 @@ def test_orchestrator_runs_registered_tool(tmp_path: Path) -> None:
         runner=runner,
     )
 
-    result = orchestrator.run(Config(), root=tmp_path)
+    cfg = Config()
+    cfg.tool_settings["dummy"] = {
+        "args": ["--flag"],
+        "env": {"DUMMY_ENV": "1"},
+    }
+
+    result = orchestrator.run(cfg, root=tmp_path)
 
     assert len(result.outcomes) == 1
     outcome = result.outcomes[0]
@@ -75,7 +101,7 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
             actions=(
                 ToolAction(
                     name="lint",
-                    command=DeferredCommand(["dummy"]),
+                    command=SettingsCommand(),
                 ),
             ),
             file_extensions=(".py",),
@@ -90,7 +116,7 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
 
     calls: list[list[str]] = []
 
-    def runner(cmd, **_kwargs):
+    def runner(cmd, **kwargs):
         calls.append(list(cmd))
         return subprocess.CompletedProcess(
             cmd, returncode=0, stdout="output", stderr=""
@@ -116,3 +142,21 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
 
     assert len(result.outcomes) == 1
     assert result.outcomes[0].stdout == "output"
+
+    cfg.tool_settings["dummy"] = {"args": ["--different"]}
+    calls_after: list[list[str]] = []
+
+    def runner_settings(cmd, **kwargs):
+        calls_after.append(list(cmd))
+        return subprocess.CompletedProcess(
+            cmd, returncode=0, stdout="updated", stderr=""
+        )
+
+    orchestrator_settings = Orchestrator(
+        registry=registry,
+        discovery=FakeDiscovery([target]),
+        runner=runner_settings,
+    )
+    result_settings = orchestrator_settings.run(cfg, root=tmp_path)
+    assert len(calls_after) == 1
+    assert result_settings.outcomes[0].stdout == "updated"

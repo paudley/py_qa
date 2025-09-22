@@ -6,8 +6,9 @@ from pathlib import Path
 from typing import List
 
 import typer
+from click.core import ParameterSource
 
-from ..config import Config, default_parallel_jobs
+from ..config import Config, ConfigError, default_parallel_jobs
 from ..discovery import build_default_discovery
 from ..execution.orchestrator import Orchestrator
 from ..models import RunResult
@@ -21,6 +22,7 @@ from .options import LintOptions
 
 
 def lint_command(
+    ctx: typer.Context,
     paths: List[Path] = typer.Argument(
         [], metavar="[PATH]", help="Specific files or directories to lint."
     ),
@@ -98,6 +100,11 @@ def lint_command(
         "--use-local-linters",
         help="Force vendored linters even if compatible system versions exist.",
     ),
+    strict_config: bool = typer.Option(
+        False,
+        "--strict-config",
+        help="Treat configuration warnings (unknown keys, etc.) as errors.",
+    ),
 ) -> None:
     """Entry point for the ``pyqa lint`` CLI command."""
 
@@ -107,6 +114,16 @@ def lint_command(
         raise typer.BadParameter("--verbose and --quiet cannot be combined")
 
     effective_jobs = jobs if jobs is not None else default_parallel_jobs()
+
+    provided = _collect_provided_flags(
+        ctx,
+        paths_provided=bool(paths),
+        dirs=dirs,
+        exclude=exclude,
+        filters=filters,
+        only=only,
+        language=language,
+    )
 
     options = LintOptions(
         paths=list(paths),
@@ -138,11 +155,13 @@ def lint_command(
         pr_summary_min_severity=pr_summary_min_severity,
         pr_summary_template=pr_summary_template,
         use_local_linters=use_local_linters,
+        strict_config=strict_config,
+        provided=provided,
     )
 
     try:
         config = build_config(options)
-    except ValueError as exc:  # invalid option combinations
+    except (ValueError, ConfigError) as exc:  # invalid option combinations
         raise typer.BadParameter(str(exc)) from exc
     orchestrator = Orchestrator(
         registry=DEFAULT_REGISTRY,
@@ -179,3 +198,62 @@ def _handle_reporting(
             min_severity=config.output.pr_summary_min_severity,
             template=config.output.pr_summary_template,
         )
+
+
+def _collect_provided_flags(
+    ctx: typer.Context,
+    *,
+    paths_provided: bool,
+    dirs: List[Path],
+    exclude: List[Path],
+    filters: List[str],
+    only: List[str],
+    language: List[str],
+) -> set[str]:
+    tracked = {
+        "changed_only",
+        "diff_ref",
+        "include_untracked",
+        "base_branch",
+        "paths_from_stdin",
+        "dirs",
+        "exclude",
+        "filters",
+        "only",
+        "language",
+        "fix_only",
+        "check_only",
+        "verbose",
+        "quiet",
+        "no_color",
+        "no_emoji",
+        "output_mode",
+        "show_passing",
+        "jobs",
+        "bail",
+        "no_cache",
+        "cache_dir",
+        "pr_summary_out",
+        "pr_summary_limit",
+        "pr_summary_min_severity",
+        "pr_summary_template",
+        "use_local_linters",
+    }
+    provided: set[str] = set()
+    for name in tracked:
+        source = ctx.get_parameter_source(name)
+        if source not in (ParameterSource.DEFAULT, ParameterSource.DEFAULT_MAP):
+            provided.add(name)
+    if paths_provided:
+        provided.add("paths")
+    if dirs:
+        provided.add("dirs")
+    if exclude:
+        provided.add("exclude")
+    if filters:
+        provided.add("filters")
+    if only:
+        provided.add("only")
+    if language:
+        provided.add("language")
+    return provided
