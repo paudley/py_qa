@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
 # **A Comprehensive Guide to SOLID Design Principles in Go (v1.25+)**
 
 ## **Introduction: The Go Philosophy and SOLID Principles**

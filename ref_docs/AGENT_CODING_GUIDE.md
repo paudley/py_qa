@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
 # **The Architected Agent: A Guide to High-Quality, Autonomous Software Engineering in Complex Systems**
 
 ## **Section 1: Core Operational Directives**

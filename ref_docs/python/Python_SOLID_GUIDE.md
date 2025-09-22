@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
 # **A Guide to SOLID Software Architecture in Python 3.12+**
 
 ## **Introduction: The Philosophy of Maintainable Code**

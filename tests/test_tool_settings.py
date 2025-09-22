@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Tests covering propagation of tool-specific configuration settings."""
 
 from __future__ import annotations

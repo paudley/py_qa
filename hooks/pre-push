@@ -1,5 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 # Pre-push hook
 # Ensures tests pass and quality standards are met before pushing.
 

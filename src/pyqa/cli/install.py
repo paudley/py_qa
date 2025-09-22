@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Implementation of the `py-qa lint install` command."""
 
 from __future__ import annotations

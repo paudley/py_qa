@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Installer helpers that prefer project-local tooling when available."""
 
 from __future__ import annotations

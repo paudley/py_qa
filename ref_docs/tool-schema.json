@@ -1,4 +1,8 @@
 {
+  "_license": {
+    "copyright": "Copyright (c) 2025 Blackcat Informatics\u00ae Inc.",
+    "spdx": "MIT"
+  },
   "bandit": {
     "args": {
       "description": "Additional arguments appended to bandit.",

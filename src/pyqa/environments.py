@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Environment helpers for locating virtualenvs and preparing subprocess contexts."""
 
 from __future__ import annotations

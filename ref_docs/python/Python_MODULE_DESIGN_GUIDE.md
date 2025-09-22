@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
 # **A Guide to High-Quality Python Module Design**
 
 ## **The Pillars of Modular Design: Cohesion and Coupling**

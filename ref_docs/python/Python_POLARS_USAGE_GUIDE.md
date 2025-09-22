@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
 # **The Definitive Guide to High-Performance Data Manipulation with Polars LazyFrames**
 
 ______________________________________________________________________

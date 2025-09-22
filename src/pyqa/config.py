@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Configuration models and helpers for the pyqa lint orchestration package."""
 
 from __future__ import annotations
@@ -104,6 +106,7 @@ class Config:
     execution: ExecutionConfig = field(default_factory=ExecutionConfig)
     dedupe: DedupeConfig = field(default_factory=DedupeConfig)
     severity_rules: list[str] = field(default_factory=list)
+    tool_settings: dict[str, dict[str, object]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
         """Return a dictionary representation suitable for serialization."""
@@ -114,4 +117,7 @@ class Config:
             "execution": asdict(self.execution),
             "dedupe": asdict(self.dedupe),
             "severity_rules": list(self.severity_rules),
+            "tools": {
+                tool: dict(settings) for tool, settings in self.tool_settings.items()
+            },
         }

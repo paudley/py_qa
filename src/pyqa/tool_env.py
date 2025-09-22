@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Determine how to execute tooling commands based on environment preferences."""
 
 from __future__ import annotations

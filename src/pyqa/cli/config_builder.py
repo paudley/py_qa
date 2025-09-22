@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Translate CLI options into runtime configuration objects."""
 
 from __future__ import annotations

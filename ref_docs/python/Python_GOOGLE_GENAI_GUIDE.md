@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
 # **A Developer's and Agent's Guide to the google.genai Python SDK**
 
 ______________________________________________________________________

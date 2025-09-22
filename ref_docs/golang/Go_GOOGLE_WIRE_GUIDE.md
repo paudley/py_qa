@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
 # **Maximizing Dependency Injection in Go: An Expert's Guide to Google Wire**
 
 ## **The Philosophy of Compile-Time DI with Google Wire**
