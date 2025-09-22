@@ -124,11 +124,11 @@ echo ""
 
 # Run the full lint check
 echo "🔧 Running comprehensive lint check..."
-if ! ./py-qa/lint.sh; then
+if ! ./py-qa/lint; then
     echo ""
     echo "❌ Lint check failed!"
     echo "Please fix all lint issues before pushing."
-    echo "Run './py-qa/lint.sh' to see all issues."
+    echo "Run './py-qa/lint' to see all issues."
     exit 1
 fi
 echo "✅ All lint checks passed (10.00/10 score maintained)"

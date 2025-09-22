@@ -28,7 +28,7 @@ Runs before each commit to ensure code quality:
 
 Runs before pushing to ensure the codebase maintains high standards:
 
-- **Full Lint Check**: Runs `./py-qa/lint.sh` to ensure 10.00/10 Pylint score
+- **Full Lint Check**: Runs `./py-qa/lint` to ensure 10.00/10 Pylint score
 - **Test Suite**: Runs all tests with pytest
 - **Coverage Check**: Ensures comprehensive core functionality coverage is maintained
 
@@ -51,7 +51,7 @@ git push --no-verify
 The hooks automatically detect and activate the `.venv` virtual environment. If you see errors:
 
 1. Ensure you have a virtual environment created: `uv venv`
-2. Install dependencies: `uv pip sync pyproject.toml`
+1. Install dependencies: `uv pip sync pyproject.toml`
 
 ### Performance
 
