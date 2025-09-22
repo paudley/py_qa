@@ -71,8 +71,8 @@ done
 
 # If we have commit messages, check them for banned words
 if [ -s "$COMMIT_MSGS_FILE" ]; then
-    if [ -f "$PROJECT_ROOT/py-qa/check-banned-words.sh" ]; then
-        if ! "$PROJECT_ROOT/py-qa/check-banned-words.sh" "$COMMIT_MSGS_FILE"; then
+    if [ -f "$PROJECT_ROOT/py-qa/check-banned-words" ]; then
+        if ! "$PROJECT_ROOT/py-qa/check-banned-words" "$COMMIT_MSGS_FILE"; then
             echo ""
             echo "❌ Push aborted due to banned words in commit messages!"
             echo "Please amend your commit messages before pushing."
@@ -93,8 +93,8 @@ echo ""
 # Run comprehensive security scan on all Python files
 echo "🔒 Running comprehensive security scan..."
 ALL_PY_FILES=$(find "$PROJECT_ROOT/src" "$PROJECT_ROOT/tests" -name "*.py" -type f 2>/dev/null | head -100)
-if [ -f "$PROJECT_ROOT/py-qa/security-scan.sh" ]; then
-    if ! "$PROJECT_ROOT/py-qa/security-scan.sh" $ALL_PY_FILES; then
+if [ -f "$PROJECT_ROOT/py-qa/security-scan" ]; then
+    if ! "$PROJECT_ROOT/py-qa/security-scan" $ALL_PY_FILES; then
         echo ""
         echo "❌ Security vulnerabilities detected!"
         echo "Please fix security issues before pushing."

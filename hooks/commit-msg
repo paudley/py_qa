@@ -21,8 +21,8 @@ fi
 # Check commit message for banned words
 echo ""
 echo "🚫 Checking commit message for banned words..."
-if [ -f "$PROJECT_ROOT/py-qa/check-banned-words.sh" ]; then
-    if ! "$PROJECT_ROOT/py-qa/check-banned-words.sh" "$COMMIT_MSG_FILE"; then
+if [ -f "$PROJECT_ROOT/py-qa/check-banned-words" ]; then
+    if ! "$PROJECT_ROOT/py-qa/check-banned-words" "$COMMIT_MSG_FILE"; then
         echo ""
         echo "❌ Commit aborted due to banned words in message!"
         echo "Please revise your commit message and try again."

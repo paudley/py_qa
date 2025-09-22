@@ -25,7 +25,7 @@ This repository provides a comprehensive suite of quality assurance, linting, te
 - **`lint`**: The main linter orchestrator implemented in Python. Run `./py-qa/lint` to execute a full suite of formatters, type checkers, and linters.
 - **`lint`**: Primary Python-based lint orchestrator. Invoke `./py-qa/lint` from your project to run the complete suite without touching the host environment by default.
 - **`check-quality.sh`**: Performs repository-level checks, such as validating license headers, checking for oversized files, and other project best practices.
-- **`security-scan.sh`**: Scans for hardcoded secrets, API keys, and other sensitive credentials in your staged files.
+- **`security-scan`**: Scans for hardcoded secrets, API keys, and other sensitive credentials in your staged files.
 - **`install-hooks.sh`**: Sets up Git hooks (`pre-commit`, `pre-push`, `commit-msg`) that automatically run the quality scripts, enforcing standards for every contributor.
 
 ### AI-Enhanced Testing
