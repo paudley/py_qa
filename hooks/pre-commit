@@ -81,8 +81,8 @@ fi
 # Run project linting script with all project-specific options
 echo ""
 echo "🔧 Running project linting checks..."
-if ! "$PROJECT_ROOT/py-qa/lint.sh"; then
-    echo "❌ Linting issues found. Run './py-qa/lint.sh' to see details and fix."
+if ! "$PROJECT_ROOT/py-qa/lint"; then
+    echo "❌ Linting issues found. Run './py-qa/lint' to see details and fix."
     exit 1
 fi
 echo "✅ Linting check passed"
