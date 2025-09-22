@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -41,8 +42,6 @@ class TreeSitterContextResolver:
 
     def annotate(self, diagnostics: Iterable[Diagnostic], *, root: Path) -> None:
         root = root.resolve()
-        if Parser is None or get_language is None:
-            return
         for diag in diagnostics:
             if diag.function:
                 continue
@@ -108,17 +107,22 @@ class TreeSitterContextResolver:
         except OSError:
             return None
         parsed = self._parse(language, path, mtime_ns)
-        if parsed is None:
-            return None
-        node = self._node_at(parsed.tree.root_node, parsed.source, line)
-        if node is None:
-            return None
+        if parsed is not None:
+            node = self._node_at(parsed.tree.root_node, parsed.source, line)
+            if node is not None:
+                if language == "python":
+                    return self._python_context(node)
+                if language == "markdown":
+                    return self._markdown_context(node, parsed.source)
+                if language == "json":
+                    return self._json_context(node, parsed.source)
+        # fallbacks when Tree-sitter unavailable
         if language == "python":
-            return self._python_context(node)
+            return self._python_fallback(path, line)
         if language == "markdown":
-            return self._markdown_context(node, parsed.source)
+            return self._markdown_fallback(path, line)
         if language == "json":
-            return self._json_context(node, parsed.source)
+            return self._json_fallback(path, line)
         return None
 
     def _node_at(self, root: Node, source: bytes, line: int) -> Node | None:
@@ -168,6 +172,73 @@ class TreeSitterContextResolver:
         if not path_parts:
             return None
         return ".".join(reversed(path_parts))
+
+    @staticmethod
+    def _python_fallback(path: Path, line: int) -> str | None:
+        try:
+            source = path.read_text(encoding="utf-8")
+        except OSError:
+            return None
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            return None
+        best_node: ast.AST | None = None
+        best_start = -1
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                start = getattr(node, "lineno", None)
+                end = getattr(node, "end_lineno", start)
+                if start is None or end is None:
+                    continue
+                if start <= line <= end and start >= best_start:
+                    best_node = node
+                    best_start = start
+        if isinstance(best_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return best_node.name
+        return None
+
+    @staticmethod
+    def _markdown_fallback(path: Path, line: int) -> str | None:
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return None
+        idx = min(max(line - 1, 0), len(lines) - 1)
+        while idx >= 0:
+            text = lines[idx].strip()
+            if text.startswith("#"):
+                return text.lstrip("#").strip()
+            if text and idx > 0 and all(ch == text[0] for ch in text) and text[0] in "=-":
+                heading = lines[idx - 1].strip()
+                if heading:
+                    return heading
+            idx -= 1
+        return None
+
+    @staticmethod
+    def _json_fallback(path: Path, line: int) -> str | None:
+        # Simple heuristic: walk backwards to find enclosing key
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return None
+        idx = min(max(line - 1, 0), len(lines) - 1)
+        stack: list[str] = []
+        for i in range(idx, -1, -1):
+            text = lines[i]
+            stripped = text.strip()
+            if stripped.startswith("}") or stripped.startswith("]"):
+                if stack:
+                    stack.pop()
+                continue
+            if stripped.startswith("\"") and ":" in stripped:
+                key = stripped.split(":", 1)[0].strip().strip('"')
+                stack.insert(0, key)
+                break
+        if stack:
+            return ".".join(stack)
+        return None
 
 
 CONTEXT_RESOLVER = TreeSitterContextResolver()

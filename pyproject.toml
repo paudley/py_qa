@@ -14,8 +14,7 @@ requires-python = ">=3.12"
 dependencies = [
     "typer>=0.12",
     "packaging>=24.1",
-    "tree-sitter>=0.22",
-    "tree-sitter-languages>=1.10",
+    "cython>=3.1.4",
 ]
 
 [project.scripts]
@@ -94,3 +93,6 @@ exclude_dirs = ["tests"]
 
 [tool.isort]
 profile = "black"
+
+[tool.uv.extra-build-dependencies]
+git = ["Cython"]
