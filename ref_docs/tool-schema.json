@@ -1,0 +1,640 @@
+{
+  "bandit": {
+    "args": {
+      "description": "Additional arguments appended to bandit.",
+      "type": "list[str]"
+    },
+    "baseline": {
+      "description": "Baseline results file path.",
+      "type": "path"
+    },
+    "confidence": {
+      "description": "Minimum confidence level (low/medium/high).",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "type": "str"
+    },
+    "config": {
+      "description": "Bandit configuration file path.",
+      "type": "path"
+    },
+    "exclude": {
+      "description": "Additional directories/files to exclude from scanning.",
+      "type": "list[str]"
+    },
+    "format": {
+      "description": "Output format (json, txt, etc.).",
+      "enum": [
+        "json",
+        "txt",
+        "yaml",
+        "xml"
+      ],
+      "type": "str"
+    },
+    "severity": {
+      "description": "Minimum severity level (low/medium/high).",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "type": "str"
+    },
+    "skip": {
+      "description": "Tests to skip (e.g. S101).",
+      "type": "list[str]"
+    },
+    "targets": {
+      "description": "Extra directories to include when scanning.",
+      "type": "list[str]"
+    }
+  },
+  "black": {
+    "args": {
+      "description": "Additional arguments appended to Black.",
+      "type": "list[str]"
+    },
+    "config": {
+      "description": "Black configuration file.",
+      "type": "path"
+    },
+    "line-length": {
+      "description": "Maximum line length enforced by Black.",
+      "type": "int"
+    },
+    "preview": {
+      "description": "Enable Black preview mode.",
+      "type": "bool"
+    },
+    "skip-magic-trailing-comma": {
+      "description": "Disable automatic trailing comma insertion.",
+      "type": "bool"
+    },
+    "skip-string-normalization": {
+      "description": "Disable quote normalization transformations.",
+      "type": "bool"
+    },
+    "target-version": {
+      "description": "Allowed Python target versions (e.g. py311).",
+      "enum": [
+        "py37",
+        "py38",
+        "py39",
+        "py310",
+        "py311",
+        "py312",
+        "py313"
+      ],
+      "type": "list[str]"
+    },
+    "workers": {
+      "description": "Number of worker processes (-j).",
+      "type": "int"
+    }
+  },
+  "eslint": {
+    "args": {
+      "description": "Additional arguments appended to ESLint.",
+      "type": "list[str]"
+    },
+    "cache": {
+      "description": "Enable ESLint result caching.",
+      "type": "bool"
+    },
+    "cache-location": {
+      "description": "Where ESLint stores cache data.",
+      "type": "path"
+    },
+    "config": {
+      "description": "ESLint configuration file or directory.",
+      "type": "path"
+    },
+    "ext": {
+      "description": "Additional file extensions to lint.",
+      "type": "list[str]"
+    },
+    "fix-type": {
+      "description": "Limit fixes to the given rule types.",
+      "type": "list[str]"
+    },
+    "ignore-path": {
+      "description": "Custom .eslintignore file path.",
+      "type": "path"
+    },
+    "max-warnings": {
+      "description": "Exit with error if warnings exceed this count.",
+      "type": "int"
+    },
+    "no-error-on-unmatched-pattern": {
+      "description": "Treat unmatched patterns as success instead of failure.",
+      "type": "bool"
+    },
+    "quiet": {
+      "description": "Suppress reporting of warnings.",
+      "type": "bool"
+    },
+    "report-unused-disable-directives": {
+      "description": "Control reporting for unused eslint-disable comments.",
+      "type": "str"
+    },
+    "resolve-plugins-relative-to": {
+      "description": "Directory from which ESLint resolves plugins.",
+      "type": "path"
+    },
+    "rulesdir": {
+      "description": "Directories containing custom ESLint rules.",
+      "type": "list[str]"
+    }
+  },
+  "golangci-lint": {
+    "args": {
+      "description": "Additional arguments appended to golangci-lint run.",
+      "type": "list[str]"
+    },
+    "build-tags": {
+      "description": "Go build tags supplied to the run.",
+      "type": "list[str]"
+    },
+    "config": {
+      "description": "golangci-lint configuration file path.",
+      "type": "path"
+    },
+    "deadline": {
+      "description": "Timeout value passed to --deadline.",
+      "type": "str"
+    },
+    "disable": {
+      "description": "Linters to disable explicitly.",
+      "type": "list[str]"
+    },
+    "enable": {
+      "description": "Linters to enable explicitly.",
+      "type": "list[str]"
+    },
+    "issues-exit-code": {
+      "description": "Custom exit code when issues are found.",
+      "type": "int"
+    },
+    "skip-dirs": {
+      "description": "Regex patterns of directories to skip.",
+      "type": "list[str]"
+    },
+    "skip-files": {
+      "description": "Regex patterns of files to skip.",
+      "type": "list[str]"
+    },
+    "tests": {
+      "description": "Include tests in lint run.",
+      "type": "bool"
+    }
+  },
+  "isort": {
+    "args": {
+      "description": "Additional arguments appended to isort.",
+      "type": "list[str]"
+    },
+    "color": {
+      "description": "Enable coloured output.",
+      "type": "bool"
+    },
+    "combine-as": {
+      "description": "Combine multiple as imports into a single import.",
+      "type": "bool"
+    },
+    "combine-star": {
+      "description": "Combine star imports from the same module.",
+      "type": "bool"
+    },
+    "conda-env": {
+      "description": "Conda environment directory passed to isort.",
+      "type": "path"
+    },
+    "extend-skip": {
+      "description": "Additional skip patterns appended to defaults.",
+      "type": "list[str]"
+    },
+    "extend-skip-glob": {
+      "description": "Extra glob patterns appended after defaults.",
+      "type": "list[str]"
+    },
+    "filter-files": {
+      "description": "Filter provided files to those supported by isort before execution.",
+      "type": "bool"
+    },
+    "float-to-top": {
+      "description": "Move from-style imports to the top of the file.",
+      "type": "bool"
+    },
+    "line-length": {
+      "description": "Override import wrap line length.",
+      "type": "int"
+    },
+    "multi-line": {
+      "description": "Multi-line output mode.",
+      "enum": [
+        "GRID",
+        "VERTICAL",
+        "VERTICAL_HANGING_INDENT",
+        "VERTICAL_GRID",
+        "VERTICAL_GRID_GROUPED",
+        "VERTICAL_GRID_GROUPED_NO_COMMA",
+        "VERTICAL_GRID_NO_COMMA",
+        "HANGING_INDENT"
+      ],
+      "type": "str"
+    },
+    "profile": {
+      "description": "Profile to load (e.g. black).",
+      "type": "str"
+    },
+    "settings-path": {
+      "description": "Explicit isort settings / config file path.",
+      "type": "path"
+    },
+    "skip": {
+      "description": "Specific files or directories to skip.",
+      "type": "list[str]"
+    },
+    "skip-glob": {
+      "description": "File glob patterns excluded from processing.",
+      "type": "list[str]"
+    },
+    "src": {
+      "description": "Additional source roots for module resolution.",
+      "type": "list[str]"
+    },
+    "virtual-env": {
+      "description": "Virtual environment directory passed to isort.",
+      "type": "path"
+    }
+  },
+  "mypy": {
+    "args": {
+      "description": "Additional arguments passed to mypy.",
+      "type": "list[str]"
+    },
+    "cache-dir": {
+      "description": "Location for mypy cache data.",
+      "type": "path"
+    },
+    "config": {
+      "description": "Custom mypy configuration file to load.",
+      "type": "path"
+    },
+    "ignore-missing-imports": {
+      "description": "Suppress errors about missing type information",
+      "type": "bool"
+    },
+    "namespace-packages": {
+      "description": "Treat packages without __init__.py as namespaces.",
+      "type": "bool"
+    },
+    "plugins": {
+      "description": "Mypy plugins to load via --plugin.",
+      "type": "list[str]"
+    },
+    "python-executable": {
+      "description": "Interpreter executable used for type checking.",
+      "type": "path"
+    },
+    "python-version": {
+      "description": "Python version string for type checking.",
+      "type": "str"
+    },
+    "strict": {
+      "description": "Enable mypy strict mode.",
+      "type": "bool"
+    },
+    "warn-return-any": {
+      "description": "Warn when returning Any typed values.",
+      "type": "bool"
+    },
+    "warn-unused-configs": {
+      "description": "Warn when config options are unused.",
+      "type": "bool"
+    }
+  },
+  "prettier": {
+    "args": {
+      "description": "Additional arguments passed to prettier.",
+      "type": "list[str]"
+    },
+    "config": {
+      "description": "Prettier configuration file to load.",
+      "type": "path"
+    },
+    "config-precedence": {
+      "description": "How multiple configs are merged (cli-override/file-override).",
+      "type": "str"
+    },
+    "end-of-line": {
+      "description": "End-of-line style (lf, crlf, auto).",
+      "enum": [
+        "lf",
+        "crlf",
+        "cr",
+        "auto"
+      ],
+      "type": "str"
+    },
+    "ignore-path": {
+      "description": "Ignore file used during formatting.",
+      "type": "path"
+    },
+    "loglevel": {
+      "description": "Prettier log level (debug/info/warn/error).",
+      "type": "str"
+    },
+    "parser": {
+      "description": "Explicit parser (e.g. typescript, babel).",
+      "type": "str"
+    },
+    "plugin": {
+      "description": "Additional prettier plugins to load.",
+      "type": "list[str]"
+    },
+    "plugin-search-dir": {
+      "description": "Directories used to resolve prettier plugins.",
+      "type": "list[str]"
+    },
+    "print-width": {
+      "description": "Preferred line length before wrapping.",
+      "type": "int"
+    },
+    "semi": {
+      "description": "Whether to add semicolons at statement ends.",
+      "type": "bool"
+    },
+    "single-quote": {
+      "description": "Prefer single quotes when formatting.",
+      "type": "bool"
+    },
+    "tab-width": {
+      "description": "Number of spaces per indentation level.",
+      "type": "int"
+    },
+    "trailing-comma": {
+      "description": "Specify trailing comma behaviour (all, es5, none).",
+      "enum": [
+        "all",
+        "es5",
+        "none"
+      ],
+      "type": "str"
+    },
+    "use-tabs": {
+      "description": "Indent with tabs instead of spaces.",
+      "type": "bool"
+    }
+  },
+  "pylint": {
+    "args": {
+      "description": "Additional arguments appended to pylint.",
+      "type": "list[str]"
+    },
+    "disable": {
+      "description": "Message symbols or groups to disable.",
+      "type": "list[str]"
+    },
+    "enable": {
+      "description": "Message symbols to enable in addition to defaults.",
+      "type": "list[str]"
+    },
+    "exit-zero": {
+      "description": "Force exit code zero regardless of findings.",
+      "type": "bool"
+    },
+    "fail-under": {
+      "description": "Lower score boundary to fail the run.",
+      "type": "float"
+    },
+    "jobs": {
+      "description": "Number of parallel workers.",
+      "type": "int"
+    },
+    "max-line-length": {
+      "description": "Maximum allowed source line length.",
+      "type": "int"
+    },
+    "rcfile": {
+      "description": "Path to pylintrc or equivalent configuration.",
+      "type": "path"
+    },
+    "reports": {
+      "description": "Enable/disable additional reports.",
+      "type": "bool"
+    },
+    "score": {
+      "description": "Enable/disable pylint score output.",
+      "type": "bool"
+    }
+  },
+  "pyright": {
+    "args": {
+      "description": "Additional arguments appended to pyright.",
+      "type": "list[str]"
+    },
+    "ignoreexternal": {
+      "description": "Ignore external type stubs.",
+      "type": "bool"
+    },
+    "lib": {
+      "description": "Include library type information in the run.",
+      "type": "bool"
+    },
+    "project": {
+      "description": "Path to pyrightconfig/tsconfig project file.",
+      "type": "path"
+    },
+    "python-platform": {
+      "description": "Target execution platform (e.g. Linux, Darwin).",
+      "enum": [
+        "Linux",
+        "Darwin",
+        "Windows"
+      ],
+      "type": "str"
+    },
+    "python-version": {
+      "description": "Python version string to target.",
+      "enum": [
+        "3.7",
+        "3.8",
+        "3.9",
+        "3.10",
+        "3.11",
+        "3.12",
+        "3.13"
+      ],
+      "type": "str"
+    },
+    "pythonpath": {
+      "description": "Additional search path for module resolution.",
+      "type": "path"
+    },
+    "typeshed-path": {
+      "description": "Custom typeshed location.",
+      "type": "path"
+    },
+    "venv-path": {
+      "description": "Root directory containing virtual environments.",
+      "type": "path"
+    },
+    "verifytypes": {
+      "description": "Module or pattern to verify using --verifytypes.",
+      "type": "str"
+    }
+  },
+  "ruff": {
+    "args": {
+      "description": "Additional arguments appended to the ruff invocation.",
+      "type": "list[str]"
+    },
+    "config": {
+      "description": "Specific ruff configuration file to use.",
+      "type": "path"
+    },
+    "exclude": {
+      "description": "Paths or globs that ruff should exclude.",
+      "type": "list[str]"
+    },
+    "extend-exclude": {
+      "description": "Additional exclusion patterns applied after defaults.",
+      "type": "list[str]"
+    },
+    "extend-ignore": {
+      "description": "Extend the default ignored codes for the project.",
+      "type": "list[str]"
+    },
+    "extend-select": {
+      "description": "Extend the default selection with additional rule codes.",
+      "type": "list[str]"
+    },
+    "fix": {
+      "description": "Enable --fix when running the lint action.",
+      "type": "bool"
+    },
+    "ignore": {
+      "description": "Ignore the listed ruff rule codes.",
+      "type": "list[str]"
+    },
+    "line-length": {
+      "description": "Override the maximum line length.",
+      "type": "int"
+    },
+    "per-file-ignores": {
+      "description": "List of pattern:codes entries for per-file ignores.",
+      "type": "list[str]"
+    },
+    "preview": {
+      "description": "Enable preview / unstable ruff rules.",
+      "type": "bool"
+    },
+    "respect-gitignore": {
+      "description": "Whether to honour .gitignore patterns during linting.",
+      "type": "bool"
+    },
+    "select": {
+      "description": "Restrict linting to the provided ruff rule codes.",
+      "type": "list[str]"
+    },
+    "target-version": {
+      "description": "Python version passed to ruff (e.g. py311).",
+      "enum": [
+        "py37",
+        "py38",
+        "py39",
+        "py310",
+        "py311",
+        "py312",
+        "py313"
+      ],
+      "type": "str"
+    },
+    "unsafe-fixes": {
+      "description": "Allow fix actions that may alter runtime semantics.",
+      "type": "bool"
+    }
+  },
+  "ruff-format": {
+    "args": {
+      "description": "Additional arguments for the formatter.",
+      "type": "list[str]"
+    },
+    "config": {
+      "description": "Specific ruff formatter configuration file to use.",
+      "type": "path"
+    },
+    "exclude": {
+      "description": "Paths or globs to exclude from formatting.",
+      "type": "list[str]"
+    },
+    "extend-exclude": {
+      "description": "Additional exclusion patterns evaluated after defaults.",
+      "type": "list[str]"
+    },
+    "line-length": {
+      "description": "Override formatter line length.",
+      "type": "int"
+    },
+    "preview": {
+      "description": "Enable preview / unstable formatting behaviour.",
+      "type": "bool"
+    },
+    "respect-gitignore": {
+      "description": "Whether to honour .gitignore during formatting.",
+      "type": "bool"
+    },
+    "stdin-filename": {
+      "description": "Filename to associate with STDIN content.",
+      "type": "str"
+    },
+    "target-version": {
+      "description": "Python version passed to the formatter.",
+      "enum": [
+        "py37",
+        "py38",
+        "py39",
+        "py310",
+        "py311",
+        "py312",
+        "py313"
+      ],
+      "type": "str"
+    }
+  },
+  "tsc": {
+    "args": {
+      "description": "Additional compiler arguments appended to tsc.",
+      "type": "list[str]"
+    },
+    "incremental": {
+      "description": "Enable incremental build information.",
+      "type": "bool"
+    },
+    "pretty": {
+      "description": "Control pretty diagnostic output.",
+      "type": "bool"
+    },
+    "project": {
+      "description": "tsconfig project to use for the run.",
+      "type": "path"
+    },
+    "skip-lib-check": {
+      "description": "Skip type checking of declaration files.",
+      "type": "bool"
+    },
+    "strict": {
+      "description": "Enable all strict type-checking options.",
+      "type": "bool"
+    },
+    "watch": {
+      "description": "Run tsc in watch mode.",
+      "type": "bool"
+    }
+  }
+}

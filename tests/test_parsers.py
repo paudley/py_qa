@@ -24,7 +24,7 @@ from pyqa.tools.base import ToolContext
 
 
 def _ctx() -> ToolContext:
-    return ToolContext(cfg=Config(), root=Path("."), files=())
+    return ToolContext(cfg=Config(), root=Path("."), files=(), settings={})
 
 
 def test_parse_ruff() -> None:

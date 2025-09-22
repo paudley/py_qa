@@ -108,7 +108,14 @@ Additional quality-of-life flags mirror the original shell workflow:
 
 ## ⚙️ Configuration
 
-- **Linting Rules**: Most tool configurations (ruff, mypy, pylint) are managed in `pyproject.toml`. You can fork this repository and adjust them to fit your project's needs.
+- **Layered settings**: Runtime behaviour pulls from built-in defaults, `~/.py_qa.toml`, `[tool.pyqa]` within `pyproject.toml`, and finally `<PROJECT>/.py_qa.toml`. Paths, lists, and include directives are resolved relative to the project root, and environment variables like `${HOME}` expand inside configuration values.
+- **Strict validation**: pass `--strict-config` to `pyqa lint` (or `--strict` to `pyqa config show/validate`) to fail on unknown tool options instead of only warning.
+- **Inspect & debug**: Run `pyqa config show --root <project>` to view the merged configuration. Add `--trace` (enabled by default) to see which source last touched each option, or `pyqa config validate` to confirm all files load without errors.
+- **Schema reference**: `pyqa config schema` emits JSON or Markdown for every setting—including per-tool options—and `pyqa config schema --format json-tools [--out tool-schema.json]` prints (or writes) just the tool override catalogue. Use `pyqa config export-tools tool-schema.json` to produce the same artifact explicitly.
+- **Layer diffing**: `pyqa config diff` highlights changes between layers (defaults, home, pyproject, project, auto), making it easy to spot which source introduces a given override.
+- **Layer diffing**: `pyqa config diff` highlights changes between layers (defaults, home, pyproject, project, auto), making it easy to spot which source introduces a given override.
+- **Tool overrides**: Provide tool-specific tables under `[tool.pyqa.bandit]` in `pyproject.toml` or `[tools.bandit]` in `.py_qa.toml` to fine-tune individual linters. Each section understands common keys (for example, `line-length`, `target-version`, `severity`), an `args` list to append arbitrary flags, and an `env` table merged into the tool process.
+- **Linting Rules**: Tool-specific knobs (ruff, mypy, pylint) still respect their own config files (typically `pyproject.toml`). Customise them per project or fork this repo to adjust the baseline.
 - **Banned Words**: Create a `.banned-words` file in your project root to add custom words or phrases that should be blocked from commit messages (e.g., internal project codenames).
 
 ## 📜 License

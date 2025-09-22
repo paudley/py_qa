@@ -41,6 +41,8 @@ class LintOptions:
     pr_summary_min_severity: str = "warning"
     pr_summary_template: str = "- **{severity}** `{tool}` {message} ({location})"
     use_local_linters: bool = False
+    strict_config: bool = False
+    provided: set[str] = field(default_factory=set)
 
 
 @dataclass(slots=True)

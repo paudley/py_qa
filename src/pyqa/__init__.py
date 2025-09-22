@@ -12,6 +12,7 @@ from .config import (
     FileDiscoveryConfig,
     OutputConfig,
 )
+from .config_loader import ConfigLoader, generate_config_schema, load_config
 from .discovery import build_default_discovery
 from .execution.orchestrator import Orchestrator, OrchestratorHooks
 from .tools.builtins import register_builtin_tools
@@ -24,6 +25,9 @@ __all__ = [
     "ExecutionConfig",
     "FileDiscoveryConfig",
     "OutputConfig",
+    "ConfigLoader",
+    "generate_config_schema",
+    "load_config",
     "Orchestrator",
     "OrchestratorHooks",
     "build_default_discovery",
