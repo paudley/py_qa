@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Registration helpers for the built-in tool suite."""
 
 from __future__ import annotations

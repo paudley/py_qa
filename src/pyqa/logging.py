@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """User-facing logging helpers with optional colour and emoji support."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Integration tests for orchestrator execution flow."""
 
 # pylint: disable=missing-function-docstring

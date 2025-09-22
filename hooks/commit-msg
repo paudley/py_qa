@@ -1,5 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 # Commit message validation hook
 # Ensures commit messages follow conventional commit format and project standards
 

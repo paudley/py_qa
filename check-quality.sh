@@ -1,5 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 # Quality checks script for git-ai-reporter
 # Validates license headers, file sizes, branch protection, and commit messages
 
@@ -36,7 +37,6 @@ check_license_header() {
     fi
     
     # Check for SPDX identifier (preferred) or MIT header
-    if ! head -n 5 "$file" | grep -q "SPDX-License-Identifier: MIT" && \
        ! head -n 10 "$file" | grep -qi "MIT License\|MIT license"; then
         echo -e "${YELLOW}⚠️  Missing MIT license header: $file${NC}"
         ((WARNINGS++))

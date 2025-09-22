@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Execution helpers for invoking external commands in a controlled manner."""
 
 from __future__ import annotations

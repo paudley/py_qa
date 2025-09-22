@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Emit machine-readable reports for orchestrator results."""
 
 from __future__ import annotations

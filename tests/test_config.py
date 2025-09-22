@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Tests covering CLI configuration helpers."""
 
 # pylint: disable=missing-function-docstring

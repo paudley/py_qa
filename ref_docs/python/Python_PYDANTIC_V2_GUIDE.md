@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
 # **A Technical Guide to Maximizing Pydantic V2 Utility**
 
 ______________________________________________________________________

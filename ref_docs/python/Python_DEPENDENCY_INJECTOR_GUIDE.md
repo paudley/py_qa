@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
 # **A Comprehensive Technical Guide to the dependency-injector Framework**
 
 This document provides an exhaustive technical specification and usage guide for the dependency-injector Python library. It is designed to serve as a definitive knowledge base for an AI agent tasked with generating Python code. The guide covers foundational principles, core architectural components, advanced features, and architectural best practices for building robust, maintainable, and scalable applications.

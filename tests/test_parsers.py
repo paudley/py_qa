@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Tests covering parser adapters for supported tools."""
 
 # pylint: disable=missing-function-docstring

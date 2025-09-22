@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Tool registry providing discovery by name or language."""
 
 from __future__ import annotations

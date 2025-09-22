@@ -1,5 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 # Pre-commit hook
 # Ensures code quality by running lint, security, and quality checks on staged files.
 

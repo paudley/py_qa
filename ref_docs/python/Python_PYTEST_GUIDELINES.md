@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
 # **Comprehensive Mandate for the Repair and Enhancement of the Project pytest Suite**
 
 ## **Preamble: Mission Objective and Guiding Principles**
