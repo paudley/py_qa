@@ -25,7 +25,7 @@ This repository provides a comprehensive suite of quality assurance, linting, te
 - **`lint`**: Primary Python-based lint orchestrator. Invoke `./py-qa/lint` from your project to run the complete suite without touching the host environment by default.
 - **`check-quality`**: Runs repository-level quality enforcement including SPDX/license headers, copyright notices, file-size guardrails, schema verification, and Python hygiene.
 - **`security-scan`**: Scans for hardcoded secrets, API keys, and other sensitive credentials in your staged files.
-- **`install-hooks.sh`**: Sets up Git hooks (`pre-commit`, `pre-push`, `commit-msg`) that automatically run the quality scripts, enforcing standards for every contributor.
+- **`install-hooks`**: PyQA CLI shim that symlinks the managed Git hooks (`pre-commit`, `pre-push`, `commit-msg`) into `.git/hooks`, ensuring quality checks run for every contributor.
 
 ### AI-Enhanced Testing
 
@@ -59,7 +59,7 @@ This repository provides a comprehensive suite of quality assurance, linting, te
 1. **Install Git Hooks**: Run the installation script to set up the automated quality checks.
 
    ```bash
-   ./py-qa/install-hooks.sh
+   ./py-qa/install-hooks
    ```
 
 1. **Bootstrap the Environment**: Install the managed dependencies into `.venv` using `uv`.

@@ -14,6 +14,7 @@ from .security import security_scan_command
 from .quality import quality_app
 from .update import update_app
 from .clean import clean_app
+from .hooks import hooks_app
 
 app = typer.Typer(help="Polyglot lint orchestrator.")
 app.command("lint")(lint_command)
@@ -24,5 +25,6 @@ app.command("check-banned-words")(check_banned_words)
 app.add_typer(quality_app, name="check-quality")
 app.add_typer(update_app, name="update")
 app.add_typer(clean_app, name="sparkly-clean")
+app.add_typer(hooks_app, name="install-hooks")
 
 __all__ = ["app"]
