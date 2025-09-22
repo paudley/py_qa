@@ -22,6 +22,8 @@ dependencies = [
     "tree-sitter-go>=0.25.0",
     "tree-sitter-rust>=0.24.0",
     "tree-sitter>=0.25.1",
+    "sqlfluff>=3.4.2",
+    "tree-sitter-sql>=0.3.8",
 ]
 
 [project.scripts]

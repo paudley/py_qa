@@ -831,6 +831,43 @@ class _PrettierCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _SqlfluffCommand(CommandBuilder):
+    base: Sequence[str]
+    is_fix: bool = False
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        config_path = _setting(settings, "config", "config_path")
+        if config_path:
+            cmd.extend(["--config", str(_resolve_path(root, config_path))])
+
+        dialect = _setting(settings, "dialect") or ctx.cfg.execution.sql_dialect
+        if dialect:
+            cmd.extend(["--dialect", str(dialect)])
+
+        templater = _setting(settings, "templater")
+        if templater:
+            cmd.extend(["--templater", str(templater)])
+
+        rules = _settings_list(_setting(settings, "rules"))
+        for rule in rules:
+            cmd.extend(["--rules", str(rule)])
+
+        processes = _setting(settings, "processes")
+        if processes is not None:
+            cmd.extend(["--processes", str(processes)])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _ActionlintCommand(CommandBuilder):
     version: str
 
@@ -1162,14 +1199,14 @@ def _builtin_tools() -> Iterable[Tool]:
         actions=(
             ToolAction(
                 name="lint",
-                command=DeferredCommand(["sqlfluff", "lint", "--format", "json"]),
+                command=_SqlfluffCommand(base=("sqlfluff", "lint", "--format", "json")),
                 append_files=True,
                 description="Lint SQL files using sqlfluff.",
                 parser=JsonParser(parse_sqlfluff),
             ),
             ToolAction(
                 name="fix",
-                command=DeferredCommand(["sqlfluff", "fix", "--force"]),
+                command=_SqlfluffCommand(base=("sqlfluff", "fix", "--force"), is_fix=True),
                 append_files=True,
                 is_fix=True,
                 description="Autofix SQL files via sqlfluff fix.",

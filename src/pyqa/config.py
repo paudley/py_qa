@@ -86,6 +86,7 @@ class ExecutionConfig:
     bail: bool = False
     use_local_linters: bool = False
     line_length: int = 120
+    sql_dialect: str = "postgresql"
 
 
 @dataclass(slots=True)

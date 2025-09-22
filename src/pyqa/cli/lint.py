@@ -89,6 +89,11 @@ def lint_command(
         "--line-length",
         help="Global preferred maximum line length applied to supported tools.",
     ),
+    sql_dialect: str = typer.Option(
+        "postgresql",
+        "--sql-dialect",
+        help="Default SQL dialect for dialect-aware tools (e.g. sqlfluff).",
+    ),
 ) -> None:
     """Entry point for the ``pyqa lint`` CLI command."""
 
@@ -152,6 +157,7 @@ def lint_command(
         use_local_linters=use_local_linters,
         strict_config=strict_config,
         line_length=line_length,
+        sql_dialect=sql_dialect,
         provided=provided,
     )
 
@@ -235,6 +241,7 @@ def _collect_provided_flags(
         "pr_summary_template",
         "use_local_linters",
         "line_length",
+        "sql_dialect",
     }
     provided: set[str] = set()
     for name in tracked:

@@ -25,6 +25,7 @@ def test_load_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     assert cfg.file_discovery.roots == [project_root.resolve()]
     assert cfg.execution.cache_dir == (project_root / ".lint-cache").resolve()
     assert cfg.execution.line_length == 120
+    assert cfg.execution.sql_dialect == "postgresql"
     assert cfg.output.pr_summary_out is None
 
 

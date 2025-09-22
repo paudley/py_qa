@@ -242,6 +242,7 @@ def _build_execution(current: ExecutionConfig, options: LintOptions, project_roo
     )
     use_local_linters = options.use_local_linters if "use_local_linters" in provided else current.use_local_linters
     line_length = options.line_length if "line_length" in provided else current.line_length
+    sql_dialect = options.sql_dialect if "sql_dialect" in provided else current.sql_dialect
 
     return replace(
         current,
@@ -255,6 +256,7 @@ def _build_execution(current: ExecutionConfig, options: LintOptions, project_roo
         bail=bail,
         use_local_linters=use_local_linters,
         line_length=line_length,
+        sql_dialect=sql_dialect,
     )
 
 
