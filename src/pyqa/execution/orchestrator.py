@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import subprocess  # nosec B404 - required for executing configured tool commands
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Callable, Mapping, Sequence
 
 from ..config import Config
@@ -84,7 +87,15 @@ class Orchestrator:
             tool_files = self._filter_files_for_tool(
                 tool.file_extensions, matched_files
             )
-            context = ToolContext(cfg=cfg, root=root, files=tool_files)
+            settings_view = MappingProxyType(
+                dict(cfg.tool_settings.get(tool.name, {}))
+            )
+            context = ToolContext(
+                cfg=cfg,
+                root=root,
+                files=tool_files,
+                settings=settings_view,
+            )
             if self._hooks.before_tool:
                 self._hooks.before_tool(tool.name)
             for action in tool.actions:
@@ -276,6 +287,9 @@ class Orchestrator:
         env = dict(action.env)
         if env_overrides:
             env.update(env_overrides)
+        extra_env = context.settings.get("env")
+        if isinstance(extra_env, Mapping):
+            env.update({key: str(value) for key, value in extra_env.items()})
         cp = self._runner(list(cmd), cwd=root, env=env, timeout=action.timeout_s)
         extra_filters = context.cfg.output.tool_filters.get(tool_name, [])
         stdout = action.filter_stdout(cp.stdout, extra_filters)
@@ -341,6 +355,10 @@ class Orchestrator:
             str(exec_cfg.respect_config),
             ",".join(sorted(cfg.severity_rules)),
         ]
+        if cfg.tool_settings:
+            serialized = json.dumps(cfg.tool_settings, sort_keys=True)
+            digest = hashlib.sha1(serialized.encode("utf-8"), usedforsecurity=False).hexdigest()
+            components.append(digest)
         return "|".join(components)
 
 

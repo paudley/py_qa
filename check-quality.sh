@@ -16,6 +16,7 @@ NC='\033[0m' # No Color
 MAX_FILE_SIZE_MB=10
 MAX_FILE_SIZE_BYTES=$((MAX_FILE_SIZE_MB * 1024 * 1024))
 PROTECTED_BRANCHES=("main" "master" "production" "release")
+TOOL_SCHEMA_FILE="ref_docs/tool-schema.json"
 
 # Initialize error counter
 ERRORS=0
@@ -216,6 +217,42 @@ check_required_files() {
     done
 }
 
+check_tool_schema() {
+    if ! [ "$CHECK_TYPE" = "all" ]; then
+        return 0
+    fi
+
+    if [ ! -f "$TOOL_SCHEMA_FILE" ]; then
+        echo -e "${RED}❌ Missing tool schema file: $TOOL_SCHEMA_FILE${NC}"
+        echo "   Run: uv run pyqa config export-tools $TOOL_SCHEMA_FILE"
+        ((ERRORS++))
+        return 1
+    fi
+
+    if ! command -v uv >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  Skipping tool schema check (uv not installed)${NC}"
+        ((WARNINGS++))
+        return 0
+    fi
+
+    local tmp_schema
+    tmp_schema=$(mktemp)
+    if ! uv run pyqa config export-tools "$tmp_schema" >/dev/null 2>&1; then
+        echo -e "${RED}❌ Failed to export tool schema via pyqa${NC}"
+        ((ERRORS++))
+        rm -f "$tmp_schema"
+        return 1
+    fi
+
+    if ! cmp -s "$tmp_schema" "$TOOL_SCHEMA_FILE"; then
+        echo -e "${RED}❌ Tool schema out of date${NC}"
+        echo "   Run: uv run pyqa config export-tools $TOOL_SCHEMA_FILE"
+        ((ERRORS++))
+    fi
+
+    rm -f "$tmp_schema"
+}
+
 # Main execution
 echo -e "${BLUE}📋 Running code quality checks...${NC}"
 echo ""
@@ -275,6 +312,7 @@ fi
 if [ "$CHECK_TYPE" = "all" ]; then
     echo "📦 Checking required files..."
     check_required_files
+    check_tool_schema
     echo ""
 fi
 

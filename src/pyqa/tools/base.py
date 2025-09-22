@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Mapping, Protocol, Sequence
+from typing import Any, Literal, Mapping, Protocol, Sequence
 
 from ..config import Config
 from ..models import Diagnostic, OutputFilter, RawDiagnostic
@@ -17,6 +17,7 @@ class ToolContext:
     cfg: Config
     root: Path
     files: Sequence[Path]
+    settings: Mapping[str, Any] = field(default_factory=dict)
 
 
 class Parser(Protocol):
