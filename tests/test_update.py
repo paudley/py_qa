@@ -11,7 +11,13 @@ from typing import Sequence
 from typer.testing import CliRunner
 
 from pyqa.cli.app import app
-from pyqa.update import WorkspaceDiscovery, WorkspaceKind, WorkspaceUpdater
+from pyqa.update import (
+    DEFAULT_STRATEGIES,
+    WorkspaceDiscovery,
+    WorkspaceKind,
+    WorkspacePlanner,
+    WorkspaceUpdater,
+)
 
 
 class RecordingRunner:
@@ -62,9 +68,11 @@ def test_python_workspace_runs_uv_commands(tmp_path: Path, monkeypatch) -> None:
 
     discovery = WorkspaceDiscovery()
     workspaces = discovery.discover(tmp_path)
-    python_ws = next(ws for ws in workspaces if ws.kind is WorkspaceKind.PYTHON)
+    python_ws = next(ws for ws in workspaces if ws.kind == WorkspaceKind.PYTHON)
 
-    updater.update(tmp_path, workspaces=[python_ws])
+    planner = WorkspacePlanner(DEFAULT_STRATEGIES)
+    plan = planner.plan([python_ws])
+    updater.execute(plan, root=tmp_path)
 
     commands = [call[0] for call in runner.calls]
     assert ("uv", "venv") in commands

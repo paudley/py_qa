@@ -1,22 +1,20 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2025 Blackcat Informatics® Inc.
-"""Workspace dependency updater orchestrations."""
+"""Workspace discovery and dependency update orchestration."""
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
-from typing import Callable, Iterable, Sequence
+from typing import Iterable, List, Mapping, Protocol, Sequence
 
+from .config import UpdateConfig
 from .constants import ALWAYS_EXCLUDE_DIRS
 from .logging import fail, info, ok, warn
 
 
-class WorkspaceKind(str, Enum):
+class WorkspaceKind(str):
     PYTHON = "python"
     PNPM = "pnpm"
     YARN = "yarn"
@@ -25,55 +23,186 @@ class WorkspaceKind(str, Enum):
     RUST = "rust"
 
 
-CommandRunner = Callable[[Sequence[str], Path | None], subprocess.CompletedProcess[str]]
-
-
 @dataclass(slots=True)
 class Workspace:
-    """A discovered workspace and its package manager metadata."""
-
     directory: Path
     kind: WorkspaceKind
     manifest: Path
 
 
 @dataclass(slots=True)
-class UpdateResult:
-    """Summary of update execution."""
+class CommandSpec:
+    args: tuple[str, ...]
+    description: str | None = None
+    requires: tuple[str, ...] = ()
 
+
+@dataclass(slots=True)
+class UpdatePlanItem:
+    workspace: Workspace
+    commands: list[CommandSpec]
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class UpdatePlan:
+    items: list[UpdatePlanItem]
+
+
+@dataclass(slots=True)
+class UpdateResult:
     successes: list[Workspace] = field(default_factory=list)
     failures: list[tuple[Workspace, str]] = field(default_factory=list)
     skipped: list[Workspace] = field(default_factory=list)
 
-    def record_success(self, workspace: Workspace) -> None:
+    def register_success(self, workspace: Workspace) -> None:
         self.successes.append(workspace)
 
-    def record_failure(self, workspace: Workspace, message: str) -> None:
+    def register_failure(self, workspace: Workspace, message: str) -> None:
         self.failures.append((workspace, message))
 
-    def record_skip(self, workspace: Workspace) -> None:
+    def register_skip(self, workspace: Workspace) -> None:
         self.skipped.append(workspace)
 
     def exit_code(self) -> int:
         return 1 if self.failures else 0
 
 
+class WorkspaceStrategy(Protocol):
+    kind: WorkspaceKind
+
+    def detect(self, directory: Path, filenames: set[str]) -> bool:
+        ...
+
+    def plan(self, workspace: Workspace) -> list[CommandSpec]:
+        ...
+
+
+class PythonStrategy:
+    kind = WorkspaceKind.PYTHON
+
+    def detect(self, directory: Path, filenames: set[str]) -> bool:
+        return "pyproject.toml" in filenames
+
+    def plan(self, workspace: Workspace) -> list[CommandSpec]:
+        commands: list[CommandSpec] = []
+        if not (workspace.directory / ".venv").exists():
+            commands.append(CommandSpec(args=("uv", "venv"), description="Create virtual env", requires=("uv",)))
+        commands.append(
+            CommandSpec(
+                args=(
+                    "uv",
+                    "sync",
+                    "-U",
+                    "--all-extras",
+                    "--all-groups",
+                    "--managed-python",
+                    "--link-mode=hardlink",
+                    "--compile-bytecode",
+                ),
+                description="Synchronise Python dependencies",
+                requires=("uv",),
+            )
+        )
+        return commands
+
+
+class PnpmStrategy:
+    kind = WorkspaceKind.PNPM
+
+    def detect(self, directory: Path, filenames: set[str]) -> bool:
+        return "pnpm-lock.yaml" in filenames
+
+    def plan(self, workspace: Workspace) -> list[CommandSpec]:
+        return [
+            CommandSpec(
+                args=("pnpm", "up", "--latest"),
+                description="Update pnpm workspace",
+                requires=("pnpm",),
+            )
+        ]
+
+
+class YarnStrategy:
+    kind = WorkspaceKind.YARN
+
+    def detect(self, directory: Path, filenames: set[str]) -> bool:
+        return "yarn.lock" in filenames
+
+    def plan(self, workspace: Workspace) -> list[CommandSpec]:
+        return [
+            CommandSpec(
+                args=("yarn", "upgrade", "--latest"),
+                description="Upgrade yarn dependencies",
+                requires=("yarn",),
+            )
+        ]
+
+
+class NpmStrategy:
+    kind = WorkspaceKind.NPM
+
+    def detect(self, directory: Path, filenames: set[str]) -> bool:
+        return "package.json" in filenames
+
+    def plan(self, workspace: Workspace) -> list[CommandSpec]:
+        return [
+            CommandSpec(
+                args=("npm", "update"),
+                description="Update npm dependencies",
+                requires=("npm",),
+            )
+        ]
+
+
+class GoStrategy:
+    kind = WorkspaceKind.GO
+
+    def detect(self, directory: Path, filenames: set[str]) -> bool:
+        return "go.mod" in filenames
+
+    def plan(self, workspace: Workspace) -> list[CommandSpec]:
+        return [
+            CommandSpec(args=("go", "get", "-u", "./..."), description="Update Go modules", requires=("go",)),
+            CommandSpec(args=("go", "mod", "tidy"), description="Tidy go.mod", requires=("go",)),
+        ]
+
+
+class RustStrategy:
+    kind = WorkspaceKind.RUST
+
+    def detect(self, directory: Path, filenames: set[str]) -> bool:
+        return "Cargo.toml" in filenames
+
+    def plan(self, workspace: Workspace) -> list[CommandSpec]:
+        return [CommandSpec(args=("cargo", "update"), description="Update Cargo dependencies", requires=("cargo",))]
+
+
+DEFAULT_STRATEGIES: tuple[WorkspaceStrategy, ...] = (
+    PythonStrategy(),
+    PnpmStrategy(),
+    YarnStrategy(),
+    NpmStrategy(),
+    GoStrategy(),
+    RustStrategy(),
+)
+
+
 class WorkspaceDiscovery:
-    """Discover workspaces for supported package managers."""
+    """Discover workspaces using provided strategies."""
 
-    _NODE_LOCKS = {
-        WorkspaceKind.PNPM: "pnpm-lock.yaml",
-        WorkspaceKind.YARN: "yarn.lock",
-        WorkspaceKind.NPM: "package-lock.json",
-    }
-
-    def __init__(self, *, skip_patterns: Iterable[str] | None = None) -> None:
-        default_patterns = {"pyreadstat", ".git/modules"}
-        if skip_patterns:
-            default_patterns.update(skip_patterns)
-        self._skip_substrings = default_patterns
+    def __init__(
+        self,
+        *,
+        strategies: Iterable[WorkspaceStrategy] = DEFAULT_STRATEGIES,
+        skip_patterns: Iterable[str] | None = None,
+    ) -> None:
+        self._strategies = list(strategies)
+        self._skip_patterns = set(skip_patterns or [])
 
     def discover(self, root: Path) -> list[Workspace]:
+        import os
+
         root = root.resolve()
         workspaces: list[Workspace] = []
         for dirpath, dirnames, filenames in os.walk(root):
@@ -81,66 +210,55 @@ class WorkspaceDiscovery:
             if self._should_skip(directory, root):
                 dirnames[:] = []
                 continue
-            manifests = self._manifests_for(directory, filenames)
-            workspaces.extend(manifests)
-        return sorted(workspaces, key=lambda ws: (ws.directory, ws.kind.value))
+            names = set(filenames)
+            for strategy in self._strategies:
+                if strategy.detect(directory, names):
+                    manifest = _manifest_for(strategy.kind, directory)
+                    workspaces.append(Workspace(directory=directory, kind=strategy.kind, manifest=manifest))
+                    break
+        workspaces.sort(key=lambda ws: (ws.directory, ws.kind))
+        return workspaces
 
     def _should_skip(self, directory: Path, root: Path) -> bool:
         try:
             relative = directory.relative_to(root)
         except ValueError:
-            relative = directory
+            return True
         if any(part in ALWAYS_EXCLUDE_DIRS for part in relative.parts):
             return True
-        path_str = str(relative)
-        return any(pattern in path_str for pattern in self._skip_substrings)
-
-    def _manifests_for(self, directory: Path, filenames: list[str]) -> list[Workspace]:
-        workspaces: list[Workspace] = []
-        files = set(filenames)
-
-        # Python workspace via pyproject.toml
-        if "pyproject.toml" in files:
-            workspaces.append(
-                Workspace(directory=directory, kind=WorkspaceKind.PYTHON, manifest=directory / "pyproject.toml")
-            )
-
-        # Node workspaces with priority: pnpm -> yarn -> npm
-        for kind, lock_name in self._NODE_LOCKS.items():
-            if lock_name in files:
-                manifest = directory / lock_name
-                workspaces.append(Workspace(directory=directory, kind=kind, manifest=manifest))
-                break
-        else:
-            if "package.json" in files:
-                workspaces.append(
-                    Workspace(directory=directory, kind=WorkspaceKind.NPM, manifest=directory / "package.json")
-                )
-
-        if "go.mod" in files:
-            workspaces.append(
-                Workspace(directory=directory, kind=WorkspaceKind.GO, manifest=directory / "go.mod")
-            )
-
-        if "Cargo.toml" in files:
-            workspaces.append(
-                Workspace(directory=directory, kind=WorkspaceKind.RUST, manifest=directory / "Cargo.toml")
-            )
-
-        return workspaces
+        rel_str = str(relative)
+        return any(pattern in rel_str for pattern in self._skip_patterns)
 
 
-def _default_runner(args: Sequence[str], cwd: Path | None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        args,
-        cwd=cwd,
-        check=False,
-        text=True,
-    )
+class WorkspacePlanner:
+    """Create update plans for discovered workspaces."""
+
+    def __init__(self, strategies: Iterable[WorkspaceStrategy]) -> None:
+        self._strategies: Mapping[WorkspaceKind, WorkspaceStrategy] = {
+            strategy.kind: strategy for strategy in strategies
+        }
+
+    def plan(
+        self,
+        workspaces: Iterable[Workspace],
+        *,
+        enabled_managers: Iterable[str] | None = None,
+    ) -> UpdatePlan:
+        allowed = {WorkspaceKind(kind) for kind in enabled_managers} if enabled_managers else None
+        items: list[UpdatePlanItem] = []
+        for workspace in workspaces:
+            if allowed and workspace.kind not in allowed:
+                continue
+            strategy = self._strategies.get(workspace.kind)
+            if strategy is None:
+                continue
+            commands = strategy.plan(workspace)
+            items.append(UpdatePlanItem(workspace=workspace, commands=list(commands)))
+        return UpdatePlan(items=items)
 
 
 class WorkspaceUpdater:
-    """Apply package manager updates across discovered workspaces."""
+    """Execute update plans for workspaces."""
 
     def __init__(
         self,
@@ -153,122 +271,58 @@ class WorkspaceUpdater:
         self._dry_run = dry_run
         self._use_emoji = use_emoji
 
-    def update(
-        self,
-        root: Path,
-        *,
-        managers: set[WorkspaceKind] | None = None,
-        workspaces: Iterable[Workspace],
-    ) -> UpdateResult:
+    def execute(self, plan: UpdatePlan, *, root: Path) -> UpdateResult:
         result = UpdateResult()
-        for workspace in workspaces:
-            if managers and workspace.kind not in managers:
-                continue
+        for item in plan.items:
+            workspace = item.workspace
             rel_path = _format_relative(workspace.directory, root)
             info(
-                f"Updating {workspace.kind.value} workspace at {rel_path}",
+                f"Updating {workspace.kind} workspace at {rel_path}",
                 use_emoji=self._use_emoji,
             )
-            commands = self._commands_for(workspace)
-            if not commands:
+            if not item.commands:
                 warn("No update strategy available", use_emoji=self._use_emoji)
-                result.record_skip(workspace)
+                result.register_skip(workspace)
                 continue
             failed = False
-            for command in commands:
-                if self._dry_run:
-                    info(
-                        f"DRY RUN: {' '.join(command)}",
+            for spec in item.commands:
+                missing = [tool for tool in spec.requires if shutil.which(tool) is None]
+                if missing:
+                    warn(
+                        f"Skipping command {' '.join(spec.args)} (missing {', '.join(missing)})",
                         use_emoji=self._use_emoji,
                     )
                     continue
-                cp = self._runner(command, workspace.directory)
+                if self._dry_run:
+                    info(
+                        f"DRY RUN: {' '.join(spec.args)}",
+                        use_emoji=self._use_emoji,
+                    )
+                    continue
+                cp = self._runner(spec.args, workspace.directory)
                 if cp.returncode != 0:
                     message = (
-                        f"Command '{' '.join(command)}' failed with exit code {cp.returncode}"
+                        f"Command '{' '.join(spec.args)}' failed with exit code {cp.returncode}"
                     )
                     fail(message, use_emoji=self._use_emoji)
-                    result.record_failure(workspace, f"{rel_path}: {message}")
+                    result.register_failure(workspace, f"{rel_path}: {message}")
                     failed = True
                     break
-            if not failed:
-                if self._dry_run:
-                    result.record_skip(workspace)
-                else:
-                    ok("Workspace updated", use_emoji=self._use_emoji)
-                    result.record_success(workspace)
+            if failed:
+                continue
+            if self._dry_run:
+                result.register_skip(workspace)
+            else:
+                ok("Workspace updated", use_emoji=self._use_emoji)
+                result.register_success(workspace)
         return result
-
-    def _commands_for(self, workspace: Workspace) -> list[list[str]]:
-        if workspace.kind is WorkspaceKind.PYTHON:
-            return self._python_commands(workspace)
-        if workspace.kind is WorkspaceKind.PNPM:
-            return self._pnpm_commands(workspace)
-        if workspace.kind is WorkspaceKind.YARN:
-            return self._yarn_commands(workspace)
-        if workspace.kind is WorkspaceKind.NPM:
-            return self._npm_commands(workspace)
-        if workspace.kind is WorkspaceKind.GO:
-            return self._go_commands(workspace)
-        if workspace.kind is WorkspaceKind.RUST:
-            return self._rust_commands(workspace)
-        return []
-
-    def _python_commands(self, workspace: Workspace) -> list[list[str]]:
-        commands: list[list[str]] = []
-        venv = workspace.directory / ".venv"
-        if not venv.exists():
-            commands.append(["uv", "venv"])
-        commands.append(
-            [
-                "uv",
-                "sync",
-                "-U",
-                "--all-extras",
-                "--all-groups",
-                "--managed-python",
-                "--link-mode=hardlink",
-                "--compile-bytecode",
-            ]
-        )
-        return commands
-
-    def _pnpm_commands(self, workspace: Workspace) -> list[list[str]]:
-        if not shutil.which("pnpm"):
-            warn("pnpm not found in PATH; skipping", use_emoji=self._use_emoji)
-            return []
-        return [["pnpm", "up", "--latest"]]
-
-    def _yarn_commands(self, workspace: Workspace) -> list[list[str]]:
-        if not shutil.which("yarn"):
-            warn("yarn not found in PATH; skipping", use_emoji=self._use_emoji)
-            return []
-        return [["yarn", "upgrade", "--latest"]]
-
-    def _npm_commands(self, workspace: Workspace) -> list[list[str]]:
-        if not shutil.which("npm"):
-            warn("npm not found in PATH; skipping", use_emoji=self._use_emoji)
-            return []
-        return [["npm", "update"]]
-
-    def _go_commands(self, workspace: Workspace) -> list[list[str]]:
-        if not shutil.which("go"):
-            warn("go not found in PATH; skipping", use_emoji=self._use_emoji)
-            return []
-        return [["go", "get", "-u", "./..."], ["go", "mod", "tidy"]]
-
-    def _rust_commands(self, workspace: Workspace) -> list[list[str]]:
-        if not shutil.which("cargo"):
-            warn("cargo not found in PATH; skipping", use_emoji=self._use_emoji)
-            return []
-        return [["cargo", "update"]]
 
 
 def ensure_lint_install(root: Path, runner: CommandRunner, *, dry_run: bool) -> None:
     lint_shim = root / "py-qa" / "lint"
     if not lint_shim.exists():
         return
-    command = [str(lint_shim), "install"]
+    command = (str(lint_shim), "install")
     info("Ensuring py-qa lint dependencies are installed", use_emoji=True)
     if dry_run:
         info(f"DRY RUN: {' '.join(command)}", use_emoji=True)
@@ -281,18 +335,41 @@ def ensure_lint_install(root: Path, runner: CommandRunner, *, dry_run: bool) -> 
         )
 
 
+def _manifest_for(kind: WorkspaceKind, directory: Path) -> Path:
+    mapping = {
+        WorkspaceKind.PYTHON: "pyproject.toml",
+        WorkspaceKind.PNPM: "pnpm-lock.yaml",
+        WorkspaceKind.YARN: "yarn.lock",
+        WorkspaceKind.NPM: "package.json",
+        WorkspaceKind.GO: "go.mod",
+        WorkspaceKind.RUST: "Cargo.toml",
+    }
+    name = mapping.get(kind)
+    return directory / name if name else directory
+
+
+def _default_runner(args: Sequence[str], cwd: Path | None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(args, cwd=cwd, check=False, text=True)
+
+
 def _format_relative(path: Path, root: Path) -> str:
     try:
-        return str(path.relative_to(root)) or "."
+        relative = path.relative_to(root)
     except ValueError:
         return str(path)
+    return str(relative) or "."
 
 
 __all__ = [
     "Workspace",
     "WorkspaceKind",
     "WorkspaceDiscovery",
+    "WorkspacePlanner",
     "WorkspaceUpdater",
+    "UpdatePlan",
+    "UpdatePlanItem",
     "UpdateResult",
+    "CommandSpec",
+    "DEFAULT_STRATEGIES",
     "ensure_lint_install",
 ]

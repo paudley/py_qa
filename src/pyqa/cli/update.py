@@ -1,10 +1,8 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2025 Blackcat Informatics® Inc.
 """CLI command for updating dependencies across workspaces."""
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence
 
@@ -13,19 +11,25 @@ import typer
 from ..config_loader import ConfigError, ConfigLoader
 from ..logging import fail, ok, warn
 from ..update import (
+    DEFAULT_STRATEGIES,
+    CommandSpec,
+    UpdatePlan,
     WorkspaceDiscovery,
-    WorkspaceKind,
+    WorkspacePlanner,
     WorkspaceUpdater,
     ensure_lint_install,
+    WorkspaceKind,
 )
 
-CommandRunner = Callable[[Sequence[str], Path | None], subprocess.CompletedProcess[str]]
+CommandRunner = Callable[[Sequence[str], Path | None], object]
 
 update_app = typer.Typer(name="update", help="Update dependencies across detected workspaces.")
 
 
-def _default_runner(args: Sequence[str], cwd: Path | None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, cwd=cwd, check=False, text=True)
+def _default_runner(args: Sequence[str], cwd: Path | None):
+    from subprocess import run
+
+    return run(args, cwd=cwd, check=False, text=True)
 
 
 @update_app.callback(invoke_without_command=True)
@@ -56,23 +60,48 @@ def main(
         fail(f"Configuration invalid: {exc}", use_emoji=emoji)
         raise typer.Exit(code=1) from exc
 
-    if load_result.warnings:
-        for message in load_result.warnings:
-            warn(message, use_emoji=emoji)
+    update_config = load_result.config.update
 
-    manager_filter: set[WorkspaceKind] | None = None
+    valid_managers = {strategy.kind for strategy in DEFAULT_STRATEGIES}
+
+    manager_filter: set[str] | None = None
     if manager:
-        try:
-            manager_filter = {WorkspaceKind(value.lower()) for value in manager}
-        except ValueError as exc:
-            valid = ", ".join(kind.value for kind in WorkspaceKind)
-            fail(f"{exc}. Valid managers: {valid}", use_emoji=emoji)
-            raise typer.Exit(code=1) from exc
+        normalized = {value.lower() for value in manager}
+        invalid = sorted(normalized - valid_managers)
+        if invalid:
+            fail(
+                f"Unknown manager(s): {', '.join(invalid)}. Valid managers: {', '.join(sorted(valid_managers))}",
+                use_emoji=emoji,
+            )
+            raise typer.Exit(code=1)
+        manager_filter = normalized
 
-    discovery = WorkspaceDiscovery()
+    discovery = WorkspaceDiscovery(
+        strategies=DEFAULT_STRATEGIES,
+        skip_patterns=update_config.skip_patterns,
+    )
     workspaces = discovery.discover(root)
     if not workspaces:
         warn("No workspaces discovered.", use_emoji=emoji)
+        raise typer.Exit(code=0)
+
+    planner = WorkspacePlanner(DEFAULT_STRATEGIES)
+    config_enabled: set[str] | None = None
+    if update_config.enabled_managers:
+        normalized = {value.lower() for value in update_config.enabled_managers}
+        invalid = sorted(normalized - valid_managers)
+        if invalid:
+            fail(
+                f"Invalid manager(s) in configuration: {', '.join(invalid)}",
+                use_emoji=emoji,
+            )
+            raise typer.Exit(code=1)
+        config_enabled = normalized
+
+    enabled = manager_filter or config_enabled
+    plan = planner.plan(workspaces, enabled_managers=enabled)
+    if not plan.items:
+        warn("No workspaces selected for update.", use_emoji=emoji)
         raise typer.Exit(code=0)
 
     runner: CommandRunner = _default_runner
@@ -80,14 +109,13 @@ def main(
     if not skip_lint_install:
         ensure_lint_install(root, runner, dry_run=dry_run)
 
-    result = updater.update(
-        root,
-        managers=manager_filter,
-        workspaces=workspaces,
-    )
+    result = updater.execute(plan, root=root)
 
     if dry_run:
-        ok(f"Planned updates for {len(result.skipped)} workspace(s).", use_emoji=emoji)
+        ok(
+            f"Planned updates for {len(result.skipped)} workspace(s).",
+            use_emoji=emoji,
+        )
         raise typer.Exit(code=0)
 
     if result.failures:

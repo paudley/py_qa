@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 
 from pyqa.cli.app import app
 from pyqa.clean import sparkly_clean
+from pyqa.config import CleanConfig
 
 
 def _setup_repo(root: Path) -> None:
@@ -22,7 +23,7 @@ def _setup_repo(root: Path) -> None:
 
 def test_sparkly_clean_removes_known_patterns(tmp_path: Path) -> None:
     _setup_repo(tmp_path)
-    sparkly_clean(tmp_path, dry_run=False)
+    sparkly_clean(tmp_path, config=CleanConfig(), dry_run=False)
     assert not (tmp_path / "coverage.xml").exists()
     assert not (tmp_path / "examples" / "test.log").exists()
     assert not any((tmp_path / "build").rglob("__pycache__"))

@@ -79,7 +79,7 @@ def build_config(options: LintOptions) -> Config:
     load_result = loader.load_with_trace(strict=options.strict_config)
     if load_result.warnings and not options.strict_config:
         for message in load_result.warnings:
-            warn(message)
+            warn(message, use_emoji=False)
     base_config = load_result.config
 
     file_cfg = _build_file_discovery(base_config.file_discovery, options, project_root)

@@ -36,7 +36,8 @@ line-length = 88
     )
 
     assert result.exit_code == 0
-    payload = json.loads(result.stdout)
+    stdout = result.stdout.split("\n\n# Warnings", 1)[0]
+    payload = json.loads(stdout)
     assert payload["execution"]["jobs"] == 3
     assert payload["tool_settings"]["black"]["line-length"] == 88
 

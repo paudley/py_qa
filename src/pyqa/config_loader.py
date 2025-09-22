@@ -17,6 +17,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - Python <3.11 fallback
     raise RuntimeError("tomllib is required to parse configuration files") from exc
 
 from .config import (
+    CleanConfig,
     Config,
     ConfigError,
     DedupeConfig,
@@ -25,6 +26,7 @@ from .config import (
     LicenseConfig,
     OutputConfig,
     QualityConfigSection,
+    UpdateConfig,
 )
 from .tools.settings import TOOL_SETTING_SCHEMA
 
@@ -274,6 +276,8 @@ class _ConfigMerger:
         self._dedupe_section = _DedupeSection()
         self._license_section = _LicenseSection()
         self._quality_section = _QualitySection(resolver)
+        self._clean_section = _CleanSection()
+        self._update_section = _UpdateSection()
 
     def apply(
         self, config: Config, data: Mapping[str, Any], source: str
@@ -329,6 +333,22 @@ class _ConfigMerger:
             for field, value in quality_updates.items()
         )
 
+        clean_config, clean_updates = self._clean_section.merge(
+            config.clean, data.get("clean")
+        )
+        updates.extend(
+            FieldUpdate("clean", field, source, value)
+            for field, value in clean_updates.items()
+        )
+
+        update_config, update_updates = self._update_section.merge(
+            config.update, data.get("update")
+        )
+        updates.extend(
+            FieldUpdate("update", field, source, value)
+            for field, value in update_updates.items()
+        )
+
         tool_settings, tool_updates, tool_warnings = _merge_tool_settings(
             config.tool_settings, data.get("tools"), source
         )
@@ -354,6 +374,8 @@ class _ConfigMerger:
             tool_settings=tool_settings,
             license=license_config,
             quality=quality_config,
+            clean=clean_config,
+            update=update_config,
         )
         return merged, updates, warnings
 
@@ -658,6 +680,53 @@ class _QualitySection(_SectionMerger):
         return updated, self._diff_dataclass(current, updated)
 
 
+class _CleanSection(_SectionMerger):
+    section = "clean"
+
+    def merge(
+        self, current: CleanConfig, raw: Any
+    ) -> tuple[CleanConfig, Dict[str, Any]]:
+        data = self._ensure_mapping(raw, self.section)
+        patterns = list(current.patterns)
+        if "patterns" in data:
+            patterns = _coerce_string_sequence(data["patterns"], "clean.patterns")
+
+        trees = list(current.trees)
+        if "trees" in data:
+            trees = _coerce_string_sequence(data["trees"], "clean.trees")
+
+        updated = replace(current, patterns=patterns, trees=trees)
+        return updated, self._diff_dataclass(current, updated)
+
+
+class _UpdateSection(_SectionMerger):
+    section = "update"
+
+    def merge(
+        self, current: UpdateConfig, raw: Any
+    ) -> tuple[UpdateConfig, Dict[str, Any]]:
+        data = self._ensure_mapping(raw, self.section)
+
+        skip_patterns = list(current.skip_patterns)
+        if "skip_patterns" in data:
+            skip_patterns = _coerce_string_sequence(
+                data["skip_patterns"], "update.skip_patterns"
+            )
+
+        enabled_managers = list(current.enabled_managers)
+        if "enabled_managers" in data:
+            enabled_managers = _coerce_string_sequence(
+                data["enabled_managers"], "update.enabled_managers"
+            )
+
+        updated = replace(
+            current,
+            skip_patterns=skip_patterns,
+            enabled_managers=enabled_managers,
+        )
+        return updated, self._diff_dataclass(current, updated)
+
+
 class _DedupeSection(_SectionMerger):
     section = "dedupe"
 
@@ -859,6 +928,8 @@ _KNOWN_SECTIONS = {
     "severity_rules",
     "license",
     "quality",
+    "clean",
+    "update",
     "tools",
 }
 

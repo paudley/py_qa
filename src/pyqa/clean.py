@@ -1,34 +1,29 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Utilities for removing temporary artefacts from a repository."""
 
 from __future__ import annotations
 
-import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Sequence
 
+from .config import CleanConfig
 from .logging import info, ok, warn
 
-DEFAULT_PATTERNS: tuple[str, ...] = (
-    "*.log",
-    ".*cache",
-    ".claude*.json",
-    ".coverage",
-    ".hypothesis",
-    ".stream*.json",
-    ".venv",
-    "__pycache__",
-    "chroma*db",
-    "coverage*",
-    "dist",
-    "filesystem_store",
-    "htmlcov*",
-)
 
-DEFAULT_TREES: tuple[str, ...] = ("examples", "packages")
+@dataclass(slots=True)
+class CleanPlanItem:
+    path: Path
+
+
+@dataclass(slots=True)
+class CleanPlan:
+    items: list[CleanPlanItem] = field(default_factory=list)
+
+    @property
+    def paths(self) -> list[Path]:
+        return [item.path for item in self.items]
 
 
 @dataclass(slots=True)
@@ -43,32 +38,60 @@ class CleanResult:
         self.skipped.append(path)
 
 
+class CleanPlanner:
+    """Build a cleanup plan from configuration and overrides."""
+
+    def __init__(
+        self,
+        *,
+        extra_patterns: Sequence[str] | None = None,
+        extra_trees: Sequence[str] | None = None,
+    ) -> None:
+        self._extra_patterns = tuple(extra_patterns or ())
+        self._extra_trees = tuple(extra_trees or ())
+
+    def plan(self, root: Path, config: CleanConfig) -> CleanPlan:
+        root = root.resolve()
+        patterns = _merge_unique(config.patterns, self._extra_patterns)
+        trees = _merge_unique(config.trees, self._extra_trees)
+
+        collected: dict[Path, CleanPlanItem] = {}
+
+        info("✨ Cleaning repository temporary files...", use_emoji=True)
+        for path in _glob_once(root, patterns, recursive=False):
+            collected[path] = CleanPlanItem(path=path)
+
+        for tree in trees:
+            directory = (root / tree).resolve()
+            if not directory.exists():
+                continue
+            info(f"🧹 Cleaning {tree}/ ...", use_emoji=True)
+            for path in _glob_once(directory, patterns, recursive=True):
+                collected[path] = CleanPlanItem(path=path)
+
+        items = sorted(collected.values(), key=lambda item: item.path)
+        return CleanPlan(items=items)
+
+
 def sparkly_clean(
     root: Path,
     *,
-    patterns: Sequence[str] = DEFAULT_PATTERNS,
-    trees: Sequence[str] = DEFAULT_TREES,
+    config: CleanConfig,
+    extra_patterns: Sequence[str] | None = None,
+    extra_trees: Sequence[str] | None = None,
     dry_run: bool = False,
 ) -> CleanResult:
-    """Remove temporary artefacts under *root* matching *patterns* safely."""
+    """Remove temporary artefacts under *root* based on *config* and overrides."""
 
-    root = root.resolve()
+    planner = CleanPlanner(
+        extra_patterns=extra_patterns,
+        extra_trees=extra_trees,
+    )
+    plan = planner.plan(root, config)
+
     result = CleanResult()
-    matched_paths: set[Path] = set()
-
-    info("✨ Cleaning repository temporary files...", use_emoji=True)
-    matched_paths.update(_collect_matches(root, patterns, recursive=True))
-
-    for tree in trees:
-        directory = (root / tree).resolve()
-        if not directory.exists():
-            continue
-        info(f"🧹 Cleaning {tree}/ ...", use_emoji=True)
-        matched_paths.update(_collect_matches(directory, patterns, recursive=True, root=root))
-
-    for path in sorted(matched_paths):
-        if not path.exists():
-            continue
+    for item in plan.items:
+        path = item.path
         if dry_run:
             result.register_skipped(path)
             continue
@@ -76,45 +99,39 @@ def sparkly_clean(
         result.register_removed(path)
 
     if dry_run:
-        ok(
-            f"Would remove {len(result.skipped)} paths (dry run)",
-            use_emoji=True,
-        )
+        ok(f"Dry run complete; {len(result.skipped)} paths would be removed", use_emoji=True)
     else:
         ok(f"Removed {len(result.removed)} paths", use_emoji=True)
     return result
 
 
-def _collect_matches(
-    base: Path,
-    patterns: Sequence[str],
-    *,
-    recursive: bool,
-    root: Path | None = None,
-) -> set[Path]:
-    collected: set[Path] = set()
-    root = root or base
+def _merge_unique(primary: Sequence[str], extras: Sequence[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for collection in (primary, extras):
+        for value in collection:
+            value = value.strip()
+            if not value or value in seen:
+                continue
+            merged.append(value)
+            seen.add(value)
+    return merged
+
+
+def _glob_once(base: Path, patterns: Iterable[str], *, recursive: bool) -> set[Path]:
+    matches: set[Path] = set()
     for pattern in patterns:
-        glob_iter = base.rglob(pattern) if recursive else base.glob(pattern)
-        for candidate in glob_iter:
+        iterator = base.rglob(pattern) if recursive else base.glob(pattern)
+        for candidate in iterator:
             candidate = candidate.resolve()
+            if candidate == base:
+                continue
             if not candidate.exists():
                 continue
-            if not _is_within(candidate, root):
-                warn(f"Skipping outside path {candidate}", use_emoji=True)
+            if _is_protected(candidate, base):
                 continue
-            if _is_protected(candidate, root):
-                continue
-            collected.add(candidate)
-    return collected
-
-
-def _is_within(path: Path, root: Path) -> bool:
-    try:
-        path.relative_to(root)
-    except ValueError:
-        return False
-    return True
+            matches.add(candidate)
+    return matches
 
 
 def _is_protected(path: Path, root: Path) -> bool:
@@ -122,8 +139,8 @@ def _is_protected(path: Path, root: Path) -> bool:
         relative = path.relative_to(root)
     except ValueError:
         relative = path
-    parts = relative.parts
-    return any(part in {".git", ".hg", ".svn"} for part in parts)
+    protected_names = {".git", ".hg", ".svn"}
+    return any(part in protected_names for part in relative.parts)
 
 
 def _remove_path(path: Path) -> None:
@@ -136,4 +153,4 @@ def _remove_path(path: Path) -> None:
             warn(f"Permission denied removing {path}", use_emoji=True)
 
 
-__all__ = ["sparkly_clean", "CleanResult", "DEFAULT_PATTERNS", "DEFAULT_TREES"]
+__all__ = ["sparkly_clean", "CleanPlanner", "CleanResult", "CleanPlan", "CleanPlanItem"]

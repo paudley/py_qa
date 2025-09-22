@@ -101,6 +101,26 @@ DEFAULT_QUALITY_CHECKS: list[str] = ["license", "file-size", "schema", "python"]
 DEFAULT_SCHEMA_TARGETS = [Path("ref_docs/tool-schema.json")]
 DEFAULT_PROTECTED_BRANCHES = ["main", "master"]
 
+DEFAULT_CLEAN_PATTERNS: list[str] = [
+    "*.log",
+    ".*cache",
+    ".claude*.json",
+    ".coverage",
+    ".hypothesis",
+    ".stream*.json",
+    ".venv",
+    "__pycache__",
+    "chroma*db",
+    "coverage*",
+    "dist",
+    "filesystem_store",
+    "htmlcov*",
+]
+
+DEFAULT_CLEAN_TREES: list[str] = ["examples", "packages", "build"]
+
+DEFAULT_UPDATE_SKIP_PATTERNS: list[str] = ["pyreadstat", ".git/modules"]
+
 
 @dataclass(slots=True)
 class LicenseConfig:
@@ -129,6 +149,22 @@ class QualityConfigSection:
 
 
 @dataclass(slots=True)
+class CleanConfig:
+    """Configuration for repository cleanup patterns."""
+
+    patterns: list[str] = field(default_factory=lambda: list(DEFAULT_CLEAN_PATTERNS))
+    trees: list[str] = field(default_factory=lambda: list(DEFAULT_CLEAN_TREES))
+
+
+@dataclass(slots=True)
+class UpdateConfig:
+    """Configuration for workspace dependency updates."""
+
+    skip_patterns: list[str] = field(default_factory=lambda: list(DEFAULT_UPDATE_SKIP_PATTERNS))
+    enabled_managers: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class Config:
     """Primary configuration container used by the orchestrator."""
 
@@ -140,6 +176,8 @@ class Config:
     tool_settings: dict[str, dict[str, object]] = field(default_factory=dict)
     license: LicenseConfig = field(default_factory=LicenseConfig)
     quality: QualityConfigSection = field(default_factory=QualityConfigSection)
+    clean: CleanConfig = field(default_factory=CleanConfig)
+    update: UpdateConfig = field(default_factory=UpdateConfig)
 
     def to_dict(self) -> dict[str, object]:
         """Return a dictionary representation suitable for serialization."""
@@ -158,4 +196,6 @@ class Config:
                 **asdict(self.quality),
                 "schema_targets": [str(path) for path in self.quality.schema_targets],
             },
+            "clean": asdict(self.clean),
+            "update": asdict(self.update),
         }

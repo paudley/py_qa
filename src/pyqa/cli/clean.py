@@ -8,7 +8,8 @@ from typing import List
 
 import typer
 
-from ..clean import DEFAULT_PATTERNS, DEFAULT_TREES, sparkly_clean
+from ..clean import sparkly_clean
+from ..config_loader import ConfigError, ConfigLoader
 from ..logging import fail, warn
 
 clean_app = typer.Typer(name="sparkly-clean", help="Remove temporary build/cache artefacts.")
@@ -35,19 +36,28 @@ def main(
     if ctx.invoked_subcommand:
         return
 
-    root = root.resolve()
+    loader = ConfigLoader.for_root(root)
+    try:
+        load_result = loader.load_with_trace()
+    except ConfigError as exc:
+        fail(f"Configuration invalid: {exc}", use_emoji=emoji)
+        raise typer.Exit(code=1) from exc
+
+    config = load_result.config.clean
     extra_patterns = tuple(pattern or [])
     extra_trees = tuple(include_tree or [])
-    patterns = tuple(DEFAULT_PATTERNS) + extra_patterns
-    trees = tuple(DEFAULT_TREES) + extra_trees
 
-    result = sparkly_clean(root, patterns=patterns, trees=trees, dry_run=dry_run)
+    result = sparkly_clean(
+        root,
+        config=config,
+        extra_patterns=extra_patterns,
+        extra_trees=extra_trees,
+        dry_run=dry_run,
+    )
 
     if dry_run:
         for path in sorted(result.skipped):
             warn(f"DRY RUN: would remove {path}", use_emoji=emoji)
-        raise typer.Exit(code=0)
-
     raise typer.Exit(code=0)
 
 
