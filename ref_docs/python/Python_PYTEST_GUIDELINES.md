@@ -1,5 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
+
 <!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # **Comprehensive Mandate for the Repair and Enhancement of the Project pytest Suite**
 
 ## **Preamble: Mission Objective and Guiding Principles**
@@ -139,11 +141,11 @@ Deciding when to use a standard test versus a more advanced methodology like BDD
 
 ### **Table 1: Test Strategy Selection Guide**
 
-| Test Type                | Primary Goal                                                                                            | Use When...                                                                                                                                                 | Example Scenario                                                                                                                       |
+| Test Type | Primary Goal | Use When... | Example Scenario |
 | :----------------------- | :------------------------------------------------------------------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------- |
-| **Standard pytest Test** | Verify a specific, known outcome for a single unit of code.                                             | You are testing a single, well-defined input-output pair or a specific error condition.                                                                     | def test_add_positive_numbers(): assert add(2, 3) == 5                                                                                 |
-| **pytest-bdd**           | Document and verify application behavior from a user or stakeholder perspective.                        | The functionality represents a user story or a business rule that can be described in plain language. The test covers a multi-step interaction.             | Testing a login flow: Given a user is on the login page, When they enter valid credentials, Then they are redirected to the dashboard. |
-| **hypothesis**           | Discover edge cases and bugs by testing properties of a function across a wide range of generated data. | The function performs data processing, parsing, validation, or mathematical calculations. You want to ensure its logic is robust against unexpected inputs. | Testing a sort() function: "For any list of integers L, the output sort(L) should have the same length as L and be ordered."           |
+| **Standard pytest Test** | Verify a specific, known outcome for a single unit of code. | You are testing a single, well-defined input-output pair or a specific error condition. | def test_add_positive_numbers(): assert add(2, 3) == 5 |
+| **pytest-bdd** | Document and verify application behavior from a user or stakeholder perspective. | The functionality represents a user story or a business rule that can be described in plain language. The test covers a multi-step interaction. | Testing a login flow: Given a user is on the login page, When they enter valid credentials, Then they are redirected to the dashboard. |
+| **hypothesis** | Discover edge cases and bugs by testing properties of a function across a wide range of generated data. | The function performs data processing, parsing, validation, or mathematical calculations. You want to ensure its logic is robust against unexpected inputs. | Testing a sort() function: "For any list of integers L, the output sort(L) should have the same length as L and be ordered." |
 
 ## **Section 5: Project Configuration and Final Verification**
 

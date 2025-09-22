@@ -1,5 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
+
 <!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # **A Comprehensive Guide to SOLID Design Principles in Go (v1.25+)**
 
 ## **Introduction: The Go Philosophy and SOLID Principles**
@@ -274,13 +276,13 @@ The choice of package structure is a foundational architectural decision that se
 
 The following table provides a direct comparison of these two approaches with respect to the Single Responsibility Principle.
 
-| Metric                 | Package by Layer                                                                                                                            | Package by Feature                                                                                                                              |
+| Metric | Package by Layer | Package by Feature |
 | :--------------------- | :------------------------------------------------------------------------------------------------------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cohesion**           | **Low**. Packages contain unrelated components (e.g., UserHandler and ProductHandler in the same handlers package).18                       | **High**. Packages contain all components for a single feature (e.g., user package contains handler, service, and repository for users).17      |
-| **Coupling**           | **High**. Strong, directional dependencies between layer packages are required (e.g., handlers -> services -> repositories).18              | **Low**. Dependencies between feature packages are minimized or eliminated. A change in the user feature does not affect the product feature.17 |
-| **Maintainability**    | **Difficult**. A single feature change requires modifying files across multiple packages, increasing the risk of unintended side effects.18 | **Easy**. Changes are localized to a single feature package, reducing cognitive load and the "blast radius" of modifications.20                 |
-| **Alignment with SRP** | **Poor**. Each package has multiple reasons to change, corresponding to each feature it contains. It is a monolithic structure.17           | **Excellent**. Each package has a single responsibility: managing its specific business feature. It is a modular structure.20                   |
-| **Modularity**         | **Low**. As the application grows, the layer packages become bloated with an increasing number of unrelated files.18                        | **High**. The application scales by adding new, independent feature packages. Features can often be removed simply by deleting their package.20 |
+| **Cohesion** | **Low**. Packages contain unrelated components (e.g., UserHandler and ProductHandler in the same handlers package).18 | **High**. Packages contain all components for a single feature (e.g., user package contains handler, service, and repository for users).17 |
+| **Coupling** | **High**. Strong, directional dependencies between layer packages are required (e.g., handlers -> services -> repositories).18 | **Low**. Dependencies between feature packages are minimized or eliminated. A change in the user feature does not affect the product feature.17 |
+| **Maintainability** | **Difficult**. A single feature change requires modifying files across multiple packages, increasing the risk of unintended side effects.18 | **Easy**. Changes are localized to a single feature package, reducing cognitive load and the "blast radius" of modifications.20 |
+| **Alignment with SRP** | **Poor**. Each package has multiple reasons to change, corresponding to each feature it contains. It is a monolithic structure.17 | **Excellent**. Each package has a single responsibility: managing its specific business feature. It is a modular structure.20 |
+| **Modularity** | **Low**. As the application grows, the layer packages become bloated with an increasing number of unrelated files.18 | **High**. The application scales by adding new, independent feature packages. Features can often be removed simply by deleting their package.20 |
 
 ## **Part II: The Open/Closed Principle (OCP): Extending Behavior Without Modification**
 
@@ -755,12 +757,12 @@ The UnstableStore violates LSP because its behavior (panicking) is not substitut
 
 The following table summarizes these advanced LSP violations.
 
-| Violation Type                  | Description                                                                                                                     | Anti-Pattern Example (Go Snippet)                                                                                                         |
+| Violation Type | Description | Anti-Pattern Example (Go Snippet) |
 | :------------------------------ | :------------------------------------------------------------------------------------------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------- |
-| **Strengthened Precondition**   | An implementation imposes stricter input requirements than the interface contract implies.                                      | func (p \*StrictProcessor) Process(databyte) error { if len(data) == 0 { return errors.New("empty data not allowed") }... }               |
-| **Weakened Postcondition**      | An implementation fails to deliver on the guarantees of the interface contract after execution.                                 | func (r \*LeakyResource) Close() error { // Fails to release resource but returns nil error return nil }                                  |
-| **Violated Invariant**          | An implementation alters state in a way that breaks a fundamental assumption of the interface.                                  | func (c \*BuggyCounter) Increment() { c.value-- } // A counter that sometimes decrements.                                                 |
-| **Unexpected Panic**            | An implementation panics under normal conditions where an error is expected by the interface contract.                          | func (s \*UnstableStore) Get(key string) string { return s.data[key] } // Panics if key not found or map is nil.                          |
+| **Strengthened Precondition** | An implementation imposes stricter input requirements than the interface contract implies. | func (p \*StrictProcessor) Process(databyte) error { if len(data) == 0 { return errors.New("empty data not allowed") }... } |
+| **Weakened Postcondition** | An implementation fails to deliver on the guarantees of the interface contract after execution. | func (r \*LeakyResource) Close() error { // Fails to release resource but returns nil error return nil } |
+| **Violated Invariant** | An implementation alters state in a way that breaks a fundamental assumption of the interface. | func (c \*BuggyCounter) Increment() { c.value-- } // A counter that sometimes decrements. |
+| **Unexpected Panic** | An implementation panics under normal conditions where an error is expected by the interface contract. | func (s \*UnstableStore) Get(key string) string { return s.data[key] } // Panics if key not found or map is nil. |
 | **Inconsistent Error Handling** | An implementation returns a specific error type that a consumer is not prepared for, or returns nil where an error is expected. | func (d \*DB) Find(id int) (\*User, error) { if notFound { return nil, nil }... } // Returns (nil, nil) on not found, which is ambiguous. |
 
 Adhering to LSP is the cornerstone of defensive programming with interfaces in Go. It establishes a trust contract between the consumer of an interface and its various implementations. When a function accepts an interface, it is programming against this abstract contract. LSP violations break this trust. An implementation that strengthens preconditions, panics instead of returning an error, or weakens postconditions makes the abstraction "leaky." It forces the consumer to become aware of specific implementation details to avoid bugs, which fundamentally defeats the purpose of using an interface for decoupling. Therefore, LSP is not merely an abstract design principle; it is the practical guarantee that makes programming against interfaces safe, reliable, and truly abstract in Go.

@@ -10,7 +10,6 @@ from typing import Dict, Iterable, List, Literal, cast
 
 from ..config import Config, ExecutionConfig, FileDiscoveryConfig, OutputConfig
 from ..config_loader import ConfigLoader
-from ..logging import warn
 from .options import LintOptions, ToolFilters
 
 DEFAULT_TOOL_FILTERS: Dict[str, List[str]] = {
@@ -91,8 +90,7 @@ def build_config(options: LintOptions) -> Config:
         dedupe=replace(base_config.dedupe),
         severity_rules=list(base_config.severity_rules),
         tool_settings={
-            tool: dict(settings)
-            for tool, settings in base_config.tool_settings.items()
+            tool: dict(settings) for tool, settings in base_config.tool_settings.items()
         },
     )
 
@@ -108,20 +106,44 @@ def _build_file_discovery(
 
     if "dirs" in provided:
         for directory in options.dirs:
-            resolved = directory if directory.is_absolute() else (project_root / directory)
+            resolved = (
+                directory if directory.is_absolute() else (project_root / directory)
+            )
             roots.append(resolved.resolve())
 
     explicit_files: List[Path] = [path.resolve() for path in current.explicit_files]
+    user_dirs: List[Path] = []
+    user_files: List[Path] = []
     if "paths" in provided:
         for path in options.paths:
             resolved = path if path.is_absolute() else project_root / path
-            if resolved.is_dir():
-                roots.append(resolved.resolve())
+            resolved_path = resolved.resolve()
+            if resolved_path.is_dir():
+                roots.append(resolved_path)
+                user_dirs.append(resolved_path)
             else:
-                explicit_files.append(resolved.resolve())
+                user_files.append(resolved_path)
 
     roots = _unique_paths(roots)
     explicit_files = _existing_unique_paths(explicit_files)
+    for file_path in user_files:
+        if file_path not in explicit_files:
+            explicit_files.append(file_path)
+
+    boundaries = _unique_paths(
+        path for path in (user_dirs + [file.parent for file in user_files]) if path
+    )
+
+    if boundaries:
+        roots = [path for path in roots if _is_within_any(path, boundaries)]
+        if not roots:
+            roots = [path for path in boundaries if path.is_dir()]
+        else:
+            roots.extend(path for path in boundaries if path not in roots)
+        roots = _unique_paths(roots)
+        explicit_files = [
+            path for path in explicit_files if _is_within_any(path, boundaries)
+        ]
 
     excludes = _unique_paths([path.resolve() for path in current.excludes])
     for default_path in DEFAULT_EXCLUDES:
@@ -163,6 +185,7 @@ def _build_file_discovery(
         include_untracked=include_untracked,
         base_branch=base_branch,
         explicit_files=explicit_files,
+        limit_to=boundaries,
     )
 
 
@@ -183,12 +206,8 @@ def _build_output(
 
     verbose = options.verbose if "verbose" in provided else current.verbose
     quiet = options.quiet if "quiet" in provided else current.quiet
-    color = (
-        (not options.no_color) if "no_color" in provided else current.color
-    )
-    emoji = (
-        (not options.no_emoji) if "no_emoji" in provided else current.emoji
-    )
+    color = (not options.no_color) if "no_color" in provided else current.color
+    emoji = (not options.no_emoji) if "no_emoji" in provided else current.emoji
     output_mode = (
         _normalize_output_mode(options.output_mode)
         if "output_mode" in provided
@@ -244,9 +263,7 @@ def _build_execution(
 
     only = list(options.only) if "only" in provided else list(current.only)
     language = (
-        list(options.language)
-        if "language" in provided
-        else list(current.languages)
+        list(options.language) if "language" in provided else list(current.languages)
     )
     fix_only = options.fix_only if "fix_only" in provided else current.fix_only
     check_only = options.check_only if "check_only" in provided else current.check_only
@@ -272,6 +289,9 @@ def _build_execution(
         if "use_local_linters" in provided
         else current.use_local_linters
     )
+    line_length = (
+        options.line_length if "line_length" in provided else current.line_length
+    )
 
     return replace(
         current,
@@ -284,6 +304,7 @@ def _build_execution(
         cache_dir=cache_dir,
         bail=bail,
         use_local_linters=use_local_linters,
+        line_length=line_length,
     )
 
 
@@ -324,6 +345,16 @@ def _existing_unique_paths(paths: Iterable[Path]) -> List[Path]:
 
 def _ensure_abs(root: Path, path: Path) -> Path:
     return path if path.is_absolute() else (root / path).resolve()
+
+
+def _is_within_any(path: Path, bounds: Iterable[Path]) -> bool:
+    for bound in bounds:
+        try:
+            path.relative_to(bound)
+            return True
+        except ValueError:
+            continue
+    return False
 
 
 def _parse_filters(specs: List[str]) -> ToolFilters:

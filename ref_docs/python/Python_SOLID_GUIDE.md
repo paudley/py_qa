@@ -1,5 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
+
 <!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # **A Guide to SOLID Software Architecture in Python 3.12+**
 
 ## **Introduction: The Philosophy of Maintainable Code**
@@ -118,7 +120,7 @@ return price
 class OrderPersistence:\
 """Responsible solely for saving and retrieving orders from a database."""\
 def save(self, order: Order) -> None:\
-print(f"Saving order {order.order_id} with total \${order.total_price:.2f} to the database...")\
+print(f"Saving order {order.order_id} with total ${order.total_price:.2f} to the database...")\
 \# Database logic would go here
 
 class InvoiceGenerator:\
@@ -429,7 +431,7 @@ def fax\_document(self, document):
 
 class SimplePrinter(IMachine):\
 def print_document(self, document):\
-print(f"Printing \{document}...")
+print(f"Printing {document}...")
 
 ```
 def scan\_document(self, document):  
@@ -471,12 +473,12 @@ pass
 class SimplePrinter(IPrinter):\
 """Implements only the interface it needs."""\
 def print_document(self, document):\
-print(f"Printing \{document}...")
+print(f"Printing {document}...")
 
 class MultiFunctionDevice(IPrinter, IScanner, IFax):\
 """A device that can perform multiple roles."""\
 def print_document(self, document):\
-print(f"Printing \{document} from MFD...")
+print(f"Printing {document} from MFD...")
 
 ```
 def scan\_document(self, document):  
@@ -527,7 +529,7 @@ Python
 class EmailClient:\
 """A low-level module for sending emails."""\
 def send_email(self, recipient: str, message: str):\
-print(f"Sending email to \{recipient}: \{message}")
+print(f"Sending email to {recipient}: {message}")
 
 class NotificationService:\
 """A high-level module containing business logic."""\
@@ -572,11 +574,11 @@ def send\_notification(self, user: str, message: str):
 \# 3. Low-level details conform to the abstraction.\
 class EmailClient(IMessageClient):\
 def send(self, recipient: str, message: str) -> None:\
-print(f"Sending email to \{recipient}: \{message}")
+print(f"Sending email to {recipient}: {message}")
 
 class SmsClient(IMessageClient):\
 def send(self, recipient: str, message: str) -> None:\
-print(f"Sending SMS to \{recipient}: \{message}")
+print(f"Sending SMS to {recipient}: {message}")
 
 \# The system can now be configured with different low-level modules\
 \# without changing the NotificationService.\
@@ -625,13 +627,13 @@ dependency-injector and injector.
 
 The following table provides a structured comparison to help in selecting an appropriate framework based on project requirements. This analysis is based on the core paradigms and features highlighted by their respective documentation.30
 
-| Feature           | dependency-injector                                                                                                                                        | injector                                                                                                                                                     |
+| Feature | dependency-injector | injector |
 | :---------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Core Paradigm** | Utilizes declarative **Containers** to define and manage **Providers** (e.g., Factory, Singleton) that assemble objects.31                                 | Inspired by Google's Guice, it uses **Modules** to configure **Bindings** between interfaces (types) and their concrete implementations.30                   |
-| **Performance**   | High performance. The core is written in **Cython**, making it significantly faster, which is beneficial for performance-critical applications.31          | A standard, pure Python implementation. Performance is generally sufficient for most applications but may not match Cython-based alternatives.30             |
-| **Syntax**        | Relies on an explicit wiring mechanism using the @inject decorator and a Provide marker. Configuration is centralized in container classes.31              | Employs a more "magical" approach, using the @inject decorator on \_\_init\_\_ and relying heavily on type hints to automatically resolve dependencies.30    |
-| **Key Features**  | Extensive provider types (Factory, Singleton, Configuration, Resource), built-in support for async, and a powerful override() mechanism for testing.31     | Supports scopes (e.g., singleton), provider methods, and modular configuration. It is designed to be non-intrusive and avoids global state.30                |
-| **Best For**      | Large, complex, and performance-sensitive applications. Excellent for projects that require deep integration with web frameworks like Django or FastAPI.31 | Projects that prioritize simplicity, a clean and Pythonic API, and strong integration with static type checking without the need for a compiled extension.30 |
+| **Core Paradigm** | Utilizes declarative **Containers** to define and manage **Providers** (e.g., Factory, Singleton) that assemble objects.31 | Inspired by Google's Guice, it uses **Modules** to configure **Bindings** between interfaces (types) and their concrete implementations.30 |
+| **Performance** | High performance. The core is written in **Cython**, making it significantly faster, which is beneficial for performance-critical applications.31 | A standard, pure Python implementation. Performance is generally sufficient for most applications but may not match Cython-based alternatives.30 |
+| **Syntax** | Relies on an explicit wiring mechanism using the @inject decorator and a Provide marker. Configuration is centralized in container classes.31 | Employs a more "magical" approach, using the @inject decorator on \_\_init\_\_ and relying heavily on type hints to automatically resolve dependencies.30 |
+| **Key Features** | Extensive provider types (Factory, Singleton, Configuration, Resource), built-in support for async, and a powerful override() mechanism for testing.31 | Supports scopes (e.g., singleton), provider methods, and modular configuration. It is designed to be non-intrusive and avoids global state.30 |
+| **Best For** | Large, complex, and performance-sensitive applications. Excellent for projects that require deep integration with web frameworks like Django or FastAPI.31 | Projects that prioritize simplicity, a clean and Pythonic API, and strong integration with static type checking without the need for a compiled extension.30 |
 
 #### **In-Depth Example with dependency-injector**
 

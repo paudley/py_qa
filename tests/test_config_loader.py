@@ -24,6 +24,7 @@ def test_load_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 
     assert cfg.file_discovery.roots == [project_root.resolve()]
     assert cfg.execution.cache_dir == (project_root / ".lint-cache").resolve()
+    assert cfg.execution.line_length == 120
     assert cfg.output.pr_summary_out is None
 
 
@@ -144,7 +145,9 @@ report_out = "reports/output.json"
     assert cfg.output.report_out == (project_root / "reports/output.json").resolve()
 
 
-def test_config_loader_expands_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_config_loader_expands_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     project_root = tmp_path / "workspace"
     project_root.mkdir()
 
@@ -161,7 +164,9 @@ pr_summary_out = "${REPORT_DIR}/summary.md"
 
     cfg = ConfigLoader.for_root(project_root).load()
 
-    assert cfg.output.pr_summary_out == (project_root / "artifacts/summary.md").resolve()
+    assert (
+        cfg.output.pr_summary_out == (project_root / "artifacts/summary.md").resolve()
+    )
 
 
 def test_pyproject_tool_section_is_loaded(tmp_path: Path) -> None:
@@ -199,9 +204,12 @@ jobs = 11
         encoding="utf-8",
     )
 
-    result = ConfigLoader.for_root(project_root, project_config=project_config).load_with_trace()
+    result = ConfigLoader.for_root(
+        project_root, project_config=project_config
+    ).load_with_trace()
 
     assert result.config.execution.jobs == 11
+    assert result.config.execution.line_length == 120
 
     sources = {update.source for update in result.updates if update.field == "jobs"}
     assert str(project_config) in sources
@@ -214,6 +222,7 @@ def test_generate_config_schema_exposes_defaults() -> None:
     assert schema["file_discovery"]["roots"]["default"] == ["."]
     assert schema["output"]["emoji"]["default"] is True
     assert schema["tool_settings"]["default"] == {}
+    assert schema["execution"]["line_length"]["default"] == 120
     assert "tools" in schema["tool_settings"]
     assert "ruff" in schema["tool_settings"]["tools"]
 

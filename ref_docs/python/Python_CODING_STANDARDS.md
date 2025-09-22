@@ -1,5 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
+
 <!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # **Python 3.12 Code Generation Guidelines**
 
 ## **Foundational Principles**
@@ -104,9 +106,9 @@ The type system should be used as a design tool to create explicit data contract
 
 The following table provides a non-negotiable mapping of forbidden types to their mandatory alternatives.
 
-| Forbidden Type                     | Reason for Prohibition                                                        | Recommended Alternative(s)                                                                                                   | Example                                         |
+| Forbidden Type | Reason for Prohibition | Recommended Alternative(s) | Example |
 | :--------------------------------- | :---------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------- |
-| typing.Any                         | Defeats static analysis; creates type holes that hide bugs.                   | typing.TypeVar (for generics), typing.Protocol (for structural contracts), object (with mandatory isinstance checks).        | def process(item: T) -> T:                      |
+| typing.Any | Defeats static analysis; creates type holes that hide bugs. | typing.TypeVar (for generics), typing.Protocol (for structural contracts), object (with mandatory isinstance checks). | def process(item: T) -> T: |
 | typing.Union (for complex objects) | Creates ambiguous branching logic (if/else on type); promotes weak contracts. | Pydantic Discriminated Unions (using Literal), typing.Literal (for simple values), or separate functions for distinct types. | class Model(BaseModel): type: Literal['a', 'b'] |
 
 ### **Mandatory Use of Final and Literal**
@@ -314,11 +316,11 @@ A .pylintrc file must be present. It should be configured to align with these gu
 
 The following table summarizes the key tool configurations and their link to the foundational principles.
 
-| Tool   | Configuration File | Key Flags/Settings                 | Purpose (Linked Principle)                                                  |
+| Tool | Configuration File | Key Flags/Settings | Purpose (Linked Principle) |
 | :----- | :----------------- | :--------------------------------- | :-------------------------------------------------------------------------- |
-| mypy   | mypy.ini           | strict = True                      | Enables all strictness checks to enforce provable correctness (Strictness). |
-| pylint | .pylintrc          | good-names=..., max-line-length=88 | Enforces consistent and readable naming and layout (Explicitness).          |
-| pytest | pyproject.toml     | addopts = "--cov-fail-under=100"   | Enforces complete test coverage, driving a testable design (Testability).   |
+| mypy | mypy.ini | strict = True | Enables all strictness checks to enforce provable correctness (Strictness). |
+| pylint | .pylintrc | good-names=..., max-line-length=88 | Enforces consistent and readable naming and layout (Explicitness). |
+| pytest | pyproject.toml | addopts = "--cov-fail-under=100" | Enforces complete test coverage, driving a testable design (Testability). |
 
 ## **Conclusion**
 

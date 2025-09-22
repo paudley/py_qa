@@ -21,11 +21,16 @@ class FilesystemDiscovery(DiscoveryStrategy):
         self.follow_symlinks = follow_symlinks
 
     def discover(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
+        limits = self._normalise_limits(config, root)
+
         if config.explicit_files:
             for entry in config.explicit_files:
                 candidate = entry if entry.is_absolute() else root / entry
-                if candidate.exists():
-                    yield candidate.resolve()
+                if not candidate.exists():
+                    continue
+                resolved = candidate.resolve()
+                if self._is_within_limits(resolved, limits):
+                    yield resolved
             return
         if config.paths_from_stdin:
             yield from self._paths_from_stdin(root)
@@ -33,19 +38,25 @@ class FilesystemDiscovery(DiscoveryStrategy):
 
         excludes = {root.joinpath(p).resolve() for p in config.excludes}
         for base in self._resolve_roots(config, root):
+            if limits and not self._is_within_limits(base.resolve(), limits):
+                continue
             if not base.exists():
                 continue
             if base.is_file():
-                yield base.resolve()
+                resolved = base.resolve()
+                if self._is_within_limits(resolved, limits):
+                    yield resolved
                 continue
-            yield from self._walk(base, excludes)
+            yield from self._walk(base, excludes, limits)
 
     def _resolve_roots(self, config: FileDiscoveryConfig, root: Path) -> Iterator[Path]:
         for entry in config.roots:
             candidate = entry if entry.is_absolute() else root / entry
             yield candidate
 
-    def _walk(self, base: Path, excludes: set[Path]) -> Iterator[Path]:
+    def _walk(
+        self, base: Path, excludes: set[Path], limits: list[Path]
+    ) -> Iterator[Path]:
         follow_links = self.follow_symlinks
         for dirpath, dirnames, filenames in os.walk(base, followlinks=follow_links):
             current = Path(dirpath)
@@ -64,7 +75,9 @@ class FilesystemDiscovery(DiscoveryStrategy):
                 candidate = current / filename
                 if any(self._is_child_of(candidate, ex) for ex in excludes):
                     continue
-                yield candidate.resolve()
+                resolved = candidate.resolve()
+                if self._is_within_limits(resolved, limits):
+                    yield resolved
 
     def _paths_from_stdin(self, root: Path) -> Iterator[Path]:
         for line in sys.stdin.read().splitlines():
@@ -81,3 +94,24 @@ class FilesystemDiscovery(DiscoveryStrategy):
             return True
         except ValueError:
             return False
+
+    def _normalise_limits(self, config: FileDiscoveryConfig, root: Path) -> list[Path]:
+        limits: list[Path] = []
+        for entry in config.limit_to:
+            candidate = entry if entry.is_absolute() else root / entry
+            resolved = candidate.resolve()
+            if resolved not in limits:
+                limits.append(resolved)
+        return limits
+
+    @staticmethod
+    def _is_within_limits(candidate: Path, limits: list[Path]) -> bool:
+        if not limits:
+            return True
+        for limit in limits:
+            try:
+                candidate.relative_to(limit)
+                return True
+            except ValueError:
+                continue
+        return False

@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 from typing import List, Optional
 
@@ -29,8 +28,8 @@ quality_app = typer.Typer(
 @quality_app.callback()
 def main(
     ctx: typer.Context,
-    paths: List[Path] = typer.Argument(
-        [], metavar="[PATHS...]", help="Optional file paths to scope the checks."
+    paths: List[Path] | None = typer.Argument(
+        None, metavar="[PATHS...]", help="Optional file paths to scope the checks."
     ),
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
     staged: bool = typer.Option(
@@ -44,8 +43,12 @@ def main(
         "-c",
         help="Limit execution to specific checks (e.g. license,file-size,schema,python).",
     ),
-    no_schema: bool = typer.Option(False, "--no-schema", help="Skip schema validation."),
-    emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output."),
+    no_schema: bool = typer.Option(
+        False, "--no-schema", help="Skip schema validation."
+    ),
+    emoji: bool = typer.Option(
+        True, "--emoji/--no-emoji", help="Toggle emoji in output."
+    ),
 ) -> None:
     if ctx.invoked_subcommand:
         return
@@ -65,7 +68,7 @@ def main(
     if no_schema and "schema" in selected_checks:
         selected_checks.remove("schema")
 
-    files = list(paths) or None
+    files = list(paths or []) or None
 
     checker = QualityChecker(
         root=root,
@@ -82,9 +85,13 @@ def main(
 
 @quality_app.command("commit-msg")
 def commit_msg(
-    message_file: Path = typer.Argument(..., metavar="FILE", help="Commit message file."),
+    message_file: Path = typer.Argument(
+        ..., metavar="FILE", help="Commit message file."
+    ),
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output."),
+    emoji: bool = typer.Option(
+        True, "--emoji/--no-emoji", help="Toggle emoji in output."
+    ),
 ) -> None:
     result = check_commit_message(root, message_file)
     _render_result(result, root, emoji)
@@ -94,7 +101,9 @@ def commit_msg(
 @quality_app.command("branch")
 def branch_guard(
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output."),
+    emoji: bool = typer.Option(
+        True, "--emoji/--no-emoji", help="Toggle emoji in output."
+    ),
 ) -> None:
     loader = ConfigLoader.for_root(root)
     try:
@@ -141,6 +150,8 @@ def _render_result(result: QualityCheckResult, root: Path, use_emoji: bool) -> N
             f"Quality checks completed with {len(result.warnings)} warning(s)",
             use_emoji=use_emoji,
         )
+
+
 def _to_path(value: object) -> Path | None:
     if isinstance(value, Path):
         return value

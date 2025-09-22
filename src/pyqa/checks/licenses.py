@@ -4,16 +4,15 @@
 
 from __future__ import annotations
 
+import re
+import tomllib
 from dataclasses import asdict, dataclass, field
 from fnmatch import fnmatch
-import re
 from pathlib import Path
-from typing import Iterable, Mapping, Optional, Sequence
+from typing import Mapping, Optional, Sequence
 
-from ..constants import ALWAYS_EXCLUDE_DIRS
 from ..config import LicenseConfig
-
-import tomllib
+from ..constants import ALWAYS_EXCLUDE_DIRS
 
 KNOWN_LICENSE_SNIPPETS: Mapping[str, str] = {
     "MIT": "Permission is hereby granted, free of charge",
@@ -111,9 +110,7 @@ def load_license_policy(
         config = dict(metadata.overrides)
 
     spdx_id = _coerce_optional_str(config.pop("spdx", None)) or metadata.spdx_id
-    allow_alternate = tuple(
-        _coerce_str_list(config.pop("allow_alternate_spdx", ()))
-    )
+    allow_alternate = tuple(_coerce_str_list(config.pop("allow_alternate_spdx", ())))
 
     canonical_notice = _build_canonical_notice(config, metadata)
     license_snippet = None
@@ -215,9 +212,7 @@ def verify_file_license(
     if policy.require_notice and policy.canonical_notice:
         observed = policy.match_notice(content)
         if not observed:
-            issues.append(
-                f"Missing copyright notice '{policy.canonical_notice}'"
-            )
+            issues.append(f"Missing copyright notice '{policy.canonical_notice}'")
         elif not _notices_equal(observed, policy.canonical_notice):
             issues.append(
                 "Mismatched copyright notice. "
@@ -311,7 +306,7 @@ def _strip_comment_prefix(line: str) -> str:
     patterns = ("#", "//", "/*", "*", "--", ";", "<!--")
     for token in patterns:
         if cleaned.startswith(token):
-            cleaned = cleaned[len(token):].lstrip(" -*#/")
+            cleaned = cleaned[len(token) :].lstrip(" -*#/")
             break
     if cleaned.endswith("*/"):
         cleaned = cleaned[:-2].rstrip()

@@ -104,7 +104,10 @@ def sparkly_clean(
         result.register_removed(path)
 
     if dry_run:
-        ok(f"Dry run complete; {len(result.skipped)} paths would be removed", use_emoji=True)
+        ok(
+            f"Dry run complete; {len(result.skipped)} paths would be removed",
+            use_emoji=True,
+        )
     else:
         ok(f"Removed {len(result.removed)} paths", use_emoji=True)
     return result
@@ -132,7 +135,9 @@ def _is_protected(path: Path, root: Path) -> bool:
     return any(part in protected_names for part in relative.parts)
 
 
-def _match_patterns(base: Path, filenames: Iterable[str], patterns: Iterable[str]) -> set[Path]:
+def _match_patterns(
+    base: Path, filenames: Iterable[str], patterns: Iterable[str]
+) -> set[Path]:
     matches: set[Path] = set()
     for pattern in patterns:
         iterator = base.glob(pattern)

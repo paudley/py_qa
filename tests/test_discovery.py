@@ -4,10 +4,12 @@
 
 # pylint: disable=missing-function-docstring
 
+import subprocess
 from pathlib import Path
 
 from pyqa.config import FileDiscoveryConfig
 from pyqa.discovery.filesystem import FilesystemDiscovery
+from pyqa.discovery.git import GitDiscovery
 
 
 def test_filesystem_discovery_respects_excludes(tmp_path: Path) -> None:
@@ -37,3 +39,79 @@ def test_filesystem_discovery_respects_excludes(tmp_path: Path) -> None:
     assert included.resolve() in files
     assert not any(path.name == "ignored.js" for path in files)
     assert not any(path.name == "machine.py" for path in files)
+
+
+def test_filesystem_discovery_respects_limit_to(tmp_path: Path) -> None:
+    project_root = tmp_path
+    target_dir = project_root / "target"
+    other_dir = project_root / "other"
+    target_dir.mkdir()
+    other_dir.mkdir()
+
+    inside = target_dir / "inside.py"
+    inside.write_text("print('inside')\n", encoding="utf-8")
+
+    outside = other_dir / "outside.py"
+    outside.write_text("print('outside')\n", encoding="utf-8")
+
+    cfg = FileDiscoveryConfig(
+        roots=[Path("target")],
+        limit_to=[Path("target")],
+    )
+
+    discovery = FilesystemDiscovery()
+    files = list(discovery.discover(cfg, project_root))
+
+    assert inside.resolve() in files
+    assert outside.resolve() not in files
+
+
+def test_git_discovery_limit_to_filters_changes(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    target_dir = repo / "pkg"
+    other_dir = repo / "docs"
+    target_dir.mkdir(parents=True)
+    other_dir.mkdir(parents=True)
+
+    inside = target_dir / "module.py"
+    outside = other_dir / "notes.md"
+    inside.write_text("print('v1')\n", encoding="utf-8")
+    outside.write_text("outside v1\n", encoding="utf-8")
+
+    subprocess.run(["git", "init"], cwd=repo, check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "config", "user.name", "PyQATest"],
+        cwd=repo,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "pyqa@example.com"],
+        cwd=repo,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-m", "initial"],
+        cwd=repo,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+
+    inside.write_text("print('v2')\n", encoding="utf-8")
+    outside.write_text("outside v2\n", encoding="utf-8")
+
+    cfg = FileDiscoveryConfig(
+        roots=[Path(".")],
+        limit_to=[Path("pkg")],
+        changed_only=True,
+        include_untracked=True,
+    )
+
+    discovery = GitDiscovery()
+    files = list(discovery.discover(cfg, repo))
+
+    assert inside.resolve() in files
+    assert all(repo_path.is_relative_to(target_dir) for repo_path in files)
+    assert outside.resolve() not in files

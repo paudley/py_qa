@@ -69,13 +69,15 @@ def test_parse_pyright() -> None:
 def test_parse_mypy() -> None:
     parser = JsonParser(parse_mypy)
     stdout = """
-    [{"path": "pkg/app.py", "line": 10, "column": 1, "message": "oops", "severity": "note"}]
+    [{"path": "pkg/app.py", "line": 10, "column": 1, "message": "oops", "severity": "note", "name": "pkg.app.check_func", "code": "assignment"}]
     """
     diags = parser.parse(stdout, "", context=_ctx())
     assert len(diags) == 1
     severity = diags[0].severity
     assert isinstance(severity, Severity)
     assert severity.value == "note"
+    assert diags[0].function == "check_func"
+    assert diags[0].code == "assignment"
 
 
 def test_parse_bandit() -> None:

@@ -16,7 +16,7 @@ from packaging.version import InvalidVersion, Version
 
 from .tools.base import Tool
 
-PYQA_ROOT = Path(__file__).resolve().parent.parent
+PYQA_ROOT = Path(__file__).resolve().parents[2]
 CACHE_ROOT = PYQA_ROOT / ".tool-cache"
 UV_CACHE_DIR = CACHE_ROOT / "uv"
 NPM_CACHE_DIR = CACHE_ROOT / "npm"
@@ -97,11 +97,20 @@ class CommandPreparer:
         requirement = tool.package or tool.name
         if tool.min_version:
             requirement = f"{requirement}=={tool.min_version}"
-        return ["uv", "run", "--with", requirement, *base_cmd]
+        return [
+            "uv",
+            "--project",
+            str(PYQA_ROOT),
+            "run",
+            "--with",
+            requirement,
+            *base_cmd,
+        ]
 
     def _python_env(self) -> dict[str, str]:
         return {
             "UV_CACHE_DIR": str(UV_CACHE_DIR),
+            "UV_PROJECT": str(PYQA_ROOT),
         }
 
     def _npm_local_command(self, tool: Tool, base_cmd: Sequence[str]) -> list[str]:

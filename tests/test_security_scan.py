@@ -60,7 +60,14 @@ def test_security_scan_handles_no_files(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["security-scan", "--root", str(tmp_path), "--no-bandit", "--no-staged", "--no-emoji"],
+        [
+            "security-scan",
+            "--root",
+            str(tmp_path),
+            "--no-bandit",
+            "--no-staged",
+            "--no-emoji",
+        ],
     )
 
     assert result.exit_code == 0

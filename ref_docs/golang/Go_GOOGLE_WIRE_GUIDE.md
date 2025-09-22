@@ -1,5 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
+
 <!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # **Maximizing Dependency Injection in Go: An Expert's Guide to Google Wire**
 
 ## **The Philosophy of Compile-Time DI with Google Wire**
@@ -143,13 +145,13 @@ The SOLID principles are a set of five design principles that are foundational t
 
 The following table summarizes the relationship between SOLID principles and Wire's features, which will be explored in detail in the subsequent sections.
 
-| SOLID Principle | Corresponding Wire Pattern/Feature                                              | Key Benefit with Wire                                                                         |
+| SOLID Principle | Corresponding Wire Pattern/Feature | Key Benefit with Wire |
 | :-------------- | :------------------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------- |
-| **S**RP         | Small, focused provider functions; cohesive ProviderSets.                       | Enhances testability and maintainability of individual components and modules.                |
-| **O**CP         | wire.Bind to swap interface implementations.                                    | Allows for new functionality without modifying existing consumer code.                        |
-| **L**SP         | Go's static typing + interface contracts enforced by providers.                 | Ensures swappable components behave as expected (compile-time guarantee).                     |
-| **I**SP         | Small, role-based interfaces as provider dependencies.                          | Prevents components from depending on methods they don't use, leading to leaner dependencies. |
-| **D**IP         | Heavy use of wire.Bind and interface-based dependencies in provider signatures. | Decouples high-level business logic from low-level implementation details.                    |
+| **S**RP | Small, focused provider functions; cohesive ProviderSets. | Enhances testability and maintainability of individual components and modules. |
+| **O**CP | wire.Bind to swap interface implementations. | Allows for new functionality without modifying existing consumer code. |
+| **L**SP | Go's static typing + interface contracts enforced by providers. | Ensures swappable components behave as expected (compile-time guarantee). |
+| **I**SP | Small, role-based interfaces as provider dependencies. | Prevents components from depending on methods they don't use, leading to leaner dependencies. |
+| **D**IP | Heavy use of wire.Bind and interface-based dependencies in provider signatures. | Decouples high-level business logic from low-level implementation details. |
 
 ### **Single Responsibility Principle (SRP): Crafting Focused Providers**
 
@@ -470,13 +472,13 @@ While Wire guides developers toward good design, it is still possible to use it 
 
 The following table outlines common anti-patterns observed in projects using Wire, their symptoms, consequences, and the correct refactoring approach.
 
-| Anti-Pattern                  | Symptoms                                                                                                        | Negative Consequences                                                                                                                         | Refactoring Solution                                                                                                  |
+| Anti-Pattern | Symptoms | Negative Consequences | Refactoring Solution |
 | :---------------------------- | :-------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------- |
-| **The Monolithic Injector**   | A single wire.go file with a wire.Build call containing dozens or hundreds of providers.                        | High coupling; difficult to maintain and reason about; slow wire generation.                                                                  | Decompose into feature/layer-specific ProviderSets and compose them in the main injector.                             |
-| **Provider Sprawl**           | Provider functions are defined ad-hoc across many files without being grouped.                                  | Low cohesion; hard to discover available providers; dependency graph is implicit and scattered.                                               | Group related providers into cohesive wire.NewSets within the package that owns them.                                 |
-| **Concrete Leaks**            | Provider function parameters and struct fields use concrete types (e.g., \*PostgresRepo) instead of interfaces. | Tight coupling to implementations; violates DIP; makes testing difficult and swapping implementations impossible without major refactoring.44 | Depend on interfaces and use wire.Bind in a ProviderSet to link the interface to the concrete type.                   |
-| **The "God" Provider**        | A single provider function that news up multiple, unrelated objects.                                            | Violates SRP; hides the true dependency graph from Wire; creates tightly coupled components.                                                  | Split the function into multiple, small providers, each responsible for creating one object.                          |
-| **Ignoring Resource Cleanup** | Providers for resources like \*sql.DB or \*os.File do not return a cleanup function.                            | Resource leaks; connections are not closed, leading to application instability and crashes.                                                   | Ensure any provider that acquires a resource returns a (T, func(), error) signature and implements the cleanup logic. |
+| **The Monolithic Injector** | A single wire.go file with a wire.Build call containing dozens or hundreds of providers. | High coupling; difficult to maintain and reason about; slow wire generation. | Decompose into feature/layer-specific ProviderSets and compose them in the main injector. |
+| **Provider Sprawl** | Provider functions are defined ad-hoc across many files without being grouped. | Low cohesion; hard to discover available providers; dependency graph is implicit and scattered. | Group related providers into cohesive wire.NewSets within the package that owns them. |
+| **Concrete Leaks** | Provider function parameters and struct fields use concrete types (e.g., \*PostgresRepo) instead of interfaces. | Tight coupling to implementations; violates DIP; makes testing difficult and swapping implementations impossible without major refactoring.44 | Depend on interfaces and use wire.Bind in a ProviderSet to link the interface to the concrete type. |
+| **The "God" Provider** | A single provider function that news up multiple, unrelated objects. | Violates SRP; hides the true dependency graph from Wire; creates tightly coupled components. | Split the function into multiple, small providers, each responsible for creating one object. |
+| **Ignoring Resource Cleanup** | Providers for resources like \*sql.DB or \*os.File do not return a cleanup function. | Resource leaks; connections are not closed, leading to application instability and crashes. | Ensure any provider that acquires a resource returns a (T, func(), error) signature and implements the cleanup logic. |
 
 ## **Practical Application Blueprints**
 

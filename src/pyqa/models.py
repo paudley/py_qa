@@ -47,6 +47,7 @@ class Diagnostic:
     tool: str
     code: str | None = None
     group: str | None = None
+    function: str | None = None
 
 
 # pylint: disable=too-many-instance-attributes
@@ -62,6 +63,7 @@ class RawDiagnostic:
     code: str | None = None
     tool: str | None = None
     group: str | None = None
+    function: str | None = None
 
 
 @dataclass(slots=True)

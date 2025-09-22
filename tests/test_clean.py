@@ -7,8 +7,8 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from pyqa.cli.app import app
 from pyqa.clean import sparkly_clean
+from pyqa.cli.app import app
 from pyqa.config import CleanConfig
 
 

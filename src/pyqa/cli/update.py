@@ -12,18 +12,17 @@ from ..config_loader import ConfigError, ConfigLoader
 from ..logging import fail, ok, warn
 from ..update import (
     DEFAULT_STRATEGIES,
-    CommandSpec,
-    UpdatePlan,
     WorkspaceDiscovery,
     WorkspacePlanner,
     WorkspaceUpdater,
     ensure_lint_install,
-    WorkspaceKind,
 )
 
 CommandRunner = Callable[[Sequence[str], Path | None], object]
 
-update_app = typer.Typer(name="update", help="Update dependencies across detected workspaces.")
+update_app = typer.Typer(
+    name="update", help="Update dependencies across detected workspaces."
+)
 
 
 def _default_runner(args: Sequence[str], cwd: Path | None):
@@ -47,7 +46,9 @@ def main(
         "--skip-lint-install",
         help="Skip running the py-qa lint install bootstrap step.",
     ),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Print planned commands without executing."),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Print planned commands without executing."
+    ),
     emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji output."),
 ) -> None:
     if ctx.invoked_subcommand:

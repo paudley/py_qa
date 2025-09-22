@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import List
 
@@ -25,8 +26,8 @@ from .options import LintOptions
 
 def lint_command(
     ctx: typer.Context,
-    paths: List[Path] = typer.Argument(
-        [], metavar="[PATH]", help="Specific files or directories to lint."
+    paths: List[Path] | None = typer.Argument(
+        None, metavar="[PATH]", help="Specific files or directories to lint."
     ),
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
     changed_only: bool = typer.Option(
@@ -107,6 +108,11 @@ def lint_command(
         "--strict-config",
         help="Treat configuration warnings (unknown keys, etc.) as errors.",
     ),
+    line_length: int = typer.Option(
+        120,
+        "--line-length",
+        help="Global preferred maximum line length applied to supported tools.",
+    ),
 ) -> None:
     """Entry point for the ``pyqa lint`` CLI command."""
 
@@ -115,11 +121,25 @@ def lint_command(
     if verbose and quiet:
         raise typer.BadParameter("--verbose and --quiet cannot be combined")
 
+    invocation_cwd = Path.cwd()
+    provided_paths = list(paths or [])
+    normalized_paths = [_normalise_path(arg, invocation_cwd) for arg in provided_paths]
+
+    root_source = ctx.get_parameter_source("root")
+    root = _normalise_path(root, invocation_cwd)
+    if (
+        root_source in (ParameterSource.DEFAULT, ParameterSource.DEFAULT_MAP)
+        and normalized_paths
+    ):
+        derived_root = _derive_default_root(normalized_paths)
+        if derived_root is not None:
+            root = derived_root
+
     effective_jobs = jobs if jobs is not None else default_parallel_jobs()
 
     provided = _collect_provided_flags(
         ctx,
-        paths_provided=bool(paths),
+        paths_provided=bool(normalized_paths),
         dirs=dirs,
         exclude=exclude,
         filters=filters,
@@ -128,7 +148,7 @@ def lint_command(
     )
 
     options = LintOptions(
-        paths=list(paths),
+        paths=list(normalized_paths),
         root=root,
         changed_only=changed_only,
         diff_ref=diff_ref,
@@ -158,6 +178,7 @@ def lint_command(
         pr_summary_template=pr_summary_template,
         use_local_linters=use_local_linters,
         strict_config=strict_config,
+        line_length=line_length,
         provided=provided,
     )
 
@@ -240,6 +261,7 @@ def _collect_provided_flags(
         "pr_summary_min_severity",
         "pr_summary_template",
         "use_local_linters",
+        "line_length",
     }
     provided: set[str] = set()
     for name in tracked:
@@ -259,3 +281,18 @@ def _collect_provided_flags(
     if language:
         provided.add("language")
     return provided
+
+
+def _normalise_path(value: Path, cwd: Path) -> Path:
+    candidate = value if value.is_absolute() else cwd / value
+    return candidate.resolve()
+
+
+def _derive_default_root(paths: List[Path]) -> Path | None:
+    if not paths:
+        return None
+    candidates = [path if path.is_dir() else path.parent for path in paths]
+    if not candidates:
+        return None
+    common = Path(os.path.commonpath([str(candidate) for candidate in candidates]))
+    return common.resolve()

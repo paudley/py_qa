@@ -55,7 +55,10 @@ class BannedWordChecker:
 
     def load_terms(self) -> list[str]:
         terms: set[str] = set()
-        for source in (self.personal_list or Path.home() / ".banned-words", self.repo_list or self.root / ".banned-words"):
+        for source in (
+            self.personal_list or Path.home() / ".banned-words",
+            self.repo_list or self.root / ".banned-words",
+        ):
             terms.update(_read_terms(source))
         terms.update(term.strip() for term in self.default_terms if term.strip())
         return sorted(terms, key=lambda s: s.lower())

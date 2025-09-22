@@ -38,6 +38,7 @@ class FileDiscoveryConfig:
     pre_commit: bool = False
     respect_gitignore: bool = False
     explicit_files: list[Path] = field(default_factory=list)
+    limit_to: list[Path] = field(default_factory=list)
 
 
 # pylint: disable=too-many-instance-attributes
@@ -84,6 +85,7 @@ class ExecutionConfig:
     cache_dir: Path = field(default_factory=lambda: Path(".lint-cache"))
     bail: bool = False
     use_local_linters: bool = False
+    line_length: int = 120
 
 
 @dataclass(slots=True)
@@ -142,10 +144,14 @@ class QualityConfigSection:
 
     checks: list[str] = field(default_factory=lambda: list(DEFAULT_QUALITY_CHECKS))
     skip_globs: list[str] = field(default_factory=list)
-    schema_targets: list[Path] = field(default_factory=lambda: list(DEFAULT_SCHEMA_TARGETS))
+    schema_targets: list[Path] = field(
+        default_factory=lambda: list(DEFAULT_SCHEMA_TARGETS)
+    )
     warn_file_size: int = 5 * 1024 * 1024
     max_file_size: int = 10 * 1024 * 1024
-    protected_branches: list[str] = field(default_factory=lambda: list(DEFAULT_PROTECTED_BRANCHES))
+    protected_branches: list[str] = field(
+        default_factory=lambda: list(DEFAULT_PROTECTED_BRANCHES)
+    )
 
 
 @dataclass(slots=True)
@@ -160,7 +166,9 @@ class CleanConfig:
 class UpdateConfig:
     """Configuration for workspace dependency updates."""
 
-    skip_patterns: list[str] = field(default_factory=lambda: list(DEFAULT_UPDATE_SKIP_PATTERNS))
+    skip_patterns: list[str] = field(
+        default_factory=lambda: list(DEFAULT_UPDATE_SKIP_PATTERNS)
+    )
     enabled_managers: list[str] = field(default_factory=list)
 
 

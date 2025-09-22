@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Sequence
 
 from .logging import fail, info, ok, warn
 
@@ -127,7 +127,9 @@ class SecurityScanner:
         result = SecurityScanResult()
         resolved_files = self._resolve_files(files)
 
-        info("🔍 Scanning files for secrets and credentials...", use_emoji=self.use_emoji)
+        info(
+            "🔍 Scanning files for secrets and credentials...", use_emoji=self.use_emoji
+        )
         for path in resolved_files:
             self._scan_file(path, result)
 
@@ -191,21 +193,37 @@ class SecurityScanner:
             matches = _match_pattern(pattern, lines)
             if matches and not _should_skip_markdown(pattern, path, matches):
                 for line_no, snippet in matches[:3]:
-                    result.register_secret(relative_path, f"line {line_no}: {snippet.strip()}")
-                fail(f"Potential secrets found in {relative_path}", use_emoji=self.use_emoji)
+                    result.register_secret(
+                        relative_path, f"line {line_no}: {snippet.strip()}"
+                    )
+                fail(
+                    f"Potential secrets found in {relative_path}",
+                    use_emoji=self.use_emoji,
+                )
 
         # High entropy strings
         matches = _match_pattern(_ENTROPY_PATTERN, lines)
         matches = _filter_entropy(matches)
         if matches:
             for line_no, snippet in matches[:3]:
-                result.register_secret(relative_path, f"high entropy string at line {line_no}: {snippet.strip()}")
-            fail(f"High entropy strings found in {relative_path}", use_emoji=self.use_emoji)
+                result.register_secret(
+                    relative_path,
+                    f"high entropy string at line {line_no}: {snippet.strip()}",
+                )
+            fail(
+                f"High entropy strings found in {relative_path}",
+                use_emoji=self.use_emoji,
+            )
 
         # Temp/backup files
-        if relative_path.suffix in _TMP_FILE_SUFFIXES or relative_path.name.endswith("~"):
+        if relative_path.suffix in _TMP_FILE_SUFFIXES or relative_path.name.endswith(
+            "~"
+        ):
             result.register_temp(relative_path)
-            warn(f"Temporary/backup file should not be committed: {relative_path}", use_emoji=self.use_emoji)
+            warn(
+                f"Temporary/backup file should not be committed: {relative_path}",
+                use_emoji=self.use_emoji,
+            )
 
         # PII patterns
         if not _should_skip_pii(path):
@@ -214,18 +232,29 @@ class SecurityScanner:
                 pii_matches = _filter_comments(pii_matches)
                 if pii_matches:
                     for line_no, snippet in pii_matches[:3]:
-                        result.register_pii(relative_path, f"line {line_no}: {snippet.strip()}")
-                    warn(f"Potential PII found in {relative_path}", use_emoji=self.use_emoji)
+                        result.register_pii(
+                            relative_path, f"line {line_no}: {snippet.strip()}"
+                        )
+                    warn(
+                        f"Potential PII found in {relative_path}",
+                        use_emoji=self.use_emoji,
+                    )
 
     # ------------------------------------------------------------------
     def _run_bandit(self, result: SecurityScanResult) -> None:
         src_dir = self.root / "src"
         if not src_dir.is_dir():
-            info("No src/ directory found, skipping bandit scan", use_emoji=self.use_emoji)
+            info(
+                "No src/ directory found, skipping bandit scan",
+                use_emoji=self.use_emoji,
+            )
             return
 
         if not shutil.which("bandit"):
-            warn("Bandit is not installed. Install via 'uv sync --group dev' to enable python security scanning.", use_emoji=self.use_emoji)
+            warn(
+                "Bandit is not installed. Install via 'uv sync --group dev' to enable python security scanning.",
+                use_emoji=self.use_emoji,
+            )
             return
 
         info("Running bandit security analysis...", use_emoji=self.use_emoji)
@@ -233,13 +262,25 @@ class SecurityScanner:
             report_path = Path(handle.name)
         try:
             completed = subprocess.run(
-                ["bandit", "-r", str(src_dir), "-f", "json", "-o", str(report_path), "--quiet"],
+                [
+                    "bandit",
+                    "-r",
+                    str(src_dir),
+                    "-f",
+                    "json",
+                    "-o",
+                    str(report_path),
+                    "--quiet",
+                ],
                 capture_output=True,
                 text=True,
                 check=False,
             )
             if completed.returncode == 0:
-                ok("Bandit scan completed - no security issues found", use_emoji=self.use_emoji)
+                ok(
+                    "Bandit scan completed - no security issues found",
+                    use_emoji=self.use_emoji,
+                )
                 return
             if completed.returncode not in {0, 1}:
                 warn(
@@ -274,7 +315,9 @@ class SecurityScanner:
             report_path.unlink(missing_ok=True)
 
 
-def _match_pattern(pattern: re.Pattern[str], lines: Sequence[str], *, case_sensitive: bool = False) -> list[tuple[int, str]]:
+def _match_pattern(
+    pattern: re.Pattern[str], lines: Sequence[str], *, case_sensitive: bool = False
+) -> list[tuple[int, str]]:
     matches: list[tuple[int, str]] = []
     compiled = pattern if case_sensitive else re.compile(pattern.pattern, re.IGNORECASE)
     for idx, line in enumerate(lines, start=1):
@@ -289,7 +332,9 @@ def _should_skip_pii(path: Path) -> bool:
     return any(fragment in path.as_posix() for fragment in _SKIP_PII_PATH_FRAGMENTS)
 
 
-def _should_skip_markdown(pattern: re.Pattern[str], path: Path, matches: list[tuple[int, str]]) -> bool:
+def _should_skip_markdown(
+    pattern: re.Pattern[str], path: Path, matches: list[tuple[int, str]]
+) -> bool:
     if path.suffix.lower() != ".md":
         return False
     return all(_DOC_ENV_PATTERNS.search(line) for _, line in matches)
@@ -298,7 +343,9 @@ def _should_skip_markdown(pattern: re.Pattern[str], path: Path, matches: list[tu
 def _filter_entropy(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
     filtered: list[tuple[int, str]] = []
     for idx, line in matches:
-        if re.search(r"sha256|md5|hash|digest|test|example|sample|hexsha", line, re.IGNORECASE):
+        if re.search(
+            r"sha256|md5|hash|digest|test|example|sample|hexsha", line, re.IGNORECASE
+        ):
             continue
         if line.strip().startswith("#") or line.strip().startswith("//"):
             continue
@@ -327,6 +374,10 @@ def get_staged_files(root: Path) -> list[Path]:
         )
         if completed.returncode != 0:
             return []
-        return [root / line.strip() for line in completed.stdout.splitlines() if line.strip()]
+        return [
+            root / line.strip()
+            for line in completed.stdout.splitlines()
+            if line.strip()
+        ]
     except FileNotFoundError:  # git not installed
         return []

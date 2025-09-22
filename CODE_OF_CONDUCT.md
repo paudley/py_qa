@@ -1,4 +1,5 @@
 <!-- SPDX-License-Identifier: MIT -->
+
 <!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
 
 # PyQA Contributor Code of Conduct

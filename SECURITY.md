@@ -1,4 +1,5 @@
 <!-- SPDX-License-Identifier: MIT -->
+
 <!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
 
 # PyQA Security Policy
@@ -7,16 +8,18 @@ PyQA is maintained by Blackcat Informatics® Inc. and we take security seriously
 
 ## Supported Versions
 
-| Version | Supported          |
+| Version | Supported |
 | ------- | ------------------ |
-| 0.1.x   | ✅ |
-| < 0.1   | ❌ |
+| 0.1.x | ✅ |
+| < 0.1 | ❌ |
 
 ### Please DO NOT:
+
 - Open a public GitHub issue for security vulnerabilities
 - Post about the vulnerability on social media or forums
 
 ### Please DO:
+
 - Email **security@blackcat.ca** (PGP key below)
 - Include the word "SECURITY" in the subject line
 - Provide detailed steps to reproduce the vulnerability
@@ -32,10 +35,10 @@ PyQA is maintained by Blackcat Informatics® Inc. and we take security seriously
 ## Responsible Disclosure Process
 
 1. Security vulnerabilities are reported privately.
-2. The PyQA maintainers confirm and triage issues.
-3. Fixes are developed, reviewed, and tested.
-4. A coordinated release is prepared.
-5. Public disclosure occurs after users have reasonable time to update.
+1. The PyQA maintainers confirm and triage issues.
+1. Fixes are developed, reviewed, and tested.
+1. A coordinated release is prepared.
+1. Public disclosure occurs after users have reasonable time to update.
 
 ## Security Advisories & Updates
 
@@ -104,6 +107,5 @@ XE4dvUx/JNzvuZ/nkLMnuVf+feQJsvc+kLNV1K2sFGffpC/ZdBkU0lz5oLfqTtAM
 1k2Eu+FYVJiyxA6fujgY65hx/hj/qZZJeuBTNgfWwiTn/A==
 =fCTf
 -----END PGP PUBLIC KEY BLOCK-----
-
 
 For general questions about PyQA, please use GitHub discussions or open an issue with the "question" label.

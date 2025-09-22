@@ -13,16 +13,24 @@ from ..security import SecurityScanner, get_staged_files
 
 
 def security_scan_command(
-    files: List[Path] = typer.Argument([], metavar="[FILES...]", help="Specific files to scan."),
+    files: List[Path] | None = typer.Argument(
+        None, metavar="[FILES...]", help="Specific files to scan."
+    ),
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    staged: bool = typer.Option(True, "--staged/--no-staged", help="Include staged files when no explicit files are provided."),
-    no_bandit: bool = typer.Option(False, "--no-bandit", help="Skip running bandit static analysis."),
+    staged: bool = typer.Option(
+        True,
+        "--staged/--no-staged",
+        help="Include staged files when no explicit files are provided.",
+    ),
+    no_bandit: bool = typer.Option(
+        False, "--no-bandit", help="Skip running bandit static analysis."
+    ),
     no_emoji: bool = typer.Option(False, "--no-emoji", help="Disable emoji in output."),
 ) -> None:
     """Run security scans across the project."""
 
     root = root.resolve()
-    selected_files = list(files)
+    selected_files = list(files or [])
     if not selected_files and staged:
         selected_files = get_staged_files(root)
 

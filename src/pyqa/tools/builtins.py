@@ -218,6 +218,8 @@ class _RuffCommand(CommandBuilder):
             cmd.extend(["--extend-ignore", ",".join(extend_ignore)])
 
         line_length = _setting(settings, "line-length")
+        if line_length is None:
+            line_length = ctx.cfg.execution.line_length
         if line_length is not None:
             cmd.extend(["--line-length", str(line_length)])
 
@@ -280,6 +282,8 @@ class _RuffFormatCommand(CommandBuilder):
             cmd.extend(["--config", str(_resolve_path(root, config))])
 
         line_length = _setting(settings, "line-length")
+        if line_length is None:
+            line_length = ctx.cfg.execution.line_length
         if line_length is not None:
             cmd.extend(["--line-length", str(line_length)])
 
@@ -336,6 +340,8 @@ class _IsortCommand(CommandBuilder):
             cmd.extend(["--profile", str(profile)])
 
         line_length = _setting(settings, "line-length")
+        if line_length is None:
+            line_length = ctx.cfg.execution.line_length
         if line_length is not None:
             cmd.extend(["--line-length", str(line_length)])
 

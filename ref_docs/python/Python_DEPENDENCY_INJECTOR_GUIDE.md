@@ -1,5 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
+
 <!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # **A Comprehensive Technical Guide to the dependency-injector Framework**
 
 This document provides an exhaustive technical specification and usage guide for the dependency-injector Python library. It is designed to serve as a definitive knowledge base for an AI agent tasked with generating Python code. The guide covers foundational principles, core architectural components, advanced features, and architectural best practices for building robust, maintainable, and scalable applications.
@@ -351,15 +353,15 @@ The choice of provider is a critical architectural decision that dictates the li
 
 The following table provides a high-density summary to facilitate the selection of the appropriate provider based on its lifecycle and intended use case.
 
-| Provider Type     | Lifecycle | Primary Use Case                                         | Key Characteristics                                          |
+| Provider Type | Lifecycle | Primary Use Case | Key Characteristics |
 | :---------------- | :-------- | :------------------------------------------------------- | :----------------------------------------------------------- |
-| **Factory**       | Transient | Stateful or request-specific services.                   | Creates a new instance on every call.                        |
-| **Singleton**     | Singleton | Stateless services, shared resources, expensive objects. | Creates one instance and reuses it for all subsequent calls. |
-| **Configuration** | Singleton | Managing application settings from various sources.      | Provides hierarchical, dot-notation access to configuration. |
-| **Resource**      | Managed   | Objects requiring explicit startup and shutdown.         | Integrates with init_resources() and shutdown_resources().   |
-| **Callable**      | Transient | Integrating existing factory functions.                  | Wraps a standard function; calls it on every request.        |
-| **Coroutine**     | Transient | Integrating existing async factory functions.            | Wraps a coroutine function; calls it on every request.       |
-| **Object**        | Static    | Injecting pre-existing instances or constants.           | Returns the provided object directly without instantiation.  |
+| **Factory** | Transient | Stateful or request-specific services. | Creates a new instance on every call. |
+| **Singleton** | Singleton | Stateless services, shared resources, expensive objects. | Creates one instance and reuses it for all subsequent calls. |
+| **Configuration** | Singleton | Managing application settings from various sources. | Provides hierarchical, dot-notation access to configuration. |
+| **Resource** | Managed | Objects requiring explicit startup and shutdown. | Integrates with init_resources() and shutdown_resources(). |
+| **Callable** | Transient | Integrating existing factory functions. | Wraps a standard function; calls it on every request. |
+| **Coroutine** | Transient | Integrating existing async factory functions. | Wraps a coroutine function; calls it on every request. |
+| **Object** | Static | Injecting pre-existing instances or constants. | Returns the provided object directly without instantiation. |
 
 ## **Part IV: Dynamic Configuration Management**
 
@@ -507,13 +509,13 @@ The Configuration provider supports several advanced features that enable robust
   container.config.api.timeout.from_env("TIMEOUT", as\_=int, default=5)\
   container.config.feature.enabled.from_env("ENABLE_FEATURE", as\_=bool, default=False)
 
-- **Environment Variable Interpolation:** This powerful feature allows you to embed environment variable lookups directly within your YAML or INI files. The syntax is ${ENV\_VAR} for a required variable or $\{ENV_VAR:default_value} to provide a fallback. This allows for a base configuration file to be checked into version control, with sensitive or environment-specific values being injected from the environment at runtime.13\
+- **Environment Variable Interpolation:** This powerful feature allows you to embed environment variable lookups directly within your YAML or INI files. The syntax is ${ENV_VAR} for a required variable or ${ENV_VAR:default_value} to provide a fallback. This allows for a base configuration file to be checked into version control, with sensitive or environment-specific values being injected from the environment at runtime.13\
   **config.yml with interpolation:**\
   YAML\
   database:\
-  host: ${DB\_HOST:localhost}
-  port: $\{DB_PORT:5432}\
-  password: \$\{DB_PASSWORD} # This must be set in the environment
+  host: ${DB_HOST:localhost}
+  port: ${DB_PORT:5432}\
+  password: ${DB_PASSWORD} # This must be set in the environment
 
   When container.config.from_yaml("config.yml") is called, the provider will automatically substitute these placeholders with the corresponding environment variable values.
 
@@ -548,7 +550,7 @@ class ApiClient:\
 def \_\_init\_\_(self, api_key: str, timeout: int):\
 self.api_key = api_key\
 self.timeout = timeout\
-print(f"ApiClient created with key '...{api_key[-4:]}' and timeout \{timeout}s")
+print(f"ApiClient created with key '...{api_key[-4:]}' and timeout {timeout}s")
 
 ```
 def get\_data(self):  
@@ -595,7 +597,7 @@ The @inject decorator and Provide marker handle the injection.\
 """\
 print("main: starting application logic.")\
 result_length = data_service.process_data()\
-print(f"main: processed data length is \{result_length}.")
+print(f"main: processed data length is {result_length}.")
 
 \# 4. Instantiate the container and run the application\
 if \_\_name\_\_ == "\_\_main\_\_":\
@@ -647,7 +649,7 @@ container.wire(modules=[\_\_name\_\_])
 def index(data_service: DataService = Provide[Container.data_service]):\
 \# The data_service is automatically injected for each request.\
 processed_length = data_service.process_data()\
-return f"Processed data length: \{processed_length}"
+return f"Processed data length: {processed_length}"
 
 \# To run: flask --app \<filename> run
 
@@ -704,7 +706,7 @@ db_client = providers.Resource(init_async_db_client)
 
 @inject\
 async def fetch_data_from_db(db = Provide[Container.db_client]):\
-print(f"Fetching data using: \{db}")\
+print(f"Fetching data using: {db}")\
 await asyncio.sleep(0.2)\
 return "some data"
 

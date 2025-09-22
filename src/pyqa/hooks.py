@@ -3,13 +3,11 @@
 
 from __future__ import annotations
 
-import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from .logging import info, ok, warn
-
 
 HOOK_NAMES = ("pre-commit", "pre-push", "commit-msg")
 
@@ -57,7 +55,9 @@ def install_hooks(
 
         if destination.exists() and not destination.is_symlink():
             timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            backup_path = destination.with_suffix(destination.suffix + f".backup.{timestamp}")
+            backup_path = destination.with_suffix(
+                destination.suffix + f".backup.{timestamp}"
+            )
             info(f"Backing up existing {name} hook to {backup_path}", use_emoji=True)
             if not dry_run:
                 destination.rename(backup_path)

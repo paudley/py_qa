@@ -12,7 +12,12 @@ from typing import Any, Mapping
 import typer
 
 from ..config import ConfigError
-from ..config_loader import ConfigLoader, ConfigLoadResult, FieldUpdate, generate_config_schema
+from ..config_loader import (
+    ConfigLoader,
+    ConfigLoadResult,
+    FieldUpdate,
+    generate_config_schema,
+)
 from ..tools.settings import TOOL_SETTING_SCHEMA
 
 config_app = typer.Typer(help="Inspect, validate, and document configuration layers.")
@@ -122,7 +127,8 @@ def config_diff(
     from_layer: str = typer.Option("defaults", "--from", help="Baseline layer."),
     to_layer: str = typer.Option("final", "--to", help="Comparison layer."),
     out: Path | None = typer.Option(
-        None, "--out", help="Write diff output to the provided path."),
+        None, "--out", help="Write diff output to the provided path."
+    ),
 ) -> None:
     """Show the difference between two configuration layers."""
 

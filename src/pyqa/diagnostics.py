@@ -80,6 +80,7 @@ def _normalize_raw(
         tool=tool,
         code=code,
         group=raw.group,
+        function=raw.function,
     )
 
 
@@ -151,6 +152,9 @@ def _is_duplicate(
         and existing.file is None
         and candidate.file is not None
     ):
+        return False
+
+    if (existing.function or "") != (candidate.function or ""):
         return False
 
     if not cfg.dedupe_same_file_only and existing.file != candidate.file:

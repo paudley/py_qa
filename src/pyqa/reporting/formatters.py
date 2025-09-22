@@ -27,19 +27,68 @@ def render(result: RunResult, cfg: OutputConfig) -> None:
 
 
 def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
-    header = f"Ran {len(result.outcomes)} action(s) against {len(result.files)} file(s)"
-    print(colorize(header, "cyan", cfg.color))
+    root_path = Path(result.root)
+    try:
+        root_path = root_path.resolve()
+    except OSError:
+        pass
+
+    total_actions = len(result.outcomes)
+    failed_actions = sum(1 for outcome in result.outcomes if not outcome.ok)
+    entries: set[tuple[str, int, str, str, str, str]] = set()
     for outcome in result.outcomes:
-        status = "ok" if outcome.ok else "failed"
-        symbol = {
-            True: emoji("✅", cfg.emoji),
-            False: emoji("❌", cfg.emoji),
-        }[outcome.ok]
-        print(
-            f"{symbol} {outcome.tool}:{outcome.action} [{status}] rc={outcome.returncode}"
+        for diag in outcome.diagnostics:
+            tool_name = diag.tool or outcome.tool
+            file_path = _normalize_concise_path(diag.file, root_path)
+            line_no = diag.line if diag.line is not None else -1
+            code = diag.code or "-"
+            message = diag.message.splitlines()[0].strip() or "<no message provided>"
+            function = diag.function or ""
+            entries.add((file_path, line_no, function, tool_name, code, message))
+
+    if not entries:
+        return
+
+    def sort_key(item: tuple[str, int, str, str, str, str]) -> tuple:
+        file_path, line_no, function, tool_name, code, message = item
+        return (
+            file_path,
+            line_no if line_no >= 0 else float("inf"),
+            function,
+            tool_name,
+            code,
+            message,
         )
-        if outcome.diagnostics and cfg.show_passing:
-            _dump_diagnostics(outcome.diagnostics, cfg)
+
+    for file_path, line_no, function, tool_name, code, message in sorted(
+        entries, key=sort_key
+    ):
+        location = file_path
+        if line_no >= 0:
+            location = f"{file_path}:{line_no}"
+        if function:
+            location = (
+                f"{location}:{function}" if line_no >= 0 else f"{location}:{function}"
+            )
+        print(f"{tool_name}, {location}, {code}, {message}")
+
+    symbol = "❌" if failed_actions else "✅"
+    summary_symbol = emoji(symbol, cfg.emoji)
+    summary_label = (
+        f"{summary_symbol} {'Failed' if failed_actions else 'Passed'}"
+        if summary_symbol
+        else ("Failed" if failed_actions else "Passed")
+    )
+    summary_color = "red" if failed_actions else "green"
+    diagnostics_count = len(entries)
+    files_count = len(result.files)
+    stats_raw = (
+        f"— {diagnostics_count} diagnostic(s) across {files_count} file(s); "
+        f"{failed_actions} failing action(s) out of {total_actions}"
+    )
+    status_text = colorize(summary_label, summary_color, cfg.color)
+    stats_text = colorize(stats_raw, "white", cfg.color)
+    print(f"{status_text} {stats_text}".strip())
 
 
 def _render_quiet(result: RunResult, cfg: OutputConfig) -> None:
@@ -81,6 +130,29 @@ def _render_raw(result: RunResult) -> None:
         print(outcome.stdout.rstrip())
         if outcome.stderr:
             print(outcome.stderr.rstrip())
+
+
+def _normalize_concise_path(path_str: str | None, root: Path) -> str:
+    if not path_str:
+        return "<unknown>"
+    candidate = Path(path_str)
+    try:
+        if candidate.is_absolute():
+            try:
+                candidate_resolved = candidate.resolve()
+            except OSError:
+                candidate_resolved = candidate
+            try:
+                root_resolved = root.resolve()
+            except OSError:
+                root_resolved = root
+            try:
+                return candidate_resolved.relative_to(root_resolved).as_posix()
+            except ValueError:
+                return candidate_resolved.as_posix()
+        return candidate.as_posix()
+    except OSError:
+        return str(candidate)
 
 
 def _dump_diagnostics(diags: Iterable[Diagnostic], cfg: OutputConfig) -> None:

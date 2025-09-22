@@ -60,6 +60,15 @@ class Orchestrator:
         inject_node_defaults()
 
         matched_files = self._discovery.run(cfg.file_discovery, root)
+        limits = [
+            entry if entry.is_absolute() else (root / entry)
+            for entry in cfg.file_discovery.limit_to
+        ]
+        limits = [limit.resolve() for limit in limits]
+        if limits:
+            matched_files = [
+                path for path in matched_files if self._is_within_limits(path, limits)
+            ]
         info(
             f"Discovered {len(matched_files)} file(s) to lint",
             use_emoji=cfg.output.emoji,
@@ -89,9 +98,7 @@ class Orchestrator:
             tool_files = self._filter_files_for_tool(
                 tool.file_extensions, matched_files
             )
-            settings_view = MappingProxyType(
-                dict(cfg.tool_settings.get(tool.name, {}))
-            )
+            settings_view = MappingProxyType(dict(cfg.tool_settings.get(tool.name, {})))
             context = ToolContext(
                 cfg=cfg,
                 root=root,
@@ -302,7 +309,7 @@ class Orchestrator:
         diagnostics = normalize_diagnostics(
             parsed, tool_name=tool_name, severity_rules=severity_rules
         )
-        if cp.returncode != 0 and not action.ignore_exit:
+        if cp.returncode != 0 and not action.ignore_exit and context.cfg.output.verbose:
             warn(
                 f"{tool_name}:{action.name} exited with {cp.returncode}",
                 use_emoji=context.cfg.output.emoji,
@@ -355,13 +362,28 @@ class Orchestrator:
             str(exec_cfg.check_only),
             str(exec_cfg.force_all),
             str(exec_cfg.respect_config),
+            str(exec_cfg.line_length),
             ",".join(sorted(cfg.severity_rules)),
         ]
         if cfg.tool_settings:
             serialized = json.dumps(cfg.tool_settings, sort_keys=True)
-            digest = hashlib.sha1(serialized.encode("utf-8"), usedforsecurity=False).hexdigest()
+            digest = hashlib.sha1(
+                serialized.encode("utf-8"), usedforsecurity=False
+            ).hexdigest()
             components.append(digest)
         return "|".join(components)
+
+    @staticmethod
+    def _is_within_limits(candidate: Path, limits: Sequence[Path]) -> bool:
+        if not limits:
+            return True
+        for limit in limits:
+            try:
+                candidate.relative_to(limit)
+                return True
+            except ValueError:
+                continue
+        return False
 
 
 @dataclass

@@ -208,8 +208,12 @@ class ConfigLoader:
         """Build a loader with default tiered sources."""
 
         root = project_root.resolve()
-        home_config = user_config if user_config is not None else Path.home() / ".py_qa.toml"
-        project_file = project_config if project_config is not None else root / ".py_qa.toml"
+        home_config = (
+            user_config if user_config is not None else Path.home() / ".py_qa.toml"
+        )
+        project_file = (
+            project_config if project_config is not None else root / ".py_qa.toml"
+        )
         pyproject = root / "pyproject.toml"
         sources: list[ConfigSource] = [
             DefaultConfigSource(),
@@ -358,7 +362,9 @@ class _ConfigMerger:
             for tool, value in tool_updates.items()
         )
 
-        severity_rules = _merge_severity_rules(config.severity_rules, data.get("severity_rules"))
+        severity_rules = _merge_severity_rules(
+            config.severity_rules, data.get("severity_rules")
+        )
         if severity_rules != config.severity_rules:
             updates.append(
                 FieldUpdate("root", "severity_rules", source, list(severity_rules))
@@ -424,9 +430,7 @@ class _FileDiscoverySection(_SectionMerger):
 
         excludes = _unique_paths(current.excludes)
         if "excludes" in data:
-            raw_excludes = _coerce_iterable(
-                data["excludes"], "file_discovery.excludes"
-            )
+            raw_excludes = _coerce_iterable(data["excludes"], "file_discovery.excludes")
             for resolved in self._resolver.resolve_iterable(raw_excludes):
                 candidate = resolved.resolve()
                 if candidate not in excludes:
@@ -442,6 +446,11 @@ class _FileDiscoverySection(_SectionMerger):
                 if candidate.exists() and candidate not in explicit_files:
                     explicit_files.append(candidate)
 
+        limit_to = _unique_paths(current.limit_to)
+        if "limit_to" in data:
+            raw_limits = _coerce_iterable(data["limit_to"], "file_discovery.limit_to")
+            limit_to = _unique_paths(self._resolver.resolve_iterable(raw_limits))
+
         updated = replace(
             current,
             roots=roots,
@@ -450,10 +459,9 @@ class _FileDiscoverySection(_SectionMerger):
             paths_from_stdin=data.get("paths_from_stdin", current.paths_from_stdin),
             changed_only=data.get("changed_only", current.changed_only),
             diff_ref=data.get("diff_ref", current.diff_ref),
-            include_untracked=data.get(
-                "include_untracked", current.include_untracked
-            ),
+            include_untracked=data.get("include_untracked", current.include_untracked),
             base_branch=data.get("base_branch", current.base_branch),
+            limit_to=limit_to,
         )
         return updated, self._diff_dataclass(current, updated)
 
@@ -468,9 +476,13 @@ class _OutputSection(_SectionMerger):
         self, current: OutputConfig, raw: Any
     ) -> tuple[OutputConfig, Dict[str, Any]]:
         data = self._ensure_mapping(raw, self.section)
-        tool_filters = {tool: patterns.copy() for tool, patterns in current.tool_filters.items()}
+        tool_filters = {
+            tool: patterns.copy() for tool, patterns in current.tool_filters.items()
+        }
         if "tool_filters" in data:
-            tool_filters = _normalize_tool_filters(data["tool_filters"], current.tool_filters)
+            tool_filters = _normalize_tool_filters(
+                data["tool_filters"], current.tool_filters
+            )
 
         pr_summary_out = self._resolver.resolve_optional(
             data.get("pr_summary_out", current.pr_summary_out)
@@ -487,7 +499,9 @@ class _OutputSection(_SectionMerger):
             raise ConfigError("output.mode must be a string")
         normalized_output = _normalize_output_mode(output_mode)
 
-        pr_summary_min = data.get("pr_summary_min_severity", current.pr_summary_min_severity)
+        pr_summary_min = data.get(
+            "pr_summary_min_severity", current.pr_summary_min_severity
+        )
         if not isinstance(pr_summary_min, str):
             raise ConfigError("output.pr_summary_min_severity must be a string")
         normalized_min = _normalize_min_severity(pr_summary_min)
@@ -536,22 +550,32 @@ class _ExecutionSection(_SectionMerger):
     ) -> tuple[ExecutionConfig, Dict[str, Any]]:
         data = self._ensure_mapping(raw, self.section)
         cache_dir_value = data.get("cache_dir", current.cache_dir)
-        cache_dir = self._resolver.resolve(cache_dir_value) if cache_dir_value is not None else current.cache_dir
+        cache_dir = (
+            self._resolver.resolve(cache_dir_value)
+            if cache_dir_value is not None
+            else current.cache_dir
+        )
 
         jobs = data.get("jobs", current.jobs)
         bail = data.get("bail", current.bail)
         if bail:
             jobs = 1
 
-        only = list(
-            _coerce_iterable(data["only"], "execution.only")
-        ) if "only" in data else list(current.only)
-        languages = list(
-            _coerce_iterable(data["languages"], "execution.languages")
-        ) if "languages" in data else list(current.languages)
-        enable = list(
-            _coerce_iterable(data["enable"], "execution.enable")
-        ) if "enable" in data else list(current.enable)
+        only = (
+            list(_coerce_iterable(data["only"], "execution.only"))
+            if "only" in data
+            else list(current.only)
+        )
+        languages = (
+            list(_coerce_iterable(data["languages"], "execution.languages"))
+            if "languages" in data
+            else list(current.languages)
+        )
+        enable = (
+            list(_coerce_iterable(data["enable"], "execution.enable"))
+            if "enable" in data
+            else list(current.enable)
+        )
 
         updated = replace(
             current,
@@ -567,9 +591,7 @@ class _ExecutionSection(_SectionMerger):
             cache_enabled=data.get("cache_enabled", current.cache_enabled),
             cache_dir=cache_dir,
             bail=bail,
-            use_local_linters=data.get(
-                "use_local_linters", current.use_local_linters
-            ),
+            use_local_linters=data.get("use_local_linters", current.use_local_linters),
         )
         return updated, self._diff_dataclass(current, updated)
 
@@ -582,14 +604,18 @@ class _LicenseSection(_SectionMerger):
     ) -> tuple[LicenseConfig, Dict[str, Any]]:
         data = self._ensure_mapping(raw, self.section)
 
-        spdx = _coerce_optional_str_value(data.get("spdx"), current.spdx, "license.spdx")
+        spdx = _coerce_optional_str_value(
+            data.get("spdx"), current.spdx, "license.spdx"
+        )
         notice = _coerce_optional_str_value(
             data.get("notice"), current.notice, "license.notice"
         )
         copyright_value = _coerce_optional_str_value(
             data.get("copyright"), current.copyright, "license.copyright"
         )
-        year = _coerce_optional_str_value(data.get("year"), current.year, "license.year")
+        year = _coerce_optional_str_value(
+            data.get("year"), current.year, "license.year"
+        )
 
         require_spdx = _coerce_optional_bool(
             data.get("require_spdx"), current.require_spdx, "license.require_spdx"
@@ -606,7 +632,9 @@ class _LicenseSection(_SectionMerger):
 
         exceptions = list(current.exceptions)
         if "exceptions" in data:
-            exceptions = _coerce_string_sequence(data["exceptions"], "license.exceptions")
+            exceptions = _coerce_string_sequence(
+                data["exceptions"], "license.exceptions"
+            )
 
         updated = replace(
             current,
@@ -639,11 +667,15 @@ class _QualitySection(_SectionMerger):
 
         skip_globs = list(current.skip_globs)
         if "skip_globs" in data:
-            skip_globs = _coerce_string_sequence(data["skip_globs"], "quality.skip_globs")
+            skip_globs = _coerce_string_sequence(
+                data["skip_globs"], "quality.skip_globs"
+            )
 
         schema_targets = current.schema_targets
         if "schema_targets" in data:
-            raw_targets = _coerce_iterable(data["schema_targets"], "quality.schema_targets")
+            raw_targets = _coerce_iterable(
+                data["schema_targets"], "quality.schema_targets"
+            )
             resolved: list[Path] = []
             seen: set[Path] = set()
             for entry in raw_targets:
@@ -794,7 +826,9 @@ def _merge_tool_settings(
     return result, updates, warnings
 
 
-def _coerce_optional_str_value(value: Any, current: str | None, context: str) -> str | None:
+def _coerce_optional_str_value(
+    value: Any, current: str | None, context: str
+) -> str | None:
     if value is None:
         return current
     if isinstance(value, str):
@@ -1015,7 +1049,9 @@ def _auto_discover_tool_settings(config: Config, root: Path) -> list[FieldUpdate
             continue
         current_settings["config"] = selected
         config.tool_settings[tool] = current_settings
-        updates.append(FieldUpdate("tool_settings", tool, "auto", dict(current_settings)))
+        updates.append(
+            FieldUpdate("tool_settings", tool, "auto", dict(current_settings))
+        )
     return updates
 
 
@@ -1114,6 +1150,8 @@ def _jsonify(value: Any) -> Any:
     if isinstance(value, dict):
         return {key: _jsonify(item) for key, item in value.items()}
     return value
+
+
 AUTO_TOOL_CONFIG_FILES: dict[str, list[str]] = {
     "ruff": ["ruff.toml"],
     "ruff-format": ["ruff.toml"],

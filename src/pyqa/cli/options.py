@@ -45,6 +45,7 @@ class LintOptions:
     use_local_linters: bool = False
     strict_config: bool = False
     provided: set[str] = field(default_factory=set)
+    line_length: int = 120
 
 
 @dataclass(slots=True)

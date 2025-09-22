@@ -1,5 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
+
 <!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # **A Guide to High-Quality Python Module Design**
 
 ## **The Pillars of Modular Design: Cohesion and Coupling**
@@ -87,13 +89,13 @@ Understanding the different forms of coupling helps in identifying and mitigatin
 
 The following table provides a summary for identifying and addressing different coupling types.
 
-| Coupling Type        | Description                                                   | Python Example                                  | Maintainability Risk | Recommendation                                                                                                           |
+| Coupling Type | Description | Python Example | Maintainability Risk | Recommendation |
 | :------------------- | :------------------------------------------------------------ | :---------------------------------------------- | :------------------- | :----------------------------------------------------------------------------------------------------------------------- |
-| **Data Coupling**    | Modules communicate by passing primitive data via parameters. | process_data(user_id: int, item_name: str)      | Low                  | Ideal; use whenever possible.                                                                                            |
-| **Stamp Coupling**   | Modules communicate by passing a whole data structure.        | process_user(user: UserData)                    | Low-Medium           | Acceptable, especially with Pydantic models. Prefer passing only required data if the structure is complex and volatile. |
-| **Control Coupling** | One module passes a control flag to another.                  | generate_report(data: list, mode: str)          | Medium               | Refactor to use separate functions or the Strategy pattern to avoid passing control flags.                               |
-| **Common Coupling**  | Modules share a global mutable state.                         | import config; config.SETTINGS['mode'] = 'prod' | High                 | Avoid global mutable state. Use explicit configuration objects or dependency injection instead.                          |
-| **Content Coupling** | One module modifies the internal state of another.            | other_module.\_internal_variable = 10           | Extreme              | Anti-pattern; strictly forbidden. Interact only through the defined public API of a module.                              |
+| **Data Coupling** | Modules communicate by passing primitive data via parameters. | process_data(user_id: int, item_name: str) | Low | Ideal; use whenever possible. |
+| **Stamp Coupling** | Modules communicate by passing a whole data structure. | process_user(user: UserData) | Low-Medium | Acceptable, especially with Pydantic models. Prefer passing only required data if the structure is complex and volatile. |
+| **Control Coupling** | One module passes a control flag to another. | generate_report(data: list, mode: str) | Medium | Refactor to use separate functions or the Strategy pattern to avoid passing control flags. |
+| **Common Coupling** | Modules share a global mutable state. | import config; config.SETTINGS['mode'] = 'prod' | High | Avoid global mutable state. Use explicit configuration objects or dependency injection instead. |
+| **Content Coupling** | One module modifies the internal state of another. | other_module.\_internal_variable = 10 | Extreme | Anti-pattern; strictly forbidden. Interact only through the defined public API of a module. |
 
 The refactoring of a vehicle registration application provides a clear example of reducing coupling. Initially, a single Application class is responsible for everything, including generating vehicle IDs and calculating taxes, making it highly coupled to the implementation details of these processes.4
 
@@ -317,7 +319,7 @@ def scan_doc(self, document: str) -> None: pass
 
 class OldPrinter(MultiFunctionDevice):\
 def print_doc(self, document: str) -> None:\
-print(f"Printing \{document}")
+print(f"Printing {document}")
 
 ```
 def fax\_doc(self, document: str) \-\> None:  
@@ -351,11 +353,11 @@ from.interfaces import Printable, Faxable, Scannable
 
 class OldPrinter(Printable):\
 def print_doc(self, document: str) -> None:\
-print(f"Printing \{document}")
+print(f"Printing {document}")
 
 class ModernPrinter(Printable, Faxable, Scannable):\
 def print_doc(self, document: str) -> None:\
-print(f"Printing \{document} in color")
+print(f"Printing {document} in color")
 
 ```
 def fax\_doc(self, document: str) \-\> None:  
@@ -455,7 +457,7 @@ Python
 class EmailService:\
 """A concrete service for sending emails."""\
 def send_email(self, recipient: str, message: str) -> None:\
-print(f"Sending email to \{recipient}: \{message}")
+print(f"Sending email to {recipient}: {message}")
 
 \# components.py\
 from.services import EmailService
@@ -499,7 +501,7 @@ Python
 class Logger:\
 """A service for logging messages."""\
 def log(self, message: str) -> None:\
-print(f"\[LOG\]: \{message}")
+print(f"\[LOG\]: {message}")
 
 \# components.py\
 from typing import Optional\
@@ -627,7 +629,7 @@ return text[:max_length-3] + "..."
 
 \# Another internal function, not exported.\
 def \_log_operation(op_name: str) -> None:\
-print(f"Operation performed: \{op_name}")
+print(f"Operation performed: {op_name}")
 
 In this example, only is_palindrome and truncate_string are considered public. An attempt to use from string_utils import * would only import these two names.18
 
@@ -767,11 +769,11 @@ While architectural refactoring is always the preferred solution, it may not be 
 
 The following table outlines the available strategies, distinguishing between the ideal architectural fix and temporary tactical solutions.
 
-| Strategy                        | Description                                                                                                                  | Pros                                                                                                                      | Cons                                                                                                                                        | When to Use                                                                                                                            |
+| Strategy | Description | Pros | Cons | When to Use |
 | :------------------------------ | :--------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------- |
-| **Refactor to a Shared Module** | Extract the common dependency into a new, lower-level module that both original modules can import from.                     | Resolves the underlying architectural flaw. Improves cohesion and reduces coupling. Creates a clear dependency hierarchy. | Requires code reorganization and a deeper understanding of the architecture.                                                                | **Best Practice.** This is the preferred, long-term solution for all circular dependencies.                                            |
-| **Local (In-Function) Import**  | Move the import statement from the top level of the module into the specific function or method where it is needed.          | Quick to implement. Avoids import-time errors by delaying the import until runtime.                                       | Hides the design flaw. Can make dependencies harder to track. May slightly impact performance on the first function call.                   | As a **temporary fix** when a dependency is only needed at runtime in one specific location and immediate refactoring is not possible. |
-| **typing.TYPE_CHECKING Block**  | Place imports used only for type annotations inside an if typing.TYPE_CHECKING: block. These imports are ignored at runtime. | Resolves circular dependencies that exist only at the type-hinting level, without affecting runtime behavior.             | Does not solve runtime circular dependencies. Can be confusing if the distinction between type-time and run-time dependencies is not clear. | To resolve cycles caused **exclusively by type hints**, where the modules do not have a circular dependency at runtime.                |
+| **Refactor to a Shared Module** | Extract the common dependency into a new, lower-level module that both original modules can import from. | Resolves the underlying architectural flaw. Improves cohesion and reduces coupling. Creates a clear dependency hierarchy. | Requires code reorganization and a deeper understanding of the architecture. | **Best Practice.** This is the preferred, long-term solution for all circular dependencies. |
+| **Local (In-Function) Import** | Move the import statement from the top level of the module into the specific function or method where it is needed. | Quick to implement. Avoids import-time errors by delaying the import until runtime. | Hides the design flaw. Can make dependencies harder to track. May slightly impact performance on the first function call. | As a **temporary fix** when a dependency is only needed at runtime in one specific location and immediate refactoring is not possible. |
+| **typing.TYPE_CHECKING Block** | Place imports used only for type annotations inside an if typing.TYPE_CHECKING: block. These imports are ignored at runtime. | Resolves circular dependencies that exist only at the type-hinting level, without affecting runtime behavior. | Does not solve runtime circular dependencies. Can be confusing if the distinction between type-time and run-time dependencies is not clear. | To resolve cycles caused **exclusively by type hints**, where the modules do not have a circular dependency at runtime. |
 
 **Example of a Local Import:**
 
@@ -870,7 +872,7 @@ try:\
 user_contract = UserData.model_validate(raw_data)\
 activate_user(user=user_contract)\
 except ValidationError as e:\
-print(f"Invalid API data received: \{e}")
+print(f"Invalid API data received: {e}")
 
 In this example, api_handler is responsible for enforcing the contract. The user_processing module receives a UserData object that is guaranteed to be valid, simplifying its internal logic.
 

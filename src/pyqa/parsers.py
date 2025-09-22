@@ -173,10 +173,20 @@ def parse_mypy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     for item in items:
         if not isinstance(item, dict):
             continue
-        path = item.get("path")
+        path = item.get("path") or item.get("file")
         message = str(item.get("message", "")).strip()
         severity = str(item.get("severity", "error")).lower()
         code = item.get("code") or item.get("error_code")
+        function = (
+            item.get("function")
+            or item.get("name")
+            or item.get("target")
+            or item.get("symbol")
+        )
+        if isinstance(function, str) and function:
+            function = function.split(".")[-1]
+        else:
+            function = None
         sev_enum = {
             "error": Severity.ERROR,
             "warning": Severity.WARNING,
@@ -191,6 +201,7 @@ def parse_mypy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
                 message=message,
                 code=code,
                 tool="mypy",
+                function=function,
             )
         )
     return results
@@ -333,7 +344,9 @@ def parse_cargo_clippy(payload: Any, _context: ToolContext) -> Sequence[RawDiagn
     records = (
         payload
         if isinstance(payload, list)
-        else [payload] if isinstance(payload, dict) else []
+        else [payload]
+        if isinstance(payload, dict)
+        else []
     )
     results: list[RawDiagnostic] = []
     for record in records:

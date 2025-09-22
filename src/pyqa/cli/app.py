@@ -7,14 +7,14 @@ from __future__ import annotations
 import typer
 
 from .banned import check_banned_words
+from .clean import clean_app
+from .config_cmd import config_app
+from .hooks import hooks_app
 from .install import install_command
 from .lint import lint_command
-from .config_cmd import config_app
-from .security import security_scan_command
 from .quality import quality_app
+from .security import security_scan_command
 from .update import update_app
-from .clean import clean_app
-from .hooks import hooks_app
 
 app = typer.Typer(help="Polyglot lint orchestrator.")
 app.command("lint")(lint_command)
