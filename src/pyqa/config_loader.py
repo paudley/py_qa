@@ -17,12 +17,16 @@ except ModuleNotFoundError as exc:  # pragma: no cover - Python <3.11 fallback
     raise RuntimeError("tomllib is required to parse configuration files") from exc
 
 from .config import (
+    CleanConfig,
     Config,
     ConfigError,
     DedupeConfig,
     ExecutionConfig,
     FileDiscoveryConfig,
+    LicenseConfig,
     OutputConfig,
+    QualityConfigSection,
+    UpdateConfig,
 )
 from .tools.settings import TOOL_SETTING_SCHEMA
 
@@ -270,6 +274,10 @@ class _ConfigMerger:
         self._output_section = _OutputSection(resolver)
         self._execution_section = _ExecutionSection(resolver)
         self._dedupe_section = _DedupeSection()
+        self._license_section = _LicenseSection()
+        self._quality_section = _QualitySection(resolver)
+        self._clean_section = _CleanSection()
+        self._update_section = _UpdateSection()
 
     def apply(
         self, config: Config, data: Mapping[str, Any], source: str
@@ -309,6 +317,38 @@ class _ConfigMerger:
             for field, value in dedupe_updates.items()
         )
 
+        license_config, license_updates = self._license_section.merge(
+            config.license, data.get("license")
+        )
+        updates.extend(
+            FieldUpdate("license", field, source, value)
+            for field, value in license_updates.items()
+        )
+
+        quality_config, quality_updates = self._quality_section.merge(
+            config.quality, data.get("quality")
+        )
+        updates.extend(
+            FieldUpdate("quality", field, source, value)
+            for field, value in quality_updates.items()
+        )
+
+        clean_config, clean_updates = self._clean_section.merge(
+            config.clean, data.get("clean")
+        )
+        updates.extend(
+            FieldUpdate("clean", field, source, value)
+            for field, value in clean_updates.items()
+        )
+
+        update_config, update_updates = self._update_section.merge(
+            config.update, data.get("update")
+        )
+        updates.extend(
+            FieldUpdate("update", field, source, value)
+            for field, value in update_updates.items()
+        )
+
         tool_settings, tool_updates, tool_warnings = _merge_tool_settings(
             config.tool_settings, data.get("tools"), source
         )
@@ -324,13 +364,18 @@ class _ConfigMerger:
                 FieldUpdate("root", "severity_rules", source, list(severity_rules))
             )
 
-        merged = Config(
+        merged = replace(
+            config,
             file_discovery=file_config,
             output=output_config,
             execution=execution_config,
             dedupe=dedupe_config,
             severity_rules=severity_rules,
             tool_settings=tool_settings,
+            license=license_config,
+            quality=quality_config,
+            clean=clean_config,
+            update=update_config,
         )
         return merged, updates, warnings
 
@@ -529,6 +574,159 @@ class _ExecutionSection(_SectionMerger):
         return updated, self._diff_dataclass(current, updated)
 
 
+class _LicenseSection(_SectionMerger):
+    section = "license"
+
+    def merge(
+        self, current: LicenseConfig, raw: Any
+    ) -> tuple[LicenseConfig, Dict[str, Any]]:
+        data = self._ensure_mapping(raw, self.section)
+
+        spdx = _coerce_optional_str_value(data.get("spdx"), current.spdx, "license.spdx")
+        notice = _coerce_optional_str_value(
+            data.get("notice"), current.notice, "license.notice"
+        )
+        copyright_value = _coerce_optional_str_value(
+            data.get("copyright"), current.copyright, "license.copyright"
+        )
+        year = _coerce_optional_str_value(data.get("year"), current.year, "license.year")
+
+        require_spdx = _coerce_optional_bool(
+            data.get("require_spdx"), current.require_spdx, "license.require_spdx"
+        )
+        require_notice = _coerce_optional_bool(
+            data.get("require_notice"), current.require_notice, "license.require_notice"
+        )
+
+        allow_alternate = list(current.allow_alternate_spdx)
+        if "allow_alternate_spdx" in data:
+            allow_alternate = _coerce_string_sequence(
+                data["allow_alternate_spdx"], "license.allow_alternate_spdx"
+            )
+
+        exceptions = list(current.exceptions)
+        if "exceptions" in data:
+            exceptions = _coerce_string_sequence(data["exceptions"], "license.exceptions")
+
+        updated = replace(
+            current,
+            spdx=spdx,
+            notice=notice,
+            copyright=copyright_value,
+            year=year,
+            require_spdx=require_spdx,
+            require_notice=require_notice,
+            allow_alternate_spdx=allow_alternate,
+            exceptions=exceptions,
+        )
+        return updated, self._diff_dataclass(current, updated)
+
+
+class _QualitySection(_SectionMerger):
+    section = "quality"
+
+    def __init__(self, resolver: PathResolver) -> None:
+        self._resolver = resolver
+
+    def merge(
+        self, current: QualityConfigSection, raw: Any
+    ) -> tuple[QualityConfigSection, Dict[str, Any]]:
+        data = self._ensure_mapping(raw, self.section)
+
+        checks = list(current.checks)
+        if "checks" in data:
+            checks = _coerce_string_sequence(data["checks"], "quality.checks")
+
+        skip_globs = list(current.skip_globs)
+        if "skip_globs" in data:
+            skip_globs = _coerce_string_sequence(data["skip_globs"], "quality.skip_globs")
+
+        schema_targets = current.schema_targets
+        if "schema_targets" in data:
+            raw_targets = _coerce_iterable(data["schema_targets"], "quality.schema_targets")
+            resolved: list[Path] = []
+            seen: set[Path] = set()
+            for entry in raw_targets:
+                if not isinstance(entry, (str, Path)):
+                    raise ConfigError("quality.schema_targets entries must be paths")
+                candidate = self._resolver.resolve(entry)
+                if candidate not in seen:
+                    seen.add(candidate)
+                    resolved.append(candidate)
+            schema_targets = resolved
+
+        warn_file_size = _coerce_optional_int(
+            data.get("warn_file_size"), current.warn_file_size, "quality.warn_file_size"
+        )
+        max_file_size = _coerce_optional_int(
+            data.get("max_file_size"), current.max_file_size, "quality.max_file_size"
+        )
+
+        protected_branches = list(current.protected_branches)
+        if "protected_branches" in data:
+            protected_branches = _coerce_string_sequence(
+                data["protected_branches"], "quality.protected_branches"
+            )
+
+        updated = replace(
+            current,
+            checks=checks,
+            skip_globs=skip_globs,
+            schema_targets=schema_targets,
+            warn_file_size=warn_file_size,
+            max_file_size=max_file_size,
+            protected_branches=protected_branches,
+        )
+        return updated, self._diff_dataclass(current, updated)
+
+
+class _CleanSection(_SectionMerger):
+    section = "clean"
+
+    def merge(
+        self, current: CleanConfig, raw: Any
+    ) -> tuple[CleanConfig, Dict[str, Any]]:
+        data = self._ensure_mapping(raw, self.section)
+        patterns = list(current.patterns)
+        if "patterns" in data:
+            patterns = _coerce_string_sequence(data["patterns"], "clean.patterns")
+
+        trees = list(current.trees)
+        if "trees" in data:
+            trees = _coerce_string_sequence(data["trees"], "clean.trees")
+
+        updated = replace(current, patterns=patterns, trees=trees)
+        return updated, self._diff_dataclass(current, updated)
+
+
+class _UpdateSection(_SectionMerger):
+    section = "update"
+
+    def merge(
+        self, current: UpdateConfig, raw: Any
+    ) -> tuple[UpdateConfig, Dict[str, Any]]:
+        data = self._ensure_mapping(raw, self.section)
+
+        skip_patterns = list(current.skip_patterns)
+        if "skip_patterns" in data:
+            skip_patterns = _coerce_string_sequence(
+                data["skip_patterns"], "update.skip_patterns"
+            )
+
+        enabled_managers = list(current.enabled_managers)
+        if "enabled_managers" in data:
+            enabled_managers = _coerce_string_sequence(
+                data["enabled_managers"], "update.enabled_managers"
+            )
+
+        updated = replace(
+            current,
+            skip_patterns=skip_patterns,
+            enabled_managers=enabled_managers,
+        )
+        return updated, self._diff_dataclass(current, updated)
+
+
 class _DedupeSection(_SectionMerger):
     section = "dedupe"
 
@@ -594,6 +792,54 @@ def _merge_tool_settings(
                         f"[{source}] Unknown option '{key}' for tool '{tool}' in tool settings"
                     )
     return result, updates, warnings
+
+
+def _coerce_optional_str_value(value: Any, current: str | None, context: str) -> str | None:
+    if value is None:
+        return current
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    raise ConfigError(f"{context} must be a string")
+
+
+def _coerce_optional_bool(value: Any, current: bool, context: str) -> bool:
+    if value is None:
+        return current
+    if isinstance(value, bool):
+        return value
+    raise ConfigError(f"{context} must be a boolean")
+
+
+def _coerce_optional_int(value: Any, current: int, context: str) -> int:
+    if value is None:
+        return current
+    if isinstance(value, bool):
+        raise ConfigError(f"{context} must be an integer")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    raise ConfigError(f"{context} must be an integer")
+
+
+def _coerce_string_sequence(value: Any, context: str) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        items = [value]
+    elif isinstance(value, Iterable) and not isinstance(value, (bytes, str)):
+        items = list(value)
+    else:
+        raise ConfigError(f"{context} must be a string or array of strings")
+    result: list[str] = []
+    for item in items:
+        if not isinstance(item, str):
+            raise ConfigError(f"{context} entries must be strings")
+        trimmed = item.strip()
+        if trimmed:
+            result.append(trimmed)
+    return result
 
 
 def _normalize_tool_filters(
@@ -680,6 +926,10 @@ _KNOWN_SECTIONS = {
     "execution",
     "dedupe",
     "severity_rules",
+    "license",
+    "quality",
+    "clean",
+    "update",
     "tools",
 }
 

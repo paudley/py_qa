@@ -14,15 +14,19 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Run commit message validation
-if [ -f "$PROJECT_ROOT/py-qa/check-quality.sh" ]; then
-    "$PROJECT_ROOT/py-qa/check-quality.sh" commit-msg "$COMMIT_MSG_FILE"
+if [ -f "$PROJECT_ROOT/py-qa/check-quality" ]; then
+    if ! "$PROJECT_ROOT/py-qa/check-quality" commit-msg "$COMMIT_MSG_FILE"; then
+        echo ""
+        echo "❌ Commit message quality checks failed!"
+        exit 1
+    fi
 fi
 
 # Check commit message for banned words
 echo ""
 echo "🚫 Checking commit message for banned words..."
-if [ -f "$PROJECT_ROOT/py-qa/check-banned-words.sh" ]; then
-    if ! "$PROJECT_ROOT/py-qa/check-banned-words.sh" "$COMMIT_MSG_FILE"; then
+if [ -f "$PROJECT_ROOT/py-qa/check-banned-words" ]; then
+    if ! "$PROJECT_ROOT/py-qa/check-banned-words" "$COMMIT_MSG_FILE"; then
         echo ""
         echo "❌ Commit aborted due to banned words in message!"
         echo "Please revise your commit message and try again."
