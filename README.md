@@ -16,16 +16,16 @@ This repository provides a comprehensive suite of quality assurance, linting, te
 - **🛡️ Git Hooks**: Includes `pre-commit`, `pre-push`, and `commit-msg` hooks to automate quality checks.
 - **📄 Reporting Outputs**: Export machine-readable JSON, SARIF 2.1.0, and Markdown summaries for CI/CD and PR annotations.
 - **🧰 Turnkey Install**: `pyqa install` mirrors the legacy shell workflow, installing dev dependencies, optional type stubs, and generated typing shims.
+- **🛡️ Security Scan**: `pyqa security-scan` finds high-risk secrets/PII in your files (or staged changes) and runs Bandit for Python vulnerability checks.
 
 ## Scripts Overview
 
 ### Core Quality & CI Scripts
 
-- **`lint`**: The main linter orchestrator implemented in Python. Run `./py-qa/lint` to execute a full suite of formatters, type checkers, and linters.
 - **`lint`**: Primary Python-based lint orchestrator. Invoke `./py-qa/lint` from your project to run the complete suite without touching the host environment by default.
-- **`check-quality.sh`**: Performs repository-level checks, such as validating license headers, checking for oversized files, and other project best practices.
-- **`security-scan.sh`**: Scans for hardcoded secrets, API keys, and other sensitive credentials in your staged files.
-- **`install-hooks.sh`**: Sets up Git hooks (`pre-commit`, `pre-push`, `commit-msg`) that automatically run the quality scripts, enforcing standards for every contributor.
+- **`check-quality`**: Runs repository-level quality enforcement including SPDX/license headers, copyright notices, file-size guardrails, schema verification, and Python hygiene.
+- **`security-scan`**: Scans for hardcoded secrets, API keys, and other sensitive credentials in your staged files.
+- **`install-hooks`**: PyQA CLI shim that symlinks the managed Git hooks (`pre-commit`, `pre-push`, `commit-msg`) into `.git/hooks`, ensuring quality checks run for every contributor.
 
 ### AI-Enhanced Testing
 
@@ -39,7 +39,8 @@ This repository provides a comprehensive suite of quality assurance, linting, te
 
 ### Utility & Management Scripts
 
-- **`update_packages.sh`**: A convenience script to update all Python dependencies in `pyproject.toml` files using `uv`.
+- **`update-packages`**: Python CLI shim for `pyqa update`, which scans the repository and refreshes dependencies for Python (uv), Node (npm/yarn/pnpm), Go modules, and Cargo workspaces in one pass.
+- **`sparkly-clean`**: Wipes cache/coverage artefacts (`__pycache__`, `.venv`, logs, coverage files, dist/, etc.) while leaving real source changes intact—great before packaging or switching branches.
 - **`pre_run_clean.sh`**: Cleans the project directory of temporary files, caches, and build artifacts.
 - **`gen_aider_list.sh`**: Generates a file list for the `aider` AI coding assistant, pre-populating its context with relevant project files.
 
@@ -58,7 +59,7 @@ This repository provides a comprehensive suite of quality assurance, linting, te
 1. **Install Git Hooks**: Run the installation script to set up the automated quality checks.
 
    ```bash
-   ./py-qa/install-hooks.sh
+   ./py-qa/install-hooks
    ```
 
 1. **Bootstrap the Environment**: Install the managed dependencies into `.venv` using `uv`.
@@ -88,6 +89,10 @@ The new Typer application exposes a `lint` command with a modular configuration 
 ./py-qa/lint --jobs 8 --cache-dir .lint-cache --pr-summary-out reports/summary.md
 ./py-qa/lint --pr-summary-min-severity error --pr-summary-template "* [{severity}] {message}"
 ./py-qa/lint --bail --quiet
+./py-qa/security-scan --no-bandit --no-staged ./path/to/file
+./py-qa/check-quality --staged
+uv run pyqa check-quality commit-msg .git/COMMIT_EDITMSG
+uv run pyqa update --dry-run
 ```
 
 Run `./py-qa/lint install` to install the preferred development dependencies, optional type stubs, and generated `stubgen` packages used by the workflow.
@@ -108,12 +113,16 @@ Additional quality-of-life flags mirror the original shell workflow:
 
 `./py-qa/lint` is the primary entry point and can be invoked directly from your repository root or via project automation.
 
+`pyqa check-quality` replaces the legacy shell script with a Typer-driven command that enforces SPDX headers, canonical license and copyright notices, schema freshness, file-size thresholds, and Python hygiene. Hooks and CI call the shim (`./py-qa/check-quality`), but you can invoke it directly with `uv run pyqa check-quality` or scope it to staged files via `./py-qa/check-quality --staged`.
+
 ## ⚙️ Configuration
 
 - **Layered settings**: Runtime behaviour pulls from built-in defaults, `~/.py_qa.toml`, `[tool.pyqa]` within `pyproject.toml`, and finally `<PROJECT>/.py_qa.toml`. Paths, lists, and include directives are resolved relative to the project root, and environment variables like `${HOME}` expand inside configuration values.
 - **Strict validation**: pass `--strict-config` to `pyqa lint` (or `--strict` to `pyqa config show/validate`) to fail on unknown tool options instead of only warning.
 - **Inspect & debug**: Run `pyqa config show --root <project>` to view the merged configuration. Add `--trace` (enabled by default) to see which source last touched each option, or `pyqa config validate` to confirm all files load without errors.
 - **Schema reference**: `pyqa config schema` emits JSON or Markdown for every setting—including per-tool options—and `pyqa config schema --format json-tools [--out tool-schema.json]` prints (or writes) just the tool override catalogue. Use `pyqa config export-tools tool-schema.json` to produce the same artifact explicitly.
+- **License policy**: `[tool.pyqa.license]` in `pyproject.toml` lets you declare the canonical SPDX identifier, notice text, year range, and per-directory exceptions that the quality checker enforces across the repository.
+- **Quality defaults**: `[tool.pyqa.quality]` controls which checks run (`checks`), repository-wide skip globs, schema targets, file-size thresholds, and protected branches so CLI, hooks, and CI share one source of truth.
 - **Layer diffing**: `pyqa config diff` highlights changes between layers (defaults, home, pyproject, project, auto), making it easy to spot which source introduces a given override.
 - **Layer diffing**: `pyqa config diff` highlights changes between layers (defaults, home, pyproject, project, auto), making it easy to spot which source introduces a given override.
 - **Tool overrides**: Provide tool-specific tables under `[tool.pyqa.bandit]` in `pyproject.toml` or `[tools.bandit]` in `.py_qa.toml` to fine-tune individual linters. Each section understands common keys (for example, `line-length`, `target-version`, `severity`), an `args` list to append arbitrary flags, and an `env` table merged into the tool process.

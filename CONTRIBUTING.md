@@ -71,7 +71,7 @@ Before requesting review, make sure you:
 - [ ] ran `uv run pytest` (or the subset relevant to your change)
 - [ ] regenerated `ref_docs/tool-schema.json` if tool settings changed
 - [ ] updated README.md or other docs if workflow/behaviour changed
-- [ ] confirmed CI checks (`./check-quality.sh`) pass locally when possible
+- [ ] confirmed CI checks (`uv run pyqa check-quality`) pass locally when possible
 
 ## Commit Messages
 
