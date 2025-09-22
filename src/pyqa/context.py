@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 import ast
+import importlib
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
 
 try:  # pragma: no cover - optional dependency gating
-    from tree_sitter import Node, Parser
-    from tree_sitter_languages import get_language
+    from tree_sitter import Language, Node, Parser  # type: ignore[attr-defined]
 except ModuleNotFoundError:  # pragma: no cover - graceful degradation
     Parser = None  # type: ignore[assignment]
     Node = object  # type: ignore[misc]
-    get_language = None
 
 from .models import Diagnostic
 
@@ -32,9 +31,19 @@ class TreeSitterContextResolver:
         "python": {".py", ".pyi"},
         "markdown": {".md", ".markdown"},
         "json": {".json"},
+        "javascript": {".js", ".jsx", ".ts", ".tsx"},
+        "go": {".go"},
+        "rust": {".rs"},
     }
 
-    _SUPPORTED_LANGUAGES = frozenset(_LANGUAGE_ALIASES.keys())
+    _GRAMMAR_MODULES = {
+        "python": "tree_sitter_python",
+        "markdown": "tree_sitter_markdown",
+        "json": "tree_sitter_json",
+        "javascript": "tree_sitter_javascript",
+        "go": "tree_sitter_go",
+        "rust": "tree_sitter_rust",
+    }
 
     def __init__(self) -> None:
         self._parsers: dict[str, Parser | None] = {}
@@ -72,16 +81,22 @@ class TreeSitterContextResolver:
         return candidate
 
     def _get_parser(self, language: str) -> Parser | None:
-        if Parser is None or get_language is None:
+        if Parser is None:
             return None
         if language in self._disabled:
             return None
         parser = self._parsers.get(language)
         if parser is None:
+            module_name = self._GRAMMAR_MODULES.get(language)
+            if module_name is None:
+                self._disabled.add(language)
+                self._parsers[language] = None
+                return None
             try:
-                lang = get_language(language)
+                module = importlib.import_module(module_name)
+                lang = Language(module.language())  # type: ignore[attr-defined]
                 parser = Parser()
-                parser.set_language(lang)
+                parser.language = lang  # type: ignore[assignment]
                 self._parsers[language] = parser
             except Exception:  # pragma: no cover - dependency issues
                 self._disabled.add(language)
@@ -108,14 +123,22 @@ class TreeSitterContextResolver:
             return None
         parsed = self._parse(language, path, mtime_ns)
         if parsed is not None:
-            node = self._node_at(parsed.tree.root_node, parsed.source, line)
-            if node is not None:
-                if language == "python":
-                    return self._python_context(node)
-                if language == "markdown":
-                    return self._markdown_context(node, parsed.source)
-                if language == "json":
-                    return self._json_context(node, parsed.source)
+            if language == "python":
+                context = self._python_context(parsed.tree.root_node, line)
+                if context:
+                    return context
+            elif language == "markdown":
+                context = self._markdown_context(
+                    parsed.tree.root_node, line, parsed.source
+                )
+                if context:
+                    return context
+            elif language == "json":
+                node = self._node_at(parsed.tree.root_node, line)
+                if node is not None:
+                    context = self._json_context(node)
+                    if context:
+                        return context
         # fallbacks when Tree-sitter unavailable
         if language == "python":
             return self._python_fallback(path, line)
@@ -125,41 +148,69 @@ class TreeSitterContextResolver:
             return self._json_fallback(path, line)
         return None
 
-    def _node_at(self, root: Node, source: bytes, line: int) -> Node | None:
-        # Tree-sitter uses zero-based row
+    def _node_at(self, root: Node, line: int) -> Node | None:
         target_row = max(line - 1, 0)
-        node = root.descendant_for_point_range((target_row, 0), (target_row, 1000))
-        if node is None:
-            return None
-        # climb to significant node
-        while node.parent and node.type in {"block", "suite", "pair", "section"}:
-            node = node.parent
-        return node
+        return root.descendant_for_point_range((target_row, 0), (target_row, 1000))
 
-    def _python_context(self, node: Node) -> str | None:
-        while node:
+    def _python_context(self, root: Node, line: int) -> str | None:
+        target_row = line - 1
+        best: tuple[int, Node] | None = None
+        stack = [root]
+        while stack:
+            node = stack.pop()
             if node.type in {
                 "function_definition",
                 "class_definition",
                 "async_function_definition",
             }:
-                name_node = node.child_by_field_name("name")
-                if name_node:
-                    return name_node.text.decode("utf-8")
-            node = node.parent
+                start = node.start_point[0]
+                end = node.end_point[0]
+                if start <= target_row <= end:
+                    if best is None or start >= best[0]:
+                        best = (start, node)
+            stack.extend(node.children)
+        if best is None:
+            return None
+        name_node = best[1].child_by_field_name("name")
+        if name_node:
+            return name_node.text.decode("utf-8")
         return None
 
-    def _markdown_context(self, node: Node, source: bytes) -> str | None:
-        current = node
-        while current:
-            if current.type in {"atx_heading", "setext_heading"}:
-                text = current.child_by_field_name("content")
-                if text:
-                    return text.text.decode("utf-8").strip()
-            current = current.parent
+    def _markdown_context(self, root: Node, line: int, source: bytes) -> str | None:
+        target_row = line - 1
+        stack = [root]
+        candidate: Node | None = None
+        candidate_start = -1
+        while stack:
+            node = stack.pop()
+            if node.type in {"atx_heading", "setext_heading"}:
+                start = node.start_point[0]
+                end = node.end_point[0]
+                if start <= target_row <= end:
+                    if candidate is None or start >= candidate_start:
+                        candidate = node
+                        candidate_start = start
+            if node.type == "section":
+                for child in node.children:
+                    if child.type in {"atx_heading", "setext_heading"}:
+                        start = child.start_point[0]
+                        end = child.end_point[0]
+                        if start <= target_row:
+                            if candidate is None or start >= candidate_start:
+                                candidate = child
+                                candidate_start = start
+            stack.extend(node.children)
+        if candidate is None:
+            return None
+        text_node = candidate.child_by_field_name("heading_content")
+        if text_node:
+            return text_node.text.decode("utf-8").strip()
+        inline = candidate.child_by_field_name("content")
+        if inline:
+            return inline.text.decode("utf-8").strip()
         return None
 
-    def _json_context(self, node: Node, source: bytes) -> str | None:
+    def _json_context(self, node: Node) -> str | None:
         path_parts: list[str] = []
         current = node
         while current:
@@ -209,7 +260,12 @@ class TreeSitterContextResolver:
             text = lines[idx].strip()
             if text.startswith("#"):
                 return text.lstrip("#").strip()
-            if text and idx > 0 and all(ch == text[0] for ch in text) and text[0] in "=-":
+            if (
+                text
+                and idx > 0
+                and all(ch == text[0] for ch in text)
+                and text[0] in "=-"
+            ):
                 heading = lines[idx - 1].strip()
                 if heading:
                     return heading
@@ -232,7 +288,7 @@ class TreeSitterContextResolver:
                 if stack:
                     stack.pop()
                 continue
-            if stripped.startswith("\"") and ":" in stripped:
+            if stripped.startswith('"') and ":" in stripped:
                 key = stripped.split(":", 1)[0].strip().strip('"')
                 stack.insert(0, key)
                 break
