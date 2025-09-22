@@ -28,6 +28,7 @@ LANGUAGE_EXTENSIONS: Final[dict[str, set[str]]] = {
     "go": {".go"},
     "rust": {".rs"},
     "markdown": {".md", ".mdx", ".markdown"},
+    "github-actions": {".yml", ".yaml"},
 }
 
 LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
@@ -47,4 +48,5 @@ LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
     },
     "go": {"go.mod"},
     "rust": {"Cargo.toml"},
+    "github-actions": {".github/workflows"},
 }

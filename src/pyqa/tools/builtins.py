@@ -4,9 +4,17 @@
 
 from __future__ import annotations
 
+import io
+import os
+import platform
+import stat
+import tarfile
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
+
+import requests
 
 from ..models import RawDiagnostic
 from ..parsers import (
@@ -16,6 +24,7 @@ from ..parsers import (
     parse_cargo_clippy,
     parse_eslint,
     parse_golangci_lint,
+    parse_actionlint,
     parse_mypy,
     parse_pylint,
     parse_pyright,
@@ -66,6 +75,60 @@ def _as_bool(value: Any) -> bool | None:
         if normalized in {"0", "false", "no", "off"}:
             return False
     return bool(value)
+
+
+ACTIONLINT_VERSION_DEFAULT = "1.7.1"
+
+
+def _ensure_actionlint(version: str, cache_root: Path) -> Path:
+    base_dir = cache_root / "actionlint" / version
+    binary = base_dir / "actionlint"
+    if binary.exists():
+        return binary
+
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    if system == "linux":
+        if machine in {"x86_64", "amd64"}:
+            platform_tag = "linux_amd64"
+        elif machine in {"aarch64", "arm64"}:
+            platform_tag = "linux_arm64"
+        else:
+            raise RuntimeError(f"Unsupported Linux architecture '{machine}' for actionlint")
+    elif system == "darwin":
+        if machine in {"x86_64", "amd64"}:
+            platform_tag = "darwin_amd64"
+        elif machine in {"arm64", "aarch64"}:
+            platform_tag = "darwin_arm64"
+        else:
+            raise RuntimeError(f"Unsupported macOS architecture '{machine}' for actionlint")
+    else:
+        raise RuntimeError(f"actionlint is not supported on platform '{system}'")
+
+    filename = f"actionlint_{version}_{platform_tag}.tar.gz"
+    url = f"https://github.com/rhysd/actionlint/releases/download/v{version}/{filename}"
+
+    response = requests.get(url, timeout=30)
+    response.raise_for_status()
+
+    with tempfile.NamedTemporaryFile() as tmp:
+        tmp.write(response.content)
+        tmp.flush()
+        with tarfile.open(tmp.name, "r:gz") as archive:
+            for member in archive.getmembers():
+                if member.isfile() and member.name.endswith("actionlint"):
+                    archive.extract(member, path=base_dir)
+                    extracted = base_dir / member.name
+                    extracted.chmod(extracted.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+                    if extracted != binary:
+                        extracted.rename(binary)
+                    break
+            else:
+                raise RuntimeError("Failed to locate actionlint binary in archive")
+
+    return binary
 
 
 def _parse_gofmt_check(stdout: str, _context: ToolContext) -> list[RawDiagnostic]:
@@ -370,9 +433,7 @@ class _IsortCommand(CommandBuilder):
         for pattern in _settings_list(_setting(settings, "skip-glob", "skip_glob")):
             cmd.extend(["--skip-glob", str(pattern)])
 
-        for pattern in _settings_list(
-            _setting(settings, "extend-skip-glob", "extend_skip_glob")
-        ):
+        for pattern in _settings_list(_setting(settings, "extend-skip-glob", "extend_skip_glob")):
             cmd.extend(["--extend-skip-glob", str(pattern)])
 
         if _as_bool(_setting(settings, "filter-files", "filter_files")):
@@ -625,9 +686,7 @@ class _EslintCommand(CommandBuilder):
         if ignore_path:
             cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
 
-        resolve_plugins = _setting(
-            settings, "resolve-plugins-relative-to", "resolve_plugins_relative_to"
-        )
+        resolve_plugins = _setting(settings, "resolve-plugins-relative-to", "resolve_plugins_relative_to")
         if resolve_plugins:
             cmd.extend(
                 [
@@ -713,9 +772,7 @@ class _PrettierCommand(CommandBuilder):
         if ignore_path:
             cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
 
-        for directory in _settings_list(
-            _setting(settings, "plugin-search-dir", "plugin_search_dir")
-        ):
+        for directory in _settings_list(_setting(settings, "plugin-search-dir", "plugin_search_dir")):
             cmd.extend(["--plugin-search-dir", str(_resolve_path(root, directory))])
 
         for plugin in _settings_list(_setting(settings, "plugin", "plugins")):
@@ -769,6 +826,20 @@ class _PrettierCommand(CommandBuilder):
         if args:
             cmd.extend(str(arg) for arg in args)
 
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _ActionlintCommand(CommandBuilder):
+    version: str
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cache_root = ctx.root / ".lint-cache"
+        binary = _ensure_actionlint(self.version, cache_root)
+        cmd = [str(binary), "--format", "json", "--color", "never"]
+        workflows = ctx.root / ".github" / "workflows"
+        if workflows.exists():
+            cmd.append(str(workflows))
         return tuple(cmd)
 
 
@@ -1086,6 +1157,23 @@ def _builtin_tools() -> Iterable[Tool]:
     )
 
     yield Tool(
+        name="actionlint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_ActionlintCommand(version=ACTIONLINT_VERSION_DEFAULT),
+                append_files=False,
+                description="Lint GitHub Actions workflows with actionlint.",
+                parser=JsonParser(parse_actionlint),
+            ),
+        ),
+        languages=("github-actions",),
+        file_extensions=(".yml", ".yaml"),
+        description="GitHub Actions workflow linter.",
+        runtime="binary",
+    )
+
+    yield Tool(
         name="eslint",
         actions=(
             ToolAction(
@@ -1174,9 +1262,7 @@ def _builtin_tools() -> Iterable[Tool]:
         actions=(
             ToolAction(
                 name="lint",
-                command=_GolangciLintCommand(
-                    base=("golangci-lint", "run", "--out-format", "json")
-                ),
+                command=_GolangciLintCommand(base=("golangci-lint", "run", "--out-format", "json")),
                 append_files=False,
                 description="Run golangci-lint across Go packages.",
                 parser=JsonParser(parse_golangci_lint),

@@ -11,6 +11,7 @@ from pyqa.models import RawDiagnostic
 from pyqa.parsers import (
     JsonParser,
     TextParser,
+    parse_actionlint,
     parse_bandit,
     parse_cargo_clippy,
     parse_eslint,
@@ -78,6 +79,21 @@ def test_parse_mypy() -> None:
     assert severity.value == "note"
     assert diags[0].function == "check_func"
     assert diags[0].code == "assignment"
+    assert diags[0].tool == "mypy"
+
+
+def test_parse_actionlint() -> None:
+    parser = JsonParser(parse_actionlint)
+    stdout = """
+    [{"path": ".github/workflows/ci.yml", "line": 12, "column": 4, "message": "failure", "severity": "error", "kind": "shellcheck"}]
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == ".github/workflows/ci.yml"
+    assert diag.line == 12
+    assert diag.code == "shellcheck"
+    assert diag.tool == "actionlint"
 
 
 def test_parse_bandit() -> None:

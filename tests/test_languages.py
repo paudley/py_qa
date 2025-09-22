@@ -30,3 +30,12 @@ def test_detect_languages_by_marker(tmp_path: Path) -> None:
     languages = detect_languages(tmp_path, [])
 
     assert languages == {"javascript"}
+
+
+def test_detect_github_actions_marker(tmp_path: Path) -> None:
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+
+    languages = detect_languages(tmp_path, [])
+
+    assert "github-actions" in languages

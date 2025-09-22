@@ -42,9 +42,7 @@ class JsonParser(Parser):
 
     transform: JsonTransform
 
-    def parse(
-        self, stdout: str, stderr: str, *, context: ToolContext
-    ) -> Sequence[RawDiagnostic]:
+    def parse(self, stdout: str, stderr: str, *, context: ToolContext) -> Sequence[RawDiagnostic]:
         del stderr  # retain signature compatibility without using the value
         payload = _load_json_stream(stdout)
         return self.transform(payload, context)
@@ -57,9 +55,7 @@ class TextParser(Parser):
     transform: TextTransform
     splitlines: bool = True
 
-    def parse(
-        self, stdout: str, stderr: str, *, context: ToolContext
-    ) -> Sequence[RawDiagnostic]:
+    def parse(self, stdout: str, stderr: str, *, context: ToolContext) -> Sequence[RawDiagnostic]:
         del stderr
         return self.transform(stdout, context)
 
@@ -134,9 +130,7 @@ def parse_pyright(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic
     """Parse Pyright JSON diagnostics."""
     diagnostics = []
     if isinstance(payload, dict):
-        diagnostics = payload.get("generalDiagnostics", []) or payload.get(
-            "diagnostics", []
-        )
+        diagnostics = payload.get("generalDiagnostics", []) or payload.get("diagnostics", [])
     results: list[RawDiagnostic] = []
     for item in diagnostics:
         if not isinstance(item, dict):
@@ -177,12 +171,7 @@ def parse_mypy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
         message = str(item.get("message", "")).strip()
         severity = str(item.get("severity", "error")).lower()
         code = item.get("code") or item.get("error_code")
-        function = (
-            item.get("function")
-            or item.get("name")
-            or item.get("target")
-            or item.get("symbol")
-        )
+        function = item.get("function") or item.get("name") or item.get("target") or item.get("symbol")
         if isinstance(function, str) and function:
             function = function.split(".")[-1]
         else:
@@ -202,6 +191,37 @@ def parse_mypy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
                 code=code,
                 tool="mypy",
                 function=function,
+            )
+        )
+    return results
+
+
+def parse_actionlint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse actionlint JSON diagnostics."""
+
+    items = payload if isinstance(payload, list) else []
+    results: list[RawDiagnostic] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        path = item.get("path")
+        message = str(item.get("message", "")).strip()
+        severity = str(item.get("severity", "error")).lower()
+        code = item.get("kind")
+        sev_enum = {
+            "error": Severity.ERROR,
+            "warning": Severity.WARNING,
+            "note": Severity.NOTE,
+        }.get(severity, Severity.WARNING)
+        results.append(
+            RawDiagnostic(
+                file=path,
+                line=item.get("line"),
+                column=item.get("column"),
+                severity=sev_enum,
+                message=message,
+                code=str(code) if code else None,
+                tool="actionlint",
             )
         )
     return results
@@ -283,9 +303,7 @@ def parse_tsc(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
         match = _TSC_PATTERN.match(line.strip())
         if not match:
             continue
-        severity = (
-            Severity.ERROR if match.group("severity") == "error" else Severity.WARNING
-        )
+        severity = Severity.ERROR if match.group("severity") == "error" else Severity.WARNING
         code = match.group("code")
         results.append(
             RawDiagnostic(
@@ -341,11 +359,7 @@ def parse_golangci_lint(payload: Any, _context: ToolContext) -> Sequence[RawDiag
 
 def parse_cargo_clippy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse Cargo clippy JSON payloads."""
-    records = (
-        payload
-        if isinstance(payload, list)
-        else [payload] if isinstance(payload, dict) else []
-    )
+    records = payload if isinstance(payload, list) else [payload] if isinstance(payload, dict) else []
     results: list[RawDiagnostic] = []
     for record in records:
         if not isinstance(record, dict):
@@ -393,6 +407,7 @@ __all__ = [
     "parse_pylint",
     "parse_pyright",
     "parse_mypy",
+    "parse_actionlint",
     "parse_bandit",
     "parse_eslint",
     "parse_tsc",
