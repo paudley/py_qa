@@ -1256,13 +1256,40 @@ def _builtin_tools() -> Iterable[Tool]:
                 description="Autofix issues reported by ESLint.",
             ),
         ),
-        languages=("javascript",),
+        languages=("javascript", "typescript"),
         file_extensions=(".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"),
         description="JavaScript/TypeScript linting via ESLint.",
         runtime="npm",
         package="eslint@9.13.0",
         min_version="9.13.0",
         version_command=("eslint", "--version"),
+    )
+
+    yield Tool(
+        name="gts",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_GtsCommand(base=("gts", "lint", "--", "--format", "json")),
+                append_files=True,
+                description="Run Google's TypeScript style checks via gts.",
+                parser=JsonParser(parse_eslint),
+            ),
+            ToolAction(
+                name="fix",
+                command=_GtsCommand(base=("gts", "fix"), is_fix=True),
+                append_files=True,
+                is_fix=True,
+                description="Apply gts formatting and fixes.",
+            ),
+        ),
+        languages=("javascript",),
+        file_extensions=(".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"),
+        description="Google TypeScript style checker.",
+        runtime="npm",
+        package="gts@5.3.1",
+        min_version="5.3.1",
+        version_command=("gts", "--version"),
     )
 
     yield Tool(
@@ -1408,3 +1435,28 @@ def _builtin_tools() -> Iterable[Tool]:
         runtime="binary",
         version_command=("rustfmt", "--version"),
     )
+
+
+@dataclass(slots=True)
+class _GtsCommand(CommandBuilder):
+    base: Sequence[str]
+    is_fix: bool = False
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        project = _setting(settings, "project")
+        if project:
+            cmd.extend(["--project", str(_resolve_path(root, project))])
+
+        config = _setting(settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(root, config))])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
