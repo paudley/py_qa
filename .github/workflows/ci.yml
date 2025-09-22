@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Run tests
+        run: uv run pytest
+
+      - name: Run quality checks
+        run: |
+          chmod +x check-quality.sh
+          ./check-quality.sh
+
+      - name: Verify tool schema
+        run: |
+          uv run pyqa config export-tools ref_docs/tool-schema.json
+          git diff --exit-code ref_docs/tool-schema.json
