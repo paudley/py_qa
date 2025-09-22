@@ -48,7 +48,9 @@ class DeferredCommand:
 
     args: Sequence[str]
 
-    def build(self, ctx: ToolContext) -> Sequence[str]:  # noqa: D401 - simple delegation
+    def build(
+        self, ctx: ToolContext
+    ) -> Sequence[str]:  # noqa: D401 - simple delegation
         del ctx
         return tuple(self.args)
 

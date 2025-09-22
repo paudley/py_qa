@@ -344,9 +344,7 @@ def parse_cargo_clippy(payload: Any, _context: ToolContext) -> Sequence[RawDiagn
     records = (
         payload
         if isinstance(payload, list)
-        else [payload]
-        if isinstance(payload, dict)
-        else []
+        else [payload] if isinstance(payload, dict) else []
     )
     results: list[RawDiagnostic] = []
     for record in records:

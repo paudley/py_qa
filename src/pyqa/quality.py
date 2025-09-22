@@ -173,8 +173,7 @@ class SchemaCheck:
             if actual != expected:
                 relative = _relative_to_root(target_path, ctx.root)
                 result.add_error(
-                    "Schema documentation out of date. Run 'pyqa config export-tools "
-                    f"{relative}' to refresh.",
+                    f"Schema documentation out of date. Run 'pyqa config export-tools {relative}' to refresh.",
                     target_path,
                 )
 

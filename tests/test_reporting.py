@@ -135,8 +135,12 @@ def test_render_concise_fallbacks_to_stderr(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output = capsys.readouterr().out
-    assert output.strip() == ""
+    output_lines = [
+        line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()
+    ]
+    assert output_lines == [
+        "Failed — 0 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1",
+    ]
 
 
 def test_render_concise_sorted_and_deduped(tmp_path: Path, capsys) -> None:

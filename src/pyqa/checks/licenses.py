@@ -215,8 +215,7 @@ def verify_file_license(
             issues.append(f"Missing copyright notice '{policy.canonical_notice}'")
         elif not _notices_equal(observed, policy.canonical_notice):
             issues.append(
-                "Mismatched copyright notice. "
-                f"Found '{observed}' but expected '{policy.canonical_notice}'."
+                f"Mismatched copyright notice. Found '{observed}' but expected '{policy.canonical_notice}'."
             )
 
     return issues

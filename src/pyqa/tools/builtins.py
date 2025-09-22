@@ -542,6 +542,8 @@ class _PylintCommand(CommandBuilder):
             cmd.append("--reports=n")
 
         max_line_length = _setting(settings, "max-line-length", "max_line_length")
+        if max_line_length is None:
+            max_line_length = ctx.cfg.execution.line_length
         if max_line_length is not None:
             cmd.extend(["--max-line-length", str(max_line_length)])
 
@@ -748,6 +750,8 @@ class _PrettierCommand(CommandBuilder):
             cmd.extend(["--trailing-comma", str(trailing_comma)])
 
         print_width = _setting(settings, "print-width", "print_width")
+        if print_width is None:
+            print_width = ctx.cfg.execution.line_length
         if print_width is not None:
             cmd.extend(["--print-width", str(print_width)])
 

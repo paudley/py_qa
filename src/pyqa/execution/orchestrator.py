@@ -14,7 +14,12 @@ from types import MappingProxyType
 from typing import Callable, Mapping, Sequence
 
 from ..config import Config
-from ..diagnostics import build_severity_rules, dedupe_outcomes, normalize_diagnostics
+from ..context import CONTEXT_RESOLVER
+from ..diagnostics import (
+    build_severity_rules,
+    dedupe_outcomes,
+    normalize_diagnostics,
+)
 from ..discovery.base import SupportsDiscovery
 from ..environments import inject_node_defaults, prepend_venv_to_path
 from ..execution.cache import ResultCache
@@ -309,6 +314,8 @@ class Orchestrator:
         diagnostics = normalize_diagnostics(
             parsed, tool_name=tool_name, severity_rules=severity_rules
         )
+        if diagnostics:
+            CONTEXT_RESOLVER.annotate(diagnostics, root=root)
         if cp.returncode != 0 and not action.ignore_exit and context.cfg.output.verbose:
             warn(
                 f"{tool_name}:{action.name} exited with {cp.returncode}",
