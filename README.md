@@ -109,7 +109,7 @@ Additional quality-of-life flags mirror the original shell workflow:
 
 ### Environment Modes
 
-- **Vendored by default** – running `./py-qa/lint` downloads linting toolchains into `py-qa/.tool-cache` via `uv`/`npx` without modifying the host project. This is ideal when you want linting with zero impact on your repository or virtual environment.
+- **Vendored by default** – running `./py-qa/lint` downloads linting toolchains into `py-qa/.lint-cache/tools` via `uv`/`npx` without modifying the host project. This is ideal when you want linting with zero impact on your repository or virtual environment.
 - **Project-integrated** – `./py-qa/lint install` adds the recommended linters, stubs, and helpers directly to your project (and records the state so future runs prefer project tools). Editors and other tooling in the repo will see the installed packages automatically.
 - **System toolchains** – when a compatible system binary is detected (and you have not forced local linters), pyqa will use it. Pass `--use-local-linters` to ignore system versions and rely on the vendored cache instead.
 

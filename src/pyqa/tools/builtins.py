@@ -118,18 +118,14 @@ def _ensure_actionlint(version: str, cache_root: Path) -> Path:
         elif machine in {"aarch64", "arm64"}:
             platform_tag = "linux_arm64"
         else:
-            raise RuntimeError(
-                f"Unsupported Linux architecture '{machine}' for actionlint"
-            )
+            raise RuntimeError(f"Unsupported Linux architecture '{machine}' for actionlint")
     elif system == "darwin":
         if machine in {"x86_64", "amd64"}:
             platform_tag = "darwin_amd64"
         elif machine in {"arm64", "aarch64"}:
             platform_tag = "darwin_arm64"
         else:
-            raise RuntimeError(
-                f"Unsupported macOS architecture '{machine}' for actionlint"
-            )
+            raise RuntimeError(f"Unsupported macOS architecture '{machine}' for actionlint")
     else:
         raise RuntimeError(f"actionlint is not supported on platform '{system}'")
 
@@ -147,12 +143,7 @@ def _ensure_actionlint(version: str, cache_root: Path) -> Path:
                 if member.isfile() and member.name.endswith("actionlint"):
                     archive.extract(member, path=base_dir)
                     extracted = base_dir / member.name
-                    extracted.chmod(
-                        extracted.stat().st_mode
-                        | stat.S_IXUSR
-                        | stat.S_IXGRP
-                        | stat.S_IXOTH
-                    )
+                    extracted.chmod(extracted.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
                     if extracted != binary:
                         extracted.rename(binary)
                     break
@@ -178,18 +169,14 @@ def _ensure_hadolint(version: str, cache_root: Path) -> Path:
         elif machine in {"aarch64", "arm64"}:
             asset = "hadolint-Linux-arm64"
         else:
-            raise RuntimeError(
-                f"Unsupported Linux architecture '{machine}' for hadolint"
-            )
+            raise RuntimeError(f"Unsupported Linux architecture '{machine}' for hadolint")
     elif system == "darwin":
         if machine in {"x86_64", "amd64"}:
             asset = "hadolint-Darwin-x86_64"
         elif machine in {"arm64", "aarch64"}:
             asset = "hadolint-Darwin-arm64"
         else:
-            raise RuntimeError(
-                f"Unsupported macOS architecture '{machine}' for hadolint"
-            )
+            raise RuntimeError(f"Unsupported macOS architecture '{machine}' for hadolint")
     else:
         raise RuntimeError(f"hadolint is not supported on platform '{system}'")
 
@@ -519,9 +506,7 @@ class _IsortCommand(CommandBuilder):
         for pattern in _settings_list(_setting(settings, "skip-glob", "skip_glob")):
             cmd.extend(["--skip-glob", str(pattern)])
 
-        for pattern in _settings_list(
-            _setting(settings, "extend-skip-glob", "extend_skip_glob")
-        ):
+        for pattern in _settings_list(_setting(settings, "extend-skip-glob", "extend_skip_glob")):
             cmd.extend(["--extend-skip-glob", str(pattern)])
 
         if _as_bool(_setting(settings, "filter-files", "filter_files")):
@@ -905,9 +890,7 @@ class _EslintCommand(CommandBuilder):
         if ignore_path:
             cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
 
-        resolve_plugins = _setting(
-            settings, "resolve-plugins-relative-to", "resolve_plugins_relative_to"
-        )
+        resolve_plugins = _setting(settings, "resolve-plugins-relative-to", "resolve_plugins_relative_to")
         if resolve_plugins:
             cmd.extend(
                 [
@@ -993,9 +976,7 @@ class _PrettierCommand(CommandBuilder):
         if ignore_path:
             cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
 
-        for directory in _settings_list(
-            _setting(settings, "plugin-search-dir", "plugin_search_dir")
-        ):
+        for directory in _settings_list(_setting(settings, "plugin-search-dir", "plugin_search_dir")):
             cmd.extend(["--plugin-search-dir", str(_resolve_path(root, directory))])
 
         for plugin in _settings_list(_setting(settings, "plugin", "plugins")):
@@ -1104,9 +1085,7 @@ class _TombiCommand(CommandBuilder):
             if value == "-":
                 cmd.extend(["--stdin-filename", value])
             else:
-                cmd.extend(
-                    ["--stdin-filename", str(_resolve_path(root, stdin_filename))]
-                )
+                cmd.extend(["--stdin-filename", str(_resolve_path(root, stdin_filename))])
 
         if _as_bool(_setting(settings, "offline")):
             cmd.append("--offline")
@@ -1221,9 +1200,7 @@ class _StylelintCommand(CommandBuilder):
         if _as_bool(_setting(settings, "allow-empty-input", "allow_empty_input")):
             cmd.append("--allow-empty-input")
 
-        if _as_bool(
-            _setting(settings, "disable-default-ignores", "disable_default_ignores")
-        ):
+        if _as_bool(_setting(settings, "disable-default-ignores", "disable_default_ignores")):
             cmd.append("--disable-default-ignores")
 
         if _as_bool(_setting(settings, "quiet")):
@@ -1233,11 +1210,7 @@ class _StylelintCommand(CommandBuilder):
         if max_warnings is not None:
             cmd.extend(["--max-warnings", str(max_warnings)])
 
-        if (
-            not self.is_fix
-            and "--formatter" not in cmd
-            and "--custom-formatter" not in cmd
-        ):
+        if not self.is_fix and "--formatter" not in cmd and "--custom-formatter" not in cmd:
             cmd.extend(["--formatter", "json"])
 
         args = _settings_list(_setting(settings, "args"))
@@ -1310,9 +1283,7 @@ class _HadolintCommand(CommandBuilder):
         if config:
             cmd.extend(["--config", str(_resolve_path(ctx.root, config))])
 
-        failure_threshold = _setting(
-            ctx.settings, "failure-threshold", "failure_threshold"
-        )
+        failure_threshold = _setting(ctx.settings, "failure-threshold", "failure_threshold")
         if failure_threshold:
             cmd.extend(["--failure-threshold", str(failure_threshold)])
 
@@ -1416,9 +1387,7 @@ class _LuacheckCommand(CommandBuilder):
         if globals_list:
             cmd.extend(["--globals", ",".join(globals_list)])
 
-        read_globals = _settings_list(
-            _setting(settings, "read-globals", "read_globals")
-        )
+        read_globals = _settings_list(_setting(settings, "read-globals", "read_globals"))
         if read_globals:
             cmd.extend(["--read-globals", ",".join(read_globals)])
 
@@ -1990,9 +1959,7 @@ def _builtin_tools() -> Iterable[Tool]:
             ),
             ToolAction(
                 name="fix",
-                command=_SqlfluffCommand(
-                    base=("sqlfluff", "fix", "--force"), is_fix=True
-                ),
+                command=_SqlfluffCommand(base=("sqlfluff", "fix", "--force"), is_fix=True),
                 append_files=True,
                 is_fix=True,
                 description="Autofix SQL files via sqlfluff fix.",
@@ -2084,9 +2051,7 @@ def _builtin_tools() -> Iterable[Tool]:
         actions=(
             ToolAction(
                 name="lint",
-                command=_KubeLinterCommand(
-                    base=("kube-linter", "lint", "--format", "json")
-                ),
+                command=_KubeLinterCommand(base=("kube-linter", "lint", "--format", "json")),
                 append_files=True,
                 description="Analyze Kubernetes manifests with kube-linter.",
                 parser=JsonParser(parse_kube_linter),
@@ -2188,9 +2153,7 @@ def _builtin_tools() -> Iterable[Tool]:
         actions=(
             ToolAction(
                 name="lint",
-                command=_RemarkCommand(
-                    base=("remark", "--use", "remark-preset-lint-recommended")
-                ),
+                command=_RemarkCommand(base=("remark", "--use", "remark-preset-lint-recommended")),
                 append_files=True,
                 description="Lint Markdown files using remark-lint recommended rules.",
                 parser=JsonParser(parse_remark),
@@ -2382,9 +2345,7 @@ def _builtin_tools() -> Iterable[Tool]:
         actions=(
             ToolAction(
                 name="lint",
-                command=_DockerfilelintCommand(
-                    base=("dockerfilelint", "--output", "json")
-                ),
+                command=_DockerfilelintCommand(base=("dockerfilelint", "--output", "json")),
                 append_files=True,
                 description="Analyze Dockerfiles with dockerfilelint.",
                 parser=JsonParser(parse_dockerfilelint),
@@ -2560,9 +2521,7 @@ def _builtin_tools() -> Iterable[Tool]:
         actions=(
             ToolAction(
                 name="lint",
-                command=_GolangciLintCommand(
-                    base=("golangci-lint", "run", "--out-format", "json")
-                ),
+                command=_GolangciLintCommand(base=("golangci-lint", "run", "--out-format", "json")),
                 append_files=False,
                 description="Run golangci-lint across Go packages.",
                 parser=JsonParser(parse_golangci_lint),

@@ -111,9 +111,7 @@ def test_npm_runtime_falls_back_to_local_when_system_version_too_low(
     assert result.version == "9.13.0"
 
 
-def test_npm_runtime_prefers_system_when_version_sufficient(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_npm_runtime_prefers_system_when_version_sufficient(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tool = _make_tool(
         name="eslint",
         runtime="npm",
@@ -151,9 +149,7 @@ def test_npm_runtime_prefers_system_when_version_sufficient(
     assert result.version == "9.13.1"
 
 
-def test_npm_runtime_install_failure_propagates(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_npm_runtime_install_failure_propagates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tool = _make_tool(
         name="remark",
         runtime="npm",
@@ -175,9 +171,7 @@ def test_npm_runtime_install_failure_propagates(
         runtime._ensure_local_package(tool)
 
 
-def test_go_runtime_installs_when_system_too_old(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_go_runtime_installs_when_system_too_old(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tool = _make_tool(
         name="kube-linter",
         runtime="go",
@@ -228,9 +222,7 @@ def test_go_runtime_installs_when_system_too_old(
     assert str(GO_BIN_DIR) in result.env.get("PATH", "")
 
 
-def test_go_runtime_prefers_system_when_version_ok(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_go_runtime_prefers_system_when_version_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tool = _make_tool(
         name="kube-linter",
         runtime="go",
@@ -273,9 +265,7 @@ def test_go_runtime_prefers_system_when_version_ok(
     assert result.cmd[0] == "kube-linter"
 
 
-def test_go_runtime_installs_when_no_version_spec(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_go_runtime_installs_when_no_version_spec(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tool = _make_tool(
         name="checkmake",
         runtime="go",
@@ -318,9 +308,7 @@ def test_go_runtime_installs_when_no_version_spec(
     assert result.cmd[0].endswith("checkmake")
 
 
-def test_go_runtime_install_failure_propagates(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_go_runtime_install_failure_propagates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tool = _make_tool(
         name="kube-linter",
         runtime="go",
@@ -343,9 +331,7 @@ def test_go_runtime_install_failure_propagates(
         runtime._ensure_local_tool(tool, "kube-linter")
 
 
-def test_lua_runtime_install_failure_propagates(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_lua_runtime_install_failure_propagates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tool = _make_tool(name="luacheck", runtime="lua", package="luacheck")
 
     preparer = CommandPreparer()
@@ -363,9 +349,7 @@ def test_lua_runtime_install_failure_propagates(
         runtime._ensure_local_tool(tool, "luacheck")
 
 
-def test_perl_runtime_install_failure_propagates(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_perl_runtime_install_failure_propagates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tool = _make_tool(name="perlcritic", runtime="perl", package="Perl::Critic")
 
     preparer = CommandPreparer()
@@ -383,9 +367,7 @@ def test_perl_runtime_install_failure_propagates(
         runtime._ensure_local_tool(tool, "perlcritic")
 
 
-def test_rust_runtime_installs_when_system_too_old(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_rust_runtime_installs_when_system_too_old(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tool = _make_tool(
         name="dotenv-linter",
         runtime="rust",
@@ -442,9 +424,7 @@ def test_rust_runtime_installs_when_system_too_old(
     assert str(RUST_BIN_DIR) not in result.env.get("PATH", "")
 
 
-def test_rust_runtime_prefers_system_when_version_ok(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_rust_runtime_prefers_system_when_version_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tool = _make_tool(
         name="dotenv-linter",
         runtime="rust",
@@ -493,9 +473,7 @@ def test_rust_runtime_prefers_system_when_version_ok(
     assert result.cmd[0] == "dotenv-linter"
 
 
-def test_rust_runtime_install_failure_propagates(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_rust_runtime_install_failure_propagates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tool = _make_tool(name="dotenv-linter", runtime="rust", package="dotenv-linter")
 
     preparer = CommandPreparer()
@@ -513,9 +491,7 @@ def test_rust_runtime_install_failure_propagates(
         runtime._ensure_local_tool(tool, "dotenv-linter")
 
 
-def test_rust_runtime_install_rustup_component(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_rust_runtime_install_rustup_component(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tool = _make_tool(
         name="cargo-clippy",
         runtime="rust",

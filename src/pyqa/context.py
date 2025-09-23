@@ -183,9 +183,7 @@ class TreeSitterContextResolver:
                 if context:
                     return context
             elif language == "markdown":
-                context = self._markdown_context(
-                    parsed.tree.root_node, line, parsed.source
-                )
+                context = self._markdown_context(parsed.tree.root_node, line, parsed.source)
                 if context:
                     return context
             elif language == "json":
@@ -327,12 +325,7 @@ class TreeSitterContextResolver:
             text = lines[idx].strip()
             if text.startswith("#"):
                 return text.lstrip("#").strip()
-            if (
-                text
-                and idx > 0
-                and all(ch == text[0] for ch in text)
-                and text[0] in "=-"
-            ):
+            if text and idx > 0 and all(ch == text[0] for ch in text) and text[0] in "=-":
                 heading = lines[idx - 1].strip()
                 if heading:
                     return heading

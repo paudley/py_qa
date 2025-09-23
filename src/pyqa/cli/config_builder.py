@@ -65,7 +65,7 @@ DEFAULT_EXCLUDES = [
     Path(".pytest_cache"),
     Path(".tox"),
     Path(".eggs"),
-    Path(".tool-cache"),
+    Path(".lint-cache"),
     Path(".cache"),
 ]
 

@@ -4,8 +4,10 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
+import shlex
 import shutil
 import subprocess  # nosec B404 - subprocess used for controlled version checks
 from abc import ABC, abstractmethod
@@ -15,14 +17,11 @@ from typing import Mapping, Sequence
 
 from packaging.version import InvalidVersion, Version
 
-import json
-import shlex
-
 from .environments import inject_node_defaults
 from .tools.base import Tool
 
 PYQA_ROOT = Path(__file__).resolve().parents[2]
-CACHE_ROOT = PYQA_ROOT / ".tool-cache"
+CACHE_ROOT = PYQA_ROOT / ".lint-cache" / "tools"
 UV_CACHE_DIR = CACHE_ROOT / "uv"
 NODE_CACHE_DIR = CACHE_ROOT / "node"
 NPM_CACHE_DIR = CACHE_ROOT / "npm"
