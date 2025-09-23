@@ -33,6 +33,7 @@ LANGUAGE_EXTENSIONS: Final[dict[str, set[str]]] = {
     "kubernetes": set(),
     "css": {".css", ".scss", ".sass", ".less"},
     "yaml": {".yml", ".yaml"},
+    "docker": set(),
 }
 
 LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
@@ -82,4 +83,13 @@ LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
         "yamllint.yaml",
         "yamllint.yml",
     },
+    "docker": {
+        "Dockerfile",
+        "dockerfile",
+        "Containerfile",
+    },
+}
+
+LANGUAGE_FILENAMES: Final[dict[str, set[str]]] = {
+    "docker": {"dockerfile", "containerfile"},
 }

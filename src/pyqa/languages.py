@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable
 
-from .constants import LANGUAGE_EXTENSIONS, LANGUAGE_MARKERS
+from .constants import LANGUAGE_EXTENSIONS, LANGUAGE_FILENAMES, LANGUAGE_MARKERS
 
 
 def detect_languages(root: Path, files: Iterable[Path]) -> set[str]:
@@ -22,6 +22,10 @@ def detect_languages(root: Path, files: Iterable[Path]) -> set[str]:
         suffix = path.suffix.lower()
         for language, extensions in LANGUAGE_EXTENSIONS.items():
             if suffix in extensions:
+                languages.add(language)
+        name = path.name.lower()
+        for language, names in LANGUAGE_FILENAMES.items():
+            if name in names:
                 languages.add(language)
     return languages
 

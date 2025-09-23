@@ -18,6 +18,7 @@ from pyqa.parsers import (
     parse_eslint,
     parse_stylelint,
     parse_yamllint,
+    parse_dockerfilelint,
     parse_golangci_lint,
     parse_kube_linter,
     parse_mypy,
@@ -207,6 +208,31 @@ def test_parse_yamllint() -> None:
     severity = diag.severity
     assert isinstance(severity, Severity)
     assert severity.value == "warning"
+
+
+def test_parse_dockerfilelint() -> None:
+    parser = JsonParser(parse_dockerfilelint)
+    stdout = """
+    {
+      "files": [
+        {
+          "file": "Dockerfile",
+          "issues_count": 1,
+          "issues": [
+            {"line": 2, "category": "Clarity", "title": "Avoid latest", "description": "Pin versions"}
+          ]
+        }
+      ],
+      "totalIssues": 1
+    }
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == "Dockerfile"
+    assert diag.code == "Clarity"
+    assert diag.line == 2
+    assert "Avoid latest" in diag.message
 
 
 def test_parse_tsc() -> None:

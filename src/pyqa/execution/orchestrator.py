@@ -333,8 +333,23 @@ class Orchestrator:
     def _filter_files_for_tool(extensions: Sequence[str], files: Sequence[Path]) -> list[Path]:
         if not extensions:
             return list(files)
-        allowed = {ext.lower() for ext in extensions}
-        return [path for path in files if path.suffix.lower() in allowed]
+        suffixes = {ext.lower() for ext in extensions if ext.startswith('.')}
+        names = {ext.lower() for ext in extensions if not ext.startswith('.')}
+        filtered: list[Path] = []
+        for path in files:
+            suffix = path.suffix.lower()
+            name = path.name.lower()
+            if suffixes and suffix in suffixes:
+                filtered.append(path)
+                continue
+            if names and name in names:
+                filtered.append(path)
+                continue
+        if not suffixes and names:
+            return filtered
+        if not names and suffixes:
+            return filtered
+        return filtered
 
     @staticmethod
     def _cache_token(cfg: Config) -> str:

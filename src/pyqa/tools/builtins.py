@@ -24,6 +24,7 @@ from ..parsers import (
     parse_cargo_clippy,
     parse_eslint,
     parse_stylelint,
+    parse_dockerfilelint,
     parse_yamllint,
     parse_golangci_lint,
     parse_actionlint,
@@ -1009,6 +1010,26 @@ class _YamllintCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _DockerfilelintCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        config = _setting(settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(root, config))])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _TscCommand(CommandBuilder):
     base: Sequence[str]
 
@@ -1485,6 +1506,26 @@ def _builtin_tools() -> Iterable[Tool]:
         package="yamllint",
         min_version="1.35.1",
         version_command=("yamllint", "--version"),
+    )
+
+    yield Tool(
+        name="dockerfilelint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_DockerfilelintCommand(base=("dockerfilelint", "--output", "json")),
+                append_files=True,
+                description="Analyze Dockerfiles with dockerfilelint.",
+                parser=JsonParser(parse_dockerfilelint),
+            ),
+        ),
+        languages=("docker",),
+        file_extensions=("Dockerfile", "dockerfile", "Containerfile"),
+        description="Dockerfile linter enforcing best practices.",
+        runtime="npm",
+        package="dockerfilelint@1.8.0",
+        min_version="1.8.0",
+        version_command=("dockerfilelint", "--version"),
     )
 
     yield Tool(

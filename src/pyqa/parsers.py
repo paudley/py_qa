@@ -409,6 +409,45 @@ def parse_stylelint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnost
     return results
 
 
+def parse_dockerfilelint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse dockerfilelint JSON output."""
+
+    files = []
+    if isinstance(payload, dict):
+        files = payload.get("files", [])
+    elif isinstance(payload, list):
+        files = payload
+
+    results: list[RawDiagnostic] = []
+    for entry in files:
+        if not isinstance(entry, dict):
+            continue
+        file_path = entry.get("file")
+        issues = entry.get("issues")
+        if not isinstance(issues, list):
+            continue
+        for issue in issues:
+            if not isinstance(issue, dict):
+                continue
+            title = str(issue.get("title", "")).strip()
+            description = str(issue.get("description", "")).strip()
+            message = title if description == "" else f"{title}: {description}" if title else description
+            if not message:
+                continue
+            results.append(
+                RawDiagnostic(
+                    file=file_path,
+                    line=int(issue.get("line", 0)) or None,
+                    column=None,
+                    severity=Severity.WARNING,
+                    message=message,
+                    code=str(issue.get("category")) if issue.get("category") else None,
+                    tool="dockerfilelint",
+                )
+            )
+    return results
+
+
 def parse_yamllint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse yamllint JSON output."""
 
@@ -568,6 +607,7 @@ __all__ = [
     "parse_bandit",
     "parse_eslint",
     "parse_stylelint",
+    "parse_dockerfilelint",
     "parse_yamllint",
     "parse_tsc",
     "parse_golangci_lint",
