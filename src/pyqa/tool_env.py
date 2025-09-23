@@ -665,6 +665,20 @@ class RustRuntime(RuntimeHandler):
 
     def _ensure_local_tool(self, tool: Tool, binary_name: str) -> Path:
         crate, version_spec = self._crate_spec(tool)
+        if crate.startswith("rustup:"):
+            component = crate.split(":", 1)[1]
+            requirement = f"rustup:{component}"
+            slug = _slugify(requirement)
+            meta_file = RUST_META_DIR / f"{slug}.json"
+            meta_file.parent.mkdir(parents=True, exist_ok=True)
+            if not meta_file.exists():
+                self._install_rustup_component(component)
+                meta_file.write_text(json.dumps({"requirement": requirement}), encoding="utf-8")
+            cargo_path = shutil.which("cargo")
+            if not cargo_path:
+                raise RuntimeError("cargo executable not found for rust tool")
+            return Path(cargo_path)
+
         requirement = f"{crate}@{version_spec}" if version_spec else crate
         slug = _slugify(requirement)
         prefix = RUST_CACHE_DIR / slug
@@ -722,6 +736,16 @@ class RustRuntime(RuntimeHandler):
                 version = tool.min_version
             return crate, version
         return tool.name, tool.min_version
+
+    def _install_rustup_component(self, component: str) -> None:
+        if not shutil.which("rustup"):
+            raise RuntimeError("rustup is required to install rustup components")
+        subprocess.run(  # nosec B603 - controlled rustup call
+            ["rustup", "component", "add", component],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
 
 
 class BinaryRuntime(RuntimeHandler):

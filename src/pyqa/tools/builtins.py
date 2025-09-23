@@ -2109,7 +2109,8 @@ def _builtin_tools() -> Iterable[Tool]:
         languages=("rust",),
         file_extensions=(".rs",),
         description="Rust linting via cargo clippy.",
-        runtime="binary",
+        runtime="rust",
+        package="rustup:clippy",
         min_version="1.81.0",
         version_command=("cargo", "--version"),
     )

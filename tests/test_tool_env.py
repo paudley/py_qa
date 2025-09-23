@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Sequence
 
 import pytest
+import subprocess
 
 from pyqa.tool_env import GO_BIN_DIR, RUST_BIN_DIR, CommandPreparer, PreparedCommand, desired_version
 from pyqa.tools.base import Tool
@@ -238,6 +239,12 @@ def test_rust_runtime_installs_when_system_too_old(tmp_path: Path, monkeypatch: 
         version_command=("dotenv-linter", "--version"),
     )
 
+    rust_cache = tmp_path / "rust-cache"
+    monkeypatch.setattr("pyqa.tool_env.RUST_CACHE_DIR", rust_cache)
+    monkeypatch.setattr("pyqa.tool_env.RUST_BIN_DIR", rust_cache / "bin")
+    monkeypatch.setattr("pyqa.tool_env.RUST_META_DIR", rust_cache / "meta")
+    monkeypatch.setattr("pyqa.tool_env.RUST_WORK_DIR", rust_cache / "work")
+
     def fake_which(cmd: str) -> str | None:
         if cmd == "dotenv-linter":
             return "/usr/bin/dotenv-linter"
@@ -289,6 +296,12 @@ def test_rust_runtime_prefers_system_when_version_ok(tmp_path: Path, monkeypatch
         version_command=("dotenv-linter", "--version"),
     )
 
+    rust_cache = tmp_path / "rust-cache"
+    monkeypatch.setattr("pyqa.tool_env.RUST_CACHE_DIR", rust_cache)
+    monkeypatch.setattr("pyqa.tool_env.RUST_BIN_DIR", rust_cache / "bin")
+    monkeypatch.setattr("pyqa.tool_env.RUST_META_DIR", rust_cache / "meta")
+    monkeypatch.setattr("pyqa.tool_env.RUST_WORK_DIR", rust_cache / "work")
+
     def fake_which(cmd: str) -> str | None:
         if cmd in {"dotenv-linter", "cargo"}:
             return f"/usr/bin/{cmd}"
@@ -321,3 +334,57 @@ def test_rust_runtime_prefers_system_when_version_ok(tmp_path: Path, monkeypatch
 
     assert result.source == "system"
     assert result.cmd[0] == "dotenv-linter"
+
+
+def test_rust_runtime_install_rustup_component(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    tool = _make_tool(
+        name="cargo-clippy",
+        runtime="rust",
+        package="rustup:clippy",
+        min_version="1.81.0",
+        version_command=("cargo", "--version"),
+    )
+
+    rust_cache = tmp_path / "rust-cache"
+    monkeypatch.setattr("pyqa.tool_env.RUST_CACHE_DIR", rust_cache)
+    monkeypatch.setattr("pyqa.tool_env.RUST_BIN_DIR", rust_cache / "bin")
+    monkeypatch.setattr("pyqa.tool_env.RUST_META_DIR", rust_cache / "meta")
+    monkeypatch.setattr("pyqa.tool_env.RUST_WORK_DIR", rust_cache / "work")
+
+    def fake_which(cmd: str) -> str | None:
+        if cmd == "cargo":
+            return "/usr/bin/cargo"
+        if cmd == "rustup":
+            return "/usr/bin/rustup"
+        return None
+
+    monkeypatch.setattr("pyqa.tool_env.shutil.which", fake_which)
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):  # noqa: ANN001
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr("pyqa.tool_env.subprocess.run", fake_run)
+
+    preparer = CommandPreparer()
+
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:  # noqa: ANN001
+        if command[0] == "cargo":
+            return "cargo 1.81.0"
+        return None
+
+    monkeypatch.setattr(preparer._versions, "capture", fake_capture)  # type: ignore[attr-defined]
+
+    result = preparer.prepare(
+        tool=tool,
+        base_cmd=("cargo", "clippy", "--message-format=json"),
+        root=tmp_path,
+        cache_dir=tmp_path,
+        system_preferred=True,
+        use_local_override=False,
+    )
+
+    assert result.cmd[0] == "/usr/bin/cargo"
+    assert any(cmd[:3] == ["rustup", "component", "add"] for cmd in calls)
