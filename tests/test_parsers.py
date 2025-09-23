@@ -17,6 +17,7 @@ from pyqa.parsers import (
     parse_cargo_clippy,
     parse_eslint,
     parse_golangci_lint,
+    parse_kube_linter,
     parse_mypy,
     parse_pylint,
     parse_pyright,
@@ -110,6 +111,30 @@ def test_parse_sqlfluff() -> None:
     assert diag.line == 4
     assert diag.column == 10
     assert diag.tool == "sqlfluff"
+
+
+def test_parse_kube_linter() -> None:
+    parser = JsonParser(parse_kube_linter)
+    stdout = """
+    {
+      "Reports": [
+        {
+          "Check": "run-as-non-root",
+          "Diagnostic": {"Message": "Container must run as non-root"},
+          "Object": {"Metadata": {"FilePath": "deployments/api.yaml"}}
+        }
+      ]
+    }
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == "deployments/api.yaml"
+    assert diag.code == "run-as-non-root"
+    assert diag.tool == "kube-linter"
+    severity = diag.severity
+    assert isinstance(severity, Severity)
+    assert severity.value == "error"
 
 
 def test_parse_bandit() -> None:

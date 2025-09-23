@@ -227,6 +227,46 @@ def parse_actionlint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnos
     return results
 
 
+def parse_kube_linter(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse kube-linter JSON output."""
+
+    reports: Iterable[dict[str, Any]]
+    if isinstance(payload, dict):
+        raw_reports = payload.get("Reports", [])
+        reports = [item for item in raw_reports if isinstance(item, dict)]
+    elif isinstance(payload, list):
+        reports = [item for item in payload if isinstance(item, dict)]
+    else:
+        reports = []
+
+    diagnostics: list[RawDiagnostic] = []
+    for report in reports:
+        diagnostic_info = report.get("Diagnostic") if isinstance(report.get("Diagnostic"), dict) else {}
+        message = str(diagnostic_info.get("Message", "")).strip()
+        if not message:
+            continue
+
+        obj_info = report.get("Object") if isinstance(report.get("Object"), dict) else {}
+        metadata = obj_info.get("Metadata") if isinstance(obj_info, dict) else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        file_path = metadata.get("FilePath") or metadata.get("filePath")
+
+        diagnostics.append(
+            RawDiagnostic(
+                file=file_path,
+                line=None,
+                column=None,
+                severity=Severity.ERROR,
+                message=message,
+                code=str(report.get("Check")) if report.get("Check") else None,
+                tool="kube-linter",
+            )
+        )
+
+    return diagnostics
+
+
 def parse_sqlfluff(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse sqlfluff JSON diagnostics."""
 

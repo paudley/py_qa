@@ -25,6 +25,7 @@ from ..parsers import (
     parse_eslint,
     parse_golangci_lint,
     parse_actionlint,
+    parse_kube_linter,
     parse_sqlfluff,
     parse_mypy,
     parse_pylint,
@@ -79,6 +80,7 @@ def _as_bool(value: Any) -> bool | None:
 
 
 ACTIONLINT_VERSION_DEFAULT = "1.7.1"
+KUBE_LINTER_VERSION_DEFAULT = "0.7.6"
 
 
 def _ensure_actionlint(version: str, cache_root: Path) -> Path:
@@ -129,6 +131,45 @@ def _ensure_actionlint(version: str, cache_root: Path) -> Path:
             else:
                 raise RuntimeError("Failed to locate actionlint binary in archive")
 
+    return binary
+
+
+def _ensure_kube_linter(version: str, cache_root: Path) -> Path:
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+
+    if system == "linux":
+        if machine in {"x86_64", "amd64"}:
+            asset = "kube-linter-linux"
+            platform_tag = "linux"
+        elif machine in {"aarch64", "arm64"}:
+            asset = "kube-linter-linux_arm64"
+            platform_tag = "linux_arm64"
+        else:
+            raise RuntimeError(f"Unsupported Linux architecture '{machine}' for kube-linter")
+    elif system == "darwin":
+        if machine in {"x86_64", "amd64"}:
+            asset = "kube-linter-darwin"
+            platform_tag = "darwin"
+        elif machine in {"arm64", "aarch64"}:
+            asset = "kube-linter-darwin_arm64"
+            platform_tag = "darwin_arm64"
+        else:
+            raise RuntimeError(f"Unsupported macOS architecture '{machine}' for kube-linter")
+    else:
+        raise RuntimeError(f"kube-linter is not supported on platform '{system}'")
+
+    base_dir = cache_root / "kube-linter" / version / platform_tag
+    binary = base_dir / "kube-linter"
+    if binary.exists():
+        return binary
+
+    base_dir.mkdir(parents=True, exist_ok=True)
+    url = f"https://github.com/stackrox/kube-linter/releases/download/v{version}/{asset}"
+    response = requests.get(url, timeout=60)
+    response.raise_for_status()
+    binary.write_bytes(response.content)
+    binary.chmod(binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return binary
 
 
@@ -882,6 +923,56 @@ class _ActionlintCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _KubeLinterCommand(CommandBuilder):
+    base: Sequence[str]
+    version: str
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cache_root = ctx.root / ".lint-cache"
+        binary = _ensure_kube_linter(self.version, cache_root)
+        cmd = [str(binary)]
+        if len(self.base) > 1:
+            cmd.extend(self.base[1:])
+
+        root = ctx.root
+        settings = ctx.settings
+
+        config = _setting(settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(root, config))])
+
+        if _as_bool(_setting(settings, "fail-if-no-objects-found")):
+            cmd.append("--fail-if-no-objects-found")
+
+        if _as_bool(_setting(settings, "fail-on-invalid-resource")):
+            cmd.append("--fail-on-invalid-resource")
+
+        if _as_bool(_setting(settings, "verbose")):
+            cmd.append("--verbose")
+
+        if _as_bool(_setting(settings, "add-all-built-in")):
+            cmd.append("--add-all-built-in")
+
+        if _as_bool(_setting(settings, "do-not-auto-add-defaults")):
+            cmd.append("--do-not-auto-add-defaults")
+
+        for include in _settings_list(_setting(settings, "include")):
+            cmd.extend(["--include", str(include)])
+
+        for exclude in _settings_list(_setting(settings, "exclude")):
+            cmd.extend(["--exclude", str(exclude)])
+
+        for path in _settings_list(_setting(settings, "ignore-paths", "ignore_paths")):
+            cmd.extend(["--ignore-paths", str(_resolve_path(root, path))])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _TscCommand(CommandBuilder):
     base: Sequence[str]
 
@@ -1236,6 +1327,27 @@ def _builtin_tools() -> Iterable[Tool]:
         file_extensions=(".yml", ".yaml"),
         description="GitHub Actions workflow linter.",
         runtime="binary",
+    )
+
+    yield Tool(
+        name="kube-linter",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_KubeLinterCommand(
+                    base=("kube-linter", "lint", "--format", "json"),
+                    version=KUBE_LINTER_VERSION_DEFAULT,
+                ),
+                append_files=True,
+                description="Analyze Kubernetes manifests with kube-linter.",
+                parser=JsonParser(parse_kube_linter),
+            ),
+        ),
+        languages=("kubernetes",),
+        file_extensions=(".yml", ".yaml"),
+        description="Kubernetes deployment misconfiguration detector.",
+        runtime="binary",
+        default_enabled=False,
     )
 
     yield Tool(
