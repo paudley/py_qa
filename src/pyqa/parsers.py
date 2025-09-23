@@ -925,6 +925,192 @@ def parse_checkmake(payload: Any, _context: ToolContext) -> Sequence[RawDiagnost
     return results
 
 
+_SELENE_SEVERITY = {
+    "error": Severity.ERROR,
+    "warning": Severity.WARNING,
+    "note": Severity.NOTE,
+    "help": Severity.NOTE,
+    "info": Severity.NOTICE,
+}
+
+
+def parse_selene(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse selene JSON output (display-style json2)."""
+
+    records: Iterable[dict[str, Any]]
+    if isinstance(payload, list):
+        records = [item for item in payload if isinstance(item, dict)]
+    elif isinstance(payload, dict):
+        records = [payload]
+    else:
+        records = []
+
+    results: list[RawDiagnostic] = []
+    for entry in records:
+        entry_type = str(entry.get("type", "")).lower()
+        if entry_type == "summary":
+            continue
+        if entry_type != "diagnostic":
+            continue
+
+        severity_label = str(entry.get("severity", "warning")).lower()
+        severity = _SELENE_SEVERITY.get(severity_label, Severity.WARNING)
+        primary = entry.get("primary_label") or {}
+        if not isinstance(primary, dict):
+            primary = {}
+        span = primary.get("span") or {}
+        if not isinstance(span, dict):
+            span = {}
+        line = span.get("start_line")
+        column = span.get("start_column")
+        if isinstance(line, int):
+            line += 1
+        if isinstance(column, int):
+            column += 1
+
+        notes = []
+        for note in entry.get("notes", []) or []:
+            text = str(note).strip()
+            if text:
+                notes.append(text)
+        for label in entry.get("secondary_labels", []) or []:
+            if isinstance(label, dict):
+                message = str(label.get("message", "")).strip()
+                if message:
+                    notes.append(message)
+
+        message = str(entry.get("message", "")).strip()
+        if notes:
+            message = f"{message} ({'; '.join(notes)})" if message else "; ".join(notes)
+
+        results.append(
+            RawDiagnostic(
+                file=primary.get("filename"),
+                line=line,
+                column=column,
+                severity=severity,
+                message=message,
+                code=entry.get("code"),
+                tool="selene",
+            )
+        )
+
+    return results
+
+
+_CPPLINT_PATTERN = re.compile(
+    r"^(?P<file>[^:]+):(?P<line>\d+):\s+(?P<message>.+?)\s+\[(?P<category>[^\]]+)\]\s+\[(?P<confidence>\d+)\]$"
+)
+
+
+def parse_cpplint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse cpplint text diagnostics."""
+
+    results: list[RawDiagnostic] = []
+    for line in stdout.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("Done processing") or stripped.startswith("Total errors"):
+            continue
+        match = _CPPLINT_PATTERN.match(stripped)
+        if not match:
+            continue
+        message = match.group("message").strip()
+        category = match.group("category").strip()
+        results.append(
+            RawDiagnostic(
+                file=match.group("file"),
+                line=int(match.group("line")),
+                column=None,
+                severity=Severity.WARNING,
+                message=message,
+                code=category,
+                tool="cpplint",
+            )
+        )
+    return results
+
+
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
+_TOMBI_HEADER_RE = re.compile(r"^(?P<level>Error|Warning|Info|Hint|Note):\s*(?P<message>.+)$", re.IGNORECASE)
+_TOMBI_LOCATION_RE = re.compile(
+    r"^at\s+(?P<file>.+?)(?::(?P<line>\d+))?(?::(?P<column>\d+))?$",
+    re.IGNORECASE,
+)
+
+
+def parse_tombi(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse tombi lint textual diagnostics."""
+
+    cleaned = _ANSI_ESCAPE_RE.sub("", stdout)
+    lines = cleaned.splitlines()
+    results: list[RawDiagnostic] = []
+    index = 0
+
+    def _severity(label: str) -> Severity:
+        return {
+            "error": Severity.ERROR,
+            "warning": Severity.WARNING,
+            "info": Severity.NOTICE,
+            "hint": Severity.NOTE,
+            "note": Severity.NOTE,
+        }.get(label.lower(), Severity.WARNING)
+
+    while index < len(lines):
+        header = _TOMBI_HEADER_RE.match(lines[index].strip())
+        if not header:
+            index += 1
+            continue
+
+        severity = _severity(header.group("level"))
+        message = header.group("message").strip()
+        file: str | None = None
+        line_no: int | None = None
+        column_no: int | None = None
+
+        index += 1
+        while index < len(lines):
+            candidate = lines[index].strip()
+            if not candidate:
+                index += 1
+                continue
+            if _TOMBI_HEADER_RE.match(candidate):
+                break
+            location = _TOMBI_LOCATION_RE.match(candidate)
+            if location:
+                file = location.group("file")
+                line_str = location.group("line")
+                column_str = location.group("column")
+                if line_str is not None:
+                    try:
+                        line_no = int(line_str)
+                    except ValueError:  # pragma: no cover - defensive
+                        line_no = None
+                if column_str is not None:
+                    try:
+                        column_no = int(column_str)
+                    except ValueError:  # pragma: no cover - defensive
+                        column_no = None
+            else:
+                note = candidate.strip()
+                if note:
+                    message = f"{message} ({note})" if message else note
+            index += 1
+
+        results.append(
+            RawDiagnostic(
+                file=file,
+                line=line_no,
+                column=column_no,
+                severity=severity,
+                message=message,
+                code=None,
+                tool="tombi",
+            )
+        )
+
+    return results
+
+
 _TSC_PATTERN = re.compile(
     r"^(?P<file>[^:(\n]+)\((?P<line>\d+),(?P<col>\d+)\):\s*"
     r"(?P<severity>error|warning)\s*(?P<code>[A-Z]+\d+)?\s*:?\s*(?P<message>.+)$"
@@ -1062,6 +1248,9 @@ __all__ = [
     "parse_phplint",
     "parse_perlcritic",
     "parse_checkmake",
+    "parse_selene",
+    "parse_cpplint",
+    "parse_tombi",
     "parse_tsc",
     "parse_golangci_lint",
     "parse_cargo_clippy",

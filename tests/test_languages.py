@@ -39,3 +39,23 @@ def test_detect_github_actions_marker(tmp_path: Path) -> None:
     languages = detect_languages(tmp_path, [])
 
     assert "github-actions" in languages
+
+
+def test_detect_cpp_language(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    src.mkdir()
+    cpp_file = src / "module.cpp"
+    cpp_file.write_text("int main() { return 0; }\n", encoding="utf-8")
+
+    languages = detect_languages(tmp_path, [cpp_file])
+
+    assert "cpp" in languages
+
+
+def test_detect_toml_language(tmp_path: Path) -> None:
+    config = tmp_path / "pyproject.toml"
+    config.write_text("[tool]", encoding="utf-8")
+
+    languages = detect_languages(tmp_path, [config])
+
+    assert "toml" in languages

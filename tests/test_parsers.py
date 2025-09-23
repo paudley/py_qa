@@ -12,31 +12,33 @@ from pyqa.parsers import (
     JsonParser,
     TextParser,
     parse_actionlint,
-    parse_sqlfluff,
     parse_bandit,
     parse_cargo_clippy,
-    parse_eslint,
-    parse_stylelint,
-    parse_yamllint,
+    parse_checkmake,
+    parse_cpplint,
     parse_dockerfilelint,
-    parse_hadolint,
+    parse_dotenv_linter,
+    parse_eslint,
     parse_golangci_lint,
+    parse_hadolint,
     parse_kube_linter,
-    parse_mypy,
-    parse_pylint,
-    parse_pyright,
-    parse_ruff,
-    parse_tsc,
     parse_lualint,
     parse_luacheck,
-    parse_dotenv_linter,
-    parse_remark,
-    parse_speccy,
-    parse_shfmt,
-    parse_phplint,
+    parse_mypy,
+    parse_pylint,
     parse_perlcritic,
-    parse_checkmake,
+    parse_phplint,
+    parse_pyright,
+    parse_remark,
+    parse_ruff,
+    parse_selene,
+    parse_shfmt,
     parse_speccy,
+    parse_sqlfluff,
+    parse_stylelint,
+    parse_tombi,
+    parse_tsc,
+    parse_yamllint,
 )
 from pyqa.severity import Severity
 from pyqa.tools.base import ToolContext
@@ -127,6 +129,23 @@ def test_parse_sqlfluff() -> None:
     assert diag.tool == "sqlfluff"
 
 
+def test_parse_selene() -> None:
+    parser = JsonParser(parse_selene)
+    stdout = """
+    {"type":"Diagnostic","severity":"Warning","code":"shadowing","message":"shadowing variable","primary_label":{"filename":"script.lua","span":{"start_line":1,"start_column":5}},"notes":["previous definition"],"secondary_labels":[{"message":"earlier assignment"}]}
+    {"type":"Summary","errors":0,"warnings":1,"parse_errors":0}
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == "script.lua"
+    assert diag.line == 2
+    assert diag.column == 6
+    assert diag.code == "shadowing"
+    assert "earlier assignment" in diag.message
+    assert diag.tool == "selene"
+
+
 def test_parse_kube_linter() -> None:
     parser = JsonParser(parse_kube_linter)
     stdout = """
@@ -149,6 +168,21 @@ def test_parse_kube_linter() -> None:
     severity = diag.severity
     assert isinstance(severity, Severity)
     assert severity.value == "error"
+
+
+def test_parse_cpplint() -> None:
+    parser = TextParser(parse_cpplint)
+    stdout = """foo.cc:10:  Extra space at end of line  [whitespace/indent] [3]
+Done processing foo.cc
+Total errors found: 1
+"""
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == "foo.cc"
+    assert diag.line == 10
+    assert diag.code == "whitespace/indent"
+    assert diag.tool == "cpplint"
 
 
 def test_parse_bandit() -> None:
@@ -359,6 +393,27 @@ def test_parse_phplint() -> None:
     assert diag.line == 14
     assert diag.severity.value == "error"
     assert diag.tool == "phplint"
+
+
+def test_parse_tombi() -> None:
+    parser = TextParser(parse_tombi)
+    stdout = (
+        "\x1b[1;31m  Error\x1b[0m: invalid key\n"
+        "    at config.toml:2:4\n"
+        "  Warning: missing value\n"
+        "    at config.toml:5:1\n"
+        "1 file failed to be linted\n"
+    )
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 2
+    first, second = diags
+    assert first.severity == Severity.ERROR
+    assert first.file == "config.toml"
+    assert first.line == 2
+    assert first.column == 4
+    assert first.tool == "tombi"
+    assert second.severity == Severity.WARNING
+    assert second.line == 5
 
 
 def test_parse_perlcritic() -> None:

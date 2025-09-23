@@ -22,31 +22,34 @@ from ..models import RawDiagnostic
 from ..parsers import (
     JsonParser,
     TextParser,
+    parse_actionlint,
     parse_bandit,
     parse_cargo_clippy,
-    parse_eslint,
-    parse_stylelint,
+    parse_checkmake,
+    parse_cpplint,
     parse_dockerfilelint,
-    parse_yamllint,
-    parse_hadolint,
     parse_dotenv_linter,
+    parse_eslint,
+    parse_golangci_lint,
+    parse_hadolint,
+    parse_kube_linter,
     parse_lualint,
     parse_luacheck,
-    parse_remark,
-    parse_speccy,
-    parse_shfmt,
-    parse_phplint,
-    parse_perlcritic,
-    parse_checkmake,
-    parse_golangci_lint,
-    parse_actionlint,
-    parse_kube_linter,
-    parse_sqlfluff,
     parse_mypy,
     parse_pylint,
+    parse_perlcritic,
+    parse_phplint,
     parse_pyright,
+    parse_remark,
     parse_ruff,
+    parse_selene,
+    parse_shfmt,
+    parse_speccy,
+    parse_sqlfluff,
+    parse_stylelint,
+    parse_tombi,
     parse_tsc,
+    parse_yamllint,
 )
 from ..severity import Severity
 from .base import CommandBuilder, DeferredCommand, Tool, ToolAction, ToolContext
@@ -628,6 +631,64 @@ class _MypyCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _CpplintCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        line_length = _setting(settings, "linelength", "line-length")
+        if line_length is None:
+            line_length = ctx.cfg.execution.line_length
+        if line_length is not None:
+            cmd.append(f"--linelength={line_length}")
+
+        for filt in _settings_list(_setting(settings, "filter")):
+            cmd.append(f"--filter={filt}")
+
+        for exclude in _settings_list(_setting(settings, "exclude")):
+            cmd.append(f"--exclude={_resolve_path(root, exclude)}")
+
+        extensions = _settings_list(_setting(settings, "extensions"))
+        if extensions:
+            cmd.append(f"--extensions={','.join(str(ext) for ext in extensions)}")
+
+        headers = _settings_list(_setting(settings, "headers"))
+        if headers:
+            cmd.append(f"--headers={','.join(str(h) for h in headers)}")
+
+        include_order = _setting(settings, "includeorder")
+        if include_order:
+            cmd.append(f"--includeorder={include_order}")
+
+        counting = _setting(settings, "counting")
+        if counting:
+            cmd.append(f"--counting={counting}")
+
+        repository = _setting(settings, "repository")
+        if repository:
+            cmd.append(f"--repository={_resolve_path(root, repository)}")
+
+        root_flag = _setting(settings, "root")
+        if root_flag:
+            cmd.append(f"--root={_resolve_path(root, root_flag)}")
+
+        if _as_bool(_setting(settings, "recursive")):
+            cmd.append("--recursive")
+
+        if _as_bool(_setting(settings, "quiet")):
+            cmd.append("--quiet")
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _PylintCommand(CommandBuilder):
     base: Sequence[str]
 
@@ -1013,6 +1074,48 @@ class _SqlfluffCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _TombiCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        stdin_filename = _setting(settings, "stdin-filename", "stdin_filename")
+        if stdin_filename:
+            value = str(stdin_filename)
+            if value == "-":
+                cmd.extend(["--stdin-filename", value])
+            else:
+                cmd.extend(["--stdin-filename", str(_resolve_path(root, stdin_filename))])
+
+        if _as_bool(_setting(settings, "offline")):
+            cmd.append("--offline")
+
+        if _as_bool(_setting(settings, "no-cache", "no_cache")):
+            cmd.append("--no-cache")
+
+        verbose = _setting(settings, "verbose")
+        if isinstance(verbose, int):
+            cmd.extend(["-v"] * max(verbose, 0))
+        elif _as_bool(verbose):
+            cmd.append("-v")
+
+        quiet = _setting(settings, "quiet")
+        if isinstance(quiet, int):
+            cmd.extend(["-q"] * max(quiet, 0))
+        elif _as_bool(quiet):
+            cmd.append("-q")
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _ActionlintCommand(CommandBuilder):
     version: str
 
@@ -1301,6 +1404,55 @@ class _LuacheckCommand(CommandBuilder):
 
         if _as_bool(_setting(settings, "quiet")):
             cmd.append("--quiet")
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _SeleneCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        display_style = _setting(settings, "display-style", "display_style")
+        if not display_style:
+            display_style = "Json2"
+        cmd.extend(["--display-style", str(display_style)])
+
+        color = _setting(settings, "color")
+        if not color:
+            color = "Never"
+        cmd.extend(["--color", str(color)])
+
+        config = _setting(settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(root, config))])
+
+        for pattern in _settings_list(_setting(settings, "pattern")):
+            cmd.extend(["--pattern", str(pattern)])
+
+        num_threads = _setting(settings, "num-threads", "num_threads")
+        if num_threads is not None:
+            cmd.extend(["--num-threads", str(num_threads)])
+
+        if _as_bool(_setting(settings, "allow-warnings", "allow_warnings")):
+            cmd.append("--allow-warnings")
+
+        if _as_bool(_setting(settings, "no-exclude", "no_exclude")):
+            cmd.append("--no-exclude")
+
+        if _as_bool(_setting(settings, "quiet")):
+            cmd.append("--quiet")
+
+        if _as_bool(_setting(settings, "no-summary", "no_summary")):
+            cmd.append("--no-summary")
 
         args = _settings_list(_setting(settings, "args"))
         if args:
@@ -1826,6 +1978,61 @@ def _builtin_tools() -> Iterable[Tool]:
     )
 
     yield Tool(
+        name="tombi",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_TombiCommand(base=("tombi", "lint")),
+                append_files=True,
+                description="Lint TOML files using Tombi.",
+                parser=TextParser(parse_tombi),
+            ),
+        ),
+        languages=("toml",),
+        file_extensions=(".toml",),
+        config_files=("tombi.toml",),
+        description="TOML toolkit providing linting via tombi.",
+        runtime="python",
+        package="tombi",
+        min_version="0.6.12",
+        version_command=("tombi", "--version"),
+    )
+
+    yield Tool(
+        name="cpplint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_CpplintCommand(base=("cpplint", "--output=emacs")),
+                append_files=True,
+                description="Lint C and C++ sources with cpplint.",
+                parser=TextParser(parse_cpplint),
+            ),
+        ),
+        languages=("cpp",),
+        file_extensions=(
+            ".c",
+            ".cc",
+            ".cpp",
+            ".cxx",
+            ".c++",
+            ".cu",
+            ".cuh",
+            ".h",
+            ".hh",
+            ".hpp",
+            ".h++",
+            ".hxx",
+        ),
+        config_files=("CPPLINT.cfg",),
+        description="Google style C/C++ linter.",
+        runtime="python",
+        package="cpplint",
+        min_version="2.0.2",
+        version_command=("cpplint", "--version"),
+    )
+
+    yield Tool(
         name="actionlint",
         actions=(
             ToolAction(
@@ -2278,6 +2485,28 @@ def _builtin_tools() -> Iterable[Tool]:
         min_version="1.2.0",
         version_command=("luacheck", "--version"),
         default_enabled=_LUAROCKS_AVAILABLE,
+    )
+
+    yield Tool(
+        name="selene",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_SeleneCommand(base=("selene",)),
+                append_files=True,
+                description="Lint Lua sources with Selene.",
+                parser=JsonParser(parse_selene),
+            ),
+        ),
+        languages=("lua",),
+        file_extensions=(".lua",),
+        config_files=("selene.toml",),
+        description="Modern Lua linter powered by selene.",
+        runtime="rust",
+        package="selene",
+        min_version="0.29.0",
+        version_command=("selene", "--version"),
+        default_enabled=_CARGO_AVAILABLE,
     )
 
     yield Tool(
