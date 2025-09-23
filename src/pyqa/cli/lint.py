@@ -19,7 +19,9 @@ from ..reporting.emitters import write_json_report, write_pr_summary, write_sari
 from ..reporting.formatters import render
 from ..tools.registry import DEFAULT_REGISTRY
 from .config_builder import build_config
+from .doctor import run_doctor
 from .options import LintOptions
+from .tool_info import run_tool_info
 
 # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
 
@@ -94,8 +96,18 @@ def lint_command(
         "--sql-dialect",
         help="Default SQL dialect for dialect-aware tools (e.g. sqlfluff).",
     ),
+    doctor: bool = typer.Option(False, "--doctor", help="Run environment diagnostics and exit."),
+    tool_info: str | None = typer.Option(
+        None,
+        "--tool-info",
+        metavar="TOOL",
+        help="Display detailed information for TOOL and exit.",
+    ),
 ) -> None:
     """Entry point for the ``pyqa lint`` CLI command."""
+
+    if doctor and tool_info:
+        raise typer.BadParameter("--doctor and --tool-info cannot be combined")
 
     if fix_only and check_only:
         raise typer.BadParameter("--fix-only and --check-only are mutually exclusive")
@@ -112,6 +124,14 @@ def lint_command(
         derived_root = _derive_default_root(normalized_paths)
         if derived_root is not None:
             root = derived_root
+
+    if doctor:
+        exit_code = run_doctor(root)
+        raise typer.Exit(code=exit_code)
+
+    if tool_info:
+        exit_code = run_tool_info(tool_info, root=root)
+        raise typer.Exit(code=exit_code)
 
     effective_jobs = jobs if jobs is not None else default_parallel_jobs()
 

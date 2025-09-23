@@ -24,6 +24,13 @@ dependencies = [
     "tree-sitter>=0.25.1",
     "sqlfluff>=3.4.2",
     "tree-sitter-sql>=0.3.8",
+    "tree-sitter-yaml",
+    "tree-sitter-bash",
+    "tree-sitter-lua",
+    "tree-sitter-php",
+    "tree-sitter-toml",
+    "tree-sitter-dockerfile",
+    "tree-sitter-make",
 ]
 
 [project.scripts]

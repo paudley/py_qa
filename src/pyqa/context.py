@@ -9,11 +9,38 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
 
-try:  # pragma: no cover - optional dependency gating
-    from tree_sitter import Language, Node, Parser  # type: ignore[attr-defined]
-except ModuleNotFoundError:  # pragma: no cover - graceful degradation
-    Parser = None  # type: ignore[assignment]
-    Node = object  # type: ignore[misc]
+Node = object  # type: ignore[misc]
+
+
+def _load_tree_sitter_parser() -> tuple[type | None, type | None, callable | None]:
+    try:
+        from tree_sitter import Node as TSNode  # type: ignore[attr-defined]
+        from tree_sitter import Parser as TSParser  # type: ignore[attr-defined]
+    except ModuleNotFoundError:
+        return None, None, None
+
+    try:
+        from tree_sitter_languages import get_parser as bundled_get_parser  # type: ignore[attr-defined]
+    except ModuleNotFoundError:
+        from tree_sitter import Language  # type: ignore[attr-defined]
+
+        def bundled_get_parser(name: str):
+            module_name = f"tree_sitter_{name.replace('-', '_')}"
+            try:
+                module = importlib.import_module(module_name)
+            except ModuleNotFoundError:
+                return None
+            if not hasattr(module, "language"):
+                return None
+            language = Language(module.language())  # type: ignore[attr-defined]
+            parser = TSParser()
+            parser.set_language(language)
+            return parser
+
+    return TSNode, TSParser, bundled_get_parser
+
+
+Node, Parser, _GET_PARSER = _load_tree_sitter_parser()
 
 from .models import Diagnostic
 
@@ -28,22 +55,39 @@ class TreeSitterContextResolver:
     """Enrich diagnostics with structural context using Tree-sitter."""
 
     _LANGUAGE_ALIASES = {
-        "python": {".py", ".pyi"},
-        "markdown": {".md", ".markdown"},
-        "json": {".json"},
-        "javascript": {".js", ".jsx", ".ts", ".tsx"},
-        "go": {".go"},
-        "rust": {".rs"},
+    "python": {".py", ".pyi"},
+    "markdown": {".md", ".markdown", ".mdx"},
+    "json": {".json"},
+    "javascript": {".js", ".jsx", ".ts", ".tsx"},
+    "go": {".go"},
+    "rust": {".rs"},
+    "sql": {".sql"},
+    "yaml": {".yaml", ".yml"},
+    "shell": {".sh", ".bash", ".zsh"},
+    "lua": {".lua"},
+    "php": {".php", ".phtml"},
+    "toml": {".toml"},
+    "make": {".mk"},
     }
 
-    _GRAMMAR_MODULES = {
-        "python": "tree_sitter_python",
-        "markdown": "tree_sitter_markdown",
-        "json": "tree_sitter_json",
-        "javascript": "tree_sitter_javascript",
-        "go": "tree_sitter_go",
-        "rust": "tree_sitter_rust",
+    _GRAMMAR_NAMES = {
+        "python": "python",
+        "markdown": "markdown",
+        "json": "json",
+        "javascript": "javascript",
+        "go": "go",
+        "rust": "rust",
+        "sql": "sql",
+        "yaml": "yaml",
+        "shell": "bash",
+        "lua": "lua",
+        "php": "php",
+        "toml": "toml",
+        "dockerfile": "dockerfile",
+        "make": "make",
     }
+
+    _FALLBACK_LANGUAGES = {"python", "markdown", "json"}
 
     def __init__(self) -> None:
         self._parsers: dict[str, Parser | None] = {}
@@ -72,6 +116,11 @@ class TreeSitterContextResolver:
         for language, suffixes in self._LANGUAGE_ALIASES.items():
             if suffix in suffixes:
                 return language
+        name = path.name.lower()
+        if name in {"dockerfile", "containerfile"}:
+            return "dockerfile"
+        if name == "makefile":
+            return "make"
         return None
 
     def _resolve_path(self, file_str: str, root: Path) -> Path | None:
@@ -87,19 +136,25 @@ class TreeSitterContextResolver:
             return None
         parser = self._parsers.get(language)
         if parser is None:
-            module_name = self._GRAMMAR_MODULES.get(language)
-            if module_name is None:
-                self._disabled.add(language)
+            if Parser is None or _GET_PARSER is None:
+                if language not in self._FALLBACK_LANGUAGES:
+                    self._disabled.add(language)
+                self._parsers[language] = None
+                return None
+            grammar_name = self._GRAMMAR_NAMES.get(language)
+            if grammar_name is None:
+                if language not in self._FALLBACK_LANGUAGES:
+                    self._disabled.add(language)
                 self._parsers[language] = None
                 return None
             try:
-                module = importlib.import_module(module_name)
-                lang = Language(module.language())  # type: ignore[attr-defined]
-                parser = Parser()
-                parser.language = lang  # type: ignore[assignment]
+                parser = _GET_PARSER(grammar_name)
+                if parser is None:
+                    raise ValueError("grammar unavailable")
                 self._parsers[language] = parser
             except Exception:  # pragma: no cover - dependency issues
-                self._disabled.add(language)
+                if language not in self._FALLBACK_LANGUAGES:
+                    self._disabled.add(language)
                 self._parsers[language] = None
                 return None
         return parser
@@ -139,11 +194,19 @@ class TreeSitterContextResolver:
                         return context
         # fallbacks when Tree-sitter unavailable
         if language == "python":
+            context = self._python_ast_context(path, line)
+            if context:
+                return context
             return self._python_fallback(path, line)
         if language == "markdown":
+            context = self._markdown_heading_context(path, line)
+            if context:
+                return context
             return self._markdown_fallback(path, line)
         if language == "json":
-            return self._json_fallback(path, line)
+            context = self._json_fallback(path, line)
+            if context:
+                return context
         return None
 
     def _node_at(self, root: Node, line: int) -> Node | None:
@@ -223,7 +286,7 @@ class TreeSitterContextResolver:
         return ".".join(reversed(path_parts))
 
     @staticmethod
-    def _python_fallback(path: Path, line: int) -> str | None:
+    def _python_ast_context(path: Path, line: int) -> str | None:
         try:
             source = path.read_text(encoding="utf-8")
         except OSError:
@@ -248,7 +311,11 @@ class TreeSitterContextResolver:
         return None
 
     @staticmethod
-    def _markdown_fallback(path: Path, line: int) -> str | None:
+    def _python_fallback(path: Path, line: int) -> str | None:
+        return TreeSitterContextResolver._python_ast_context(path, line)
+
+    @staticmethod
+    def _markdown_heading_context(path: Path, line: int) -> str | None:
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
         except OSError:
@@ -264,6 +331,10 @@ class TreeSitterContextResolver:
                     return heading
             idx -= 1
         return None
+
+    @staticmethod
+    def _markdown_fallback(path: Path, line: int) -> str | None:
+        return TreeSitterContextResolver._markdown_heading_context(path, line)
 
     @staticmethod
     def _json_fallback(path: Path, line: int) -> str | None:

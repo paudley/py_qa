@@ -586,7 +586,12 @@ def parse_dotenv_linter(stdout: str, _context: ToolContext) -> Sequence[RawDiagn
     results: list[RawDiagnostic] = []
     for raw_line in stdout.splitlines():
         line = raw_line.strip()
-        if not line or line.startswith("Checking") or line.startswith("Nothing to check") or line.startswith("No problems found"):
+        if (
+            not line
+            or line.startswith("Checking")
+            or line.startswith("Nothing to check")
+            or line.startswith("No problems found")
+        ):
             continue
         match = DOTENV_PATTERN.match(line)
         if not match:
@@ -662,7 +667,7 @@ def parse_remark(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]
                     code=message.get("ruleId") or message.get("rule"),
                     tool="remark-lint",
                 )
-        )
+            )
     return results
 
 
@@ -814,9 +819,7 @@ def parse_shfmt(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
     return results
 
 
-PHPLINT_PATTERN = re.compile(
-    r"^Parse error: (?P<message>.+?) in (?P<file>.+) on line (?P<line>\d+)"
-)
+PHPLINT_PATTERN = re.compile(r"^Parse error: (?P<message>.+?) in (?P<file>.+) on line (?P<line>\d+)")
 
 
 def parse_phplint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:

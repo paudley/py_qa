@@ -51,7 +51,9 @@ def test_desired_version_prefers_package_spec() -> None:
     assert desired_version(unknown) is None
 
 
-def test_npm_runtime_falls_back_to_local_when_system_version_too_low(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_npm_runtime_falls_back_to_local_when_system_version_too_low(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tool = _make_tool(
         name="eslint",
         runtime="npm",

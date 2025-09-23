@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-import io
-import os
 import platform
 import stat
 import tarfile
@@ -15,7 +13,6 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 import requests
-import shlex
 import shutil
 
 from ..models import RawDiagnostic
@@ -769,7 +766,7 @@ class _PerltidyCommand(CommandBuilder):
 
         if self.is_fix:
             if "-b" not in cmd:
-                cmd.extend(["-b", "-bext=\"\""])
+                cmd.extend(["-b", '-bext=""'])
             if "-q" not in cmd:
                 cmd.append("-q")
         else:

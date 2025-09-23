@@ -167,8 +167,7 @@ class RuntimeHandler(ABC):
         root: Path,
         cache_dir: Path,
         target_version: str | None,
-    ) -> PreparedCommand:
-        ...
+    ) -> PreparedCommand: ...
 
     @staticmethod
     def _merge_env(overrides: Mapping[str, str] | None = None) -> dict[str, str]:
@@ -726,6 +725,8 @@ class PerlRuntime(RuntimeHandler):
             "PERL_LOCAL_LIB_ROOT": str(bin_dir.parent),
         }
         return env
+
+
 class RustRuntime(RuntimeHandler):
     """Provision Rust tooling using ``cargo install`` with caching."""
 

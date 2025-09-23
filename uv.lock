@@ -1049,13 +1049,20 @@ dependencies = [
     { name = "packaging" },
     { name = "sqlfluff" },
     { name = "tree-sitter" },
+    { name = "tree-sitter-bash" },
+    { name = "tree-sitter-dockerfile" },
     { name = "tree-sitter-go" },
     { name = "tree-sitter-javascript" },
     { name = "tree-sitter-json" },
+    { name = "tree-sitter-lua" },
+    { name = "tree-sitter-make" },
     { name = "tree-sitter-markdown" },
+    { name = "tree-sitter-php" },
     { name = "tree-sitter-python" },
     { name = "tree-sitter-rust" },
     { name = "tree-sitter-sql" },
+    { name = "tree-sitter-toml" },
+    { name = "tree-sitter-yaml" },
     { name = "typer" },
 ]
 
@@ -1111,13 +1118,20 @@ requires-dist = [
     { name = "packaging", specifier = ">=24.1" },
     { name = "sqlfluff", specifier = ">=3.4.2" },
     { name = "tree-sitter", specifier = ">=0.25.1" },
+    { name = "tree-sitter-bash" },
+    { name = "tree-sitter-dockerfile" },
     { name = "tree-sitter-go", specifier = ">=0.25.0" },
     { name = "tree-sitter-javascript", specifier = ">=0.25.0" },
     { name = "tree-sitter-json", specifier = ">=0.24.8" },
+    { name = "tree-sitter-lua" },
+    { name = "tree-sitter-make" },
     { name = "tree-sitter-markdown", specifier = ">=0.5.1" },
+    { name = "tree-sitter-php" },
     { name = "tree-sitter-python", specifier = ">=0.25.0" },
     { name = "tree-sitter-rust", specifier = ">=0.24.0" },
     { name = "tree-sitter-sql", specifier = ">=0.3.8" },
+    { name = "tree-sitter-toml" },
+    { name = "tree-sitter-yaml" },
     { name = "typer", specifier = ">=0.12" },
 ]
 
@@ -1642,6 +1656,30 @@ wheels = [
 ]
 
 [[package]]
+name = "tree-sitter-bash"
+version = "0.25.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/94/fe115f24fd8a3e1073e240c1e766b573ea678a87f1f5e036ec071bdfe419/tree_sitter_bash-0.25.0.tar.gz", hash = "sha256:6b6410ea5f54abe8780e4b260b01adbfec3a0729907c7a62a3448f670010e72e", size = 426005, upload-time = "2025-06-04T16:37:41.38Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4a/5d/c694bcda78d6882713c37c77b2bb970ecd5fdc31f1aec5a50dbf76c75c04/tree_sitter_bash-0.25.0-cp310-abi3-macosx_10_9_x86_64.whl", hash = "sha256:1120152dc21e5d6a542207e95f3d474089e63f057696dbbcd563e5050e997dcf", size = 195836, upload-time = "2025-06-04T16:37:32.109Z" },
+    { url = "https://files.pythonhosted.org/packages/a5/e7/bc5c142ec2356aac8e5d47958caa21624fa91400981bfd499bc2aade6ded/tree_sitter_bash-0.25.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:437f3b5cbdb6e1dd81a0d0044ad190655238548d34c8ea3d78958ee896f5984d", size = 205386, upload-time = "2025-06-04T16:37:33.225Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/b6/0fc2429781bc29c6cf40754244f7608107074b60ec5d6a5dd2f11071a063/tree_sitter_bash-0.25.0-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:cd82f006078ddd6c4406be7ab4e04013daafe65a8979a2ad1d3180f6483eccd7", size = 266472, upload-time = "2025-06-04T16:37:34.151Z" },
+    { url = "https://files.pythonhosted.org/packages/ba/38/8fcd557f47ad10edc15b855c209216ac0393ff388fa0de10ba6c4bce694b/tree_sitter_bash-0.25.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:26434f942e391d6cc62ec2e43ce0a622a8c1feb6e62c1ca020493df79952d413", size = 243762, upload-time = "2025-06-04T16:37:35.543Z" },
+    { url = "https://files.pythonhosted.org/packages/0d/62/924b370de21b02d8698d9f8db078def267e50d3f1094135840656db4ca00/tree_sitter_bash-0.25.0-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:2532d8d5892f09f43716cdc1e8efcf16cf54062b8216a4c29babaf7abff56fdc", size = 232153, upload-time = "2025-06-04T16:37:36.867Z" },
+    { url = "https://files.pythonhosted.org/packages/f3/38/885d781d788fc6d9eb8fdaa2e6dda5c1a8b54a800ec6d760262534c4e8ac/tree_sitter_bash-0.25.0-cp310-abi3-win_amd64.whl", hash = "sha256:7f60510341200356ea15e8ad5eb0ffc0d495c6c23bdb31255fecd39b214d9326", size = 197974, upload-time = "2025-06-04T16:37:38.968Z" },
+    { url = "https://files.pythonhosted.org/packages/19/6b/e4602a49e280113e314073549b060977c6929e404739445c1aea950d593b/tree_sitter_bash-0.25.0-cp310-abi3-win_arm64.whl", hash = "sha256:0347c1d8fe0c7814ef98f8a65189426d2895efd2b8b00022e7ff32741e1165ac", size = 193141, upload-time = "2025-06-04T16:37:39.994Z" },
+]
+
+[[package]]
+name = "tree-sitter-dockerfile"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/31/10/a9325b3c925a6d0b17c9f46c0c75d9cb3fc3298d1add7919547228d2e2f1/tree_sitter_dockerfile-0.2.0-cp38-abi3-macosx_11_0_arm64.whl", hash = "sha256:868555b3e7684de83156c5727f4bd3e3f9bbcd99ca2c4d0625cf71cf8178744c", size = 25624, upload-time = "2025-06-19T17:24:53.146Z" },
+    { url = "https://files.pythonhosted.org/packages/22/99/b7a44b113f184d3e19f04c3b31b60978cd1ce247617515c40e45f4af2234/tree_sitter_dockerfile-0.2.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:146eeaae1fcb24617f482eb8ba1b25fcb45964eeca0663de2a53e49930292b72", size = 50275, upload-time = "2025-06-19T17:23:17.21Z" },
+]
+
+[[package]]
 name = "tree-sitter-go"
 version = "0.25.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1689,6 +1727,37 @@ wheels = [
 ]
 
 [[package]]
+name = "tree-sitter-lua"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/d7/06a5e6b437c18a7a28a61bdd20e70904a2d93919e7e9321aa6b1530e8a8e/tree_sitter_lua-0.2.0.tar.gz", hash = "sha256:3e51c784d5de5a664d4bd7897c34b8f7be07d92c36cf17b4a7a4d7bbf8687032", size = 28943, upload-time = "2024-09-09T15:14:13.577Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e3/9a/09f04baf964e9dd0d39843089b8f62d7feae6fc17b5022079cb2b5c0fdfe/tree_sitter_lua-0.2.0-cp39-abi3-macosx_10_9_x86_64.whl", hash = "sha256:79cf800e33279c0542eb2ec98faaca5c1bba56ca7c507179b47397d087c48ded", size = 21345, upload-time = "2024-09-09T15:14:03.473Z" },
+    { url = "https://files.pythonhosted.org/packages/68/ca/b8ff15701c3a6395fa251976b7b796dd0d062c465f1dc294ea27b24028a6/tree_sitter_lua-0.2.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:005027e1714fa9a47ecf47ac2fe9a3da711d81fc9c94ef7cd189e6824ea17aaf", size = 22117, upload-time = "2024-09-09T15:14:04.947Z" },
+    { url = "https://files.pythonhosted.org/packages/fa/04/ee05d34152918e939ea80d6d59a4600c747a66f79ef4307ad3c82b6e1e01/tree_sitter_lua-0.2.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e5b1e9fdddfd90a88c90e74216b0d73f83da939ac27113407667e1c4001b1b0b", size = 42662, upload-time = "2024-09-09T15:14:05.858Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/a1/1b0acf6e941b1401599b6c0c67bbd11830ae310304ced99520529daeffc2/tree_sitter_lua-0.2.0-cp39-abi3-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9e2de63a61f5af44fc34034752cdbf1680001c64d6d86be7a1c3ea0e576ead75", size = 43113, upload-time = "2024-09-09T15:14:07.695Z" },
+    { url = "https://files.pythonhosted.org/packages/67/69/e6e6d794185c72fd2ea02a81109f265d7c947e10c7ed92a5f2f636d1460b/tree_sitter_lua-0.2.0-cp39-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:abb525613049522759eec37d11ff7ab00d3b5cbf85e956341670d70debc1d645", size = 40212, upload-time = "2024-09-09T15:14:09.069Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/70/d8b81f64cbfc210be8bb7d206e137617ce73f3585b94e5bcf56b0e137d13/tree_sitter_lua-0.2.0-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:ad32c4eda8f309332e3ae593a7c606cbc86ca0e2579960bd904afbadf4ab9df4", size = 39550, upload-time = "2024-09-09T15:14:10.535Z" },
+    { url = "https://files.pythonhosted.org/packages/58/98/ee2d9a55a689053777057d5aa10d532e7f6e15076b8ea9b325daee4df567/tree_sitter_lua-0.2.0-cp39-abi3-win_amd64.whl", hash = "sha256:b196db72a35ea91aa8bf1f92bd100960b4c6ed0c2604ac64c6739d4db7fff49d", size = 23648, upload-time = "2024-09-09T15:14:11.705Z" },
+    { url = "https://files.pythonhosted.org/packages/25/2d/1ad032f310fc873482c492ec5d1e00d24cc441073c89abd756a41bfa82a6/tree_sitter_lua-0.2.0-cp39-abi3-win_arm64.whl", hash = "sha256:4afde381bebbb55fc9f4d69884d719667866d5f5f0d6fcd73ec35bc9cc3fc85a", size = 22201, upload-time = "2024-09-09T15:14:12.708Z" },
+]
+
+[[package]]
+name = "tree-sitter-make"
+version = "1.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b6/c9/4b534b0f8be76b5a7495419e7017998ceb1cd260ca91b4bf2358f00af97e/tree_sitter_make-1.1.1.tar.gz", hash = "sha256:ef394673ab83956dffb3986526f4c059082ff2d84c87f9da18ab30030f561b4c", size = 73789, upload-time = "2024-12-21T19:03:42.558Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/11/10/9f0fa416c0b6561cb93c643402a0e6567f948af2a5ce218575f1e08bcd53/tree_sitter_make-1.1.1-cp39-abi3-macosx_10_9_x86_64.whl", hash = "sha256:368fd813e274f81a69354369521dee1a4565209f030408f92fe07a92c7a4bdb7", size = 45818, upload-time = "2024-12-21T19:03:30.614Z" },
+    { url = "https://files.pythonhosted.org/packages/05/ec/aa2b0300613d60222d6e0ef11dd1a40edb73dbf10dd3db188729ca29ce45/tree_sitter_make-1.1.1-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:e2c17b7d5b51cf6eb429dd8117e94cabc76948feb3ddb67eac02fa7189a88310", size = 43805, upload-time = "2024-12-21T19:03:33.655Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/64/ce59ab3b993c37e53f99ff7f34db3eac9826ce76ce5738033219ed466859/tree_sitter_make-1.1.1-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7f16f8d00b4a52dd46b53407b81ac8e72b52f25e5917e8785270841a2dab78dc", size = 82086, upload-time = "2024-12-21T19:03:34.844Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/34/a6f9ffd8064605a45bfc78848eb2f6969871af0e6d6cd56ca76816255153/tree_sitter_make-1.1.1-cp39-abi3-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6e0e424449c9e0a2f7e8476238727638acb5fe041533440fc20e21e064ef1fb7", size = 77685, upload-time = "2024-12-21T19:03:37.125Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/cc/df46a568fd338569b73da3dd62f847eecd74983c30294d9f1550b770293a/tree_sitter_make-1.1.1-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:6dcfd4ebb0659f01bee41b5bc82e7a596bab918e8b0e95dbec6ebe470237cd3b", size = 80502, upload-time = "2024-12-21T19:03:38.243Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/5a/637d822952cf2c783a7a922f6854a0a4fda05ae4bdd0694d79faa0e11e08/tree_sitter_make-1.1.1-cp39-abi3-win_amd64.whl", hash = "sha256:0f6325bf5255bfdb3895aa18cbf3618734bc94f31bd89447559137675160a424", size = 43241, upload-time = "2024-12-21T19:03:39.355Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/18/6ec683806462573049abb0069593aaff41eb67b79025e9c152734e64f3a7/tree_sitter_make-1.1.1-cp39-abi3-win_arm64.whl", hash = "sha256:a97763826659d692784564a74cfc915c0198372ce018ac2c4ea1a511437bb07f", size = 41706, upload-time = "2024-12-21T19:03:41.513Z" },
+]
+
+[[package]]
 name = "tree-sitter-markdown"
 version = "0.5.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1702,6 +1771,20 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/8c/c8/8218482d56b78755cdc20816a28754145cb1767e1e7e0ddde5988547ab86/tree_sitter_markdown-0.5.1-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:b8a8a04a5d942c177cc590ec40074fcf3658f3a7c0a3388a8575990003665d8c", size = 184922, upload-time = "2025-09-16T17:12:08.937Z" },
     { url = "https://files.pythonhosted.org/packages/b6/ca/423600960b91c3aba6f2202ad4c430b5401e652d51a73a59769375c2b4ea/tree_sitter_markdown-0.5.1-cp39-abi3-win_amd64.whl", hash = "sha256:b1b0e4cbcf5a7b85005f1e9266fc2ed9b649b41a6048f3b1abae3612368d97a6", size = 142519, upload-time = "2025-09-16T17:12:10.027Z" },
     { url = "https://files.pythonhosted.org/packages/93/f5/327dd7fa42ae39796a8853685c40a8ac968585260094c581047270cbc851/tree_sitter_markdown-0.5.1-cp39-abi3-win_arm64.whl", hash = "sha256:2296ef53a757d8f5b848616706d0518e04d487bc7748bd05755d4a3a65711542", size = 137166, upload-time = "2025-09-16T17:12:10.858Z" },
+]
+
+[[package]]
+name = "tree-sitter-php"
+version = "0.24.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a4/c8/1a499038cb4036bea1d560ffbc807a6fb940261aa22296bd49a62ed8bcba/tree_sitter_php-0.24.1-cp310-abi3-macosx_10_9_x86_64.whl", hash = "sha256:d56e2dcf025450f84a2cdbf4b18a09e6cb88b92e9e6858e63de3d4133ab2e43e", size = 219550, upload-time = "2025-08-16T22:14:30.212Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/5e/b52f2599acb29f6899470f7137d3d491c752b88df3950fb7408aea57ddca/tree_sitter_php-0.24.1-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:29759c67d4c27a68c227ed82c0b7e4699617b1bd23757d50c081f81a12b4f80d", size = 229632, upload-time = "2025-08-16T22:14:31.85Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/58/ca290da45380bd6ba7c6b0b98cc5fc30325c32c7f14f0c93196a451b19c4/tree_sitter_php-0.24.1-cp310-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:94b89832ac09f078eed2acd88598838bc51012224cbcebb916dbb6a37e74357e", size = 325351, upload-time = "2025-08-16T22:14:33Z" },
+    { url = "https://files.pythonhosted.org/packages/9a/c6/fd863a7a779d0ab67688939eba0e08bff7b1ffe731288d3d3610df21217b/tree_sitter_php-0.24.1-cp310-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:7a1404a30f2972498ace040b0029738b8dac45d0a12932ccb8b605eb94bafbe4", size = 313021, upload-time = "2025-08-16T22:14:34.394Z" },
+    { url = "https://files.pythonhosted.org/packages/48/ed/aace12f30c4f5474a9ad0e9da85c060174e3764342c9860974bb0feb02fc/tree_sitter_php-0.24.1-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:3e96f61462a960c78e5389c7ba6c16c25e66b465c763b8e63ad66423326c2fa7", size = 305905, upload-time = "2025-08-16T22:14:35.846Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/c4/6c690c33b1ae9cae9505c0a2896f046fda174d72c46bdafce6aab3b2f2e7/tree_sitter_php-0.24.1-cp310-abi3-win_amd64.whl", hash = "sha256:1a1b65b72a8410d421f914ee13d38fd546a94d01cb834f69b27c78ba7589a5b5", size = 208014, upload-time = "2025-08-16T22:14:37.206Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/69/54c670d725c092b89e76ca6984582b6a768b128ac1859ed48141b124da1d/tree_sitter_php-0.24.1-cp310-abi3-win_arm64.whl", hash = "sha256:56a70c5ef1bddb15f220a479b2f2edf3042c764b6c443921fbd7ca9174d664e3", size = 206033, upload-time = "2025-08-16T22:14:38.632Z" },
 ]
 
 [[package]]
@@ -1748,6 +1831,36 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/0c/44/2723c54e0309cda89f643457d40511acdd908f70408728ad6a5c4aa5bc88/tree_sitter_sql-0.3.8-cp38-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:18268daaca95e38ed0f3b751defc213c07263576f864eaa2a44f642a54f1ff18", size = 335663, upload-time = "2025-02-13T16:08:08.455Z" },
     { url = "https://files.pythonhosted.org/packages/00/93/38f26ed9760520b7f29d7328b8211081945dc846a32ff0b0daaaef7af681/tree_sitter_sql-0.3.8-cp38-abi3-win_amd64.whl", hash = "sha256:bd2832b719d4d3b1560f06fdfabbdb95d1119e8debb96b9b95d1177fe4fccf4c", size = 302976, upload-time = "2025-02-13T16:08:10.378Z" },
     { url = "https://files.pythonhosted.org/packages/0d/d9/dd32d7b74e20dd057d74fb21be0af3e6a1be69709494092fcc3a560200b0/tree_sitter_sql-0.3.8-cp38-abi3-win_arm64.whl", hash = "sha256:5630369688f3eecc59740f2e48e23ac5b905961ad2e8b6a1bcee80a212f85727", size = 286947, upload-time = "2025-02-13T16:08:12.357Z" },
+]
+
+[[package]]
+name = "tree-sitter-toml"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/59/b9/03ee757ac375e77186ea112c14fcf31e0ca70b27b6388d93dcceef61f029/tree_sitter_toml-0.7.0.tar.gz", hash = "sha256:29e257612fa8f0c1fcbc4e7e08ddc561169f1725265302e64d81086354144a70", size = 16803, upload-time = "2024-12-03T05:03:46.711Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ad/4d/1e00a5cd8dba09e340b25aa60a3eaeae584ff5bc5d93b0777169d6741ee5/tree_sitter_toml-0.7.0-cp39-abi3-macosx_10_9_x86_64.whl", hash = "sha256:b9ae5c3e7c5b6bb05299dd73452ceafa7fa0687d5af3012332afa7757653b676", size = 14755, upload-time = "2024-12-03T05:03:39.973Z" },
+    { url = "https://files.pythonhosted.org/packages/92/20/ac8a20805339105fe0bbb6beaa99dbbd1159647760ddd786142364e0b7f2/tree_sitter_toml-0.7.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:18be09538e9775cddc0290392c4e2739de2201260af361473ca60b5c21f7bd22", size = 15201, upload-time = "2024-12-03T05:03:40.871Z" },
+    { url = "https://files.pythonhosted.org/packages/36/cf/7bae8e20310e7cc763ae407599e6130b819f91ad5197e210a56f697f15d8/tree_sitter_toml-0.7.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:a045e0acfcf91b7065066f7e51ea038ed7385c1e35e7e8fae18f252d3f8adb8c", size = 30855, upload-time = "2024-12-03T05:03:41.83Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/49/51f2fa25a3ff4d45af1be8cbf7a3d733fb6a390b2763cfa00892fffe90bf/tree_sitter_toml-0.7.0-cp39-abi3-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:7a2f8cf9d73f07b6628093b35e5c5fbac039247e32cb075eaa5289a5914e73af", size = 29741, upload-time = "2024-12-03T05:03:42.577Z" },
+    { url = "https://files.pythonhosted.org/packages/4d/30/dd94ed1ab0bc3198e16ed2140a6f4d2474c1cd561d8c6847ab269af73654/tree_sitter_toml-0.7.0-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:860ffa4513b2dc3083d8e412bd815a350b0a9490624b37e7c8f6ed5c6f9ce63c", size = 30498, upload-time = "2024-12-03T05:03:43.447Z" },
+    { url = "https://files.pythonhosted.org/packages/a2/dd/0681d43aa09dd161565858bcfdd4402c8d10259f142de734448f5ce17418/tree_sitter_toml-0.7.0-cp39-abi3-win_amd64.whl", hash = "sha256:2760a04f06937b01b1562a2135cd7e8207e399e73ef75bbebc77e37b1ad3b15d", size = 16756, upload-time = "2024-12-03T05:03:44.227Z" },
+    { url = "https://files.pythonhosted.org/packages/17/e4/cce587001e620f1972e70aeabc1b38893a85681be9ec5a64e4be9ce17410/tree_sitter_toml-0.7.0-cp39-abi3-win_arm64.whl", hash = "sha256:fd00fd8a51c65aa19c40539431cb1773d87c30af5757b4041fa6c229058420b4", size = 15651, upload-time = "2024-12-03T05:03:45.261Z" },
+]
+
+[[package]]
+name = "tree-sitter-yaml"
+version = "0.7.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0b/d0/97899f366e3d982ad92dd83faa2b1dd0060e5db99990e0d7f660902493f8/tree_sitter_yaml-0.7.1.tar.gz", hash = "sha256:2cea5f8d4ca4d10439bd7d9e458c61b330cb33cf7a92e4ef1d428e10e1ab7e2c", size = 91533, upload-time = "2025-05-22T13:34:57.257Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3f/7e/83a40de4315b8f9975d3fd562071bda8fa1dfc088b3359d048003f174fd0/tree_sitter_yaml-0.7.1-cp310-abi3-macosx_10_9_x86_64.whl", hash = "sha256:0256632914d6eb21819f21a85bab649505496ac01fac940eb08a410669346822", size = 43788, upload-time = "2025-05-22T13:34:49.261Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/05/760b38e31f9ca1e8667cf82a07119956dcb865728f7d777a22f5ddf296c6/tree_sitter_yaml-0.7.1-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:bf9dd2649392e1f28a20f920f49acd9398cfb872876e338aa84562f8f868dc4d", size = 45001, upload-time = "2025-05-22T13:34:50.397Z" },
+    { url = "https://files.pythonhosted.org/packages/88/e9/6d8d502eeb96fb363c1ac926ac456afc55019836fc675263fd23754dfdc6/tree_sitter_yaml-0.7.1-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:94eb8fcb1ac8e43f7da47e63880b6f283524460153f08420a167c1721e42b08a", size = 93852, upload-time = "2025-05-22T13:34:51.728Z" },
+    { url = "https://files.pythonhosted.org/packages/85/ef/b84bc6aaaa08022b4cc1d36212e837ce051306d50dd62993ffc21c9bf4ab/tree_sitter_yaml-0.7.1-cp310-abi3-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:30410089828ebdece9abf3aa16b2e172b84cf2fd90a2b7d8022f6ed8cde90ecb", size = 92125, upload-time = "2025-05-22T13:34:52.731Z" },
+    { url = "https://files.pythonhosted.org/packages/16/0c/5caa26da012c93da1eadf66c6babb1b1e2e8dd4434668c7232739df87e46/tree_sitter_yaml-0.7.1-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:219af34f4b35b5c16f25426cc3f90cf725fbba17c9592f78504086e67787be09", size = 90443, upload-time = "2025-05-22T13:34:53.626Z" },
+    { url = "https://files.pythonhosted.org/packages/92/25/a14297ea2a575bc3c19fcf58a5983a926ad732c32af23a346d7fa0563d8d/tree_sitter_yaml-0.7.1-cp310-abi3-win_amd64.whl", hash = "sha256:550645223d68b7d6b4cfedf4972754724e64d369ec321fa33f57d3ca54cafc7c", size = 45517, upload-time = "2025-05-22T13:34:54.545Z" },
+    { url = "https://files.pythonhosted.org/packages/62/fa/b25e688df5b4e024bc3627bc3f951524ef9c8b0756f0646411efa5063a10/tree_sitter_yaml-0.7.1-cp310-abi3-win_arm64.whl", hash = "sha256:298ade69ad61f76bb3e50ced809650ec30521a51aa2708166b176419ccb0a6ba", size = 43801, upload-time = "2025-05-22T13:34:55.471Z" },
 ]
 
 [[package]]
