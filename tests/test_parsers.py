@@ -408,6 +408,7 @@ def test_parse_golangci_lint() -> None:
     assert len(diags) == 1
     diag = diags[0]
     assert diag.file == "main.go"
+    assert diag.tool == "govet"
     severity = diag.severity
     assert isinstance(severity, Severity)
     assert severity.value == "warning"

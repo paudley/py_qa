@@ -932,15 +932,18 @@ def parse_golangci_lint(payload: Any, _context: ToolContext) -> Sequence[RawDiag
             "warning": Severity.WARNING,
             "info": Severity.NOTICE,
         }.get(severity, Severity.WARNING)
+        sub_linter = issue.get("FromLinter") or issue.get("source") or "golangci-lint"
+        message = str(issue.get("Text", "") or issue.get("text", "")).strip()
+        code = issue.get("Code") or issue.get("code")
         results.append(
             RawDiagnostic(
                 file=path,
                 line=line,
                 column=column,
                 severity=sev_enum,
-                message=str(issue.get("Text", "") or issue.get("text", "")).strip(),
-                code=issue.get("FromLinter") or issue.get("source"),
-                tool="golangci-lint",
+                message=message,
+                code=code,
+                tool=str(sub_linter),
             )
         )
     return results

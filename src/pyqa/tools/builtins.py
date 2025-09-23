@@ -1508,6 +1508,11 @@ class _GolangciLintCommand(CommandBuilder):
         if deadline:
             cmd.extend(["--deadline", str(deadline)])
 
+        enable_all_setting = _setting(settings, "enable-all", "enable_all")
+        if enable_all_setting is None or _as_bool(enable_all_setting) is not False:
+            if "--enable-all" not in cmd:
+                cmd.append("--enable-all")
+
         for item in _settings_list(_setting(settings, "enable")):
             cmd.extend(["--enable", str(item)])
 
