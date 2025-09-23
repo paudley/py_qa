@@ -333,22 +333,17 @@ class Orchestrator:
     def _filter_files_for_tool(extensions: Sequence[str], files: Sequence[Path]) -> list[Path]:
         if not extensions:
             return list(files)
-        suffixes = {ext.lower() for ext in extensions if ext.startswith('.')}
-        names = {ext.lower() for ext in extensions if not ext.startswith('.')}
+        patterns = {ext.lower() for ext in extensions}
         filtered: list[Path] = []
         for path in files:
-            suffix = path.suffix.lower()
             name = path.name.lower()
-            if suffixes and suffix in suffixes:
+            if name in patterns:
                 filtered.append(path)
                 continue
-            if names and name in names:
+            suffix = path.suffix.lower()
+            if suffix and suffix in patterns:
                 filtered.append(path)
                 continue
-        if not suffixes and names:
-            return filtered
-        if not names and suffixes:
-            return filtered
         return filtered
 
     @staticmethod

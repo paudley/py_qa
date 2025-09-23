@@ -517,6 +517,38 @@ def parse_hadolint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnosti
     return results
 
 
+DOTENV_PATTERN = re.compile(r"^(?P<file>[^:]+):(?P<line>\d+)\s+(?P<code>[A-Za-z0-9_-]+):\s+(?P<message>.+)$")
+
+
+def parse_dotenv_linter(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse dotenv-linter text output."""
+
+    results: list[RawDiagnostic] = []
+    for raw_line in stdout.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("Checking") or line.startswith("Nothing to check") or line.startswith("No problems found"):
+            continue
+        match = DOTENV_PATTERN.match(line)
+        if not match:
+            continue
+        file_path = match.group("file")
+        line_no = int(match.group("line")) if match.group("line") else None
+        code = match.group("code")
+        message = match.group("message").strip()
+        results.append(
+            RawDiagnostic(
+                file=file_path,
+                line=line_no,
+                column=None,
+                severity=Severity.WARNING,
+                message=message,
+                code=code,
+                tool="dotenv-linter",
+            )
+        )
+    return results
+
+
 _TSC_PATTERN = re.compile(
     r"^(?P<file>[^:(\n]+)\((?P<line>\d+),(?P<col>\d+)\):\s*"
     r"(?P<severity>error|warning)\s*(?P<code>[A-Z]+\d+)?\s*:?\s*(?P<message>.+)$"
@@ -642,6 +674,7 @@ __all__ = [
     "parse_dockerfilelint",
     "parse_yamllint",
     "parse_hadolint",
+    "parse_dotenv_linter",
     "parse_tsc",
     "parse_golangci_lint",
     "parse_cargo_clippy",

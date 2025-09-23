@@ -27,6 +27,7 @@ from ..parsers import (
     parse_dockerfilelint,
     parse_yamllint,
     parse_hadolint,
+    parse_dotenv_linter,
     parse_golangci_lint,
     parse_actionlint,
     parse_kube_linter,
@@ -1091,6 +1092,40 @@ class _HadolintCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _DotenvLinterCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        if "--no-color" not in cmd:
+            cmd.append("--no-color")
+        if "--quiet" not in cmd:
+            cmd.append("--quiet")
+
+        root = ctx.root
+        settings = ctx.settings
+
+        for exclude in _settings_list(_setting(settings, "exclude")):
+            cmd.extend(["--exclude", str(_resolve_path(root, exclude))])
+
+        for skip in _settings_list(_setting(settings, "skip")):
+            cmd.extend(["--skip", str(skip)])
+
+        schema = _setting(settings, "schema")
+        if schema:
+            cmd.extend(["--schema", str(_resolve_path(root, schema))])
+
+        if _as_bool(_setting(settings, "recursive")):
+            cmd.append("--recursive")
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _TscCommand(CommandBuilder):
     base: Sequence[str]
 
@@ -1604,6 +1639,26 @@ def _builtin_tools() -> Iterable[Tool]:
         file_extensions=("Dockerfile", "dockerfile", "Containerfile"),
         description="Dockerfile linter based on ShellCheck and best practices.",
         runtime="binary",
+    )
+
+    yield Tool(
+        name="dotenv-linter",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_DotenvLinterCommand(base=("dotenv-linter",)),
+                append_files=True,
+                description="Lint .env files using dotenv-linter.",
+                parser=TextParser(parse_dotenv_linter),
+            ),
+        ),
+        languages=("dotenv",),
+        file_extensions=(".env", ".env.example", ".env.template", "env"),
+        description="Rust-based linter for dotenv files.",
+        runtime="rust",
+        package="dotenv-linter",
+        min_version="3.3.0",
+        version_command=("dotenv-linter", "--version"),
     )
 
     yield Tool(

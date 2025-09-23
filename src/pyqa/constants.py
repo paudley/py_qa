@@ -34,6 +34,7 @@ LANGUAGE_EXTENSIONS: Final[dict[str, set[str]]] = {
     "css": {".css", ".scss", ".sass", ".less"},
     "yaml": {".yml", ".yaml"},
     "docker": set(),
+    "dotenv": set(),
 }
 
 LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
@@ -88,8 +89,14 @@ LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
         "dockerfile",
         "Containerfile",
     },
+    "dotenv": {
+        ".env",
+        ".env.example",
+        ".env.template",
+    },
 }
 
 LANGUAGE_FILENAMES: Final[dict[str, set[str]]] = {
     "docker": {"dockerfile", "containerfile"},
+    "dotenv": {".env", "env"},
 }

@@ -5,7 +5,7 @@ from typing import Sequence
 
 import pytest
 
-from pyqa.tool_env import GO_BIN_DIR, CommandPreparer, PreparedCommand, desired_version
+from pyqa.tool_env import GO_BIN_DIR, RUST_BIN_DIR, CommandPreparer, PreparedCommand, desired_version
 from pyqa.tools.base import Tool
 
 
@@ -227,3 +227,97 @@ def test_go_runtime_prefers_system_when_version_ok(tmp_path: Path, monkeypatch: 
 
     assert result.source == "system"
     assert result.cmd[0] == "kube-linter"
+
+
+def test_rust_runtime_installs_when_system_too_old(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    tool = _make_tool(
+        name="dotenv-linter",
+        runtime="rust",
+        package="dotenv-linter",
+        min_version="3.3.0",
+        version_command=("dotenv-linter", "--version"),
+    )
+
+    def fake_which(cmd: str) -> str | None:
+        if cmd == "dotenv-linter":
+            return "/usr/bin/dotenv-linter"
+        if cmd == "cargo":
+            return "/usr/bin/cargo"
+        return None
+
+    monkeypatch.setattr("pyqa.tool_env.shutil.which", fake_which)
+
+    preparer = CommandPreparer()
+
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:  # noqa: ANN001
+        if command[0] == "dotenv-linter":
+            return "2.9.0"
+        return None
+
+    monkeypatch.setattr(preparer._versions, "capture", fake_capture)  # type: ignore[attr-defined]
+
+    fake_binary = tmp_path / "rust" / "bin" / "dotenv-linter"
+    fake_binary.parent.mkdir(parents=True, exist_ok=True)
+    fake_binary.write_text("#!/bin/sh\nexit 0\n")
+    fake_binary.chmod(0o755)
+
+    def fake_install(self, tool_obj: Tool, binary_name: str) -> Path:  # noqa: ANN001
+        return fake_binary
+
+    monkeypatch.setattr("pyqa.tool_env.RustRuntime._ensure_local_tool", fake_install)
+
+    result = preparer.prepare(
+        tool=tool,
+        base_cmd=("dotenv-linter",),
+        root=tmp_path,
+        cache_dir=tmp_path,
+        system_preferred=True,
+        use_local_override=False,
+    )
+
+    assert result.source == "local"
+    assert result.cmd[0] == str(fake_binary)
+    assert str(RUST_BIN_DIR) not in result.env.get("PATH", "")
+
+
+def test_rust_runtime_prefers_system_when_version_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    tool = _make_tool(
+        name="dotenv-linter",
+        runtime="rust",
+        package="dotenv-linter",
+        min_version="3.3.0",
+        version_command=("dotenv-linter", "--version"),
+    )
+
+    def fake_which(cmd: str) -> str | None:
+        if cmd in {"dotenv-linter", "cargo"}:
+            return f"/usr/bin/{cmd}"
+        return None
+
+    monkeypatch.setattr("pyqa.tool_env.shutil.which", fake_which)
+
+    preparer = CommandPreparer()
+
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:  # noqa: ANN001
+        if command[0] == "dotenv-linter":
+            return "3.3.1"
+        return None
+
+    monkeypatch.setattr(preparer._versions, "capture", fake_capture)  # type: ignore[attr-defined]
+
+    def fail_install(self, tool_obj: Tool, binary_name: str) -> Path:  # noqa: ANN001
+        raise AssertionError("Local rust install should not occur")
+
+    monkeypatch.setattr("pyqa.tool_env.RustRuntime._ensure_local_tool", fail_install)
+
+    result = preparer.prepare(
+        tool=tool,
+        base_cmd=("dotenv-linter",),
+        root=tmp_path,
+        cache_dir=tmp_path,
+        system_preferred=True,
+        use_local_override=False,
+    )
+
+    assert result.source == "system"
+    assert result.cmd[0] == "dotenv-linter"
