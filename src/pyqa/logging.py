@@ -23,7 +23,7 @@ def is_tty() -> bool:
 
     try:
         return sys.stdout.isatty()
-    except (AttributeError, ValueError):  # pragma: no cover - defensive
+    except (AttributeError, ValueError):
         return False
 
 

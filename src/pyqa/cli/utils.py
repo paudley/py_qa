@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess  # nosec B404 - subprocess used for controlled CLI invocations
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Sequence
@@ -36,7 +36,7 @@ def installed_packages() -> set[str]:
     """Return the set of installed packages within the project environment."""
 
     try:
-        completed = subprocess.run(  # nosec - arguments are fixed and trusted
+        completed = subprocess.run(
             ["uv", "pip", "list", "--format=json"],
             check=True,
             capture_output=True,
@@ -49,15 +49,17 @@ def installed_packages() -> set[str]:
         data = json.loads(completed.stdout)
     except json.JSONDecodeError:
         return set()
-    return {str(item.get("name", "")).lower() for item in data if isinstance(item, dict) and item.get("name")}
+    return {
+        str(item.get("name", "")).lower()
+        for item in data
+        if isinstance(item, dict) and item.get("name")
+    }
 
 
 def run_uv(args: List[str], *, check: bool = True) -> None:
     """Invoke ``uv`` with *args* relative to the project root."""
 
-    subprocess.run(  # nosec - caller controls arguments without shell
-        args, check=check, cwd=PYQA_ROOT
-    )
+    subprocess.run(args, check=check, cwd=PYQA_ROOT)
 
 
 def check_tool_status(tool: Tool) -> ToolStatus:
@@ -87,7 +89,7 @@ def check_tool_status(tool: Tool) -> ToolStatus:
         )
 
     try:
-        completed = subprocess.run(  # nosec B603 - diagnostic probe, caller controls command
+        completed = subprocess.run(
             list(version_cmd),
             capture_output=True,
             text=True,
@@ -95,8 +97,14 @@ def check_tool_status(tool: Tool) -> ToolStatus:
         )
     except FileNotFoundError:
         status = "vendored" if tool.runtime != "binary" else "uninstalled"
-        runtime_note = f"Runtime '{tool.runtime}' can vend this tool on demand." if tool.runtime != "binary" else ""
-        notes = f"Executable '{version_cmd[0]}' not found on PATH. {runtime_note}".strip()
+        runtime_note = (
+            f"Runtime '{tool.runtime}' can vend this tool on demand."
+            if tool.runtime != "binary"
+            else ""
+        )
+        notes = (
+            f"Executable '{version_cmd[0]}' not found on PATH. {runtime_note}".strip()
+        )
         return ToolStatus(
             name=tool.name,
             status=status,
@@ -109,7 +117,9 @@ def check_tool_status(tool: Tool) -> ToolStatus:
             raw_output=None,
         )
 
-    output = (completed.stdout or "") + ("\n" + completed.stderr if completed.stderr else "")
+    output = (completed.stdout or "") + (
+        "\n" + completed.stderr if completed.stderr else ""
+    )
     output = output.strip()
     version = resolver.normalize(output.splitlines()[0] if output else None)
 
@@ -119,7 +129,11 @@ def check_tool_status(tool: Tool) -> ToolStatus:
     else:
         status = "ok"
         notes = output.splitlines()[0] if output else ""
-        if tool.min_version and version and not resolver.is_compatible(version, tool.min_version):
+        if (
+            tool.min_version
+            and version
+            and not resolver.is_compatible(version, tool.min_version)
+        ):
             status = "outdated"
             notes = f"Detected {version}; requires ≥ {tool.min_version}."
 

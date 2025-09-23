@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Sequence, cast
+from typing import Literal, Sequence, cast
 
 import pytest
 
@@ -19,15 +19,25 @@ from pyqa.tool_env import (
     PerlRuntime,
     PreparedCommand,
     RustRuntime,
+)
+from pyqa.tool_env import constants as tool_constants
+from pyqa.tool_env import (
     desired_version,
 )
+from pyqa.tool_env.runtimes import go as go_runtime
+from pyqa.tool_env.runtimes import lua as lua_runtime
+from pyqa.tool_env.runtimes import npm as npm_runtime
+from pyqa.tool_env.runtimes import perl as perl_runtime
+from pyqa.tool_env.runtimes import rust as rust_runtime
 from pyqa.tools.base import Tool
+
+ToolRuntime = Literal["python", "npm", "binary", "go", "lua", "perl", "rust"]
 
 
 def _make_tool(
     *,
     name: str,
-    runtime: str,
+    runtime: ToolRuntime,
     package: str | None = None,
     min_version: str | None = None,
     version_command: Sequence[str] | None = None,
@@ -77,11 +87,11 @@ def test_npm_runtime_falls_back_to_local_when_system_version_too_low(
     )
 
     # System executable is available but reports an older version.
-    monkeypatch.setattr("pyqa.tool_env.shutil.which", lambda _: "/usr/bin/eslint")
+    monkeypatch.setattr(npm_runtime.shutil, "which", lambda _: "/usr/bin/eslint")
 
     preparer = CommandPreparer()
 
-    def fake_capture(command: Sequence[str], *, env=None) -> str | None:  # noqa: ANN001
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:
         return "9.12.0"
 
     monkeypatch.setattr(preparer._versions, "capture", fake_capture)  # type: ignore[attr-defined]
@@ -93,10 +103,10 @@ def test_npm_runtime_falls_back_to_local_when_system_version_too_low(
     executable.write_text("#!/bin/sh\nexit 0\n")
     executable.chmod(0o755)
 
-    def fake_install(self, tool_obj: Tool):  # noqa: ANN001
+    def fake_install(self, tool_obj: Tool):
         return prefix, "9.13.0"
 
-    monkeypatch.setattr("pyqa.tool_env.NpmRuntime._ensure_local_package", fake_install)
+    monkeypatch.setattr(npm_runtime.NpmRuntime, "_ensure_local_package", fake_install)
 
     result = preparer.prepare(
         tool=tool,
@@ -114,7 +124,9 @@ def test_npm_runtime_falls_back_to_local_when_system_version_too_low(
     assert result.version == "9.13.0"
 
 
-def test_npm_runtime_prefers_system_when_version_sufficient(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_npm_runtime_prefers_system_when_version_sufficient(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tool = _make_tool(
         name="eslint",
         runtime="npm",
@@ -123,19 +135,19 @@ def test_npm_runtime_prefers_system_when_version_sufficient(tmp_path: Path, monk
         version_command=("eslint", "--version"),
     )
 
-    monkeypatch.setattr("pyqa.tool_env.shutil.which", lambda _: "/usr/bin/eslint")
+    monkeypatch.setattr(npm_runtime.shutil, "which", lambda _: "/usr/bin/eslint")
 
     preparer = CommandPreparer()
 
-    def fake_capture(command: Sequence[str], *, env=None) -> str | None:  # noqa: ANN001
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:
         return "9.13.1"
 
     monkeypatch.setattr(preparer._versions, "capture", fake_capture)  # type: ignore[attr-defined]
 
-    def fail_install(self, tool_obj: Tool):  # noqa: ANN001
+    def fail_install(self, tool_obj: Tool):
         raise AssertionError("Local install should not be attempted")
 
-    monkeypatch.setattr("pyqa.tool_env.NpmRuntime._ensure_local_package", fail_install)
+    monkeypatch.setattr(npm_runtime.NpmRuntime, "_ensure_local_package", fail_install)
 
     result = preparer.prepare(
         tool=tool,
@@ -152,7 +164,9 @@ def test_npm_runtime_prefers_system_when_version_sufficient(tmp_path: Path, monk
     assert result.version == "9.13.1"
 
 
-def test_npm_runtime_install_failure_propagates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_npm_runtime_install_failure_propagates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tool = _make_tool(
         name="remark",
         runtime="npm",
@@ -162,19 +176,21 @@ def test_npm_runtime_install_failure_propagates(tmp_path: Path, monkeypatch: pyt
     preparer = CommandPreparer()
     runtime = cast(NpmRuntime, preparer._handlers["npm"])
 
-    monkeypatch.setattr("pyqa.tool_env.NODE_CACHE_DIR", tmp_path / "node-cache")
-    monkeypatch.setattr("pyqa.tool_env.NPM_CACHE_DIR", tmp_path / "npm-cache")
+    monkeypatch.setattr(tool_constants, "NODE_CACHE_DIR", tmp_path / "node-cache")
+    monkeypatch.setattr(tool_constants, "NPM_CACHE_DIR", tmp_path / "npm-cache")
 
-    def fail_install(*args, **kwargs):  # noqa: ANN001
+    def fail_install(*args, **kwargs):
         raise subprocess.CalledProcessError(1, args[0], "out", "err")
 
-    monkeypatch.setattr("pyqa.tool_env.subprocess.run", fail_install)
+    monkeypatch.setattr(npm_runtime, "run_command", fail_install)
 
     with pytest.raises(subprocess.CalledProcessError):
         runtime._ensure_local_package(tool)
 
 
-def test_go_runtime_installs_when_system_too_old(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_go_runtime_installs_when_system_too_old(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tool = _make_tool(
         name="kube-linter",
         runtime="go",
@@ -190,11 +206,11 @@ def test_go_runtime_installs_when_system_too_old(tmp_path: Path, monkeypatch: py
             return "/usr/bin/go"
         return None
 
-    monkeypatch.setattr("pyqa.tool_env.shutil.which", fake_which)
+    monkeypatch.setattr(go_runtime.shutil, "which", fake_which)
 
     preparer = CommandPreparer()
 
-    def fake_capture(command: Sequence[str], *, env=None) -> str | None:  # noqa: ANN001
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:
         if command[0] == "kube-linter":
             return "0.7.5"
         return None
@@ -206,10 +222,10 @@ def test_go_runtime_installs_when_system_too_old(tmp_path: Path, monkeypatch: py
     fake_binary.write_text("#!/bin/sh\nexit 0\n")
     fake_binary.chmod(0o755)
 
-    def fake_install(self, tool_obj: Tool, binary_name: str) -> Path:  # noqa: ANN001
+    def fake_install(self, tool_obj: Tool, binary_name: str) -> Path:
         return fake_binary
 
-    monkeypatch.setattr("pyqa.tool_env.GoRuntime._ensure_local_tool", fake_install)
+    monkeypatch.setattr(go_runtime.GoRuntime, "_ensure_local_tool", fake_install)
 
     result = preparer.prepare(
         tool=tool,
@@ -225,7 +241,9 @@ def test_go_runtime_installs_when_system_too_old(tmp_path: Path, monkeypatch: py
     assert str(GO_BIN_DIR) in result.env.get("PATH", "")
 
 
-def test_go_runtime_prefers_system_when_version_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_go_runtime_prefers_system_when_version_ok(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tool = _make_tool(
         name="kube-linter",
         runtime="go",
@@ -239,21 +257,21 @@ def test_go_runtime_prefers_system_when_version_ok(tmp_path: Path, monkeypatch: 
             return f"/usr/bin/{cmd}"
         return None
 
-    monkeypatch.setattr("pyqa.tool_env.shutil.which", fake_which)
+    monkeypatch.setattr(go_runtime.shutil, "which", fake_which)
 
     preparer = CommandPreparer()
 
-    def fake_capture(command: Sequence[str], *, env=None) -> str | None:  # noqa: ANN001
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:
         if command[0] == "kube-linter":
             return "0.7.6"
         return None
 
     monkeypatch.setattr(preparer._versions, "capture", fake_capture)  # type: ignore[attr-defined]
 
-    def fail_install(self, tool_obj: Tool, binary_name: str) -> Path:  # noqa: ANN001
+    def fail_install(self, tool_obj: Tool, binary_name: str) -> Path:
         raise AssertionError("Local go install should not occur")
 
-    monkeypatch.setattr("pyqa.tool_env.GoRuntime._ensure_local_tool", fail_install)
+    monkeypatch.setattr(go_runtime.GoRuntime, "_ensure_local_tool", fail_install)
 
     result = preparer.prepare(
         tool=tool,
@@ -268,7 +286,9 @@ def test_go_runtime_prefers_system_when_version_ok(tmp_path: Path, monkeypatch: 
     assert result.cmd[0] == "kube-linter"
 
 
-def test_go_runtime_installs_when_no_version_spec(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_go_runtime_installs_when_no_version_spec(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tool = _make_tool(
         name="checkmake",
         runtime="go",
@@ -284,11 +304,11 @@ def test_go_runtime_installs_when_no_version_spec(tmp_path: Path, monkeypatch: p
             return None
         return None
 
-    monkeypatch.setattr("pyqa.tool_env.shutil.which", fake_which)
+    monkeypatch.setattr(go_runtime.shutil, "which", fake_which)
 
     preparer = CommandPreparer()
 
-    def fake_install(self, tool_obj: Tool, binary_name: str):  # noqa: ANN001
+    def fake_install(self, tool_obj: Tool, binary_name: str):
         prefix = tmp_path / "go-latest"
         binary = prefix / "bin" / binary_name
         binary.parent.mkdir(parents=True, exist_ok=True)
@@ -296,7 +316,7 @@ def test_go_runtime_installs_when_no_version_spec(tmp_path: Path, monkeypatch: p
         binary.chmod(0o755)
         return binary
 
-    monkeypatch.setattr("pyqa.tool_env.GoRuntime._ensure_local_tool", fake_install)
+    monkeypatch.setattr(go_runtime.GoRuntime, "_ensure_local_tool", fake_install)
 
     result = preparer.prepare(
         tool=tool,
@@ -311,7 +331,9 @@ def test_go_runtime_installs_when_no_version_spec(tmp_path: Path, monkeypatch: p
     assert result.cmd[0].endswith("checkmake")
 
 
-def test_go_runtime_install_failure_propagates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_go_runtime_install_failure_propagates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tool = _make_tool(
         name="kube-linter",
         runtime="go",
@@ -321,56 +343,62 @@ def test_go_runtime_install_failure_propagates(tmp_path: Path, monkeypatch: pyte
     preparer = CommandPreparer()
     runtime = cast(GoRuntime, preparer._handlers["go"])
 
-    monkeypatch.setattr("pyqa.tool_env.GO_BIN_DIR", tmp_path / "go-bin")
-    monkeypatch.setattr("pyqa.tool_env.GO_META_DIR", tmp_path / "go-meta")
-    monkeypatch.setattr("pyqa.tool_env.GO_WORK_DIR", tmp_path / "go-work")
+    monkeypatch.setattr(tool_constants, "GO_BIN_DIR", tmp_path / "go-bin")
+    monkeypatch.setattr(tool_constants, "GO_META_DIR", tmp_path / "go-meta")
+    monkeypatch.setattr(tool_constants, "GO_WORK_DIR", tmp_path / "go-work")
 
-    def fail_install(*args, **kwargs):  # noqa: ANN001
+    def fail_install(*args, **kwargs):
         raise subprocess.CalledProcessError(1, args[0], "out", "err")
 
-    monkeypatch.setattr("pyqa.tool_env.subprocess.run", fail_install)
+    monkeypatch.setattr(go_runtime, "run_command", fail_install)
 
     with pytest.raises(subprocess.CalledProcessError):
         runtime._ensure_local_tool(tool, "kube-linter")
 
 
-def test_lua_runtime_install_failure_propagates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_lua_runtime_install_failure_propagates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tool = _make_tool(name="luacheck", runtime="lua", package="luacheck")
 
     preparer = CommandPreparer()
     runtime = cast(LuaRuntime, preparer._handlers["lua"])
 
-    monkeypatch.setattr("pyqa.tool_env.LUA_CACHE_DIR", tmp_path / "lua-cache")
-    monkeypatch.setattr("pyqa.tool_env.LUA_META_DIR", tmp_path / "lua-meta")
+    monkeypatch.setattr(tool_constants, "LUA_CACHE_DIR", tmp_path / "lua-cache")
+    monkeypatch.setattr(tool_constants, "LUA_META_DIR", tmp_path / "lua-meta")
 
-    def fail_install(*args, **kwargs):  # noqa: ANN001
+    def fail_install(*args, **kwargs):
         raise subprocess.CalledProcessError(1, args[0], "out", "err")
 
-    monkeypatch.setattr("pyqa.tool_env.subprocess.run", fail_install)
+    monkeypatch.setattr(lua_runtime, "run_command", fail_install)
 
     with pytest.raises(subprocess.CalledProcessError):
         runtime._ensure_local_tool(tool, "luacheck")
 
 
-def test_perl_runtime_install_failure_propagates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_perl_runtime_install_failure_propagates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tool = _make_tool(name="perlcritic", runtime="perl", package="Perl::Critic")
 
     preparer = CommandPreparer()
     runtime = cast(PerlRuntime, preparer._handlers["perl"])
 
-    monkeypatch.setattr("pyqa.tool_env.PERL_CACHE_DIR", tmp_path / "perl-cache")
-    monkeypatch.setattr("pyqa.tool_env.PERL_META_DIR", tmp_path / "perl-meta")
+    monkeypatch.setattr(tool_constants, "PERL_CACHE_DIR", tmp_path / "perl-cache")
+    monkeypatch.setattr(tool_constants, "PERL_META_DIR", tmp_path / "perl-meta")
 
-    def fail_install(*args, **kwargs):  # noqa: ANN001
+    def fail_install(*args, **kwargs):
         raise subprocess.CalledProcessError(1, args[0], "out", "err")
 
-    monkeypatch.setattr("pyqa.tool_env.subprocess.run", fail_install)
+    monkeypatch.setattr(perl_runtime, "run_command", fail_install)
 
     with pytest.raises(subprocess.CalledProcessError):
         runtime._ensure_local_tool(tool, "perlcritic")
 
 
-def test_rust_runtime_installs_when_system_too_old(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rust_runtime_installs_when_system_too_old(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tool = _make_tool(
         name="dotenv-linter",
         runtime="rust",
@@ -380,10 +408,10 @@ def test_rust_runtime_installs_when_system_too_old(tmp_path: Path, monkeypatch: 
     )
 
     rust_cache = tmp_path / "rust-cache"
-    monkeypatch.setattr("pyqa.tool_env.RUST_CACHE_DIR", rust_cache)
-    monkeypatch.setattr("pyqa.tool_env.RUST_BIN_DIR", rust_cache / "bin")
-    monkeypatch.setattr("pyqa.tool_env.RUST_META_DIR", rust_cache / "meta")
-    monkeypatch.setattr("pyqa.tool_env.RUST_WORK_DIR", rust_cache / "work")
+    monkeypatch.setattr(tool_constants, "RUST_CACHE_DIR", rust_cache)
+    monkeypatch.setattr(tool_constants, "RUST_BIN_DIR", rust_cache / "bin")
+    monkeypatch.setattr(tool_constants, "RUST_META_DIR", rust_cache / "meta")
+    monkeypatch.setattr(tool_constants, "RUST_WORK_DIR", rust_cache / "work")
 
     def fake_which(cmd: str) -> str | None:
         if cmd == "dotenv-linter":
@@ -392,11 +420,11 @@ def test_rust_runtime_installs_when_system_too_old(tmp_path: Path, monkeypatch: 
             return "/usr/bin/cargo"
         return None
 
-    monkeypatch.setattr("pyqa.tool_env.shutil.which", fake_which)
+    monkeypatch.setattr(rust_runtime.shutil, "which", fake_which)
 
     preparer = CommandPreparer()
 
-    def fake_capture(command: Sequence[str], *, env=None) -> str | None:  # noqa: ANN001
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:
         if command[0] == "dotenv-linter":
             return "2.9.0"
         return None
@@ -408,10 +436,10 @@ def test_rust_runtime_installs_when_system_too_old(tmp_path: Path, monkeypatch: 
     fake_binary.write_text("#!/bin/sh\nexit 0\n")
     fake_binary.chmod(0o755)
 
-    def fake_install(self, tool_obj: Tool, binary_name: str) -> Path:  # noqa: ANN001
+    def fake_install(self, tool_obj: Tool, binary_name: str) -> Path:
         return fake_binary
 
-    monkeypatch.setattr("pyqa.tool_env.RustRuntime._ensure_local_tool", fake_install)
+    monkeypatch.setattr(rust_runtime.RustRuntime, "_ensure_local_tool", fake_install)
 
     result = preparer.prepare(
         tool=tool,
@@ -427,7 +455,9 @@ def test_rust_runtime_installs_when_system_too_old(tmp_path: Path, monkeypatch: 
     assert str(RUST_BIN_DIR) not in result.env.get("PATH", "")
 
 
-def test_rust_runtime_prefers_system_when_version_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rust_runtime_prefers_system_when_version_ok(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tool = _make_tool(
         name="dotenv-linter",
         runtime="rust",
@@ -437,31 +467,31 @@ def test_rust_runtime_prefers_system_when_version_ok(tmp_path: Path, monkeypatch
     )
 
     rust_cache = tmp_path / "rust-cache"
-    monkeypatch.setattr("pyqa.tool_env.RUST_CACHE_DIR", rust_cache)
-    monkeypatch.setattr("pyqa.tool_env.RUST_BIN_DIR", rust_cache / "bin")
-    monkeypatch.setattr("pyqa.tool_env.RUST_META_DIR", rust_cache / "meta")
-    monkeypatch.setattr("pyqa.tool_env.RUST_WORK_DIR", rust_cache / "work")
+    monkeypatch.setattr(tool_constants, "RUST_CACHE_DIR", rust_cache)
+    monkeypatch.setattr(tool_constants, "RUST_BIN_DIR", rust_cache / "bin")
+    monkeypatch.setattr(tool_constants, "RUST_META_DIR", rust_cache / "meta")
+    monkeypatch.setattr(tool_constants, "RUST_WORK_DIR", rust_cache / "work")
 
     def fake_which(cmd: str) -> str | None:
         if cmd in {"dotenv-linter", "cargo"}:
             return f"/usr/bin/{cmd}"
         return None
 
-    monkeypatch.setattr("pyqa.tool_env.shutil.which", fake_which)
+    monkeypatch.setattr(rust_runtime.shutil, "which", fake_which)
 
     preparer = CommandPreparer()
 
-    def fake_capture(command: Sequence[str], *, env=None) -> str | None:  # noqa: ANN001
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:
         if command[0] == "dotenv-linter":
             return "3.3.1"
         return None
 
     monkeypatch.setattr(preparer._versions, "capture", fake_capture)  # type: ignore[attr-defined]
 
-    def fail_install(self, tool_obj: Tool, binary_name: str) -> Path:  # noqa: ANN001
+    def fail_install(self, tool_obj: Tool, binary_name: str) -> Path:
         raise AssertionError("Local rust install should not occur")
 
-    monkeypatch.setattr("pyqa.tool_env.RustRuntime._ensure_local_tool", fail_install)
+    monkeypatch.setattr(rust_runtime.RustRuntime, "_ensure_local_tool", fail_install)
 
     result = preparer.prepare(
         tool=tool,
@@ -476,25 +506,29 @@ def test_rust_runtime_prefers_system_when_version_ok(tmp_path: Path, monkeypatch
     assert result.cmd[0] == "dotenv-linter"
 
 
-def test_rust_runtime_install_failure_propagates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rust_runtime_install_failure_propagates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tool = _make_tool(name="dotenv-linter", runtime="rust", package="dotenv-linter")
 
     preparer = CommandPreparer()
     runtime = cast(RustRuntime, preparer._handlers["rust"])
 
-    monkeypatch.setattr("pyqa.tool_env.RUST_CACHE_DIR", tmp_path / "rust-cache")
-    monkeypatch.setattr("pyqa.tool_env.RUST_META_DIR", tmp_path / "rust-meta")
+    monkeypatch.setattr(tool_constants, "RUST_CACHE_DIR", tmp_path / "rust-cache")
+    monkeypatch.setattr(tool_constants, "RUST_META_DIR", tmp_path / "rust-meta")
 
-    def fail_install(*args, **kwargs):  # noqa: ANN001
+    def fail_install(*args, **kwargs):
         raise subprocess.CalledProcessError(1, args[0], "out", "err")
 
-    monkeypatch.setattr("pyqa.tool_env.subprocess.run", fail_install)
+    monkeypatch.setattr(rust_runtime, "run_command", fail_install)
 
     with pytest.raises(subprocess.CalledProcessError):
         runtime._ensure_local_tool(tool, "dotenv-linter")
 
 
-def test_rust_runtime_install_rustup_component(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rust_runtime_install_rustup_component(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tool = _make_tool(
         name="cargo-clippy",
         runtime="rust",
@@ -504,10 +538,10 @@ def test_rust_runtime_install_rustup_component(tmp_path: Path, monkeypatch: pyte
     )
 
     rust_cache = tmp_path / "rust-cache"
-    monkeypatch.setattr("pyqa.tool_env.RUST_CACHE_DIR", rust_cache)
-    monkeypatch.setattr("pyqa.tool_env.RUST_BIN_DIR", rust_cache / "bin")
-    monkeypatch.setattr("pyqa.tool_env.RUST_META_DIR", rust_cache / "meta")
-    monkeypatch.setattr("pyqa.tool_env.RUST_WORK_DIR", rust_cache / "work")
+    monkeypatch.setattr(tool_constants, "RUST_CACHE_DIR", rust_cache)
+    monkeypatch.setattr(tool_constants, "RUST_BIN_DIR", rust_cache / "bin")
+    monkeypatch.setattr(tool_constants, "RUST_META_DIR", rust_cache / "meta")
+    monkeypatch.setattr(tool_constants, "RUST_WORK_DIR", rust_cache / "work")
 
     def fake_which(cmd: str) -> str | None:
         if cmd == "cargo":
@@ -516,19 +550,19 @@ def test_rust_runtime_install_rustup_component(tmp_path: Path, monkeypatch: pyte
             return "/usr/bin/rustup"
         return None
 
-    monkeypatch.setattr("pyqa.tool_env.shutil.which", fake_which)
+    monkeypatch.setattr(rust_runtime.shutil, "which", fake_which)
 
     calls: list[list[str]] = []
 
-    def fake_run(cmd, **kwargs):  # noqa: ANN001
-        calls.append(cmd)
+    def fake_run(cmd, **kwargs):
+        calls.append(list(cmd))
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
-    monkeypatch.setattr("pyqa.tool_env.subprocess.run", fake_run)
+    monkeypatch.setattr(rust_runtime, "run_command", fake_run)
 
     preparer = CommandPreparer()
 
-    def fake_capture(command: Sequence[str], *, env=None) -> str | None:  # noqa: ANN001
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:
         if command[0] == "cargo":
             return "cargo 1.81.0"
         return None
@@ -545,4 +579,7 @@ def test_rust_runtime_install_rustup_component(tmp_path: Path, monkeypatch: pyte
     )
 
     assert result.cmd[0] == "/usr/bin/cargo"
-    assert any(cmd[:3] == ["rustup", "component", "add"] for cmd in calls)
+    assert any(
+        Path(cmd[0]).name == "rustup" and cmd[1:3] == ["component", "add"]
+        for cmd in calls
+    )

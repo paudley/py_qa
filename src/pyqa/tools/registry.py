@@ -37,10 +37,10 @@ class ToolRegistry:
         names = self._by_language.get(language, set())
         return (self._tools[name] for name in names)
 
-    def __contains__(self, name: str) -> bool:  # pragma: no cover - trivial
+    def __contains__(self, name: str) -> bool:
         return name in self._tools
 
-    def __len__(self) -> int:  # pragma: no cover - trivial
+    def __len__(self) -> int:
         return len(self._tools)
 
 

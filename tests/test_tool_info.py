@@ -13,7 +13,7 @@ from pyqa.cli.app import app
 def test_tool_info_option(monkeypatch) -> None:
     runner = CliRunner()
 
-    def fake_run_tool_info(tool_name, root):  # pragma: no cover - simple stub
+    def fake_run_tool_info(tool_name, root):
         print(f"tool info for {tool_name} at {root}")
         return 0
 

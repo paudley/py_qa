@@ -22,8 +22,12 @@ hooks_app = typer.Typer(
 def main(
     ctx: typer.Context,
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Repository root."),
-    hooks_dir: Path = typer.Option(Path(".git/hooks"), "--hooks-dir", help="Overrides the hooks directory."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show actions without modifying files."),
+    hooks_dir: Path = typer.Option(
+        Path(".git/hooks"), "--hooks-dir", help="Overrides the hooks directory."
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show actions without modifying files."
+    ),
 ) -> None:
     if ctx.invoked_subcommand:
         return

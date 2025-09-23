@@ -11,15 +11,15 @@ from pathlib import Path
 import pytest
 
 try:
-    from tree_sitter import Parser  # type: ignore[attr-defined]
-except ModuleNotFoundError:  # pragma: no cover
-    Parser = None  # type: ignore[assignment]
+    import tree_sitter  # type: ignore[attr-defined]
+except ModuleNotFoundError:
+    pytest.skip("tree-sitter not available", allow_module_level=True)
+else:
+    _ = tree_sitter
 
 from pyqa.context import TreeSitterContextResolver
 from pyqa.models import Diagnostic
 from pyqa.severity import Severity
-
-pytestmark = pytest.mark.skipif(Parser is None, reason="tree-sitter not available")
 
 
 def test_python_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -48,7 +48,9 @@ def test_python_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     def fail_fallback(path: Path, line: int) -> str:
         raise AssertionError("fallback should not be used")
 
-    monkeypatch.setattr(TreeSitterContextResolver, "_python_fallback", staticmethod(fail_fallback))
+    monkeypatch.setattr(
+        TreeSitterContextResolver, "_python_fallback", staticmethod(fail_fallback)
+    )
 
     resolver.annotate([diag], root=tmp_path)
 

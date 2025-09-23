@@ -7,13 +7,13 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
 from .logging import fail, info, ok, warn
+from .subprocess_utils import run_command
 
 # Patterns for secret detection (compiled lazily)
 _SECRET_PATTERNS: list[re.Pattern[str]] = [
@@ -58,7 +58,9 @@ _PII_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"),
 ]
 
-_DOC_ENV_PATTERNS = re.compile(r"os\.environ|process\.env|ENV\[|getenv\(|-e [A-Z_]+=|export [A-Z_]+=|\$\{?[A-Z_]+\}?")
+_DOC_ENV_PATTERNS = re.compile(
+    r"os\.environ|process\.env|ENV\[|getenv\(|-e [A-Z_]+=|export [A-Z_]+=|\$\{?[A-Z_]+\}?"
+)
 
 _SKIP_PII_FILES = (
     "CONTRIBUTING.md",
@@ -125,7 +127,9 @@ class SecurityScanner:
         result = SecurityScanResult()
         resolved_files = self._resolve_files(files)
 
-        info("🔍 Scanning files for secrets and credentials...", use_emoji=self.use_emoji)
+        info(
+            "🔍 Scanning files for secrets and credentials...", use_emoji=self.use_emoji
+        )
         for path in resolved_files:
             self._scan_file(path, result)
 
@@ -170,11 +174,7 @@ class SecurityScanner:
             return ""
 
     def _scan_file(self, path: Path, result: SecurityScanResult) -> None:
-        if not path.is_file() or self._should_exclude(path):
-            return
-        if path.suffix in {".lock", ".json"} and path.name.endswith("lock.json"):
-            return
-        if self._is_binary(path):
+        if not self._is_scan_candidate(path):
             return
 
         text = self._read_text(path)
@@ -184,51 +184,95 @@ class SecurityScanner:
         relative_path = path.relative_to(self.root)
         lines = text.splitlines()
 
-        # Secret patterns
-        for pattern in _SECRET_PATTERNS:
-            matches = _match_pattern(pattern, lines)
-            if matches and not _should_skip_markdown(pattern, path, matches):
-                for line_no, snippet in matches[:3]:
-                    result.register_secret(relative_path, f"line {line_no}: {snippet.strip()}")
-                fail(
-                    f"Potential secrets found in {relative_path}",
-                    use_emoji=self.use_emoji,
-                )
+        secrets = self._scan_secret_patterns(path, relative_path, lines, result)
+        entropy = self._scan_entropy(relative_path, lines, result)
+        temp_flag = self._scan_temp_files(relative_path, result)
+        pii_flag = self._scan_pii(path, relative_path, lines, result)
 
-        # High entropy strings
-        matches = _match_pattern(_ENTROPY_PATTERN, lines)
-        matches = _filter_entropy(matches)
-        if matches:
-            for line_no, snippet in matches[:3]:
-                result.register_secret(
-                    relative_path,
-                    f"high entropy string at line {line_no}: {snippet.strip()}",
-                )
+        if secrets or entropy:
             fail(
-                f"High entropy strings found in {relative_path}",
-                use_emoji=self.use_emoji,
+                f"Potential secrets found in {relative_path}", use_emoji=self.use_emoji
             )
-
-        # Temp/backup files
-        if relative_path.suffix in _TMP_FILE_SUFFIXES or relative_path.name.endswith("~"):
-            result.register_temp(relative_path)
+        if temp_flag:
             warn(
                 f"Temporary/backup file should not be committed: {relative_path}",
                 use_emoji=self.use_emoji,
             )
+        if pii_flag:
+            warn(f"Potential PII found in {relative_path}", use_emoji=self.use_emoji)
 
-        # PII patterns
-        if not _should_skip_pii(path):
-            for pattern in _PII_PATTERNS:
-                pii_matches = _match_pattern(pattern, lines, case_sensitive=True)
-                pii_matches = _filter_comments(pii_matches)
-                if pii_matches:
-                    for line_no, snippet in pii_matches[:3]:
-                        result.register_pii(relative_path, f"line {line_no}: {snippet.strip()}")
-                    warn(
-                        f"Potential PII found in {relative_path}",
-                        use_emoji=self.use_emoji,
-                    )
+    def _is_scan_candidate(self, path: Path) -> bool:
+        if not path.is_file() or self._should_exclude(path):
+            return False
+        if path.suffix in {".lock", ".json"} and path.name.endswith("lock.json"):
+            return False
+        if self._is_binary(path):
+            return False
+        return True
+
+    def _scan_secret_patterns(
+        self,
+        path: Path,
+        relative_path: Path,
+        lines: Sequence[str],
+        result: SecurityScanResult,
+    ) -> bool:
+        found = False
+        for pattern in _SECRET_PATTERNS:
+            matches = _match_pattern(pattern, lines)
+            if not matches or _should_skip_markdown(pattern, path, matches):
+                continue
+            for line_no, snippet in matches[:3]:
+                result.register_secret(
+                    relative_path, f"line {line_no}: {snippet.strip()}"
+                )
+            found = True
+        return found
+
+    def _scan_entropy(
+        self,
+        relative_path: Path,
+        lines: Sequence[str],
+        result: SecurityScanResult,
+    ) -> bool:
+        matches = _match_pattern(_ENTROPY_PATTERN, lines)
+        filtered = _filter_entropy(matches)
+        if not filtered:
+            return False
+        for line_no, snippet in filtered[:3]:
+            result.register_secret(
+                relative_path,
+                f"high entropy string at line {line_no}: {snippet.strip()}",
+            )
+        return True
+
+    def _scan_temp_files(self, relative_path: Path, result: SecurityScanResult) -> bool:
+        if relative_path.suffix in _TMP_FILE_SUFFIXES or relative_path.name.endswith(
+            "~"
+        ):
+            result.register_temp(relative_path)
+            return True
+        return False
+
+    def _scan_pii(
+        self,
+        path: Path,
+        relative_path: Path,
+        lines: Sequence[str],
+        result: SecurityScanResult,
+    ) -> bool:
+        if _should_skip_pii(path):
+            return False
+        found = False
+        for pattern in _PII_PATTERNS:
+            matches = _match_pattern(pattern, lines, case_sensitive=True)
+            matches = _filter_comments(matches)
+            if not matches:
+                continue
+            for line_no, snippet in matches[:3]:
+                result.register_pii(relative_path, f"line {line_no}: {snippet.strip()}")
+            found = True
+        return found
 
     # ------------------------------------------------------------------
     def _run_bandit(self, result: SecurityScanResult) -> None:
@@ -251,7 +295,7 @@ class SecurityScanner:
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as handle:
             report_path = Path(handle.name)
         try:
-            completed = subprocess.run(
+            completed = run_command(
                 [
                     "bandit",
                     "-r",
@@ -263,7 +307,6 @@ class SecurityScanner:
                     "--quiet",
                 ],
                 capture_output=True,
-                text=True,
                 check=False,
             )
             if completed.returncode == 0:
@@ -295,7 +338,8 @@ class SecurityScanner:
             fail("Bandit found security vulnerabilities", use_emoji=self.use_emoji)
             for level, count in metrics.items():
                 symbol = "❌" if "HIGH" in level else "⚠️"
-                print(f"  {symbol} {level.split('.')[-1].title()} severity: {count}")
+                suffix = level.rsplit(".", maxsplit=1)[-1].title()
+                print(f"  {symbol} {suffix} severity: {count}")
             if samples:
                 print("\n  Sample issues:")
                 for sample in samples:
@@ -322,7 +366,9 @@ def _should_skip_pii(path: Path) -> bool:
     return any(fragment in path.as_posix() for fragment in _SKIP_PII_PATH_FRAGMENTS)
 
 
-def _should_skip_markdown(pattern: re.Pattern[str], path: Path, matches: list[tuple[int, str]]) -> bool:
+def _should_skip_markdown(
+    _pattern: re.Pattern[str], path: Path, matches: list[tuple[int, str]]
+) -> bool:
     if path.suffix.lower() != ".md":
         return False
     return all(_DOC_ENV_PATTERNS.search(line) for _, line in matches)
@@ -331,7 +377,9 @@ def _should_skip_markdown(pattern: re.Pattern[str], path: Path, matches: list[tu
 def _filter_entropy(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
     filtered: list[tuple[int, str]] = []
     for idx, line in matches:
-        if re.search(r"sha256|md5|hash|digest|test|example|sample|hexsha", line, re.IGNORECASE):
+        if re.search(
+            r"sha256|md5|hash|digest|test|example|sample|hexsha", line, re.IGNORECASE
+        ):
             continue
         if line.strip().startswith("#") or line.strip().startswith("//"):
             continue
@@ -341,7 +389,9 @@ def _filter_entropy(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
 
 def _filter_comments(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
     return [
-        (idx, line) for idx, line in matches if not line.lstrip().startswith("#") and not line.lstrip().startswith("//")
+        (idx, line)
+        for idx, line in matches
+        if not line.lstrip().startswith("#") and not line.lstrip().startswith("//")
     ]
 
 
@@ -349,15 +399,18 @@ def get_staged_files(root: Path) -> list[Path]:
     """Return files with staged changes in git."""
 
     try:
-        completed = subprocess.run(
+        completed = run_command(
             ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
             capture_output=True,
-            text=True,
-            cwd=root,
             check=False,
+            cwd=root,
         )
         if completed.returncode != 0:
             return []
-        return [root / line.strip() for line in completed.stdout.splitlines() if line.strip()]
+        return [
+            root / line.strip()
+            for line in completed.stdout.splitlines()
+            if line.strip()
+        ]
     except FileNotFoundError:  # git not installed
         return []

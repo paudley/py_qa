@@ -13,7 +13,7 @@ from pyqa.cli.app import app
 def test_doctor_option(monkeypatch) -> None:
     runner = CliRunner()
 
-    def fake_run_doctor(root):  # pragma: no cover - simple stub
+    def fake_run_doctor(root):
         print(f"doctor invoked for {root}")
         return 0
 

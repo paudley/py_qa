@@ -1,0 +1,119 @@
+# SPDX-License-Identifier: MIT
+"""Runtime handler for Perl-based tooling."""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import stat
+from pathlib import Path
+from typing import Sequence
+
+from ...subprocess_utils import run_command
+from ...tools.base import Tool
+from .. import constants as tool_constants
+from ..models import PreparedCommand
+from ..utils import _slugify
+from .base import RuntimeHandler
+
+
+class PerlRuntime(RuntimeHandler):
+    """Provision Perl tooling using cpanm."""
+
+    def _try_system(
+        self,
+        tool: Tool,
+        base_cmd: Sequence[str],
+        root: Path,
+        cache_dir: Path,
+        target_version: str | None,
+    ) -> PreparedCommand | None:
+        executable = shutil.which(base_cmd[0])
+        if not executable:
+            return None
+        version = None
+        if tool.version_command:
+            version = self._versions.capture(tool.version_command)
+        if not self._versions.is_compatible(version, target_version):
+            return None
+        return PreparedCommand.from_parts(
+            cmd=base_cmd, env=None, version=version, source="system"
+        )
+
+    def _prepare_local(
+        self,
+        tool: Tool,
+        base_cmd: Sequence[str],
+        root: Path,
+        cache_dir: Path,
+        target_version: str | None,
+    ) -> PreparedCommand:
+        binary_name = Path(base_cmd[0]).name
+        binary_path = self._ensure_local_tool(tool, binary_name)
+        cmd = list(base_cmd)
+        cmd[0] = str(binary_path)
+        env = self._perl_env(root)
+        version = None
+        if tool.version_command:
+            version = self._versions.capture(
+                tool.version_command, env=self._merge_env(env)
+            )
+        return PreparedCommand.from_parts(
+            cmd=cmd, env=env, version=version, source="local"
+        )
+
+    def _ensure_local_tool(self, tool: Tool, binary_name: str) -> Path:
+        requirement = tool.package or tool.name
+        slug = _slugify(requirement)
+        prefix = tool_constants.PERL_CACHE_DIR / slug
+        meta_file = tool_constants.PERL_META_DIR / f"{slug}.json"
+        binary = tool_constants.PERL_BIN_DIR / binary_name
+
+        if binary.exists() and meta_file.exists():
+            try:
+                data = json.loads(meta_file.read_text(encoding="utf-8"))
+                if data.get("requirement") == requirement:
+                    return binary
+            except json.JSONDecodeError:
+                pass
+
+        prefix.mkdir(parents=True, exist_ok=True)
+        tool_constants.PERL_META_DIR.mkdir(parents=True, exist_ok=True)
+        tool_constants.PERL_BIN_DIR.mkdir(parents=True, exist_ok=True)
+
+        env = os.environ.copy()
+        env.setdefault("PERL_CARTON_PATH", str(prefix))
+        env.setdefault("PERL_MM_OPT", f"INSTALL_BASE={prefix}")
+        env.setdefault("PERL_MB_OPT", f"--install_base {prefix}")
+        env.setdefault(
+            "PATH", f"{tool_constants.PERL_BIN_DIR}{os.pathsep}" + env.get("PATH", "")
+        )
+
+        run_command(["cpanm", "--notest", requirement], capture_output=True, env=env)
+
+        target = prefix / "bin" / binary_name
+        if not target.exists():
+            msg = f"Failed to install perl tool '{tool.name}'"
+            raise RuntimeError(msg)
+
+        shutil.copy2(target, binary)
+        binary.chmod(binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        meta_file.write_text(json.dumps({"requirement": requirement}), encoding="utf-8")
+        return binary
+
+    @staticmethod
+    def _perl_env(root: Path) -> dict[str, str]:
+        path_value = os.environ.get("PATH", "")
+        combined = (
+            f"{tool_constants.PERL_BIN_DIR}{os.pathsep}{path_value}"
+            if path_value
+            else str(tool_constants.PERL_BIN_DIR)
+        )
+        return {
+            "PATH": combined,
+            "PWD": str(root),
+        }
+
+
+__all__ = ["PerlRuntime"]

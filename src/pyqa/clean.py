@@ -61,8 +61,8 @@ class CleanPlanner:
         collected: dict[Path, CleanPlanItem] = {}
 
         info("✨ Cleaning repository temporary files...", use_emoji=True)
-        for directory, dirnames, filenames in iter_paths(root):
-            matches = _match_patterns(directory, filenames, patterns)
+        for directory, _subdirs, _files in iter_paths(root):
+            matches = _match_patterns(directory, patterns)
             for path in matches:
                 collected[path] = CleanPlanItem(path=path)
 
@@ -71,8 +71,8 @@ class CleanPlanner:
             if not directory.exists():
                 continue
             info(f"🧹 Cleaning {tree}/ ...", use_emoji=True)
-            for subdir, dirnames, filenames in iter_paths(directory):
-                matches = _match_patterns(subdir, filenames, patterns)
+            for subdir, _subdirs, _files in iter_paths(directory):
+                matches = _match_patterns(subdir, patterns)
                 for path in matches:
                     collected[path] = CleanPlanItem(path=path)
 
@@ -137,7 +137,7 @@ def _is_protected(path: Path, root: Path) -> bool:
     return any(part in protected_names for part in relative.parts)
 
 
-def _match_patterns(base: Path, filenames: Iterable[str], patterns: Iterable[str]) -> set[Path]:
+def _match_patterns(base: Path, patterns: Iterable[str]) -> set[Path]:
     matches: set[Path] = set()
     for pattern in patterns:
         iterator = base.glob(pattern)

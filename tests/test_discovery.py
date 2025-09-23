@@ -2,8 +2,6 @@
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 """Tests for filesystem and git discovery strategies."""
 
-# pylint: disable=missing-function-docstring
-
 import subprocess
 from pathlib import Path
 
@@ -20,7 +18,9 @@ def test_filesystem_discovery_respects_excludes(tmp_path: Path) -> None:
 
     node_modules = project_root / "node_modules"
     node_modules.mkdir()
-    (node_modules / "ignored.js").write_text("console.log('ignore');\n", encoding="utf-8")
+    (node_modules / "ignored.js").write_text(
+        "console.log('ignore');\n", encoding="utf-8"
+    )
 
     excluded_dir = project_root / "app" / "generated"
     excluded_dir.mkdir()

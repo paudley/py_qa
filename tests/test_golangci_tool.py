@@ -23,7 +23,9 @@ def test_golangci_command_includes_enable_all(tmp_path: Path) -> None:
 
     action = ToolAction(
         name="lint",
-        command=_GolangciLintCommand(base=("golangci-lint", "run", "--out-format", "json")),
+        command=_GolangciLintCommand(
+            base=("golangci-lint", "run", "--out-format", "json")
+        ),
         append_files=False,
     )
 
@@ -43,7 +45,9 @@ def test_golangci_respects_disable_enable_all_flag(tmp_path: Path) -> None:
 
     action = ToolAction(
         name="lint",
-        command=_GolangciLintCommand(base=("golangci-lint", "run", "--out-format", "json")),
+        command=_GolangciLintCommand(
+            base=("golangci-lint", "run", "--out-format", "json")
+        ),
         append_files=False,
     )
 

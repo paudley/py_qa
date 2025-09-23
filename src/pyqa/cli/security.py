@@ -5,69 +5,105 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
+from typing import Iterable, List, Sequence
 
 import typer
 
-from ..security import SecurityScanner, get_staged_files
+from ..security import SecurityScanner, SecurityScanResult, get_staged_files
 
 
 def security_scan_command(
-    files: List[Path] | None = typer.Argument(None, metavar="[FILES...]", help="Specific files to scan."),
+    files: List[Path] | None = typer.Argument(
+        None, metavar="[FILES...]", help="Specific files to scan."
+    ),
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
     staged: bool = typer.Option(
         True,
         "--staged/--no-staged",
         help="Include staged files when no explicit files are provided.",
     ),
-    no_bandit: bool = typer.Option(False, "--no-bandit", help="Skip running bandit static analysis."),
+    no_bandit: bool = typer.Option(
+        False, "--no-bandit", help="Skip running bandit static analysis."
+    ),
     no_emoji: bool = typer.Option(False, "--no-emoji", help="Disable emoji in output."),
 ) -> None:
     """Run security scans across the project."""
 
-    root = root.resolve()
-    selected_files = list(files or [])
-    if not selected_files and staged:
-        selected_files = get_staged_files(root)
-
-    if not selected_files:
+    root_path = root.resolve()
+    target_files = _resolve_security_targets(files, root_path, staged)
+    if not target_files:
         typer.echo("No files to scan.")
         raise typer.Exit(code=0)
 
     scanner = SecurityScanner(
-        root=root,
-        use_emoji=not no_emoji,
-        use_bandit=not no_bandit,
+        root=root_path, use_emoji=not no_emoji, use_bandit=not no_bandit
     )
-    result = scanner.run(selected_files)
+    result = scanner.run(list(target_files))
+    exit_code = _report_security_findings(result)
+    raise typer.Exit(code=exit_code)
 
-    if result.secret_files or result.pii_files or result.temp_files:
-        typer.echo("")
-    for path, matches in result.secret_files.items():
-        typer.echo(f"❌ {path}")
-        for match in matches:
-            typer.echo(f"    {match}")
-    for path, matches in result.pii_files.items():
-        typer.echo(f"⚠️  Potential PII in {path}")
-        for match in matches:
-            typer.echo(f"    {match}")
-    for path in result.temp_files:
-        typer.echo(f"⚠️  Temporary/backup file tracked: {path}")
 
-    if result.bandit_issues:
-        typer.echo("")
-        typer.echo("Bandit summary:")
-        for level, count in result.bandit_issues.items():
-            typer.echo(f"  {level.split('.')[-1].title()}: {count}")
-        if result.bandit_samples:
-            typer.echo("  Sample issues:")
-            for sample in result.bandit_samples:
-                typer.echo(f"    {sample}")
+def _resolve_security_targets(
+    files: Sequence[Path] | None,
+    root: Path,
+    staged: bool,
+) -> tuple[Path, ...]:
+    if files:
+        return tuple(path.resolve() for path in files)
+    if staged:
+        return tuple(get_staged_files(root))
+    return ()
 
+
+def _report_security_findings(result: SecurityScanResult) -> int:
+    emitted_header = _emit_secret_and_pii_findings(result)
+    emitted_bandit = _emit_bandit_summary(result)
     if result.findings:
-        typer.echo("")
+        if emitted_header or emitted_bandit:
+            typer.echo("")
         typer.echo(f"❌ Security scan found {result.findings} potential issue(s)")
-        raise typer.Exit(code=1)
-
+        return 1
     typer.echo("✅ No security issues detected")
-    raise typer.Exit(code=0)
+    return 0
+
+
+def _emit_secret_and_pii_findings(result: SecurityScanResult) -> bool:
+    emitted = False
+    for path, matches in result.secret_files.items():
+        if not emitted:
+            typer.echo("")
+            emitted = True
+        typer.echo(f"❌ {path}")
+        _emit_indented_lines(matches)
+    for path, matches in result.pii_files.items():
+        if not emitted:
+            typer.echo("")
+            emitted = True
+        typer.echo(f"⚠️  Potential PII in {path}")
+        _emit_indented_lines(matches)
+    for path in result.temp_files:
+        if not emitted:
+            typer.echo("")
+            emitted = True
+        typer.echo(f"⚠️  Temporary/backup file tracked: {path}")
+    return emitted
+
+
+def _emit_bandit_summary(result: SecurityScanResult) -> bool:
+    if not result.bandit_issues:
+        return False
+    typer.echo("")
+    typer.echo("Bandit summary:")
+    for level, count in sorted(result.bandit_issues.items()):
+        label = level.split(".")[-1].title()
+        typer.echo(f"  {label}: {count}")
+    if result.bandit_samples:
+        typer.echo("  Sample issues:")
+        for sample in result.bandit_samples:
+            typer.echo(f"    {sample}")
+    return True
+
+
+def _emit_indented_lines(lines: Iterable[str]) -> None:
+    for entry in lines:
+        typer.echo(f"    {entry}")

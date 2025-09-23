@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-import subprocess  # nosec B404 - subprocess required for controlled installer calls
+import subprocess
 from pathlib import Path
 from shutil import which
 from typing import Callable, Iterable
@@ -57,4 +57,6 @@ def install_with_preferred_manager(
     if pip_exe:
         return runner([pip_exe, "install", "-U", *args_list])
 
-    return subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="pip not found")
+    return subprocess.CompletedProcess(
+        args=[], returncode=1, stdout="", stderr="pip not found"
+    )

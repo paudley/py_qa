@@ -4,10 +4,19 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+import json
+from collections.abc import Mapping, Sequence
+from collections.abc import Set as AbstractSet
+from pathlib import Path
+from typing import Any, TypeAlias
+
+from pydantic import BaseModel
 
 from .models import Diagnostic, ToolOutcome
 from .severity import Severity
+
+JsonPrimitive: TypeAlias = str | int | float | bool | None
+JsonValue: TypeAlias = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
 
 
 def serialize_diagnostic(diag: Diagnostic) -> dict[str, object | None]:
@@ -50,14 +59,14 @@ def deserialize_outcome(data: Mapping[str, Any]) -> ToolOutcome:
             severity_enum = Severity.WARNING
         diagnostics.append(
             Diagnostic(
-                file=_coerce_optional_str(entry.get("file")),
-                line=_coerce_optional_int(entry.get("line")),
-                column=_coerce_optional_int(entry.get("column")),
+                file=coerce_optional_str(entry.get("file")),
+                line=coerce_optional_int(entry.get("line")),
+                column=coerce_optional_int(entry.get("column")),
                 severity=severity_enum,
                 message=str(entry.get("message", "")),
                 tool=str(entry.get("tool", "")),
-                code=_coerce_optional_str(entry.get("code")),
-                group=_coerce_optional_str(entry.get("group")),
+                code=coerce_optional_str(entry.get("code")),
+                group=coerce_optional_str(entry.get("group")),
             )
         )
 
@@ -86,7 +95,7 @@ def safe_int(value: object, default: int = 0) -> int:
     return default
 
 
-def _coerce_optional_int(value: object) -> int | None:
+def coerce_optional_int(value: object) -> int | None:
     if isinstance(value, bool):
         return int(value)
     if isinstance(value, int):
@@ -99,7 +108,7 @@ def _coerce_optional_int(value: object) -> int | None:
     return None
 
 
-def _coerce_optional_str(value: object) -> str | None:
+def coerce_optional_str(value: object) -> str | None:
     if value is None:
         return None
     return str(value)
@@ -115,9 +124,37 @@ def _coerce_diagnostic_payload(value: object) -> list[dict[str, Any]]:
     return diagnostics
 
 
+def jsonify(value: Any) -> JsonValue:
+    """Convert ``value`` into a JSON-serializable payload."""
+
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, BaseModel):
+        return jsonify(value.model_dump(mode="python", by_alias=True))
+    if hasattr(value, "to_dict"):
+        dumped = value.to_dict()  # type: ignore[call-arg, no-untyped-call]
+        return jsonify(dumped)
+    if isinstance(value, Mapping):
+        return {str(key): jsonify(item) for key, item in value.items()}
+    if isinstance(value, AbstractSet):
+        serialised = [jsonify(item) for item in value]
+        try:
+            return sorted(serialised, key=lambda item: json.dumps(item, sort_keys=True))
+        except TypeError:
+            return serialised
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [jsonify(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
 __all__ = [
     "deserialize_outcome",
     "safe_int",
+    "coerce_optional_int",
+    "coerce_optional_str",
     "serialize_diagnostic",
     "serialize_outcome",
+    "jsonify",
 ]

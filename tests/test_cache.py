@@ -2,8 +2,6 @@
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 """Tests for the result cache helpers."""
 
-# pylint: disable=missing-function-docstring
-
 from pathlib import Path
 
 from pyqa.execution.cache import ResultCache

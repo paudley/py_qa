@@ -23,25 +23,17 @@ class FilesystemDiscovery(DiscoveryStrategy):
     def discover(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
         limits = self._normalise_limits(config, root)
 
-        if config.explicit_files:
-            for entry in config.explicit_files:
-                candidate = entry if entry.is_absolute() else root / entry
-                if not candidate.exists():
-                    continue
-                resolved = candidate.resolve()
-                if self._is_within_limits(resolved, limits):
-                    yield resolved
+        explicit = list(self._yield_explicit_files(config, root, limits))
+        if explicit:
+            yield from explicit
             return
+
         if config.paths_from_stdin:
             yield from self._paths_from_stdin(root)
             return
 
-        excludes = {root.joinpath(p).resolve() for p in config.excludes}
-        for base in self._resolve_roots(config, root):
-            if limits and not self._is_within_limits(base.resolve(), limits):
-                continue
-            if not base.exists():
-                continue
+        excludes = {root.joinpath(path).resolve() for path in config.excludes}
+        for base in self._iter_root_candidates(config, root, limits):
             if base.is_file():
                 resolved = base.resolve()
                 if self._is_within_limits(resolved, limits):
@@ -49,22 +41,55 @@ class FilesystemDiscovery(DiscoveryStrategy):
                 continue
             yield from self._walk(base, excludes, limits)
 
+    def _yield_explicit_files(
+        self,
+        config: FileDiscoveryConfig,
+        root: Path,
+        limits: list[Path],
+    ) -> Iterable[Path]:
+        for entry in config.explicit_files:
+            candidate = entry if entry.is_absolute() else root / entry
+            if not candidate.exists():
+                continue
+            resolved = candidate.resolve()
+            if self._is_within_limits(resolved, limits):
+                yield resolved
+
+    def _iter_root_candidates(
+        self,
+        config: FileDiscoveryConfig,
+        root: Path,
+        limits: list[Path],
+    ) -> Iterable[Path]:
+        for base in self._resolve_roots(config, root):
+            resolved = base.resolve()
+            if limits and not self._is_within_limits(resolved, limits):
+                continue
+            if not resolved.exists():
+                continue
+            yield resolved
+
     def _resolve_roots(self, config: FileDiscoveryConfig, root: Path) -> Iterator[Path]:
         for entry in config.roots:
             candidate = entry if entry.is_absolute() else root / entry
             yield candidate
 
-    def _walk(self, base: Path, excludes: set[Path], limits: list[Path]) -> Iterator[Path]:
+    def _walk(
+        self, base: Path, excludes: set[Path], limits: list[Path]
+    ) -> Iterator[Path]:
         follow_links = self.follow_symlinks
         for dirpath, dirnames, filenames in os.walk(base, followlinks=follow_links):
             current = Path(dirpath)
-            if current.name in ALWAYS_EXCLUDE_DIRS or any(self._is_child_of(current, ex) for ex in excludes):
+            if current.name in ALWAYS_EXCLUDE_DIRS or any(
+                self._is_child_of(current, ex) for ex in excludes
+            ):
                 dirnames[:] = []
                 continue
             dirnames[:] = [
                 name
                 for name in dirnames
-                if name not in ALWAYS_EXCLUDE_DIRS and not any(self._is_child_of(current / name, ex) for ex in excludes)
+                if name not in ALWAYS_EXCLUDE_DIRS
+                and not any(self._is_child_of(current / name, ex) for ex in excludes)
             ]
             for filename in filenames:
                 candidate = current / filename

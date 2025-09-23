@@ -44,7 +44,9 @@ def write_sarif_report(result: RunResult, path: Path) -> None:
     path.write_text(json.dumps(sarif_doc, indent=2), encoding="utf-8")
 
 
-def _build_sarif_run(tool_name: str, diagnostics: Sequence[Diagnostic], version: str | None) -> dict[str, object]:
+def _build_sarif_run(
+    tool_name: str, diagnostics: Sequence[Diagnostic], version: str | None
+) -> dict[str, object]:
     """Construct the SARIF run dictionary for a single tool."""
 
     rules: dict[str, dict[str, object]] = {}
@@ -90,9 +92,6 @@ def _build_sarif_run(tool_name: str, diagnostics: Sequence[Diagnostic], version:
     }
 
 
-# pylint: disable=too-many-locals
-
-
 def write_pr_summary(
     result: RunResult,
     path: Path,
@@ -117,7 +116,11 @@ def write_pr_summary(
 
     min_rank = _severity_rank(min_severity, severity_order)
 
-    filtered = [(diag, tool) for diag, tool in diagnostics if severity_order.get(diag.severity, 99) <= min_rank]
+    filtered = [
+        (diag, tool)
+        for diag, tool in diagnostics
+        if severity_order.get(diag.severity, 99) <= min_rank
+    ]
 
     filtered.sort(
         key=lambda item: (

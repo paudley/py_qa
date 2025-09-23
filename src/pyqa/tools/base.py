@@ -4,22 +4,52 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, Mapping, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Iterable, Literal, Mapping, Protocol, Sequence
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..config import Config
 from ..models import Diagnostic, OutputFilter, RawDiagnostic
 
 
-@dataclass(slots=True)
-class ToolContext:
+class ToolContext(BaseModel):
     """Runtime context made available when resolving tool commands."""
 
-    cfg: Config
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    cfg: ConfigField
     root: Path
-    files: Sequence[Path]
-    settings: Mapping[str, Any] = field(default_factory=dict)
+    files: tuple[Path, ...] = Field(default_factory=tuple)
+    settings: Mapping[str, Any] = Field(default_factory=dict)
+
+    def __init__(
+        self,
+        *,
+        cfg: ConfigField,
+        root: Path,
+        files: Sequence[Path] | None = None,
+        settings: Mapping[str, Any] | None = None,
+        **data: Any,
+    ) -> None:
+        if files is not None:
+            data.setdefault("files", files)
+        if settings is not None:
+            data.setdefault("settings", settings)
+        super().__init__(cfg=cfg, root=root, **data)
+
+    @field_validator("files", mode="before")
+    @classmethod
+    def _coerce_files(cls, value: object) -> tuple[Path, ...]:
+        if value is None:
+            return ()
+        if isinstance(value, tuple):
+            return value
+        if isinstance(value, Sequence):
+            return tuple(
+                Path(item) if not isinstance(item, Path) else item for item in value
+            )
+        raise TypeError("files must be a sequence of paths")
 
 
 class Parser(Protocol):
@@ -42,31 +72,79 @@ class CommandBuilder(Protocol):
     def build(self, ctx: ToolContext) -> Sequence[str]: ...
 
 
-@dataclass(slots=True)
-class DeferredCommand:
+if TYPE_CHECKING:
+    CommandField = CommandBuilder
+    ParserField = Parser | None
+    ConfigField = Config
+else:
+    CommandField = Any
+    ParserField = Any
+    ConfigField = Any
+
+
+class DeferredCommand(BaseModel):
     """Simple command builder that returns a fixed command list."""
 
-    args: Sequence[str]
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
-    def build(self, ctx: ToolContext) -> Sequence[str]:  # noqa: D401 - simple delegation
+    args: tuple[str, ...]
+
+    @field_validator("args", mode="before")
+    @classmethod
+    def _coerce_args(cls, value: object) -> tuple[str, ...]:
+        if value is None:
+            return ()
+        if isinstance(value, (list, tuple, set)):
+            return tuple(str(item) for item in value)
+        if isinstance(value, str):
+            return (value,)
+        raise TypeError("DeferredCommand args must be a sequence of strings")
+
+    def __init__(self, args: Sequence[str] | None = None, **data: Any) -> None:
+        if args is not None:
+            data.setdefault("args", args)
+        super().__init__(**data)
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
         del ctx
         return tuple(self.args)
 
 
-@dataclass(slots=True)
-class ToolAction:
+class ToolAction(BaseModel):
     """Single executable action belonging to a tool (e.g. lint, fix)."""
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     name: str
-    command: CommandBuilder
+    command: CommandField
     is_fix: bool = False
     append_files: bool = True
-    filter_patterns: Sequence[str] = field(default_factory=tuple)
+    filter_patterns: tuple[str, ...] = Field(default_factory=tuple)
     ignore_exit: bool = False
     description: str = ""
     timeout_s: float | None = None
-    env: Mapping[str, str] = field(default_factory=dict)
-    parser: Parser | None = None
+    env: Mapping[str, str] = Field(default_factory=dict)
+    parser: ParserField = None
+
+    @field_validator("filter_patterns", mode="before")
+    @classmethod
+    def _coerce_patterns(cls, value: object) -> tuple[str, ...]:
+        if value is None:
+            return ()
+        if isinstance(value, (list, tuple, set)):
+            return tuple(str(item) for item in value)
+        if isinstance(value, str):
+            return (value,)
+        raise TypeError("filter_patterns must be a sequence of strings")
+
+    @field_validator("env", mode="before")
+    @classmethod
+    def _coerce_env(cls, value: object) -> Mapping[str, str]:
+        if value is None:
+            return {}
+        if isinstance(value, Mapping):
+            return {str(k): str(v) for k, v in value.items()}
+        raise TypeError("env must be a mapping of strings")
 
     def build_command(self, ctx: ToolContext) -> list[str]:
         cmd = list(self.command.build(ctx))
@@ -74,38 +152,81 @@ class ToolAction:
             cmd.extend(str(path) for path in ctx.files)
         return cmd
 
-    def filter_stdout(self, text: str, extra_patterns: Sequence[str] | None = None) -> str:
+    def filter_stdout(
+        self, text: str, extra_patterns: Sequence[str] | None = None
+    ) -> str:
         patterns = list(self.filter_patterns)
         if extra_patterns:
             patterns.extend(extra_patterns)
-        return OutputFilter(patterns).apply(text)
+        return OutputFilter(patterns=tuple(patterns)).apply(text)
 
-    def filter_stderr(self, text: str, extra_patterns: Sequence[str] | None = None) -> str:
+    def filter_stderr(
+        self, text: str, extra_patterns: Sequence[str] | None = None
+    ) -> str:
         patterns = list(self.filter_patterns)
         if extra_patterns:
             patterns.extend(extra_patterns)
-        return OutputFilter(patterns).apply(text)
+        return OutputFilter(patterns=tuple(patterns)).apply(text)
 
 
-@dataclass(slots=True)
-class Tool:
+class Tool(BaseModel):
     """Description of a lint tool composed of multiple actions."""
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     name: str
-    actions: Sequence[ToolAction]
-    languages: Sequence[str] = field(default_factory=tuple)
-    file_extensions: Sequence[str] = field(default_factory=tuple)
-    config_files: Sequence[str] = field(default_factory=tuple)
+    actions: tuple[ToolAction, ...]
+    languages: tuple[str, ...] = Field(default_factory=tuple)
+    file_extensions: tuple[str, ...] = Field(default_factory=tuple)
+    config_files: tuple[str, ...] = Field(default_factory=tuple)
     description: str = ""
     auto_install: bool = False
     default_enabled: bool = True
-    runtime: Literal["python", "npm", "binary"] = "python"
+    runtime: Literal["python", "npm", "binary", "go", "lua", "perl", "rust"] = "python"
     package: str | None = None
     min_version: str | None = None
     prefer_local: bool = False
-    version_command: Sequence[str] | None = None
+    version_command: tuple[str, ...] | None = None
 
-    def is_applicable(self, *, language: str | None = None, files: Sequence[Path] | None = None) -> bool:
+    @field_validator("actions", mode="before")
+    @classmethod
+    def _coerce_actions(cls, value: object) -> tuple[ToolAction, ...]:
+        if isinstance(value, ToolAction):
+            return (value,)
+        if isinstance(value, Iterable):
+            items: list[ToolAction] = []
+            for item in value:
+                if not isinstance(item, ToolAction):
+                    raise TypeError("actions must contain ToolAction instances")
+                items.append(item)
+            return tuple(items)
+        raise TypeError("actions must be an iterable of ToolAction instances")
+
+    @field_validator("languages", "file_extensions", "config_files", mode="before")
+    @classmethod
+    def _coerce_str_tuple(cls, value: object) -> tuple[str, ...]:
+        if value is None:
+            return ()
+        if isinstance(value, (list, tuple, set)):
+            return tuple(str(item) for item in value)
+        if isinstance(value, str):
+            return (value,)
+        raise TypeError("expected a sequence of strings")
+
+    @field_validator("version_command", mode="before")
+    @classmethod
+    def _coerce_version_cmd(cls, value: object) -> tuple[str, ...] | None:
+        if value is None:
+            return None
+        if isinstance(value, (list, tuple, set)):
+            return tuple(str(item) for item in value)
+        if isinstance(value, str):
+            return (value,)
+        raise TypeError("version_command must be a sequence of strings or None")
+
+    def is_applicable(
+        self, *, language: str | None = None, files: Sequence[Path] | None = None
+    ) -> bool:
         if language and self.languages and language not in self.languages:
             return False
         if files:

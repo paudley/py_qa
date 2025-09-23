@@ -2,8 +2,6 @@
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 """Integration tests for orchestrator execution flow."""
 
-# pylint: disable=missing-function-docstring
-
 import subprocess
 from pathlib import Path
 
@@ -16,7 +14,6 @@ from pyqa.tools.registry import ToolRegistry
 class FakeDiscovery:
     """Simple stub returning a pre-defined file list."""
 
-    # pylint: disable=too-few-public-methods
     def __init__(self, files: list[Path]) -> None:
         self._files = files
 
@@ -66,7 +63,9 @@ def test_orchestrator_runs_registered_tool(tmp_path: Path) -> None:
         assert Path(cmd[2]) == target
         env = kwargs.get("env", {})
         assert env.get("DUMMY_ENV") == "1"
-        return subprocess.CompletedProcess(cmd, returncode=0, stdout="output", stderr="")
+        return subprocess.CompletedProcess(
+            cmd, returncode=0, stdout="output", stderr=""
+        )
 
     orchestrator = Orchestrator(
         registry=registry,
@@ -118,7 +117,9 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
 
     def runner(cmd, **kwargs):
         calls.append(list(cmd))
-        return subprocess.CompletedProcess(cmd, returncode=0, stdout="output", stderr="")
+        return subprocess.CompletedProcess(
+            cmd, returncode=0, stdout="output", stderr=""
+        )
 
     orchestrator = Orchestrator(
         registry=registry,
@@ -146,7 +147,9 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
 
     def runner_settings(cmd, **kwargs):
         calls_after.append(list(cmd))
-        return subprocess.CompletedProcess(cmd, returncode=0, stdout="updated", stderr="")
+        return subprocess.CompletedProcess(
+            cmd, returncode=0, stdout="updated", stderr=""
+        )
 
     orchestrator_settings = Orchestrator(
         registry=registry,

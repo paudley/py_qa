@@ -4,7 +4,12 @@
 
 from __future__ import annotations
 
-TOOL_SETTING_SCHEMA: dict[str, dict[str, dict[str, str]]] = {
+from typing import Mapping
+
+ToolSettingField = Mapping[str, str | list[str]]
+ToolSettingSchema = dict[str, dict[str, ToolSettingField]]
+
+TOOL_SETTING_SCHEMA: ToolSettingSchema = {
     "ruff": {
         "config": {
             "type": "path",

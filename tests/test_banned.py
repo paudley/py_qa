@@ -30,7 +30,9 @@ def test_check_banned_words_cli(tmp_path: Path) -> None:
     commit_msg = tmp_path / "commit.txt"
     commit_msg.write_text("This is a quick hack.\n", encoding="utf-8")
 
-    result = runner.invoke(app, ["check-banned-words", str(commit_msg), "--root", str(tmp_path)])
+    result = runner.invoke(
+        app, ["check-banned-words", str(commit_msg), "--root", str(tmp_path)]
+    )
 
     assert result.exit_code == 1
     assert "quick hack" in result.stdout
@@ -41,7 +43,9 @@ def test_check_banned_words_cli_ok(tmp_path: Path) -> None:
     commit_msg = tmp_path / "commit.txt"
     commit_msg.write_text("Normal update message\n", encoding="utf-8")
 
-    result = runner.invoke(app, ["check-banned-words", str(commit_msg), "--root", str(tmp_path)])
+    result = runner.invoke(
+        app, ["check-banned-words", str(commit_msg), "--root", str(tmp_path)]
+    )
 
     assert result.exit_code == 0
     assert "No banned words" in result.stdout

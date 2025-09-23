@@ -2,17 +2,17 @@
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 """Tests covering CLI configuration helpers."""
 
-# pylint: disable=missing-function-docstring
-
 from pathlib import Path
 
 import pytest
 
 from pyqa.cli.config_builder import DEFAULT_TOOL_FILTERS, build_config
 from pyqa.cli.options import LintOptions
+from pyqa.config import Config
 
 
 def test_build_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure CLI option translation produces a fully populated config."""
     home_dir = tmp_path / "home"
     home_dir.mkdir()
     monkeypatch.setattr(Path, "home", lambda: home_dir)
@@ -50,7 +50,7 @@ def test_build_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
         provided={"jobs", "no_cache", "cache_dir", "pr_summary_template"},
     )
 
-    cfg = build_config(options)
+    cfg: Config = build_config(options)
 
     assert cfg.file_discovery.roots == [tmp_path.resolve()]
     assert cfg.file_discovery.diff_ref == "HEAD"

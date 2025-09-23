@@ -42,10 +42,10 @@ def __getattr__(name: str) -> str:
     if name == "__version__":
         try:
             return metadata.version("py-qa")
-        except metadata.PackageNotFoundError:  # pragma: no cover - local builds
+        except metadata.PackageNotFoundError:
             return "0.0.0"
     raise AttributeError(name)
 
 
-if len(DEFAULT_REGISTRY) == 0:  # pragma: no cover - import side effect
+if len(DEFAULT_REGISTRY) == 0:
     register_builtin_tools(DEFAULT_REGISTRY)

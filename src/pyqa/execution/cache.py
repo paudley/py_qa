@@ -6,32 +6,40 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Sequence
+
+from pydantic import BaseModel, ConfigDict
 
 from ..models import ToolOutcome
 from ..serialization import deserialize_outcome, safe_int, serialize_outcome
 
 
-@dataclass(frozen=True)
-class FileState:
+class FileState(BaseModel):
     """Filesystem metadata used to validate cache entries."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
     path: Path
     mtime_ns: int
     size: int
 
 
-def _collect_file_states(files: Sequence[Path]) -> list[FileState]:
+def _collect_file_states(files: Sequence[Path]) -> tuple[FileState, ...]:
     states: list[FileState] = []
     for path in files:
         try:
             stat = path.stat()
         except FileNotFoundError:
-            return []
-        states.append(FileState(path.resolve(), stat.st_mtime_ns, stat.st_size))
-    return states
+            return ()
+        states.append(
+            FileState(
+                path=path.resolve(),
+                mtime_ns=stat.st_mtime_ns,
+                size=stat.st_size,
+            )
+        )
+    return tuple(states)
 
 
 class ResultCache:
@@ -74,7 +82,10 @@ class ResultCache:
             )
             if not matched:
                 return None
-            if safe_int(matched.get("mtime_ns")) != state.mtime_ns or safe_int(matched.get("size")) != state.size:
+            if (
+                safe_int(matched.get("mtime_ns")) != state.mtime_ns
+                or safe_int(matched.get("size")) != state.size
+            ):
                 return None
 
         return deserialize_outcome(data)
@@ -121,7 +132,9 @@ class ResultCache:
         return self._dir / f"{digest}.json"
 
 
-def _outcome_to_payload(outcome: ToolOutcome, states: Iterable[FileState]) -> dict[str, object]:
+def _outcome_to_payload(
+    outcome: ToolOutcome, states: Iterable[FileState]
+) -> dict[str, object]:
     payload = serialize_outcome(outcome)
     payload["files"] = [
         {

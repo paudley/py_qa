@@ -14,6 +14,7 @@ from ..logging import fail, ok, warn
 from ..quality import (
     QualityChecker,
     QualityCheckResult,
+    QualityIssueLevel,
     check_commit_message,
     ensure_branch_protection,
 )
@@ -43,8 +44,12 @@ def main(
         "-c",
         help="Limit execution to specific checks (e.g. license,file-size,schema,python).",
     ),
-    no_schema: bool = typer.Option(False, "--no-schema", help="Skip schema validation."),
-    emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output."),
+    no_schema: bool = typer.Option(
+        False, "--no-schema", help="Skip schema validation."
+    ),
+    emoji: bool = typer.Option(
+        True, "--emoji/--no-emoji", help="Toggle emoji in output."
+    ),
 ) -> None:
     if ctx.invoked_subcommand:
         return
@@ -81,9 +86,13 @@ def main(
 
 @quality_app.command("commit-msg")
 def commit_msg(
-    message_file: Path = typer.Argument(..., metavar="FILE", help="Commit message file."),
+    message_file: Path = typer.Argument(
+        ..., metavar="FILE", help="Commit message file."
+    ),
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output."),
+    emoji: bool = typer.Option(
+        True, "--emoji/--no-emoji", help="Toggle emoji in output."
+    ),
 ) -> None:
     result = check_commit_message(root, message_file)
     _render_result(result, root, emoji)
@@ -93,7 +102,9 @@ def commit_msg(
 @quality_app.command("branch")
 def branch_guard(
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output."),
+    emoji: bool = typer.Option(
+        True, "--emoji/--no-emoji", help="Toggle emoji in output."
+    ),
 ) -> None:
     loader = ConfigLoader.for_root(root)
     try:
@@ -116,7 +127,7 @@ def _render_result(result: QualityCheckResult, root: Path, use_emoji: bool) -> N
         return
 
     for issue in result.issues:
-        prefix = fail if issue.level == "error" else warn
+        prefix = fail if issue.level is QualityIssueLevel.ERROR else warn
         location = ""
         if issue.path is not None:
             path_obj = _to_path(issue.path)
