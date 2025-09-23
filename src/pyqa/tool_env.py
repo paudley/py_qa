@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
@@ -16,6 +15,8 @@ from typing import Mapping, Sequence
 
 from packaging.version import InvalidVersion, Version
 
+import json
+
 from .environments import inject_node_defaults
 from .tools.base import Tool
 
@@ -25,6 +26,10 @@ UV_CACHE_DIR = CACHE_ROOT / "uv"
 NODE_CACHE_DIR = CACHE_ROOT / "node"
 NPM_CACHE_DIR = CACHE_ROOT / "npm"
 PROJECT_MARKER = CACHE_ROOT / "project-installed.json"
+GO_CACHE_DIR = CACHE_ROOT / "go"
+GO_BIN_DIR = GO_CACHE_DIR / "bin"
+GO_META_DIR = GO_CACHE_DIR / "meta"
+GO_WORK_DIR = GO_CACHE_DIR / "work"
 
 
 @dataclass(slots=True)
@@ -391,6 +396,113 @@ class NpmRuntime(RuntimeHandler):
         return tool.name
 
 
+class GoRuntime(RuntimeHandler):
+    """Provision Go tooling by installing modules into a dedicated cache."""
+
+    def _try_system(
+        self,
+        tool: Tool,
+        base_cmd: Sequence[str],
+        root: Path,
+        cache_dir: Path,
+        target_version: str | None,
+    ) -> PreparedCommand | None:
+        executable = shutil.which(base_cmd[0])
+        if not executable:
+            return None
+        version = None
+        if tool.version_command:
+            version = self._versions.capture(tool.version_command)
+        if not self._versions.is_compatible(version, target_version):
+            return None
+        return PreparedCommand(cmd=list(base_cmd), env={}, version=version, source="system")
+
+    def _prepare_local(
+        self,
+        tool: Tool,
+        base_cmd: Sequence[str],
+        root: Path,
+        cache_dir: Path,
+        target_version: str | None,
+    ) -> PreparedCommand:
+        if not shutil.which("go"):
+            raise RuntimeError("Go toolchain is required to install go-based linters")
+
+        binary_name = Path(base_cmd[0]).name
+        binary_path = self._ensure_local_tool(tool, binary_name)
+
+        cmd = list(base_cmd)
+        cmd[0] = str(binary_path)
+
+        env = self._go_env(root)
+        version = None
+        if tool.version_command:
+            version = self._versions.capture(tool.version_command, env=self._merge_env(env))
+        return PreparedCommand(cmd=cmd, env=env, version=version, source="local")
+
+    def _ensure_local_tool(self, tool: Tool, binary_name: str) -> Path:
+        module, version_spec = self._module_spec(tool)
+        if version_spec is None:
+            raise RuntimeError(f"Go tool '{tool.name}' requires a versioned package specification")
+        requirement = f"{module}@{version_spec}"
+        slug = _slugify(requirement)
+        meta_file = GO_META_DIR / f"{slug}.json"
+        binary = GO_BIN_DIR / binary_name
+
+        if binary.exists() and meta_file.exists():
+            try:
+                meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                if meta.get("requirement") == requirement:
+                    return binary
+            except json.JSONDecodeError:
+                pass
+
+        GO_META_DIR.mkdir(parents=True, exist_ok=True)
+        GO_BIN_DIR.mkdir(parents=True, exist_ok=True)
+        (GO_WORK_DIR / "gopath").mkdir(parents=True, exist_ok=True)
+        (GO_WORK_DIR / "gocache").mkdir(parents=True, exist_ok=True)
+        (GO_WORK_DIR / "modcache").mkdir(parents=True, exist_ok=True)
+
+        env = os.environ.copy()
+        env.setdefault("GOBIN", str(GO_BIN_DIR))
+        env.setdefault("GOCACHE", str(GO_WORK_DIR / "gocache"))
+        env.setdefault("GOMODCACHE", str(GO_WORK_DIR / "modcache"))
+        env.setdefault("GOPATH", str(GO_WORK_DIR / "gopath"))
+
+        subprocess.run(  # nosec B603 - controlled go install
+            ["go", "install", requirement],
+            capture_output=True,
+            text=True,
+            check=True,
+            env=env,
+        )
+
+        if not binary.exists():
+            raise RuntimeError(f"Failed to install go tool '{tool.name}'")
+
+        meta_file.write_text(json.dumps({"requirement": requirement}), encoding="utf-8")
+        binary.chmod(binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        return binary
+
+    @staticmethod
+    def _module_spec(tool: Tool) -> tuple[str, str | None]:
+        if tool.package:
+            module, version = _split_package_spec(tool.package)
+            return module, version
+        return tool.name, tool.min_version
+
+    @staticmethod
+    def _go_env(root: Path) -> dict[str, str]:
+        path_value = os.environ.get("PATH", "")
+        entries = [str(GO_BIN_DIR)]
+        if path_value:
+            entries.append(path_value)
+        return {
+            "PATH": os.pathsep.join(entries),
+            "PWD": str(root),
+        }
+
+
 class BinaryRuntime(RuntimeHandler):
     """Fallback runtime for tools executed directly as system binaries."""
 
@@ -416,6 +528,7 @@ class CommandPreparer:
         self._handlers: dict[str, RuntimeHandler] = {
             "python": PythonRuntime(self._versions),
             "npm": NpmRuntime(self._versions),
+            "go": GoRuntime(self._versions),
             "binary": BinaryRuntime(self._versions),
         }
         self._ensure_dirs()
@@ -446,6 +559,8 @@ class CommandPreparer:
         UV_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         NODE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         NPM_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        GO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        GO_BIN_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _split_package_spec(spec: str) -> tuple[str, str | None]:

@@ -5,7 +5,7 @@ from typing import Sequence
 
 import pytest
 
-from pyqa.tool_env import CommandPreparer, PreparedCommand, desired_version
+from pyqa.tool_env import GO_BIN_DIR, CommandPreparer, PreparedCommand, desired_version
 from pyqa.tools.base import Tool
 
 
@@ -133,3 +133,97 @@ def test_npm_runtime_prefers_system_when_version_sufficient(tmp_path: Path, monk
     assert result.cmd[0] == "eslint"
     assert result.env == {}
     assert result.version == "9.13.1"
+
+
+def test_go_runtime_installs_when_system_too_old(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    tool = _make_tool(
+        name="kube-linter",
+        runtime="go",
+        package="golang.stackrox.io/kube-linter/cmd/kube-linter@v0.7.6",
+        min_version="0.7.6",
+        version_command=("kube-linter", "version"),
+    )
+
+    def fake_which(cmd: str) -> str | None:
+        if cmd == "kube-linter":
+            return "/usr/bin/kube-linter"
+        if cmd == "go":
+            return "/usr/bin/go"
+        return None
+
+    monkeypatch.setattr("pyqa.tool_env.shutil.which", fake_which)
+
+    preparer = CommandPreparer()
+
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:  # noqa: ANN001
+        if command[0] == "kube-linter":
+            return "0.7.5"
+        return None
+
+    monkeypatch.setattr(preparer._versions, "capture", fake_capture)  # type: ignore[attr-defined]
+
+    fake_binary = tmp_path / "go" / "bin" / "kube-linter"
+    fake_binary.parent.mkdir(parents=True, exist_ok=True)
+    fake_binary.write_text("#!/bin/sh\nexit 0\n")
+    fake_binary.chmod(0o755)
+
+    def fake_install(self, tool_obj: Tool, binary_name: str) -> Path:  # noqa: ANN001
+        return fake_binary
+
+    monkeypatch.setattr("pyqa.tool_env.GoRuntime._ensure_local_tool", fake_install)
+
+    result = preparer.prepare(
+        tool=tool,
+        base_cmd=("kube-linter", "lint"),
+        root=tmp_path,
+        cache_dir=tmp_path,
+        system_preferred=True,
+        use_local_override=False,
+    )
+
+    assert result.source == "local"
+    assert result.cmd[0] == str(fake_binary)
+    assert str(GO_BIN_DIR) in result.env.get("PATH", "")
+
+
+def test_go_runtime_prefers_system_when_version_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    tool = _make_tool(
+        name="kube-linter",
+        runtime="go",
+        package="golang.stackrox.io/kube-linter/cmd/kube-linter@v0.7.6",
+        min_version="0.7.6",
+        version_command=("kube-linter", "version"),
+    )
+
+    def fake_which(cmd: str) -> str | None:
+        if cmd in {"kube-linter", "go"}:
+            return f"/usr/bin/{cmd}"
+        return None
+
+    monkeypatch.setattr("pyqa.tool_env.shutil.which", fake_which)
+
+    preparer = CommandPreparer()
+
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:  # noqa: ANN001
+        if command[0] == "kube-linter":
+            return "0.7.6"
+        return None
+
+    monkeypatch.setattr(preparer._versions, "capture", fake_capture)  # type: ignore[attr-defined]
+
+    def fail_install(self, tool_obj: Tool, binary_name: str) -> Path:  # noqa: ANN001
+        raise AssertionError("Local go install should not occur")
+
+    monkeypatch.setattr("pyqa.tool_env.GoRuntime._ensure_local_tool", fail_install)
+
+    result = preparer.prepare(
+        tool=tool,
+        base_cmd=("kube-linter", "lint"),
+        root=tmp_path,
+        cache_dir=tmp_path,
+        system_preferred=True,
+        use_local_override=False,
+    )
+
+    assert result.source == "system"
+    assert result.cmd[0] == "kube-linter"
