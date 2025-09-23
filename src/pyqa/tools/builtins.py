@@ -23,6 +23,7 @@ from ..parsers import (
     parse_bandit,
     parse_cargo_clippy,
     parse_eslint,
+    parse_stylelint,
     parse_golangci_lint,
     parse_actionlint,
     parse_kube_linter,
@@ -928,6 +929,55 @@ class _KubeLinterCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _StylelintCommand(CommandBuilder):
+    base: Sequence[str]
+    is_fix: bool = False
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        config = _setting(settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(root, config))])
+
+        config_basedir = _setting(settings, "config-basedir", "config_basedir")
+        if config_basedir:
+            cmd.extend(["--config-basedir", str(_resolve_path(root, config_basedir))])
+
+        ignore_path = _setting(settings, "ignore-path", "ignore_path")
+        if ignore_path:
+            cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
+
+        custom_syntax = _setting(settings, "custom-syntax", "custom_syntax")
+        if custom_syntax:
+            cmd.extend(["--custom-syntax", str(custom_syntax)])
+
+        if _as_bool(_setting(settings, "allow-empty-input", "allow_empty_input")):
+            cmd.append("--allow-empty-input")
+
+        if _as_bool(_setting(settings, "disable-default-ignores", "disable_default_ignores")):
+            cmd.append("--disable-default-ignores")
+
+        if _as_bool(_setting(settings, "quiet")):
+            cmd.append("--quiet")
+
+        max_warnings = _setting(settings, "max-warnings", "max_warnings")
+        if max_warnings is not None:
+            cmd.extend(["--max-warnings", str(max_warnings)])
+
+        if not self.is_fix and "--formatter" not in cmd and "--custom-formatter" not in cmd:
+            cmd.extend(["--formatter", "json"])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _TscCommand(CommandBuilder):
     base: Sequence[str]
 
@@ -1357,6 +1407,33 @@ def _builtin_tools() -> Iterable[Tool]:
         package="gts@5.3.1",
         min_version="5.3.1",
         version_command=("gts", "--version"),
+    )
+
+    yield Tool(
+        name="stylelint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_StylelintCommand(base=("stylelint",)),
+                append_files=True,
+                description="Lint stylesheets using stylelint.",
+                parser=JsonParser(parse_stylelint),
+            ),
+            ToolAction(
+                name="fix",
+                command=_StylelintCommand(base=("stylelint", "--fix"), is_fix=True),
+                append_files=True,
+                is_fix=True,
+                description="Apply stylelint autofixes.",
+            ),
+        ),
+        languages=("css",),
+        file_extensions=(".css", ".scss", ".sass", ".less"),
+        description="CSS and preprocessor linting via stylelint.",
+        runtime="npm",
+        package="stylelint@16.11.0",
+        min_version="16.11.0",
+        version_command=("stylelint", "--version"),
     )
 
     yield Tool(

@@ -371,6 +371,44 @@ def parse_eslint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]
     return results
 
 
+def parse_stylelint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse stylelint JSON output."""
+
+    items = payload if isinstance(payload, list) else []
+    results: list[RawDiagnostic] = []
+    for entry in items:
+        if not isinstance(entry, dict):
+            continue
+        source = entry.get("source") or entry.get("file")
+        warnings = entry.get("warnings")
+        if not isinstance(warnings, list):
+            continue
+        for warning in warnings:
+            if not isinstance(warning, dict):
+                continue
+            message = str(warning.get("text", "")).strip()
+            if not message:
+                continue
+            severity_label = str(warning.get("severity", "warning")).lower()
+            severity = {
+                "error": Severity.ERROR,
+                "warning": Severity.WARNING,
+            }.get(severity_label, Severity.WARNING)
+            rule = warning.get("rule")
+            results.append(
+                RawDiagnostic(
+                    file=source,
+                    line=warning.get("line"),
+                    column=warning.get("column"),
+                    severity=severity,
+                    message=message,
+                    code=str(rule) if rule else None,
+                    tool="stylelint",
+                )
+            )
+    return results
+
+
 _TSC_PATTERN = re.compile(
     r"^(?P<file>[^:(\n]+)\((?P<line>\d+),(?P<col>\d+)\):\s*"
     r"(?P<severity>error|warning)\s*(?P<code>[A-Z]+\d+)?\s*:?\s*(?P<message>.+)$"
@@ -492,6 +530,7 @@ __all__ = [
     "parse_sqlfluff",
     "parse_bandit",
     "parse_eslint",
+    "parse_stylelint",
     "parse_tsc",
     "parse_golangci_lint",
     "parse_cargo_clippy",

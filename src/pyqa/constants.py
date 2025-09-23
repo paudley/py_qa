@@ -31,6 +31,7 @@ LANGUAGE_EXTENSIONS: Final[dict[str, set[str]]] = {
     "github-actions": {".yml", ".yaml"},
     "sql": {".sql"},
     "kubernetes": set(),
+    "css": {".css", ".scss", ".sass", ".less"},
 }
 
 LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
@@ -60,5 +61,17 @@ LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
         ".kube-linter.yml",
         "charts",
         "manifests",
+    },
+    "css": {
+        ".stylelintrc",
+        ".stylelintrc.json",
+        ".stylelintrc.yaml",
+        ".stylelintrc.yml",
+        ".stylelintrc.js",
+        "stylelint.config.js",
+        "stylelint.config.cjs",
+        "stylelint.config.mjs",
+        "stylelint.config.ts",
+        "stylelint.config.coffee",
     },
 }

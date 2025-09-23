@@ -16,6 +16,7 @@ from pyqa.parsers import (
     parse_bandit,
     parse_cargo_clippy,
     parse_eslint,
+    parse_stylelint,
     parse_golangci_lint,
     parse_kube_linter,
     parse_mypy,
@@ -158,6 +159,28 @@ def test_parse_eslint() -> None:
     assert len(diags) == 1
     diag = diags[0]
     assert diag.tool == "eslint"
+    severity = diag.severity
+    assert isinstance(severity, Severity)
+    assert severity.value == "error"
+
+
+def test_parse_stylelint() -> None:
+    parser = JsonParser(parse_stylelint)
+    stdout = """
+    [
+      {
+        "source": "styles/base.css",
+        "warnings": [
+          {"line": 3, "column": 5, "text": "Unexpected unknown at-rule", "rule": "at-rule-no-unknown", "severity": "error"}
+        ]
+      }
+    ]
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == "styles/base.css"
+    assert diag.code == "at-rule-no-unknown"
     severity = diag.severity
     assert isinstance(severity, Severity)
     assert severity.value == "error"
