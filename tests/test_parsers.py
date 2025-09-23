@@ -35,6 +35,7 @@ from pyqa.parsers import (
     parse_shfmt,
     parse_phplint,
     parse_perlcritic,
+    parse_checkmake,
     parse_speccy,
 )
 from pyqa.severity import Severity
@@ -370,6 +371,28 @@ def test_parse_perlcritic() -> None:
     assert diag.line == 12
     assert diag.column == 8
     assert diag.code == "ProhibitUnusedVariables"
+
+
+def test_parse_checkmake() -> None:
+    parser = JsonParser(parse_checkmake)
+    stdout = """
+    {
+      "files": [
+        {
+          "file": "Makefile",
+          "errors": [
+            {"line": 12, "column": 1, "message": "Target has no help text", "rule": "missing-help-text"}
+          ]
+        }
+      ]
+    }
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == "Makefile"
+    assert diag.code == "missing-help-text"
+    assert diag.severity.value == "warning"
 
 
 def test_parse_tsc() -> None:

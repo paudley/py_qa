@@ -879,6 +879,52 @@ def parse_perlcritic(stdout: str, _context: ToolContext) -> Sequence[RawDiagnost
     return results
 
 
+def parse_checkmake(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse checkmake JSON output."""
+
+    files: list[dict[str, Any]]
+    if isinstance(payload, dict):
+        files = payload.get("files") or payload.get("results") or []
+    elif isinstance(payload, list):
+        files = [entry for entry in payload if isinstance(entry, dict)]
+    else:
+        files = []
+
+    results: list[RawDiagnostic] = []
+    for entry in files:
+        file_path = entry.get("file") or entry.get("filename") or entry.get("name")
+        issues = entry.get("errors") or entry.get("warnings") or entry.get("issues")
+        if not isinstance(issues, list):
+            continue
+        for issue in issues:
+            if not isinstance(issue, dict):
+                continue
+            message = issue.get("message") or issue.get("description")
+            if not message:
+                continue
+            rule = issue.get("rule") or issue.get("code")
+            severity_label = issue.get("severity") or issue.get("level") or "warning"
+            severity = {
+                "error": Severity.ERROR,
+                "warning": Severity.WARNING,
+                "info": Severity.NOTICE,
+            }.get(str(severity_label).lower(), Severity.WARNING)
+            line = issue.get("line")
+            column = issue.get("column") or issue.get("col")
+            results.append(
+                RawDiagnostic(
+                    file=file_path,
+                    line=line,
+                    column=column,
+                    severity=severity,
+                    message=str(message).strip(),
+                    code=str(rule) if rule else None,
+                    tool="checkmake",
+                )
+            )
+    return results
+
+
 _TSC_PATTERN = re.compile(
     r"^(?P<file>[^:(\n]+)\((?P<line>\d+),(?P<col>\d+)\):\s*"
     r"(?P<severity>error|warning)\s*(?P<code>[A-Z]+\d+)?\s*:?\s*(?P<message>.+)$"
@@ -1015,7 +1061,7 @@ __all__ = [
     "parse_shfmt",
     "parse_phplint",
     "parse_perlcritic",
-    "parse_speccy",
+    "parse_checkmake",
     "parse_tsc",
     "parse_golangci_lint",
     "parse_cargo_clippy",

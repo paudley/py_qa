@@ -37,7 +37,7 @@ from ..parsers import (
     parse_shfmt,
     parse_phplint,
     parse_perlcritic,
-    parse_phplint,
+    parse_checkmake,
     parse_golangci_lint,
     parse_actionlint,
     parse_kube_linter,
@@ -1421,6 +1421,33 @@ class _ShfmtCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _CheckmakeCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        if "--format" not in cmd and "-f" not in cmd:
+            cmd.extend(["--format", "json"])
+
+        config = _setting(settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(root, config))])
+
+        ignore = _settings_list(_setting(settings, "ignore"))
+        for rule in ignore:
+            cmd.extend(["--ignore", str(rule)])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _TscCommand(CommandBuilder):
     base: Sequence[str]
 
@@ -2057,6 +2084,26 @@ def _builtin_tools() -> Iterable[Tool]:
         package="phplint@2.0.5",
         min_version="2.0.5",
         version_command=("phplint", "--version"),
+    )
+
+    yield Tool(
+        name="checkmake",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_CheckmakeCommand(base=("checkmake", "lint")),
+                append_files=True,
+                description="Lint Makefiles using checkmake.",
+                parser=JsonParser(parse_checkmake),
+            ),
+        ),
+        languages=("make",),
+        file_extensions=("Makefile", "makefile", ".mk"),
+        description="Makefile linter powered by checkmake.",
+        runtime="go",
+        package="github.com/mrtazz/checkmake/cmd/checkmake",
+        min_version=None,
+        version_command=("checkmake", "--version"),
     )
 
     yield Tool(

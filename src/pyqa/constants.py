@@ -39,6 +39,7 @@ LANGUAGE_EXTENSIONS: Final[dict[str, set[str]]] = {
     "openapi": set(),
     "shell": {".sh", ".bash", ".zsh"},
     "php": {".php", ".phtml"},
+    "make": {".mk"},
 }
 
 LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
@@ -117,6 +118,10 @@ LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
         "composer.json",
         "phpunit.xml",
     },
+    "make": {
+        "Makefile",
+        "makefile",
+    },
 }
 
 LANGUAGE_FILENAMES: Final[dict[str, set[str]]] = {
@@ -126,4 +131,5 @@ LANGUAGE_FILENAMES: Final[dict[str, set[str]]] = {
     "openapi": {"openapi.yaml", "openapi.yml", "swagger.yaml", "swagger.yml", "speccy.yaml", "speccy.yml"},
     "shell": {"shellfile"},
     "php": {"index.php", "artisan", "server.php"},
+    "make": {"makefile"},
 }

@@ -461,8 +461,8 @@ class GoRuntime(RuntimeHandler):
 
     def _ensure_local_tool(self, tool: Tool, binary_name: str) -> Path:
         module, version_spec = self._module_spec(tool)
-        if version_spec is None:
-            raise RuntimeError(f"Go tool '{tool.name}' requires a versioned package specification")
+        if not version_spec:
+            version_spec = "latest"
         requirement = f"{module}@{version_spec}"
         slug = _slugify(requirement)
         meta_file = GO_META_DIR / f"{slug}.json"

@@ -230,6 +230,49 @@ def test_go_runtime_prefers_system_when_version_ok(tmp_path: Path, monkeypatch: 
     assert result.cmd[0] == "kube-linter"
 
 
+def test_go_runtime_installs_when_no_version_spec(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    tool = _make_tool(
+        name="checkmake",
+        runtime="go",
+        package="github.com/mrtazz/checkmake/cmd/checkmake",
+        min_version=None,
+        version_command=("checkmake", "--version"),
+    )
+
+    def fake_which(cmd: str) -> str | None:
+        if cmd == "go":
+            return "/usr/bin/go"
+        if cmd == "checkmake":
+            return None
+        return None
+
+    monkeypatch.setattr("pyqa.tool_env.shutil.which", fake_which)
+
+    preparer = CommandPreparer()
+
+    def fake_install(self, tool_obj: Tool, binary_name: str):  # noqa: ANN001
+        prefix = tmp_path / "go-latest"
+        binary = prefix / "bin" / binary_name
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        binary.write_text("#!/bin/sh\nexit 0\n")
+        binary.chmod(0o755)
+        return binary
+
+    monkeypatch.setattr("pyqa.tool_env.GoRuntime._ensure_local_tool", fake_install)
+
+    result = preparer.prepare(
+        tool=tool,
+        base_cmd=("checkmake", "lint"),
+        root=tmp_path,
+        cache_dir=tmp_path,
+        system_preferred=True,
+        use_local_override=False,
+    )
+
+    assert result.source == "local"
+    assert result.cmd[0].endswith("checkmake")
+
+
 def test_rust_runtime_installs_when_system_too_old(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tool = _make_tool(
         name="dotenv-linter",
