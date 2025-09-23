@@ -1430,7 +1430,8 @@ def _builtin_tools() -> Iterable[Tool]:
         languages=("go",),
         file_extensions=(".go",),
         description="Aggregated Go lint tool using golangci-lint.",
-        runtime="binary",
+        runtime="go",
+        package="github.com/golangci/golangci-lint/cmd/golangci-lint@v1.60.3",
         min_version="1.60.3",
         version_command=("golangci-lint", "--version"),
     )
