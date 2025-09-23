@@ -16,6 +16,7 @@ from typing import Mapping, Sequence
 from packaging.version import InvalidVersion, Version
 
 import json
+import shlex
 
 from .environments import inject_node_defaults
 from .tools.base import Tool
@@ -308,7 +309,10 @@ class NpmRuntime(RuntimeHandler):
 
     def _ensure_local_package(self, tool: Tool) -> tuple[Path, str | None]:
         requirement = self._npm_requirement(tool)
-        slug = _slugify(requirement)
+        packages = shlex.split(requirement)
+        if not packages:
+            raise RuntimeError("No npm packages specified for tool")
+        slug = _slugify(" ".join(packages))
         prefix = NODE_CACHE_DIR / slug
         meta_path = prefix / self.META_FILE
         bin_dir = prefix / "node_modules" / ".bin"
@@ -327,7 +331,7 @@ class NpmRuntime(RuntimeHandler):
         env.setdefault("NPM_CONFIG_PREFIX", str(prefix))
         env.setdefault("npm_config_prefix", str(prefix))
         subprocess.run(  # nosec B603 - controlled installation
-            ["npm", "install", "--prefix", str(prefix), requirement],
+            ["npm", "install", "--prefix", str(prefix), *packages],
             capture_output=True,
             text=True,
             check=True,
@@ -341,7 +345,11 @@ class NpmRuntime(RuntimeHandler):
         return prefix, version
 
     def _resolve_installed_version(self, prefix: Path, tool: Tool, env: Mapping[str, str]) -> str | None:
-        package_name, _ = _split_package_spec(self._npm_requirement(tool))
+        requirement = self._npm_requirement(tool)
+        packages = shlex.split(requirement)
+        if not packages:
+            return None
+        package_name, _ = _split_package_spec(packages[0])
         try:
             result = subprocess.run(  # nosec B603 - controlled query
                 [

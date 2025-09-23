@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 import requests
+import shlex
 import shutil
 
 from ..models import RawDiagnostic
@@ -31,6 +32,7 @@ from ..parsers import (
     parse_dotenv_linter,
     parse_lualint,
     parse_luacheck,
+    parse_remark,
     parse_golangci_lint,
     parse_actionlint,
     parse_kube_linter,
@@ -1229,6 +1231,50 @@ class _LuacheckCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _RemarkCommand(CommandBuilder):
+    base: Sequence[str]
+    is_fix: bool = False
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        if not self.is_fix and "--report" not in cmd:
+            cmd.extend(["--report", "json"])
+        if not self.is_fix and "--frail" not in cmd:
+            cmd.append("--frail")
+        if not self.is_fix and "--quiet" not in cmd:
+            cmd.append("--quiet")
+        if not self.is_fix and "--no-color" not in cmd:
+            cmd.append("--no-color")
+        if self.is_fix and "--output" not in cmd:
+            cmd.append("--output")
+
+        config = _setting(settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(root, config))])
+
+        use_plugins = _settings_list(_setting(settings, "use"))
+        for plugin in use_plugins:
+            cmd.extend(["--use", str(plugin)])
+
+        ignore_path = _setting(settings, "ignore-path", "ignore_path")
+        if ignore_path:
+            cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
+
+        setting_files = _settings_list(_setting(settings, "setting"))
+        for value in setting_files:
+            cmd.extend(["--setting", str(value)])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _TscCommand(CommandBuilder):
     base: Sequence[str]
 
@@ -1685,6 +1731,33 @@ def _builtin_tools() -> Iterable[Tool]:
         package="stylelint@16.11.0",
         min_version="16.11.0",
         version_command=("stylelint", "--version"),
+    )
+
+    yield Tool(
+        name="remark-lint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_RemarkCommand(base=("remark", "--use", "remark-preset-lint-recommended")),
+                append_files=True,
+                description="Lint Markdown files using remark-lint recommended rules.",
+                parser=JsonParser(parse_remark),
+            ),
+            ToolAction(
+                name="fix",
+                command=_RemarkCommand(base=("remark", "--use", "remark-preset-lint-recommended"), is_fix=True),
+                append_files=True,
+                is_fix=True,
+                description="Apply remark formatting fixes.",
+            ),
+        ),
+        languages=("markdown",),
+        file_extensions=(".md", ".mdx", ".markdown"),
+        description="Markdown linting via remark-lint preset.",
+        runtime="npm",
+        package="remark-cli@12.0.1 remark-lint@9.1.2 remark-preset-lint-recommended@6.0.2",
+        min_version="12.0.1",
+        version_command=("remark", "--version"),
     )
 
     yield Tool(

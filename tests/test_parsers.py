@@ -30,6 +30,7 @@ from pyqa.parsers import (
     parse_lualint,
     parse_luacheck,
     parse_dotenv_linter,
+    parse_remark,
 )
 from pyqa.severity import Severity
 from pyqa.tools.base import ToolContext
@@ -280,6 +281,26 @@ def test_parse_dotenv_linter() -> None:
     assert len(diags) == 2
     assert diags[0].code == "LowercaseKey"
     assert diags[1].code == "LeadingSpace"
+
+
+def test_parse_remark() -> None:
+    parser = JsonParser(parse_remark)
+    stdout = """
+    [
+      {
+        "name": "README.md",
+        "messages": [
+          {"reason": "List item spacing", "line": 4, "column": 3, "ruleId": "list-item-spacing", "fatal": false}
+        ]
+      }
+    ]
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == "README.md"
+    assert diag.code == "list-item-spacing"
+    assert diag.severity.value == "warning"
 
 
 def test_parse_tsc() -> None:

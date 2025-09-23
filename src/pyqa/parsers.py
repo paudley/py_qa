@@ -609,6 +609,63 @@ def parse_dotenv_linter(stdout: str, _context: ToolContext) -> Sequence[RawDiagn
     return results
 
 
+def parse_remark(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse remark/remark-lint JSON output."""
+
+    files: list[dict[str, Any]]
+    if isinstance(payload, list):
+        files = [item for item in payload if isinstance(item, dict)]
+    elif isinstance(payload, dict):
+        intermediate = payload.get("files") or payload.get("results") or []
+        files = [item for item in intermediate if isinstance(item, dict)]
+    else:
+        files = []
+
+    results: list[RawDiagnostic] = []
+    for entry in files:
+        file_path = entry.get("name") or entry.get("path") or entry.get("file")
+        messages = entry.get("messages")
+        if not isinstance(messages, list):
+            continue
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+            reason = str(message.get("reason", "")).strip()
+            if not reason:
+                continue
+            fatal = message.get("fatal")
+            severity_label = message.get("severity")
+            if isinstance(severity_label, str):
+                severity = {
+                    "error": Severity.ERROR,
+                    "warning": Severity.WARNING,
+                    "info": Severity.NOTICE,
+                }.get(severity_label.lower(), Severity.WARNING)
+            else:
+                severity = Severity.ERROR if fatal in (True, 1) else Severity.WARNING
+
+            line = message.get("line")
+            column = message.get("column")
+            location = message.get("location") if isinstance(message.get("location"), dict) else {}
+            start = location.get("start") if isinstance(location, dict) else {}
+            if line is None and isinstance(start, dict):
+                line = start.get("line")
+                column = start.get("column")
+
+            results.append(
+                RawDiagnostic(
+                    file=file_path,
+                    line=line,
+                    column=column,
+                    severity=severity,
+                    message=reason,
+                    code=message.get("ruleId") or message.get("rule"),
+                    tool="remark-lint",
+                )
+            )
+    return results
+
+
 _TSC_PATTERN = re.compile(
     r"^(?P<file>[^:(\n]+)\((?P<line>\d+),(?P<col>\d+)\):\s*"
     r"(?P<severity>error|warning)\s*(?P<code>[A-Z]+\d+)?\s*:?\s*(?P<message>.+)$"
@@ -737,6 +794,7 @@ __all__ = [
     "parse_yamllint",
     "parse_hadolint",
     "parse_dotenv_linter",
+    "parse_remark",
     "parse_tsc",
     "parse_golangci_lint",
     "parse_cargo_clippy",
