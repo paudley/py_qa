@@ -34,6 +34,7 @@ from pyqa.parsers import (
     parse_speccy,
     parse_shfmt,
     parse_phplint,
+    parse_perlcritic,
     parse_speccy,
 )
 from pyqa.severity import Severity
@@ -357,6 +358,18 @@ def test_parse_phplint() -> None:
     assert diag.line == 14
     assert diag.severity.value == "error"
     assert diag.tool == "phplint"
+
+
+def test_parse_perlcritic() -> None:
+    parser = TextParser(parse_perlcritic)
+    stdout = "lib/Foo.pm:12:8:ProhibitUnusedVariables: MyVar is never used (ProhibitUnusedVariables)\n"
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == "lib/Foo.pm"
+    assert diag.line == 12
+    assert diag.column == 8
+    assert diag.code == "ProhibitUnusedVariables"
 
 
 def test_parse_tsc() -> None:

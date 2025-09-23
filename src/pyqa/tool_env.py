@@ -39,6 +39,9 @@ RUST_CACHE_DIR = CACHE_ROOT / "rust"
 RUST_BIN_DIR = RUST_CACHE_DIR / "bin"
 RUST_META_DIR = RUST_CACHE_DIR / "meta"
 RUST_WORK_DIR = RUST_CACHE_DIR / "work"
+PERL_CACHE_DIR = CACHE_ROOT / "perl"
+PERL_BIN_DIR = PERL_CACHE_DIR / "bin"
+PERL_META_DIR = PERL_CACHE_DIR / "meta"
 
 
 @dataclass(slots=True)
@@ -620,6 +623,109 @@ class LuaRuntime(RuntimeHandler):
         }
 
 
+class PerlRuntime(RuntimeHandler):
+    """Provision Perl tooling using cpanm into a local cache."""
+
+    def _try_system(
+        self,
+        tool: Tool,
+        base_cmd: Sequence[str],
+        root: Path,
+        cache_dir: Path,
+        target_version: str | None,
+    ) -> PreparedCommand | None:
+        executable = shutil.which(base_cmd[0])
+        if not executable:
+            return None
+        version = None
+        if tool.version_command:
+            version = self._versions.capture(tool.version_command)
+        if not self._versions.is_compatible(version, target_version):
+            return None
+        return PreparedCommand(cmd=list(base_cmd), env={}, version=version, source="system")
+
+    def _prepare_local(
+        self,
+        tool: Tool,
+        base_cmd: Sequence[str],
+        root: Path,
+        cache_dir: Path,
+        target_version: str | None,
+    ) -> PreparedCommand:
+        if not shutil.which("cpanm"):
+            raise RuntimeError("cpanm is required to install Perl-based tools")
+
+        binary_name = Path(base_cmd[0]).name
+        binary_path = self._ensure_local_tool(tool, binary_name)
+        cmd = list(base_cmd)
+        cmd[0] = str(binary_path)
+
+        env = self._perl_env(binary_path.parent)
+        version = None
+        if tool.version_command:
+            version = self._versions.capture(tool.version_command, env=self._merge_env(env))
+        return PreparedCommand(cmd=cmd, env=env, version=version, source="local")
+
+    def _ensure_local_tool(self, tool: Tool, binary_name: str) -> Path:
+        package, version_spec = self._package_spec(tool)
+        requirement = f"{package}@{version_spec}" if version_spec else package
+        slug = _slugify(requirement)
+        prefix = PERL_CACHE_DIR / slug
+        binary = prefix / "bin" / binary_name
+        meta_file = PERL_META_DIR / f"{slug}.json"
+
+        if binary.exists() and meta_file.exists():
+            try:
+                meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                if meta.get("requirement") == requirement:
+                    return binary
+            except json.JSONDecodeError:
+                pass
+
+        meta_file.parent.mkdir(parents=True, exist_ok=True)
+        (prefix / "bin").mkdir(parents=True, exist_ok=True)
+
+        install_cmd = [
+            "cpanm",
+            "--quiet",
+            "--notest",
+            "--local-lib",
+            str(prefix),
+            package,
+        ]
+        if version_spec:
+            install_cmd.append(str(version_spec))
+
+        subprocess.run(  # nosec B603 - controlled cpanm install
+            install_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        if not binary.exists():
+            raise RuntimeError(f"Failed to install Perl tool '{tool.name}'")
+
+        meta_file.write_text(json.dumps({"requirement": requirement}), encoding="utf-8")
+        binary.chmod(binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        return binary
+
+    @staticmethod
+    def _package_spec(tool: Tool) -> tuple[str, str | None]:
+        if tool.package:
+            package, version = _split_package_spec(tool.package)
+            return package, version
+        return tool.name, tool.min_version
+
+    @staticmethod
+    def _perl_env(bin_dir: Path) -> dict[str, str]:
+        lib_dir = bin_dir.parent / "lib" / "perl5"
+        env = {
+            "PATH": os.pathsep.join([str(bin_dir)] + os.environ.get("PATH", "").split(os.pathsep)),
+            "PERL5LIB": str(lib_dir),
+            "PERL_LOCAL_LIB_ROOT": str(bin_dir.parent),
+        }
+        return env
 class RustRuntime(RuntimeHandler):
     """Provision Rust tooling using ``cargo install`` with caching."""
 
@@ -775,6 +881,7 @@ class CommandPreparer:
             "npm": NpmRuntime(self._versions),
             "go": GoRuntime(self._versions),
             "lua": LuaRuntime(self._versions),
+            "perl": PerlRuntime(self._versions),
             "rust": RustRuntime(self._versions),
             "binary": BinaryRuntime(self._versions),
         }
@@ -814,6 +921,9 @@ class CommandPreparer:
         RUST_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         RUST_BIN_DIR.mkdir(parents=True, exist_ok=True)
         RUST_META_DIR.mkdir(parents=True, exist_ok=True)
+        PERL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        PERL_BIN_DIR.mkdir(parents=True, exist_ok=True)
+        PERL_META_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _split_package_spec(spec: str) -> tuple[str, str | None]:

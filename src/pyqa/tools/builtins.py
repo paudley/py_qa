@@ -36,6 +36,8 @@ from ..parsers import (
     parse_speccy,
     parse_shfmt,
     parse_phplint,
+    parse_perlcritic,
+    parse_phplint,
     parse_golangci_lint,
     parse_actionlint,
     parse_kube_linter,
@@ -97,6 +99,7 @@ HADOLINT_VERSION_DEFAULT = "2.12.0"
 _LUAROCKS_AVAILABLE = shutil.which("luarocks") is not None
 _LUA_AVAILABLE = shutil.which("lua") is not None
 _CARGO_AVAILABLE = shutil.which("cargo") is not None
+_CPANM_AVAILABLE = shutil.which("cpanm") is not None
 
 
 def _ensure_actionlint(version: str, cache_root: Path) -> Path:
@@ -677,6 +680,79 @@ class _PylintCommand(CommandBuilder):
             max_line_length = ctx.cfg.execution.line_length
         if max_line_length is not None:
             cmd.extend(["--max-line-length", str(max_line_length)])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _PerltidyCommand(CommandBuilder):
+    base: Sequence[str]
+    is_fix: bool = False
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        profile = _setting(settings, "profile", "configuration")
+        if profile:
+            cmd.extend(["--profile", str(_resolve_path(root, profile))])
+
+        extra = _settings_list(_setting(settings, "args"))
+        if extra:
+            cmd.extend(str(arg) for arg in extra)
+
+        if self.is_fix:
+            if "-b" not in cmd:
+                cmd.extend(["-b", "-bext=\"\""])
+            if "-q" not in cmd:
+                cmd.append("-q")
+        else:
+            if "--check-only" not in cmd:
+                cmd.append("--check-only")
+            if "-q" not in cmd:
+                cmd.append("-q")
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _PerlCriticCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        if "--nocolor" not in cmd:
+            cmd.append("--nocolor")
+        if "--verbose" not in cmd:
+            cmd.extend(["--verbose", "%f:%l:%c:%m (%p)"])
+
+        severity = _setting(settings, "severity")
+        if severity:
+            cmd.extend(["--severity", str(severity)])
+
+        theme = _setting(settings, "theme")
+        if theme:
+            cmd.extend(["--theme", str(theme)])
+
+        profile = _setting(settings, "profile", "configuration")
+        if profile:
+            cmd.extend(["--profile", str(_resolve_path(root, profile))])
+
+        include = _settings_list(_setting(settings, "include"))
+        for policy in include:
+            cmd.extend(["--include", str(policy)])
+
+        exclude = _settings_list(_setting(settings, "exclude"))
+        for policy in exclude:
+            cmd.extend(["--exclude", str(policy)])
 
         args = _settings_list(_setting(settings, "args"))
         if args:
@@ -1881,6 +1957,54 @@ def _builtin_tools() -> Iterable[Tool]:
         package="speccy@0.11.0",
         min_version="0.11.0",
         version_command=("speccy", "--version"),
+    )
+
+    yield Tool(
+        name="perltidy",
+        actions=(
+            ToolAction(
+                name="format",
+                command=_PerltidyCommand(base=("perltidy",), is_fix=True),
+                append_files=True,
+                is_fix=True,
+                description="Format Perl code using perltidy.",
+            ),
+            ToolAction(
+                name="check",
+                command=_PerltidyCommand(base=("perltidy",), is_fix=False),
+                append_files=True,
+                description="Verify Perl formatting without modifying files.",
+            ),
+        ),
+        languages=("perl",),
+        file_extensions=(".pl", ".pm", ".t", ".phtml"),
+        description="Perl formatter using perltidy.",
+        runtime="perl",
+        package="Perl::Tidy",
+        min_version="20240112",
+        version_command=("perltidy", "--version"),
+        default_enabled=_CPANM_AVAILABLE,
+    )
+
+    yield Tool(
+        name="perlcritic",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_PerlCriticCommand(base=("perlcritic",)),
+                append_files=True,
+                description="Run Perl::Critic static analysis.",
+                parser=TextParser(parse_perlcritic),
+            ),
+        ),
+        languages=("perl",),
+        file_extensions=(".pl", ".pm", ".t", ".phtml"),
+        description="Perl static analysis via Perl::Critic.",
+        runtime="perl",
+        package="Perl::Critic",
+        min_version="1.151",
+        version_command=("perlcritic", "--version"),
+        default_enabled=_CPANM_AVAILABLE,
     )
 
     yield Tool(

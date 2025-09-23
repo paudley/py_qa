@@ -848,6 +848,37 @@ def parse_phplint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]
     return results
 
 
+PERLCRITIC_PATTERN = re.compile(
+    r"^(?P<file>[^:]+):(?P<line>\d+):(?P<column>\d+):\s*(?P<message>.+?)\s*\((?P<rule>[^)]+)\)$"
+)
+
+
+def parse_perlcritic(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse perlcritic textual output using custom verbose template."""
+
+    results: list[RawDiagnostic] = []
+    for raw_line in stdout.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        match = PERLCRITIC_PATTERN.match(line)
+        if not match:
+            continue
+        message = match.group("message").strip()
+        results.append(
+            RawDiagnostic(
+                file=match.group("file"),
+                line=int(match.group("line")),
+                column=int(match.group("column")),
+                severity=Severity.WARNING,
+                message=message,
+                code=match.group("rule"),
+                tool="perlcritic",
+            )
+        )
+    return results
+
+
 _TSC_PATTERN = re.compile(
     r"^(?P<file>[^:(\n]+)\((?P<line>\d+),(?P<col>\d+)\):\s*"
     r"(?P<severity>error|warning)\s*(?P<code>[A-Z]+\d+)?\s*:?\s*(?P<message>.+)$"
@@ -980,6 +1011,7 @@ __all__ = [
     "parse_speccy",
     "parse_shfmt",
     "parse_phplint",
+    "parse_perlcritic",
     "parse_speccy",
     "parse_tsc",
     "parse_golangci_lint",
