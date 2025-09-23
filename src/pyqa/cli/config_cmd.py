@@ -168,7 +168,12 @@ def config_export_tools(
 
     out_path = out.resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(TOOL_SETTING_SCHEMA, indent=2, sort_keys=True) + "\n"
+    payload = {
+        "_license": "SPDX-License-Identifier: MIT",
+        "_copyright": "Copyright (c) 2025 Blackcat Informatics® Inc.",
+    }
+    payload.update(TOOL_SETTING_SCHEMA)
+    text = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     out_path.write_text(text, encoding="utf-8")
     typer.echo(str(out_path))
 

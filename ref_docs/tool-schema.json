@@ -1,6 +1,6 @@
 {
-  "_license": "SPDX-License-Identifier: MIT",
   "_copyright": "Copyright (c) 2025 Blackcat Informatics® Inc.",
+  "_license": "SPDX-License-Identifier: MIT",
   "bandit": {
     "args": {
       "description": "Additional arguments appended to bandit.",
