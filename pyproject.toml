@@ -14,6 +14,23 @@ requires-python = ">=3.12"
 dependencies = [
     "typer>=0.12",
     "packaging>=24.1",
+    "cython>=3.1.4",
+    "tree-sitter-python>=0.25.0",
+    "tree-sitter-javascript>=0.25.0",
+    "tree-sitter-markdown>=0.5.1",
+    "tree-sitter-json>=0.24.8",
+    "tree-sitter-go>=0.25.0",
+    "tree-sitter-rust>=0.24.0",
+    "tree-sitter>=0.25.1",
+    "sqlfluff>=3.4.2",
+    "tree-sitter-sql>=0.3.8",
+    "tree-sitter-yaml",
+    "tree-sitter-bash",
+    "tree-sitter-lua",
+    "tree-sitter-php",
+    "tree-sitter-toml",
+    "tree-sitter-dockerfile",
+    "tree-sitter-make",
 ]
 
 [project.scripts]
@@ -85,9 +102,11 @@ disable = [
     "too-many-statements",
     "too-many-return-statements",
 ]
+max-line-length = 120
 
 [tool.bandit]
 exclude_dirs = ["tests"]
 
 [tool.isort]
 profile = "black"
+

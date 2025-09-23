@@ -54,22 +54,17 @@ class FilesystemDiscovery(DiscoveryStrategy):
             candidate = entry if entry.is_absolute() else root / entry
             yield candidate
 
-    def _walk(
-        self, base: Path, excludes: set[Path], limits: list[Path]
-    ) -> Iterator[Path]:
+    def _walk(self, base: Path, excludes: set[Path], limits: list[Path]) -> Iterator[Path]:
         follow_links = self.follow_symlinks
         for dirpath, dirnames, filenames in os.walk(base, followlinks=follow_links):
             current = Path(dirpath)
-            if current.name in ALWAYS_EXCLUDE_DIRS or any(
-                self._is_child_of(current, ex) for ex in excludes
-            ):
+            if current.name in ALWAYS_EXCLUDE_DIRS or any(self._is_child_of(current, ex) for ex in excludes):
                 dirnames[:] = []
                 continue
             dirnames[:] = [
                 name
                 for name in dirnames
-                if name not in ALWAYS_EXCLUDE_DIRS
-                and not any(self._is_child_of(current / name, ex) for ex in excludes)
+                if name not in ALWAYS_EXCLUDE_DIRS and not any(self._is_child_of(current / name, ex) for ex in excludes)
             ]
             for filename in filenames:
                 candidate = current / filename

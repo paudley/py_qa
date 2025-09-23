@@ -9,9 +9,9 @@ PyQA is maintained by Blackcat Informatics® Inc. and we take security seriously
 ## Supported Versions
 
 | Version | Supported |
-| ------- | ------------------ |
-| 0.1.x | ✅ |
-| < 0.1 | ❌ |
+| ------- | --------- |
+| 0.1.x   | ✅        |
+| < 0.1   | ❌        |
 
 ### Please DO NOT:
 

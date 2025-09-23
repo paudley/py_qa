@@ -65,7 +65,7 @@ DEFAULT_EXCLUDES = [
     Path(".pytest_cache"),
     Path(".tox"),
     Path(".eggs"),
-    Path(".tool-cache"),
+    Path(".lint-cache"),
     Path(".cache"),
 ]
 
@@ -89,9 +89,7 @@ def build_config(options: LintOptions) -> Config:
         execution=execution_cfg,
         dedupe=replace(base_config.dedupe),
         severity_rules=list(base_config.severity_rules),
-        tool_settings={
-            tool: dict(settings) for tool, settings in base_config.tool_settings.items()
-        },
+        tool_settings={tool: dict(settings) for tool, settings in base_config.tool_settings.items()},
     )
 
 
@@ -106,9 +104,7 @@ def _build_file_discovery(
 
     if "dirs" in provided:
         for directory in options.dirs:
-            resolved = (
-                directory if directory.is_absolute() else (project_root / directory)
-            )
+            resolved = directory if directory.is_absolute() else (project_root / directory)
             roots.append(resolved.resolve())
 
     explicit_files: List[Path] = [path.resolve() for path in current.explicit_files]
@@ -130,9 +126,7 @@ def _build_file_discovery(
         if file_path not in explicit_files:
             explicit_files.append(file_path)
 
-    boundaries = _unique_paths(
-        path for path in (user_dirs + [file.parent for file in user_files]) if path
-    )
+    boundaries = _unique_paths(path for path in (user_dirs + [file.parent for file in user_files]) if path)
 
     if boundaries:
         roots = [path for path in roots if _is_within_any(path, boundaries)]
@@ -141,9 +135,7 @@ def _build_file_discovery(
         else:
             roots.extend(path for path in boundaries if path not in roots)
         roots = _unique_paths(roots)
-        explicit_files = [
-            path for path in explicit_files if _is_within_any(path, boundaries)
-        ]
+        explicit_files = [path for path in explicit_files if _is_within_any(path, boundaries)]
 
     excludes = _unique_paths([path.resolve() for path in current.excludes])
     for default_path in DEFAULT_EXCLUDES:
@@ -157,23 +149,11 @@ def _build_file_discovery(
             if resolved not in excludes:
                 excludes.append(resolved)
 
-    paths_from_stdin = (
-        options.paths_from_stdin
-        if "paths_from_stdin" in provided
-        else current.paths_from_stdin
-    )
-    changed_only = (
-        options.changed_only if "changed_only" in provided else current.changed_only
-    )
+    paths_from_stdin = options.paths_from_stdin if "paths_from_stdin" in provided else current.paths_from_stdin
+    changed_only = options.changed_only if "changed_only" in provided else current.changed_only
     diff_ref = options.diff_ref if "diff_ref" in provided else current.diff_ref
-    include_untracked = (
-        options.include_untracked
-        if "include_untracked" in provided
-        else current.include_untracked
-    )
-    base_branch = (
-        options.base_branch if "base_branch" in provided else current.base_branch
-    )
+    include_untracked = options.include_untracked if "include_untracked" in provided else current.include_untracked
+    base_branch = options.base_branch if "base_branch" in provided else current.base_branch
 
     return replace(
         current,
@@ -189,14 +169,10 @@ def _build_file_discovery(
     )
 
 
-def _build_output(
-    current: OutputConfig, options: LintOptions, project_root: Path
-) -> OutputConfig:
+def _build_output(current: OutputConfig, options: LintOptions, project_root: Path) -> OutputConfig:
     provided = options.provided
 
-    tool_filters: ToolFilters = {
-        tool: patterns.copy() for tool, patterns in DEFAULT_TOOL_FILTERS.items()
-    }
+    tool_filters: ToolFilters = {tool: patterns.copy() for tool, patterns in DEFAULT_TOOL_FILTERS.items()}
     for tool, patterns in current.tool_filters.items():
         tool_filters.setdefault(tool, []).extend(patterns)
     if "filters" in provided:
@@ -208,14 +184,8 @@ def _build_output(
     quiet = options.quiet if "quiet" in provided else current.quiet
     color = (not options.no_color) if "no_color" in provided else current.color
     emoji = (not options.no_emoji) if "no_emoji" in provided else current.emoji
-    output_mode = (
-        _normalize_output_mode(options.output_mode)
-        if "output_mode" in provided
-        else current.output
-    )
-    show_passing = (
-        options.show_passing if "show_passing" in provided else current.show_passing
-    )
+    output_mode = _normalize_output_mode(options.output_mode) if "output_mode" in provided else current.output
+    show_passing = options.show_passing if "show_passing" in provided else current.show_passing
     if quiet:
         show_passing = False
 
@@ -224,20 +194,14 @@ def _build_output(
         if "pr_summary_out" in provided
         else current.pr_summary_out
     )
-    pr_summary_limit = (
-        options.pr_summary_limit
-        if "pr_summary_limit" in provided
-        else current.pr_summary_limit
-    )
+    pr_summary_limit = options.pr_summary_limit if "pr_summary_limit" in provided else current.pr_summary_limit
     pr_summary_min = (
         _normalize_min_severity(options.pr_summary_min_severity)
         if "pr_summary_min_severity" in provided
         else current.pr_summary_min_severity
     )
     pr_summary_template = (
-        options.pr_summary_template
-        if "pr_summary_template" in provided
-        else current.pr_summary_template
+        options.pr_summary_template if "pr_summary_template" in provided else current.pr_summary_template
     )
 
     return replace(
@@ -256,15 +220,11 @@ def _build_output(
     )
 
 
-def _build_execution(
-    current: ExecutionConfig, options: LintOptions, project_root: Path
-) -> ExecutionConfig:
+def _build_execution(current: ExecutionConfig, options: LintOptions, project_root: Path) -> ExecutionConfig:
     provided = options.provided
 
     only = list(options.only) if "only" in provided else list(current.only)
-    language = (
-        list(options.language) if "language" in provided else list(current.languages)
-    )
+    language = list(options.language) if "language" in provided else list(current.languages)
     fix_only = options.fix_only if "fix_only" in provided else current.fix_only
     check_only = options.check_only if "check_only" in provided else current.check_only
     bail = options.bail if "bail" in provided else current.bail
@@ -276,22 +236,13 @@ def _build_execution(
     if bail:
         jobs = 1
 
-    cache_enabled = (
-        (not options.no_cache) if "no_cache" in provided else current.cache_enabled
-    )
+    cache_enabled = (not options.no_cache) if "no_cache" in provided else current.cache_enabled
     cache_dir = (
-        _resolve_path(project_root, options.cache_dir).resolve()
-        if "cache_dir" in provided
-        else current.cache_dir
+        _resolve_path(project_root, options.cache_dir).resolve() if "cache_dir" in provided else current.cache_dir
     )
-    use_local_linters = (
-        options.use_local_linters
-        if "use_local_linters" in provided
-        else current.use_local_linters
-    )
-    line_length = (
-        options.line_length if "line_length" in provided else current.line_length
-    )
+    use_local_linters = options.use_local_linters if "use_local_linters" in provided else current.use_local_linters
+    line_length = options.line_length if "line_length" in provided else current.line_length
+    sql_dialect = options.sql_dialect if "sql_dialect" in provided else current.sql_dialect
 
     return replace(
         current,
@@ -305,6 +256,7 @@ def _build_execution(
         bail=bail,
         use_local_linters=use_local_linters,
         line_length=line_length,
+        sql_dialect=sql_dialect,
     )
 
 
@@ -358,9 +310,7 @@ def _is_within_any(path: Path, bounds: Iterable[Path]) -> bool:
 
 
 def _parse_filters(specs: List[str]) -> ToolFilters:
-    filters: ToolFilters = {
-        tool: patterns.copy() for tool, patterns in DEFAULT_TOOL_FILTERS.items()
-    }
+    filters: ToolFilters = {tool: patterns.copy() for tool, patterns in DEFAULT_TOOL_FILTERS.items()}
     for spec in specs:
         if ":" not in spec:
             raise ValueError(f"Invalid filter '{spec}'. Expected TOOL:regex")

@@ -43,12 +43,8 @@ def main(
         "-c",
         help="Limit execution to specific checks (e.g. license,file-size,schema,python).",
     ),
-    no_schema: bool = typer.Option(
-        False, "--no-schema", help="Skip schema validation."
-    ),
-    emoji: bool = typer.Option(
-        True, "--emoji/--no-emoji", help="Toggle emoji in output."
-    ),
+    no_schema: bool = typer.Option(False, "--no-schema", help="Skip schema validation."),
+    emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output."),
 ) -> None:
     if ctx.invoked_subcommand:
         return
@@ -85,13 +81,9 @@ def main(
 
 @quality_app.command("commit-msg")
 def commit_msg(
-    message_file: Path = typer.Argument(
-        ..., metavar="FILE", help="Commit message file."
-    ),
+    message_file: Path = typer.Argument(..., metavar="FILE", help="Commit message file."),
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    emoji: bool = typer.Option(
-        True, "--emoji/--no-emoji", help="Toggle emoji in output."
-    ),
+    emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output."),
 ) -> None:
     result = check_commit_message(root, message_file)
     _render_result(result, root, emoji)
@@ -101,9 +93,7 @@ def commit_msg(
 @quality_app.command("branch")
 def branch_guard(
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    emoji: bool = typer.Option(
-        True, "--emoji/--no-emoji", help="Toggle emoji in output."
-    ),
+    emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output."),
 ) -> None:
     loader = ConfigLoader.for_root(root)
     try:

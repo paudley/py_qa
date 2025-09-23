@@ -74,17 +74,13 @@ class ToolAction:
             cmd.extend(str(path) for path in ctx.files)
         return cmd
 
-    def filter_stdout(
-        self, text: str, extra_patterns: Sequence[str] | None = None
-    ) -> str:
+    def filter_stdout(self, text: str, extra_patterns: Sequence[str] | None = None) -> str:
         patterns = list(self.filter_patterns)
         if extra_patterns:
             patterns.extend(extra_patterns)
         return OutputFilter(patterns).apply(text)
 
-    def filter_stderr(
-        self, text: str, extra_patterns: Sequence[str] | None = None
-    ) -> str:
+    def filter_stderr(self, text: str, extra_patterns: Sequence[str] | None = None) -> str:
         patterns = list(self.filter_patterns)
         if extra_patterns:
             patterns.extend(extra_patterns)
@@ -109,9 +105,7 @@ class Tool:
     prefer_local: bool = False
     version_command: Sequence[str] | None = None
 
-    def is_applicable(
-        self, *, language: str | None = None, files: Sequence[Path] | None = None
-    ) -> bool:
+    def is_applicable(self, *, language: str | None = None, files: Sequence[Path] | None = None) -> bool:
         if language and self.languages and language not in self.languages:
             return False
         if files:

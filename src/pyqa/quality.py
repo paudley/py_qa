@@ -114,9 +114,7 @@ class LicenseCheck:
             try:
                 content = path.read_text(encoding="utf-8", errors="replace")
             except OSError as exc:
-                result.add_warning(
-                    f"Unable to read file for license check: {exc}", path
-                )
+                result.add_warning(f"Unable to read file for license check: {exc}", path)
                 continue
 
             issues = verify_file_license(path, content, policy, ctx.root)
@@ -145,7 +143,7 @@ class PythonHygieneCheck:
             except OSError as exc:
                 result.add_warning(f"Unable to read Python file: {exc}", path)
                 continue
-            if "pdb.set_trace(" in content or "breakpoint(" in content:
+            if re.search(r"(?<!['\"])pdb\.set_trace\(", content) or re.search(r"(?<!['\"])breakpoint\(", content):
                 result.add_error("Debug breakpoint detected", path)
             if re.search(r"except\s*:\s*(?:#.*)?$", content, re.MULTILINE):
                 result.add_warning("Bare except detected", path)
@@ -160,9 +158,7 @@ class SchemaCheck:
             return
         expected = json.dumps(TOOL_SETTING_SCHEMA, indent=2, sort_keys=True) + "\n"
         for target in ctx.quality.schema_targets:
-            target_path = (
-                target if target.is_absolute() else (ctx.root / target).resolve()
-            )
+            target_path = target if target.is_absolute() else (ctx.root / target).resolve()
             if not target_path.exists():
                 result.add_error(
                     "Schema documentation missing. Run 'pyqa config export-tools' to regenerate.",
@@ -170,11 +166,24 @@ class SchemaCheck:
                 )
                 continue
             actual = target_path.read_text(encoding="utf-8")
-            if actual != expected:
+            if actual == expected:
+                continue
+            try:
+                parsed_actual = json.loads(actual)
+            except json.JSONDecodeError:
                 relative = _relative_to_root(target_path, ctx.root)
                 result.add_error(
-                    "Schema documentation out of date. Run 'pyqa config export-tools "
-                    f"{relative}' to refresh.",
+                    f"Schema documentation out of date. Run 'pyqa config export-tools {relative}' to refresh.",
+                    target_path,
+                )
+                continue
+            parsed_expected = json.loads(expected)
+            parsed_actual.pop("_license", None)
+            parsed_actual.pop("_copyright", None)
+            if parsed_actual != parsed_expected:
+                relative = _relative_to_root(target_path, ctx.root)
+                result.add_error(
+                    f"Schema documentation out of date. Run 'pyqa config export-tools {relative}' to refresh.",
                     target_path,
                 )
 
@@ -187,20 +196,12 @@ class QualityFileCollector:
 
     def collect(self, files: Sequence[Path] | None, *, staged: bool) -> list[Path]:
         if files:
-            return [
-                self._resolve(path) for path in files if self._resolve(path).exists()
-            ]
+            return [self._resolve(path) for path in files if self._resolve(path).exists()]
 
         if staged:
             discovery = GitDiscovery()
-            config = FileDiscoveryConfig(
-                pre_commit=True, include_untracked=True, changed_only=True
-            )
-            return [
-                path.resolve()
-                for path in discovery.discover(config, self.root)
-                if path.exists()
-            ]
+            config = FileDiscoveryConfig(pre_commit=True, include_untracked=True, changed_only=True)
+            return [path.resolve() for path in discovery.discover(config, self.root) if path.exists()]
 
         tracked = list_tracked_files(self.root)
         if tracked:
@@ -208,11 +209,7 @@ class QualityFileCollector:
 
         discovery = FilesystemDiscovery()
         config = FileDiscoveryConfig()
-        return [
-            path.resolve()
-            for path in discovery.discover(config, self.root)
-            if path.exists()
-        ]
+        return [path.resolve() for path in discovery.discover(config, self.root) if path.exists()]
 
     def _resolve(self, path: Path) -> Path:
         return path if path.is_absolute() else (self.root / path).resolve()
@@ -236,14 +233,10 @@ class QualityChecker:
         self.root = root.resolve()
         self.quality = quality
         self._staged = staged
-        self._explicit_files = (
-            [self._resolve_path(path) for path in files] if files else None
-        )
+        self._explicit_files = [self._resolve_path(path) for path in files] if files else None
         self._collector = collector or QualityFileCollector(self.root)
         self._selected_checks = set(checks) if checks else set(quality.checks)
-        self.license_policy = license_policy or load_license_policy(
-            self.root, license_overrides
-        )
+        self.license_policy = license_policy or load_license_policy(self.root, license_overrides)
         self._available_checks: dict[str, QualityCheck] = {
             "file-size": FileSizeCheck(),
             "license": LicenseCheck(),
@@ -290,9 +283,7 @@ class QualityChecker:
         if any(part in ALWAYS_EXCLUDE_DIRS for part in relative.parts):
             return True
         relative_str = str(relative)
-        return any(
-            fnmatch(relative_str, pattern) for pattern in self.quality.skip_globs
-        )
+        return any(fnmatch(relative_str, pattern) for pattern in self.quality.skip_globs)
 
     def _resolve_path(self, path: Path) -> Path:
         return path if path.is_absolute() else (self.root / path).resolve()
@@ -344,24 +335,18 @@ def check_commit_message(root: Path, message_file: Path) -> QualityCheckResult:
     banned_matches = checker.scan(lines)
     if banned_matches:
         formatted = ", ".join(sorted(set(banned_matches)))
-        result.add_error(
-            f"Commit message contains banned terms: {formatted}", message_path
-        )
+        result.add_error(f"Commit message contains banned terms: {formatted}", message_path)
 
     return result
 
 
-def ensure_branch_protection(
-    root: Path, quality: QualityConfigSection
-) -> QualityCheckResult:
+def ensure_branch_protection(root: Path, quality: QualityConfigSection) -> QualityCheckResult:
     """Fail when attempting to operate on a protected branch."""
 
     result = QualityCheckResult()
     branch = _current_branch(root)
     if branch and branch in set(quality.protected_branches):
-        result.add_error(
-            f"Branch '{branch}' is protected. Create a feature branch before pushing."
-        )
+        result.add_error(f"Branch '{branch}' is protected. Create a feature branch before pushing.")
     return result
 
 

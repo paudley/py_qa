@@ -72,6 +72,6 @@ def test_build_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert cfg.output.color
     assert cfg.output.emoji
     exclude_names = {path.name for path in cfg.file_discovery.excludes}
-    assert ".tool-cache" in exclude_names
+    assert ".lint-cache" in exclude_names
     assert ".cache" in exclude_names
     assert cfg.tool_settings == {}

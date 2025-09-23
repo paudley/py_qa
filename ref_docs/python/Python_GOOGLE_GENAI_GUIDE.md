@@ -45,14 +45,14 @@ The new SDK introduces a more structured, client-centric paradigm. Whereas the o
 
 The following table provides a direct, side-by-side comparison to facilitate the migration of common patterns.
 
-| Feature | Old SDK (google-generativeai) | New SDK (google.genai) | Key Changes & Notes |
+| Feature                 | Old SDK (google-generativeai)            | New SDK (google.genai)                                                                  | Key Changes & Notes                                                                                                      |
 | :---------------------- | :--------------------------------------- | :-------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------- |
-| **Installation** | pip install google-generativeai | pip install google-genai | The package name has changed to reflect the new unified approach.10 |
-| **Import** | import google.generativeai as genai | from google import genai | The import path is now from the top-level google package.4 |
-| **Authentication** | genai.configure(api_key=...) | client = genai.Client(api_key=...) | Authentication is no longer a global setting; it is configured per Client instance.10 |
-| **Model Instantiation** | model = genai.GenerativeModel(...) | No direct model instantiation. The model is specified as a parameter in client methods. | The new SDK is largely stateless. The model name is passed directly to methods like client.generate_content(model=...).2 |
-| **Text Generation** | response = model.generate_content("...") | response = client.generate_content(model="...", contents="...") | The method is now on the client object, and the prompt is passed via the contents parameter.2 |
-| **Chat Session** | chat = model.start_chat() | chat_session = client.chats.create(model="...") | Chat functionality is now organized under the client.chats module, with a more explicit create method.13 |
+| **Installation**        | pip install google-generativeai          | pip install google-genai                                                                | The package name has changed to reflect the new unified approach.10                                                      |
+| **Import**              | import google.generativeai as genai      | from google import genai                                                                | The import path is now from the top-level google package.4                                                               |
+| **Authentication**      | genai.configure(api_key=...)             | client = genai.Client(api_key=...)                                                      | Authentication is no longer a global setting; it is configured per Client instance.10                                    |
+| **Model Instantiation** | model = genai.GenerativeModel(...)       | No direct model instantiation. The model is specified as a parameter in client methods. | The new SDK is largely stateless. The model name is passed directly to methods like client.generate_content(model=...).2 |
+| **Text Generation**     | response = model.generate_content("...") | response = client.generate_content(model="...", contents="...")                         | The method is now on the client object, and the prompt is passed via the contents parameter.2                            |
+| **Chat Session**        | chat = model.start_chat()                | chat_session = client.chats.create(model="...")                                         | Chat functionality is now organized under the client.chats module, with a more explicit create method.13                 |
 
 ### **1.3. Client Initialization and Authentication Deep Dive**
 
@@ -398,7 +398,7 @@ print(f"Model wants to call function: {tool_call.name} with args: {dict(tool_cal
 function_to_call = get_current_weather\
 function_args = dict(tool_call.args)\
 function_response_data = function_to_call(\*\*function_args)\
-print(f"Function execution result: {function_response_data}")
+print(f"Function execution result: \{function_response_data}")
 
 \# --- Step 4: Return the result to the model ---\
 response = client.generate_content(\
@@ -539,12 +539,12 @@ The Gemini API includes configurable safety filters to prevent the generation of
 
 The thresholds are defined by API enums, which correspond to the settings available in the Google AI Studio UI. Understanding this mapping is essential for correct configuration.
 
-| Threshold (API Enum) | Description | Default For |
+| Threshold (API Enum)   | Description                                                                        | Default For                             |
 | :--------------------- | :--------------------------------------------------------------------------------- | :-------------------------------------- |
-| BLOCK_NONE | Always show content, regardless of the probability of it being unsafe. | Newer models like gemini-1.5-pro-002 43 |
-| BLOCK_ONLY_HIGH | Block content only when there is a high probability of it being unsafe. | Corresponds to "Block few" in UI 41 |
-| BLOCK_MEDIUM_AND_ABOVE | Block content when there is a medium or high probability of it being unsafe. | Older models 41 |
-| BLOCK_LOW_AND_ABOVE | Block content when there is a low, medium, or high probability of it being unsafe. | Corresponds to "Block most" in UI 41 |
+| BLOCK_NONE             | Always show content, regardless of the probability of it being unsafe.             | Newer models like gemini-1.5-pro-002 43 |
+| BLOCK_ONLY_HIGH        | Block content only when there is a high probability of it being unsafe.            | Corresponds to "Block few" in UI 41     |
+| BLOCK_MEDIUM_AND_ABOVE | Block content when there is a medium or high probability of it being unsafe.       | Older models 41                         |
+| BLOCK_LOW_AND_ABOVE    | Block content when there is a low, medium, or high probability of it being unsafe. | Corresponds to "Block most" in UI 41    |
 
 Safety settings are configured per-request within the GenerationConfig object.
 
@@ -645,13 +645,13 @@ Building resilient applications requires robust error handling to manage transie
 
 API requests can fail for various reasons, each indicated by a standard HTTP status code. Understanding these codes is the first step in diagnosing and resolving issues.
 
-| HTTP Code | Status | Common Cause(s) | Recommended Action(s) |
+| HTTP Code | Status             | Common Cause(s)                                                                                                                                       | Recommended Action(s)                                                                                                                           |
 | :-------- | :----------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------- |
-| 400 | INVALID_ARGUMENT | Malformed request body (e.g., wrong parameter name), invalid model parameter value (e.g., temperature out of range), or prompt exceeds token limit.48 | Validate the request payload against the API documentation. Use client.count_tokens() to check prompt length. |
-| 403 | PERMISSION_DENIED | The API key is invalid, has been revoked, or lacks the necessary permissions for the requested resource (e.g., a tuned model).48 | Verify the API key is correct and active. For Vertex AI, check the IAM permissions of the service account. |
-| 429 | RESOURCE_EXHAUSTED | The number of requests per minute (RPM) or tokens per minute (TPM) has exceeded the project's rate limit.48 | Implement an exponential backoff and retry mechanism. If limits are consistently hit, request a quota increase. |
-| 500 | INTERNAL | An unexpected server-side error occurred. This can sometimes be triggered by an excessively long or complex input context.48 | This is often a transient issue. Retry the request with exponential backoff. If the error persists, try reducing the prompt complexity or size. |
-| 503 | UNAVAILABLE | The service is temporarily overloaded or unavailable. This indicates a transient capacity issue on Google's side.48 | Retry the request after a short delay, using an exponential backoff strategy. |
+| 400       | INVALID_ARGUMENT   | Malformed request body (e.g., wrong parameter name), invalid model parameter value (e.g., temperature out of range), or prompt exceeds token limit.48 | Validate the request payload against the API documentation. Use client.count_tokens() to check prompt length.                                   |
+| 403       | PERMISSION_DENIED  | The API key is invalid, has been revoked, or lacks the necessary permissions for the requested resource (e.g., a tuned model).48                      | Verify the API key is correct and active. For Vertex AI, check the IAM permissions of the service account.                                      |
+| 429       | RESOURCE_EXHAUSTED | The number of requests per minute (RPM) or tokens per minute (TPM) has exceeded the project's rate limit.48                                           | Implement an exponential backoff and retry mechanism. If limits are consistently hit, request a quota increase.                                 |
+| 500       | INTERNAL           | An unexpected server-side error occurred. This can sometimes be triggered by an excessively long or complex input context.48                          | This is often a transient issue. Retry the request with exponential backoff. If the error persists, try reducing the prompt complexity or size. |
+| 503       | UNAVAILABLE        | The service is temporarily overloaded or unavailable. This indicates a transient capacity issue on Google's side.48                                   | Retry the request after a short delay, using an exponential backoff strategy.                                                                   |
 
 ### **5.2. Handling Rate Limits (429 RESOURCE_EXHAUSTED)**
 
@@ -723,7 +723,7 @@ return response.text\
 except Exception as e:\
 \# In a production environment, log the specific error.\
 \# This example catches a generic exception for simplicity.\
-print(f"An error occurred: {e}")\
+print(f"An error occurred: \{e}")\
 retry_count += 1\
 if retry_count >= max_retries:\
 print("Max retries reached. Failing.")\

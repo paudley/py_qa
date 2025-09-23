@@ -53,9 +53,7 @@ def normalize_diagnostics(
     return normalized
 
 
-def _normalize_raw(
-    raw: RawDiagnostic, tool_name: str, severity_rules: SeverityRuleView
-) -> Diagnostic:
+def _normalize_raw(raw: RawDiagnostic, tool_name: str, severity_rules: SeverityRuleView) -> Diagnostic:
     message = raw.message.strip()
     code = raw.code
     tool = raw.tool or tool_name
@@ -67,9 +65,7 @@ def _normalize_raw(
     if tool == "ruff" and code and code not in message:
         message = f"{code} {message}".strip()
 
-    severity = apply_severity_rules(
-        tool, code or message, severity, rules=severity_rules
-    )
+    severity = apply_severity_rules(tool, code or message, severity, rules=severity_rules)
 
     return Diagnostic(
         file=raw.file,
@@ -135,9 +131,7 @@ def dedupe_outcomes(result: RunResult, cfg: DedupeConfig) -> None:
         result.outcomes[entry.outcome_index].diagnostics.append(entry.diagnostic)
 
 
-def _is_duplicate(
-    existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig
-) -> bool:
+def _is_duplicate(existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig) -> bool:
     if cfg.dedupe_same_file_only and existing.file != candidate.file:
         return False
 
@@ -147,11 +141,7 @@ def _is_duplicate(
     if existing.message != candidate.message:
         return False
 
-    if (
-        cfg.dedupe_same_file_only
-        and existing.file is None
-        and candidate.file is not None
-    ):
+    if cfg.dedupe_same_file_only and existing.file is None and candidate.file is not None:
         return False
 
     if (existing.function or "") != (candidate.function or ""):
@@ -170,9 +160,7 @@ def _line_distance(lhs: int | None, rhs: int | None) -> int:
     return abs(lhs - rhs)
 
 
-def _prefer(
-    existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig
-) -> Diagnostic:
+def _prefer(existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig) -> Diagnostic:
     if cfg.dedupe_by == "first":
         return existing
     if cfg.dedupe_by == "severity":

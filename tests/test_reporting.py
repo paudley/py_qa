@@ -108,9 +108,7 @@ def test_render_concise_shows_diagnostics_for_failures(tmp_path: Path, capsys) -
     result = _run_result(tmp_path)
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [
-        line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()
-    ]
+    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
     assert output_lines == [
         "ruff, src/app.py:10, F401, bad things",
         "ruff, src/app.py:20, W000, meh",
@@ -135,8 +133,10 @@ def test_render_concise_fallbacks_to_stderr(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output = capsys.readouterr().out
-    assert output.strip() == ""
+    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert output_lines == [
+        "Failed — 0 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1",
+    ]
 
 
 def test_render_concise_sorted_and_deduped(tmp_path: Path, capsys) -> None:
@@ -195,9 +195,7 @@ def test_render_concise_sorted_and_deduped(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [
-        line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()
-    ]
+    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
     assert output_lines == [
         "bandit, a.py:3:check_func, B000, warn early",
         "bandit, a.py:5, B001, warn a",
@@ -237,9 +235,7 @@ def test_render_concise_normalizes_paths(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [
-        line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()
-    ]
+    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
     assert output_lines == [
         "mypy, src/pkg/module.py:7:resolve_value, attr-defined, absolute issue",
         "Failed — 1 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1",

@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Shared discovery helpers for filesystem traversal with exclusions."""
 
 from __future__ import annotations
@@ -26,9 +28,7 @@ def iter_paths(
         yield directory, dirnames, filenames
 
 
-def _should_skip(
-    directory: Path, root: Path, skip_patterns: Iterable[str] | None
-) -> bool:
+def _should_skip(directory: Path, root: Path, skip_patterns: Iterable[str] | None) -> bool:
     try:
         relative = directory.relative_to(root)
     except ValueError:

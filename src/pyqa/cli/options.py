@@ -46,6 +46,7 @@ class LintOptions:
     strict_config: bool = False
     provided: set[str] = field(default_factory=set)
     line_length: int = 120
+    sql_dialect: str = "postgresql"
 
 
 @dataclass(slots=True)

@@ -19,31 +19,23 @@ from ..reporting.emitters import write_json_report, write_pr_summary, write_sari
 from ..reporting.formatters import render
 from ..tools.registry import DEFAULT_REGISTRY
 from .config_builder import build_config
+from .doctor import run_doctor
 from .options import LintOptions
+from .tool_info import run_tool_info
 
 # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
 
 
 def lint_command(
     ctx: typer.Context,
-    paths: List[Path] | None = typer.Argument(
-        None, metavar="[PATH]", help="Specific files or directories to lint."
-    ),
+    paths: List[Path] | None = typer.Argument(None, metavar="[PATH]", help="Specific files or directories to lint."),
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    changed_only: bool = typer.Option(
-        False, help="Limit to files changed according to git."
-    ),
+    changed_only: bool = typer.Option(False, help="Limit to files changed according to git."),
     diff_ref: str = typer.Option("HEAD", help="Git ref for change detection."),
-    include_untracked: bool = typer.Option(
-        True, help="Include untracked files during git discovery."
-    ),
-    base_branch: str | None = typer.Option(
-        None, help="Base branch for merge-base diffing."
-    ),
+    include_untracked: bool = typer.Option(True, help="Include untracked files during git discovery."),
+    base_branch: str | None = typer.Option(None, help="Base branch for merge-base diffing."),
     paths_from_stdin: bool = typer.Option(False, help="Read file paths from stdin."),
-    dirs: List[Path] = typer.Option(
-        [], "--dir", help="Add directory to discovery roots (repeatable)."
-    ),
+    dirs: List[Path] = typer.Option([], "--dir", help="Add directory to discovery roots (repeatable)."),
     exclude: List[Path] = typer.Option([], help="Exclude specific paths or globs."),
     filters: List[str] = typer.Option(
         [],
@@ -58,24 +50,12 @@ def lint_command(
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Minimal output."),
     no_color: bool = typer.Option(False, help="Disable ANSI colour output."),
     no_emoji: bool = typer.Option(False, help="Disable emoji output."),
-    output_mode: str = typer.Option(
-        "concise", "--output", help="Output mode: concise, pretty, or raw."
-    ),
-    show_passing: bool = typer.Option(
-        False, help="Include successful diagnostics in output."
-    ),
-    report_json: Path | None = typer.Option(
-        None, help="Write JSON report to the provided path."
-    ),
-    sarif_out: Path | None = typer.Option(
-        None, help="Write SARIF 2.1.0 report to the provided path."
-    ),
-    pr_summary_out: Path | None = typer.Option(
-        None, help="Write a Markdown PR summary of diagnostics."
-    ),
-    pr_summary_limit: int = typer.Option(
-        100, "--pr-summary-limit", help="Maximum diagnostics in PR summary."
-    ),
+    output_mode: str = typer.Option("concise", "--output", help="Output mode: concise, pretty, or raw."),
+    show_passing: bool = typer.Option(False, help="Include successful diagnostics in output."),
+    report_json: Path | None = typer.Option(None, help="Write JSON report to the provided path."),
+    sarif_out: Path | None = typer.Option(None, help="Write SARIF 2.1.0 report to the provided path."),
+    pr_summary_out: Path | None = typer.Option(None, help="Write a Markdown PR summary of diagnostics."),
+    pr_summary_limit: int = typer.Option(100, "--pr-summary-limit", help="Maximum diagnostics in PR summary."),
     pr_summary_min_severity: str = typer.Option(
         "warning",
         "--pr-summary-min-severity",
@@ -95,9 +75,7 @@ def lint_command(
     ),
     bail: bool = typer.Option(False, "--bail", help="Exit on first tool failure."),
     no_cache: bool = typer.Option(False, help="Disable on-disk result caching."),
-    cache_dir: Path = typer.Option(
-        Path(".lint-cache"), "--cache-dir", help="Cache directory for tool results."
-    ),
+    cache_dir: Path = typer.Option(Path(".lint-cache"), "--cache-dir", help="Cache directory for tool results."),
     use_local_linters: bool = typer.Option(
         False,
         "--use-local-linters",
@@ -113,8 +91,23 @@ def lint_command(
         "--line-length",
         help="Global preferred maximum line length applied to supported tools.",
     ),
+    sql_dialect: str = typer.Option(
+        "postgresql",
+        "--sql-dialect",
+        help="Default SQL dialect for dialect-aware tools (e.g. sqlfluff).",
+    ),
+    doctor: bool = typer.Option(False, "--doctor", help="Run environment diagnostics and exit."),
+    tool_info: str | None = typer.Option(
+        None,
+        "--tool-info",
+        metavar="TOOL",
+        help="Display detailed information for TOOL and exit.",
+    ),
 ) -> None:
     """Entry point for the ``pyqa lint`` CLI command."""
+
+    if doctor and tool_info:
+        raise typer.BadParameter("--doctor and --tool-info cannot be combined")
 
     if fix_only and check_only:
         raise typer.BadParameter("--fix-only and --check-only are mutually exclusive")
@@ -127,13 +120,18 @@ def lint_command(
 
     root_source = ctx.get_parameter_source("root")
     root = _normalise_path(root, invocation_cwd)
-    if (
-        root_source in (ParameterSource.DEFAULT, ParameterSource.DEFAULT_MAP)
-        and normalized_paths
-    ):
+    if root_source in (ParameterSource.DEFAULT, ParameterSource.DEFAULT_MAP) and normalized_paths:
         derived_root = _derive_default_root(normalized_paths)
         if derived_root is not None:
             root = derived_root
+
+    if doctor:
+        exit_code = run_doctor(root)
+        raise typer.Exit(code=exit_code)
+
+    if tool_info:
+        exit_code = run_tool_info(tool_info, root=root)
+        raise typer.Exit(code=exit_code)
 
     effective_jobs = jobs if jobs is not None else default_parallel_jobs()
 
@@ -179,6 +177,7 @@ def lint_command(
         use_local_linters=use_local_linters,
         strict_config=strict_config,
         line_length=line_length,
+        sql_dialect=sql_dialect,
         provided=provided,
     )
 
@@ -262,6 +261,7 @@ def _collect_provided_flags(
         "pr_summary_template",
         "use_local_linters",
         "line_length",
+        "sql_dialect",
     }
     provided: set[str] = set()
     for name in tracked:

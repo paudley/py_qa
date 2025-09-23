@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Workspace discovery and dependency update orchestration."""
 
 from __future__ import annotations
@@ -77,21 +79,15 @@ class UpdateResult:
     skipped: list[Workspace] = field(default_factory=list)
     details: list[tuple[Workspace, list[ExecutionDetail]]] = field(default_factory=list)
 
-    def register_success(
-        self, workspace: Workspace, executions: list[ExecutionDetail]
-    ) -> None:
+    def register_success(self, workspace: Workspace, executions: list[ExecutionDetail]) -> None:
         self.successes.append(workspace)
         self.details.append((workspace, executions))
 
-    def register_failure(
-        self, workspace: Workspace, message: str, executions: list[ExecutionDetail]
-    ) -> None:
+    def register_failure(self, workspace: Workspace, message: str, executions: list[ExecutionDetail]) -> None:
         self.failures.append((workspace, message))
         self.details.append((workspace, executions))
 
-    def register_skip(
-        self, workspace: Workspace, executions: list[ExecutionDetail]
-    ) -> None:
+    def register_skip(self, workspace: Workspace, executions: list[ExecutionDetail]) -> None:
         self.skipped.append(workspace)
         self.details.append((workspace, executions))
 
@@ -203,9 +199,7 @@ class GoStrategy:
                 description="Update Go modules",
                 requires=("go",),
             ),
-            CommandSpec(
-                args=("go", "mod", "tidy"), description="Tidy go.mod", requires=("go",)
-            ),
+            CommandSpec(args=("go", "mod", "tidy"), description="Tidy go.mod", requires=("go",)),
         ]
 
 
@@ -259,11 +253,7 @@ class WorkspaceDiscovery:
             for strategy in self._strategies:
                 if strategy.detect(directory, names):
                     manifest = _manifest_for(strategy.kind, directory)
-                    workspaces.append(
-                        Workspace(
-                            directory=directory, kind=strategy.kind, manifest=manifest
-                        )
-                    )
+                    workspaces.append(Workspace(directory=directory, kind=strategy.kind, manifest=manifest))
                     break
         workspaces.sort(key=lambda ws: (ws.directory, ws.kind.value))
         return workspaces
@@ -293,11 +283,7 @@ class WorkspacePlanner:
         *,
         enabled_managers: Iterable[str] | None = None,
     ) -> UpdatePlan:
-        allowed = (
-            {WorkspaceKind.from_str(kind) for kind in enabled_managers}
-            if enabled_managers
-            else None
-        )
+        allowed = {WorkspaceKind.from_str(kind) for kind in enabled_managers} if enabled_managers else None
         items: list[UpdatePlanItem] = []
         for workspace in workspaces:
             if allowed and workspace.kind not in allowed:
@@ -352,31 +338,21 @@ class WorkspaceUpdater:
                         f"Skipping command {' '.join(spec.args)} ({message})",
                         use_emoji=self._use_emoji,
                     )
-                    executions.append(
-                        ExecutionDetail(command=spec, status="skipped", message=message)
-                    )
+                    executions.append(ExecutionDetail(command=spec, status="skipped", message=message))
                     continue
                 if self._dry_run:
                     info(
                         f"DRY RUN: {' '.join(spec.args)}",
                         use_emoji=self._use_emoji,
                     )
-                    executions.append(
-                        ExecutionDetail(
-                            command=spec, status="skipped", message="dry-run"
-                        )
-                    )
+                    executions.append(ExecutionDetail(command=spec, status="skipped", message="dry-run"))
                     continue
                 cp = self._runner(spec.args, workspace.directory)
                 if cp.returncode != 0:
                     message = f"Command '{' '.join(spec.args)}' failed with exit code {cp.returncode}"
                     fail(message, use_emoji=self._use_emoji)
-                    executions.append(
-                        ExecutionDetail(command=spec, status="failed", message=message)
-                    )
-                    result.register_failure(
-                        workspace, f"{rel_path}: {message}", executions
-                    )
+                    executions.append(ExecutionDetail(command=spec, status="failed", message=message))
+                    result.register_failure(workspace, f"{rel_path}: {message}", executions)
                     break
                 executions.append(ExecutionDetail(command=spec, status="ran"))
             else:
@@ -424,9 +400,7 @@ def _manifest_for(kind: WorkspaceKind, directory: Path) -> Path:
     return directory / name if name else directory
 
 
-def _default_runner(
-    args: Sequence[str], cwd: Path | None
-) -> subprocess.CompletedProcess[str]:
+def _default_runner(args: Sequence[str], cwd: Path | None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, cwd=cwd, check=False, text=True)
 
 

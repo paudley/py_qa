@@ -4,23 +4,49 @@
 
 from __future__ import annotations
 
+import platform
+import shutil
+import stat
+import tarfile
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
+
+import requests
 
 from ..models import RawDiagnostic
 from ..parsers import (
     JsonParser,
     TextParser,
+    parse_actionlint,
     parse_bandit,
     parse_cargo_clippy,
+    parse_checkmake,
+    parse_cpplint,
+    parse_dockerfilelint,
+    parse_dotenv_linter,
     parse_eslint,
     parse_golangci_lint,
+    parse_hadolint,
+    parse_kube_linter,
+    parse_luacheck,
+    parse_lualint,
     parse_mypy,
+    parse_perlcritic,
+    parse_phplint,
     parse_pylint,
     parse_pyright,
+    parse_remark,
     parse_ruff,
+    parse_selene,
+    parse_shfmt,
+    parse_speccy,
+    parse_sqlfluff,
+    parse_stylelint,
+    parse_tombi,
     parse_tsc,
+    parse_yamllint,
 )
 from ..severity import Severity
 from .base import CommandBuilder, DeferredCommand, Tool, ToolAction, ToolContext
@@ -66,6 +92,116 @@ def _as_bool(value: Any) -> bool | None:
         if normalized in {"0", "false", "no", "off"}:
             return False
     return bool(value)
+
+
+ACTIONLINT_VERSION_DEFAULT = "1.7.1"
+HADOLINT_VERSION_DEFAULT = "2.12.0"
+_LUAROCKS_AVAILABLE = shutil.which("luarocks") is not None
+_LUA_AVAILABLE = shutil.which("lua") is not None
+_CARGO_AVAILABLE = shutil.which("cargo") is not None
+_CPANM_AVAILABLE = shutil.which("cpanm") is not None
+
+
+def _ensure_actionlint(version: str, cache_root: Path) -> Path:
+    base_dir = cache_root / "actionlint" / version
+    binary = base_dir / "actionlint"
+    if binary.exists():
+        return binary
+
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    if system == "linux":
+        if machine in {"x86_64", "amd64"}:
+            platform_tag = "linux_amd64"
+        elif machine in {"aarch64", "arm64"}:
+            platform_tag = "linux_arm64"
+        else:
+            raise RuntimeError(f"Unsupported Linux architecture '{machine}' for actionlint")
+    elif system == "darwin":
+        if machine in {"x86_64", "amd64"}:
+            platform_tag = "darwin_amd64"
+        elif machine in {"arm64", "aarch64"}:
+            platform_tag = "darwin_arm64"
+        else:
+            raise RuntimeError(f"Unsupported macOS architecture '{machine}' for actionlint")
+    else:
+        raise RuntimeError(f"actionlint is not supported on platform '{system}'")
+
+    filename = f"actionlint_{version}_{platform_tag}.tar.gz"
+    url = f"https://github.com/rhysd/actionlint/releases/download/v{version}/{filename}"
+
+    response = requests.get(url, timeout=30)
+    response.raise_for_status()
+
+    with tempfile.NamedTemporaryFile() as tmp:
+        tmp.write(response.content)
+        tmp.flush()
+        with tarfile.open(tmp.name, "r:gz") as archive:
+            for member in archive.getmembers():
+                if member.isfile() and member.name.endswith("actionlint"):
+                    archive.extract(member, path=base_dir)
+                    extracted = base_dir / member.name
+                    extracted.chmod(extracted.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+                    if extracted != binary:
+                        extracted.rename(binary)
+                    break
+            else:
+                raise RuntimeError("Failed to locate actionlint binary in archive")
+
+    return binary
+
+
+def _ensure_hadolint(version: str, cache_root: Path) -> Path:
+    base_dir = cache_root / "hadolint" / version
+    binary = base_dir / "hadolint"
+    if binary.exists():
+        return binary
+
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    if system == "linux":
+        if machine in {"x86_64", "amd64"}:
+            asset = "hadolint-Linux-x86_64"
+        elif machine in {"aarch64", "arm64"}:
+            asset = "hadolint-Linux-arm64"
+        else:
+            raise RuntimeError(f"Unsupported Linux architecture '{machine}' for hadolint")
+    elif system == "darwin":
+        if machine in {"x86_64", "amd64"}:
+            asset = "hadolint-Darwin-x86_64"
+        elif machine in {"arm64", "aarch64"}:
+            asset = "hadolint-Darwin-arm64"
+        else:
+            raise RuntimeError(f"Unsupported macOS architecture '{machine}' for hadolint")
+    else:
+        raise RuntimeError(f"hadolint is not supported on platform '{system}'")
+
+    url = f"https://github.com/hadolint/hadolint/releases/download/v{version}/{asset}"
+    response = requests.get(url, timeout=60)
+    response.raise_for_status()
+    binary.write_bytes(response.content)
+    binary.chmod(binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return binary
+
+
+def _ensure_lualint(cache_root: Path) -> Path:
+    base_dir = cache_root / "lualint"
+    script = base_dir / "lualint.lua"
+    if script.exists():
+        return script
+
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    url = "https://raw.githubusercontent.com/philips/lualint/master/lualint"
+    response = requests.get(url, timeout=30)
+    response.raise_for_status()
+    script.write_bytes(response.content)
+    script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return script
 
 
 def _parse_gofmt_check(stdout: str, _context: ToolContext) -> list[RawDiagnostic]:
@@ -370,9 +506,7 @@ class _IsortCommand(CommandBuilder):
         for pattern in _settings_list(_setting(settings, "skip-glob", "skip_glob")):
             cmd.extend(["--skip-glob", str(pattern)])
 
-        for pattern in _settings_list(
-            _setting(settings, "extend-skip-glob", "extend_skip_glob")
-        ):
+        for pattern in _settings_list(_setting(settings, "extend-skip-glob", "extend_skip_glob")):
             cmd.extend(["--extend-skip-glob", str(pattern)])
 
         if _as_bool(_setting(settings, "filter-files", "filter_files")):
@@ -494,6 +628,64 @@ class _MypyCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _CpplintCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        line_length = _setting(settings, "linelength", "line-length")
+        if line_length is None:
+            line_length = ctx.cfg.execution.line_length
+        if line_length is not None:
+            cmd.append(f"--linelength={line_length}")
+
+        for filt in _settings_list(_setting(settings, "filter")):
+            cmd.append(f"--filter={filt}")
+
+        for exclude in _settings_list(_setting(settings, "exclude")):
+            cmd.append(f"--exclude={_resolve_path(root, exclude)}")
+
+        extensions = _settings_list(_setting(settings, "extensions"))
+        if extensions:
+            cmd.append(f"--extensions={','.join(str(ext) for ext in extensions)}")
+
+        headers = _settings_list(_setting(settings, "headers"))
+        if headers:
+            cmd.append(f"--headers={','.join(str(h) for h in headers)}")
+
+        include_order = _setting(settings, "includeorder")
+        if include_order:
+            cmd.append(f"--includeorder={include_order}")
+
+        counting = _setting(settings, "counting")
+        if counting:
+            cmd.append(f"--counting={counting}")
+
+        repository = _setting(settings, "repository")
+        if repository:
+            cmd.append(f"--repository={_resolve_path(root, repository)}")
+
+        root_flag = _setting(settings, "root")
+        if root_flag:
+            cmd.append(f"--root={_resolve_path(root, root_flag)}")
+
+        if _as_bool(_setting(settings, "recursive")):
+            cmd.append("--recursive")
+
+        if _as_bool(_setting(settings, "quiet")):
+            cmd.append("--quiet")
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _PylintCommand(CommandBuilder):
     base: Sequence[str]
 
@@ -542,8 +734,83 @@ class _PylintCommand(CommandBuilder):
             cmd.append("--reports=n")
 
         max_line_length = _setting(settings, "max-line-length", "max_line_length")
+        if max_line_length is None:
+            max_line_length = ctx.cfg.execution.line_length
         if max_line_length is not None:
             cmd.extend(["--max-line-length", str(max_line_length)])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _PerltidyCommand(CommandBuilder):
+    base: Sequence[str]
+    is_fix: bool = False
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        profile = _setting(settings, "profile", "configuration")
+        if profile:
+            cmd.extend(["--profile", str(_resolve_path(root, profile))])
+
+        extra = _settings_list(_setting(settings, "args"))
+        if extra:
+            cmd.extend(str(arg) for arg in extra)
+
+        if self.is_fix:
+            if "-b" not in cmd:
+                cmd.extend(["-b", '-bext=""'])
+            if "-q" not in cmd:
+                cmd.append("-q")
+        else:
+            if "--check-only" not in cmd:
+                cmd.append("--check-only")
+            if "-q" not in cmd:
+                cmd.append("-q")
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _PerlCriticCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        if "--nocolor" not in cmd:
+            cmd.append("--nocolor")
+        if "--verbose" not in cmd:
+            cmd.extend(["--verbose", "%f:%l:%c:%m (%p)"])
+
+        severity = _setting(settings, "severity")
+        if severity:
+            cmd.extend(["--severity", str(severity)])
+
+        theme = _setting(settings, "theme")
+        if theme:
+            cmd.extend(["--theme", str(theme)])
+
+        profile = _setting(settings, "profile", "configuration")
+        if profile:
+            cmd.extend(["--profile", str(_resolve_path(root, profile))])
+
+        include = _settings_list(_setting(settings, "include"))
+        for policy in include:
+            cmd.extend(["--include", str(policy)])
+
+        exclude = _settings_list(_setting(settings, "exclude"))
+        for policy in exclude:
+            cmd.extend(["--exclude", str(policy)])
 
         args = _settings_list(_setting(settings, "args"))
         if args:
@@ -623,9 +890,7 @@ class _EslintCommand(CommandBuilder):
         if ignore_path:
             cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
 
-        resolve_plugins = _setting(
-            settings, "resolve-plugins-relative-to", "resolve_plugins_relative_to"
-        )
+        resolve_plugins = _setting(settings, "resolve-plugins-relative-to", "resolve_plugins_relative_to")
         if resolve_plugins:
             cmd.extend(
                 [
@@ -711,9 +976,7 @@ class _PrettierCommand(CommandBuilder):
         if ignore_path:
             cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
 
-        for directory in _settings_list(
-            _setting(settings, "plugin-search-dir", "plugin_search_dir")
-        ):
+        for directory in _settings_list(_setting(settings, "plugin-search-dir", "plugin_search_dir")):
             cmd.extend(["--plugin-search-dir", str(_resolve_path(root, directory))])
 
         for plugin in _settings_list(_setting(settings, "plugin", "plugins")):
@@ -748,6 +1011,8 @@ class _PrettierCommand(CommandBuilder):
             cmd.extend(["--trailing-comma", str(trailing_comma)])
 
         print_width = _setting(settings, "print-width", "print_width")
+        if print_width is None:
+            print_width = ctx.cfg.execution.line_length
         if print_width is not None:
             cmd.extend(["--print-width", str(print_width)])
 
@@ -760,6 +1025,569 @@ class _PrettierCommand(CommandBuilder):
         end_of_line = _setting(settings, "end-of-line", "end_of_line")
         if end_of_line:
             cmd.extend(["--end-of-line", str(end_of_line)])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _SqlfluffCommand(CommandBuilder):
+    base: Sequence[str]
+    is_fix: bool = False
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        config_path = _setting(settings, "config", "config_path")
+        if config_path:
+            cmd.extend(["--config", str(_resolve_path(root, config_path))])
+
+        dialect = _setting(settings, "dialect") or ctx.cfg.execution.sql_dialect
+        if dialect:
+            cmd.extend(["--dialect", str(dialect)])
+
+        templater = _setting(settings, "templater")
+        if templater:
+            cmd.extend(["--templater", str(templater)])
+
+        rules = _settings_list(_setting(settings, "rules"))
+        for rule in rules:
+            cmd.extend(["--rules", str(rule)])
+
+        processes = _setting(settings, "processes")
+        if processes is not None:
+            cmd.extend(["--processes", str(processes)])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _TombiCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        stdin_filename = _setting(settings, "stdin-filename", "stdin_filename")
+        if stdin_filename:
+            value = str(stdin_filename)
+            if value == "-":
+                cmd.extend(["--stdin-filename", value])
+            else:
+                cmd.extend(["--stdin-filename", str(_resolve_path(root, stdin_filename))])
+
+        if _as_bool(_setting(settings, "offline")):
+            cmd.append("--offline")
+
+        if _as_bool(_setting(settings, "no-cache", "no_cache")):
+            cmd.append("--no-cache")
+
+        verbose = _setting(settings, "verbose")
+        if isinstance(verbose, int):
+            cmd.extend(["-v"] * max(verbose, 0))
+        elif _as_bool(verbose):
+            cmd.append("-v")
+
+        quiet = _setting(settings, "quiet")
+        if isinstance(quiet, int):
+            cmd.extend(["-q"] * max(quiet, 0))
+        elif _as_bool(quiet):
+            cmd.append("-q")
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _ActionlintCommand(CommandBuilder):
+    version: str
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cache_root = ctx.root / ".lint-cache"
+        binary = _ensure_actionlint(self.version, cache_root)
+        cmd = [str(binary), "--format", "json", "--color", "never"]
+        workflows = ctx.root / ".github" / "workflows"
+        if workflows.exists():
+            cmd.append(str(workflows))
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _KubeLinterCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+
+        root = ctx.root
+        settings = ctx.settings
+
+        config = _setting(settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(root, config))])
+
+        if _as_bool(_setting(settings, "fail-if-no-objects-found")):
+            cmd.append("--fail-if-no-objects-found")
+
+        if _as_bool(_setting(settings, "fail-on-invalid-resource")):
+            cmd.append("--fail-on-invalid-resource")
+
+        if _as_bool(_setting(settings, "verbose")):
+            cmd.append("--verbose")
+
+        if _as_bool(_setting(settings, "add-all-built-in")):
+            cmd.append("--add-all-built-in")
+
+        if _as_bool(_setting(settings, "do-not-auto-add-defaults")):
+            cmd.append("--do-not-auto-add-defaults")
+
+        for include in _settings_list(_setting(settings, "include")):
+            cmd.extend(["--include", str(include)])
+
+        for exclude in _settings_list(_setting(settings, "exclude")):
+            cmd.extend(["--exclude", str(exclude)])
+
+        for path in _settings_list(_setting(settings, "ignore-paths", "ignore_paths")):
+            cmd.extend(["--ignore-paths", str(_resolve_path(root, path))])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _StylelintCommand(CommandBuilder):
+    base: Sequence[str]
+    is_fix: bool = False
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        config = _setting(settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(root, config))])
+
+        config_basedir = _setting(settings, "config-basedir", "config_basedir")
+        if config_basedir:
+            cmd.extend(["--config-basedir", str(_resolve_path(root, config_basedir))])
+
+        ignore_path = _setting(settings, "ignore-path", "ignore_path")
+        if ignore_path:
+            cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
+
+        custom_syntax = _setting(settings, "custom-syntax", "custom_syntax")
+        if custom_syntax:
+            cmd.extend(["--custom-syntax", str(custom_syntax)])
+
+        if _as_bool(_setting(settings, "allow-empty-input", "allow_empty_input")):
+            cmd.append("--allow-empty-input")
+
+        if _as_bool(_setting(settings, "disable-default-ignores", "disable_default_ignores")):
+            cmd.append("--disable-default-ignores")
+
+        if _as_bool(_setting(settings, "quiet")):
+            cmd.append("--quiet")
+
+        max_warnings = _setting(settings, "max-warnings", "max_warnings")
+        if max_warnings is not None:
+            cmd.extend(["--max-warnings", str(max_warnings)])
+
+        if not self.is_fix and "--formatter" not in cmd and "--custom-formatter" not in cmd:
+            cmd.extend(["--formatter", "json"])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _YamllintCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        config_file = _setting(settings, "config-file", "config_file")
+        if config_file:
+            cmd.extend(["--config-file", str(_resolve_path(root, config_file))])
+
+        config_data = _setting(settings, "config-data", "config_data")
+        if config_data:
+            cmd.extend(["--config-data", str(config_data)])
+
+        if _as_bool(_setting(settings, "strict")):
+            cmd.append("--strict")
+
+        if "--format" not in cmd and "-f" not in cmd:
+            cmd.extend(["--format", "json"])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _DockerfilelintCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        config = _setting(settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(root, config))])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _HadolintCommand(CommandBuilder):
+    version: str
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cache_root = ctx.root / ".lint-cache"
+        binary = _ensure_hadolint(self.version, cache_root)
+        cmd = [str(binary), "--format", "json"]
+
+        config = _setting(ctx.settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(ctx.root, config))])
+
+        failure_threshold = _setting(ctx.settings, "failure-threshold", "failure_threshold")
+        if failure_threshold:
+            cmd.extend(["--failure-threshold", str(failure_threshold)])
+
+        args = _settings_list(_setting(ctx.settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _DotenvLinterCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        if "--no-color" not in cmd:
+            cmd.append("--no-color")
+        if "--quiet" not in cmd:
+            cmd.append("--quiet")
+
+        root = ctx.root
+        settings = ctx.settings
+
+        for exclude in _settings_list(_setting(settings, "exclude")):
+            cmd.extend(["--exclude", str(_resolve_path(root, exclude))])
+
+        for skip in _settings_list(_setting(settings, "skip")):
+            cmd.extend(["--skip", str(skip)])
+
+        schema = _setting(settings, "schema")
+        if schema:
+            cmd.extend(["--schema", str(_resolve_path(root, schema))])
+
+        if _as_bool(_setting(settings, "recursive")):
+            cmd.append("--recursive")
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _LualintCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cache_root = ctx.root / ".lint-cache"
+        script = _ensure_lualint(cache_root)
+        cmd = list(self.base)
+        cmd.append(str(script))
+
+        relaxed = _as_bool(_setting(ctx.settings, "relaxed"))
+        strict = _as_bool(_setting(ctx.settings, "strict"))
+        if relaxed:
+            cmd.append("-r")
+        if strict:
+            cmd.append("-s")
+
+        args = _settings_list(_setting(ctx.settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _LuacheckCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+
+        def ensure_flag(flag: str, *values: str) -> None:
+            if flag not in cmd:
+                cmd.append(flag)
+                cmd.extend(values)
+
+        ensure_flag("--formatter", "plain")
+        if "--codes" not in cmd:
+            cmd.append("--codes")
+        if "--ranges" not in cmd:
+            cmd.append("--ranges")
+        if "--no-color" not in cmd:
+            cmd.append("--no-color")
+
+        root = ctx.root
+        settings = ctx.settings
+
+        config = _setting(settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(root, config))])
+
+        std = _setting(settings, "std")
+        if std:
+            cmd.extend(["--std", str(std)])
+
+        globals_list = _settings_list(_setting(settings, "globals"))
+        if globals_list:
+            cmd.extend(["--globals", ",".join(globals_list)])
+
+        read_globals = _settings_list(_setting(settings, "read-globals", "read_globals"))
+        if read_globals:
+            cmd.extend(["--read-globals", ",".join(read_globals)])
+
+        ignore = _settings_list(_setting(settings, "ignore"))
+        if ignore:
+            cmd.extend(["--ignore", ",".join(ignore)])
+
+        exclude = _settings_list(_setting(settings, "exclude-files", "exclude_files"))
+        for value in exclude:
+            cmd.extend(["--exclude-files", str(_resolve_path(root, value))])
+
+        if _as_bool(_setting(settings, "quiet")):
+            cmd.append("--quiet")
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _SeleneCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        display_style = _setting(settings, "display-style", "display_style")
+        if not display_style:
+            display_style = "Json2"
+        cmd.extend(["--display-style", str(display_style)])
+
+        color = _setting(settings, "color")
+        if not color:
+            color = "Never"
+        cmd.extend(["--color", str(color)])
+
+        config = _setting(settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(root, config))])
+
+        for pattern in _settings_list(_setting(settings, "pattern")):
+            cmd.extend(["--pattern", str(pattern)])
+
+        num_threads = _setting(settings, "num-threads", "num_threads")
+        if num_threads is not None:
+            cmd.extend(["--num-threads", str(num_threads)])
+
+        if _as_bool(_setting(settings, "allow-warnings", "allow_warnings")):
+            cmd.append("--allow-warnings")
+
+        if _as_bool(_setting(settings, "no-exclude", "no_exclude")):
+            cmd.append("--no-exclude")
+
+        if _as_bool(_setting(settings, "quiet")):
+            cmd.append("--quiet")
+
+        if _as_bool(_setting(settings, "no-summary", "no_summary")):
+            cmd.append("--no-summary")
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _RemarkCommand(CommandBuilder):
+    base: Sequence[str]
+    is_fix: bool = False
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        if not self.is_fix and "--report" not in cmd:
+            cmd.extend(["--report", "json"])
+        if not self.is_fix and "--frail" not in cmd:
+            cmd.append("--frail")
+        if not self.is_fix and "--quiet" not in cmd:
+            cmd.append("--quiet")
+        if not self.is_fix and "--no-color" not in cmd:
+            cmd.append("--no-color")
+        if self.is_fix and "--output" not in cmd:
+            cmd.append("--output")
+
+        config = _setting(settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(root, config))])
+
+        use_plugins = _settings_list(_setting(settings, "use"))
+        for plugin in use_plugins:
+            cmd.extend(["--use", str(plugin)])
+
+        ignore_path = _setting(settings, "ignore-path", "ignore_path")
+        if ignore_path:
+            cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
+
+        setting_files = _settings_list(_setting(settings, "setting"))
+        for value in setting_files:
+            cmd.extend(["--setting", str(value)])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _SpeccyCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        if "--reporter" not in cmd:
+            cmd.extend(["--reporter", "json"])
+
+        ruleset = _setting(settings, "ruleset")
+        if ruleset:
+            cmd.extend(["--ruleset", str(_resolve_path(root, ruleset))])
+
+        skip = _settings_list(_setting(settings, "skip"))
+        for value in skip:
+            cmd.extend(["--skip", str(value)])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _ShfmtCommand(CommandBuilder):
+    base: Sequence[str]
+    is_fix: bool = False
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        settings = ctx.settings
+
+        indent = _setting(settings, "indent", "spaces")
+        if indent is not None and "-i" not in cmd:
+            cmd.extend(["-i", str(indent)])
+
+        language = _setting(settings, "language")
+        if language and "-ln" not in cmd:
+            cmd.extend(["-ln", str(language)])
+
+        indent_case = _as_bool(_setting(settings, "indent-case", "indent_case"))
+        if indent_case:
+            cmd.append("-ci")
+
+        simplify = _as_bool(_setting(settings, "simplify"))
+        if simplify is True and "-s" not in cmd:
+            cmd.append("-s")
+
+        write_cmd = _as_bool(_setting(settings, "write"))
+        if self.is_fix:
+            cmd.append("-w")
+        elif write_cmd:
+            cmd.append("-w")
+        else:
+            cmd.append("-d")
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _CheckmakeCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        if "--format" not in cmd and "-f" not in cmd:
+            cmd.extend(["--format", "json"])
+
+        config = _setting(settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(root, config))])
+
+        ignore = _settings_list(_setting(settings, "ignore"))
+        for rule in ignore:
+            cmd.extend(["--ignore", str(rule)])
 
         args = _settings_list(_setting(settings, "args"))
         if args:
@@ -807,6 +1635,39 @@ class _TscCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _PhplintCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        if "--no-ansi" not in cmd:
+            cmd.append("--no-ansi")
+        if "--no-progress" not in cmd:
+            cmd.append("--no-progress")
+
+        config = _setting(settings, "configuration", "config")
+        if config:
+            cmd.extend(["--configuration", str(_resolve_path(root, config))])
+
+        exclude = _settings_list(_setting(settings, "exclude"))
+        for path in exclude:
+            cmd.extend(["--exclude", str(_resolve_path(root, path))])
+
+        include = _settings_list(_setting(settings, "include"))
+        for path in include:
+            cmd.extend(["--include", str(_resolve_path(root, path))])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _GolangciLintCommand(CommandBuilder):
     base: Sequence[str]
 
@@ -822,6 +1683,11 @@ class _GolangciLintCommand(CommandBuilder):
         deadline = _setting(settings, "deadline")
         if deadline:
             cmd.extend(["--deadline", str(deadline)])
+
+        enable_all_setting = _setting(settings, "enable-all", "enable_all")
+        if enable_all_setting is None or _as_bool(enable_all_setting) is not False:
+            if "--enable-all" not in cmd:
+                cmd.append("--enable-all")
 
         for item in _settings_list(_setting(settings, "enable")):
             cmd.extend(["--enable", str(item)])
@@ -1082,6 +1948,126 @@ def _builtin_tools() -> Iterable[Tool]:
     )
 
     yield Tool(
+        name="sqlfluff",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_SqlfluffCommand(base=("sqlfluff", "lint", "--format", "json")),
+                append_files=True,
+                description="Lint SQL files using sqlfluff.",
+                parser=JsonParser(parse_sqlfluff),
+            ),
+            ToolAction(
+                name="fix",
+                command=_SqlfluffCommand(base=("sqlfluff", "fix", "--force"), is_fix=True),
+                append_files=True,
+                is_fix=True,
+                description="Autofix SQL files via sqlfluff fix.",
+            ),
+        ),
+        languages=("sql",),
+        file_extensions=(".sql",),
+        description="SQL linter and formatter using sqlfluff.",
+        runtime="python",
+        package="sqlfluff",
+        min_version="3.1.0",
+        version_command=("sqlfluff", "--version"),
+    )
+
+    yield Tool(
+        name="tombi",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_TombiCommand(base=("tombi", "lint")),
+                append_files=True,
+                description="Lint TOML files using Tombi.",
+                parser=TextParser(parse_tombi),
+            ),
+        ),
+        languages=("toml",),
+        file_extensions=(".toml",),
+        config_files=("tombi.toml",),
+        description="TOML toolkit providing linting via tombi.",
+        runtime="python",
+        package="tombi",
+        min_version="0.6.12",
+        version_command=("tombi", "--version"),
+    )
+
+    yield Tool(
+        name="cpplint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_CpplintCommand(base=("cpplint", "--output=emacs")),
+                append_files=True,
+                description="Lint C and C++ sources with cpplint.",
+                parser=TextParser(parse_cpplint),
+            ),
+        ),
+        languages=("cpp",),
+        file_extensions=(
+            ".c",
+            ".cc",
+            ".cpp",
+            ".cxx",
+            ".c++",
+            ".cu",
+            ".cuh",
+            ".h",
+            ".hh",
+            ".hpp",
+            ".h++",
+            ".hxx",
+        ),
+        config_files=("CPPLINT.cfg",),
+        description="Google style C/C++ linter.",
+        runtime="python",
+        package="cpplint",
+        min_version="2.0.2",
+        version_command=("cpplint", "--version"),
+    )
+
+    yield Tool(
+        name="actionlint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_ActionlintCommand(version=ACTIONLINT_VERSION_DEFAULT),
+                append_files=False,
+                description="Lint GitHub Actions workflows with actionlint.",
+                parser=JsonParser(parse_actionlint),
+            ),
+        ),
+        languages=("github-actions",),
+        file_extensions=(".yml", ".yaml"),
+        description="GitHub Actions workflow linter.",
+        runtime="binary",
+    )
+
+    yield Tool(
+        name="kube-linter",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_KubeLinterCommand(base=("kube-linter", "lint", "--format", "json")),
+                append_files=True,
+                description="Analyze Kubernetes manifests with kube-linter.",
+                parser=JsonParser(parse_kube_linter),
+            ),
+        ),
+        languages=("kubernetes",),
+        file_extensions=(".yml", ".yaml"),
+        description="Kubernetes deployment misconfiguration detector.",
+        runtime="go",
+        package="golang.stackrox.io/kube-linter/cmd/kube-linter@v0.7.6",
+        min_version="0.7.6",
+        version_command=("kube-linter", "version"),
+        default_enabled=False,
+    )
+
+    yield Tool(
         name="eslint",
         actions=(
             ToolAction(
@@ -1099,13 +2085,335 @@ def _builtin_tools() -> Iterable[Tool]:
                 description="Autofix issues reported by ESLint.",
             ),
         ),
-        languages=("javascript",),
+        languages=("javascript", "typescript"),
         file_extensions=(".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"),
         description="JavaScript/TypeScript linting via ESLint.",
         runtime="npm",
         package="eslint@9.13.0",
         min_version="9.13.0",
         version_command=("eslint", "--version"),
+    )
+
+    yield Tool(
+        name="gts",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_GtsCommand(base=("gts", "lint", "--", "--format", "json")),
+                append_files=True,
+                description="Run Google's TypeScript style checks via gts.",
+                parser=JsonParser(parse_eslint),
+            ),
+            ToolAction(
+                name="fix",
+                command=_GtsCommand(base=("gts", "fix"), is_fix=True),
+                append_files=True,
+                is_fix=True,
+                description="Apply gts formatting and fixes.",
+            ),
+        ),
+        languages=("javascript",),
+        file_extensions=(".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"),
+        description="Google TypeScript style checker.",
+        runtime="npm",
+        package="gts@5.3.1",
+        min_version="5.3.1",
+        version_command=("gts", "--version"),
+    )
+
+    yield Tool(
+        name="stylelint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_StylelintCommand(base=("stylelint",)),
+                append_files=True,
+                description="Lint stylesheets using stylelint.",
+                parser=JsonParser(parse_stylelint),
+            ),
+            ToolAction(
+                name="fix",
+                command=_StylelintCommand(base=("stylelint", "--fix"), is_fix=True),
+                append_files=True,
+                is_fix=True,
+                description="Apply stylelint autofixes.",
+            ),
+        ),
+        languages=("css",),
+        file_extensions=(".css", ".scss", ".sass", ".less"),
+        description="CSS and preprocessor linting via stylelint.",
+        runtime="npm",
+        package="stylelint@16.11.0",
+        min_version="16.11.0",
+        version_command=("stylelint", "--version"),
+    )
+
+    yield Tool(
+        name="remark-lint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_RemarkCommand(base=("remark", "--use", "remark-preset-lint-recommended")),
+                append_files=True,
+                description="Lint Markdown files using remark-lint recommended rules.",
+                parser=JsonParser(parse_remark),
+            ),
+            ToolAction(
+                name="fix",
+                command=_RemarkCommand(
+                    base=("remark", "--use", "remark-preset-lint-recommended"),
+                    is_fix=True,
+                ),
+                append_files=True,
+                is_fix=True,
+                description="Apply remark formatting fixes.",
+            ),
+        ),
+        languages=("markdown",),
+        file_extensions=(".md", ".mdx", ".markdown"),
+        description="Markdown linting via remark-lint preset.",
+        runtime="npm",
+        package="remark-cli@12.0.1 remark-lint@9.1.2 remark-preset-lint-recommended@6.1.3",
+        min_version="12.0.1",
+        version_command=("remark", "--version"),
+    )
+
+    yield Tool(
+        name="speccy",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_SpeccyCommand(base=("speccy", "lint")),
+                append_files=True,
+                description="Lint OpenAPI specs using Speccy.",
+                parser=JsonParser(parse_speccy),
+            ),
+        ),
+        languages=("openapi",),
+        file_extensions=(
+            "openapi.yaml",
+            "openapi.yml",
+            "swagger.yaml",
+            "swagger.yml",
+            "speccy.yaml",
+            "speccy.yml",
+        ),
+        description="OpenAPI linter powered by Speccy.",
+        runtime="npm",
+        package="speccy@0.11.0",
+        min_version="0.11.0",
+        version_command=("speccy", "--version"),
+    )
+
+    yield Tool(
+        name="perltidy",
+        actions=(
+            ToolAction(
+                name="format",
+                command=_PerltidyCommand(base=("perltidy",), is_fix=True),
+                append_files=True,
+                is_fix=True,
+                description="Format Perl code using perltidy.",
+            ),
+            ToolAction(
+                name="check",
+                command=_PerltidyCommand(base=("perltidy",), is_fix=False),
+                append_files=True,
+                description="Verify Perl formatting without modifying files.",
+            ),
+        ),
+        languages=("perl",),
+        file_extensions=(".pl", ".pm", ".t", ".phtml"),
+        description="Perl formatter using perltidy.",
+        runtime="perl",
+        package="Perl::Tidy",
+        min_version="20240112",
+        version_command=("perltidy", "--version"),
+        default_enabled=_CPANM_AVAILABLE,
+    )
+
+    yield Tool(
+        name="perlcritic",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_PerlCriticCommand(base=("perlcritic",)),
+                append_files=True,
+                description="Run Perl::Critic static analysis.",
+                parser=TextParser(parse_perlcritic),
+            ),
+        ),
+        languages=("perl",),
+        file_extensions=(".pl", ".pm", ".t", ".phtml"),
+        description="Perl static analysis via Perl::Critic.",
+        runtime="perl",
+        package="Perl::Critic",
+        min_version="1.151",
+        version_command=("perlcritic", "--version"),
+        default_enabled=_CPANM_AVAILABLE,
+    )
+
+    yield Tool(
+        name="shfmt",
+        actions=(
+            ToolAction(
+                name="format",
+                command=_ShfmtCommand(base=("shfmt",), is_fix=True),
+                append_files=True,
+                is_fix=True,
+                description="Format shell scripts using shfmt.",
+            ),
+            ToolAction(
+                name="check",
+                command=_ShfmtCommand(base=("shfmt",), is_fix=False),
+                append_files=True,
+                description="Verify shell script formatting without modifying files.",
+                parser=TextParser(parse_shfmt),
+            ),
+        ),
+        languages=("shell",),
+        file_extensions=(".sh", ".bash", ".zsh"),
+        description="Shell script formatter.",
+        runtime="go",
+        package="mvdan.cc/sh/v3/cmd/shfmt@v3.9.0",
+        min_version="3.9.0",
+        version_command=("shfmt", "--version"),
+    )
+
+    yield Tool(
+        name="phplint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_PhplintCommand(base=("phplint",)),
+                append_files=True,
+                description="Lint PHP files using phplint.",
+                parser=TextParser(parse_phplint),
+            ),
+        ),
+        languages=("php",),
+        file_extensions=(".php", ".phtml"),
+        description="PHP syntax linter via phplint.",
+        runtime="npm",
+        package="phplint@2.0.5",
+        min_version="2.0.5",
+        version_command=("phplint", "--version"),
+    )
+
+    yield Tool(
+        name="checkmake",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_CheckmakeCommand(base=("checkmake", "lint")),
+                append_files=True,
+                description="Lint Makefiles using checkmake.",
+                parser=JsonParser(parse_checkmake),
+            ),
+        ),
+        languages=("make",),
+        file_extensions=("Makefile", "makefile", ".mk"),
+        description="Makefile linter powered by checkmake.",
+        runtime="go",
+        package="github.com/mrtazz/checkmake/cmd/checkmake",
+        min_version=None,
+        version_command=("checkmake", "--version"),
+    )
+
+    yield Tool(
+        name="yamllint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_YamllintCommand(base=("yamllint",)),
+                append_files=True,
+                description="Lint YAML files using yamllint.",
+                parser=JsonParser(parse_yamllint),
+            ),
+        ),
+        languages=("yaml",),
+        file_extensions=(".yml", ".yaml"),
+        description="YAML linter enforcing style and correctness rules.",
+        runtime="python",
+        package="yamllint",
+        min_version="1.35.1",
+        version_command=("yamllint", "--version"),
+    )
+
+    yield Tool(
+        name="dockerfilelint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_DockerfilelintCommand(base=("dockerfilelint", "--output", "json")),
+                append_files=True,
+                description="Analyze Dockerfiles with dockerfilelint.",
+                parser=JsonParser(parse_dockerfilelint),
+            ),
+        ),
+        languages=("docker",),
+        file_extensions=("Dockerfile", "dockerfile", "Containerfile"),
+        description="Dockerfile linter enforcing best practices.",
+        runtime="npm",
+        package="dockerfilelint@1.8.0",
+        min_version="1.8.0",
+        version_command=("dockerfilelint", "--version"),
+    )
+
+    yield Tool(
+        name="hadolint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_HadolintCommand(version=HADOLINT_VERSION_DEFAULT),
+                append_files=True,
+                description="Dockerfile analysis via hadolint.",
+                parser=JsonParser(parse_hadolint),
+            ),
+        ),
+        languages=("docker",),
+        file_extensions=("Dockerfile", "dockerfile", "Containerfile"),
+        description="Dockerfile linter based on ShellCheck and best practices.",
+        runtime="binary",
+    )
+
+    yield Tool(
+        name="dotenv-linter",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_DotenvLinterCommand(base=("dotenv-linter",)),
+                append_files=True,
+                description="Lint .env files using dotenv-linter.",
+                parser=TextParser(parse_dotenv_linter),
+            ),
+        ),
+        languages=("dotenv",),
+        file_extensions=(".env", ".env.example", ".env.template", "env"),
+        description="Rust-based linter for dotenv files.",
+        runtime="rust",
+        package="dotenv-linter",
+        min_version="3.3.0",
+        version_command=("dotenv-linter", "--version"),
+        default_enabled=_CARGO_AVAILABLE,
+    )
+
+    yield Tool(
+        name="lualint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_LualintCommand(base=("lua",)),
+                append_files=True,
+                description="Static analysis for Lua globals via lualint.",
+                parser=TextParser(parse_lualint),
+            ),
+        ),
+        languages=("lua",),
+        file_extensions=(".lua",),
+        description="Lua bytecode-based global usage linter.",
+        runtime="binary",
+        default_enabled=_LUA_AVAILABLE,
     )
 
     yield Tool(
@@ -1166,13 +2474,54 @@ def _builtin_tools() -> Iterable[Tool]:
     )
 
     yield Tool(
+        name="luacheck",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_LuacheckCommand(base=("luacheck",)),
+                append_files=True,
+                description="Lint Lua sources using luacheck.",
+                parser=TextParser(parse_luacheck),
+            ),
+        ),
+        languages=("lua",),
+        file_extensions=(".lua",),
+        description="Lua static analyzer supporting custom standards.",
+        runtime="lua",
+        package="luacheck",
+        min_version="1.2.0",
+        version_command=("luacheck", "--version"),
+        default_enabled=_LUAROCKS_AVAILABLE,
+    )
+
+    yield Tool(
+        name="selene",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_SeleneCommand(base=("selene",)),
+                append_files=True,
+                description="Lint Lua sources with Selene.",
+                parser=JsonParser(parse_selene),
+            ),
+        ),
+        languages=("lua",),
+        file_extensions=(".lua",),
+        config_files=("selene.toml",),
+        description="Modern Lua linter powered by selene.",
+        runtime="rust",
+        package="selene",
+        min_version="0.29.0",
+        version_command=("selene", "--version"),
+        default_enabled=_CARGO_AVAILABLE,
+    )
+
+    yield Tool(
         name="golangci-lint",
         actions=(
             ToolAction(
                 name="lint",
-                command=_GolangciLintCommand(
-                    base=("golangci-lint", "run", "--out-format", "json")
-                ),
+                command=_GolangciLintCommand(base=("golangci-lint", "run", "--out-format", "json")),
                 append_files=False,
                 description="Run golangci-lint across Go packages.",
                 parser=JsonParser(parse_golangci_lint),
@@ -1181,7 +2530,8 @@ def _builtin_tools() -> Iterable[Tool]:
         languages=("go",),
         file_extensions=(".go",),
         description="Aggregated Go lint tool using golangci-lint.",
-        runtime="binary",
+        runtime="go",
+        package="github.com/golangci/golangci-lint/cmd/golangci-lint@v1.60.3",
         min_version="1.60.3",
         version_command=("golangci-lint", "--version"),
     )
@@ -1225,7 +2575,8 @@ def _builtin_tools() -> Iterable[Tool]:
         languages=("rust",),
         file_extensions=(".rs",),
         description="Rust linting via cargo clippy.",
-        runtime="binary",
+        runtime="rust",
+        package="rustup:clippy",
         min_version="1.81.0",
         version_command=("cargo", "--version"),
     )
@@ -1253,3 +2604,28 @@ def _builtin_tools() -> Iterable[Tool]:
         runtime="binary",
         version_command=("rustfmt", "--version"),
     )
+
+
+@dataclass(slots=True)
+class _GtsCommand(CommandBuilder):
+    base: Sequence[str]
+    is_fix: bool = False
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        project = _setting(settings, "project")
+        if project:
+            cmd.extend(["--project", str(_resolve_path(root, project))])
+
+        config = _setting(settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(root, config))])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)

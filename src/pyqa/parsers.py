@@ -42,9 +42,7 @@ class JsonParser(Parser):
 
     transform: JsonTransform
 
-    def parse(
-        self, stdout: str, stderr: str, *, context: ToolContext
-    ) -> Sequence[RawDiagnostic]:
+    def parse(self, stdout: str, stderr: str, *, context: ToolContext) -> Sequence[RawDiagnostic]:
         del stderr  # retain signature compatibility without using the value
         payload = _load_json_stream(stdout)
         return self.transform(payload, context)
@@ -57,9 +55,7 @@ class TextParser(Parser):
     transform: TextTransform
     splitlines: bool = True
 
-    def parse(
-        self, stdout: str, stderr: str, *, context: ToolContext
-    ) -> Sequence[RawDiagnostic]:
+    def parse(self, stdout: str, stderr: str, *, context: ToolContext) -> Sequence[RawDiagnostic]:
         del stderr
         return self.transform(stdout, context)
 
@@ -134,9 +130,7 @@ def parse_pyright(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic
     """Parse Pyright JSON diagnostics."""
     diagnostics = []
     if isinstance(payload, dict):
-        diagnostics = payload.get("generalDiagnostics", []) or payload.get(
-            "diagnostics", []
-        )
+        diagnostics = payload.get("generalDiagnostics", []) or payload.get("diagnostics", [])
     results: list[RawDiagnostic] = []
     for item in diagnostics:
         if not isinstance(item, dict):
@@ -177,12 +171,7 @@ def parse_mypy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
         message = str(item.get("message", "")).strip()
         severity = str(item.get("severity", "error")).lower()
         code = item.get("code") or item.get("error_code")
-        function = (
-            item.get("function")
-            or item.get("name")
-            or item.get("target")
-            or item.get("symbol")
-        )
+        function = item.get("function") or item.get("name") or item.get("target") or item.get("symbol")
         if isinstance(function, str) and function:
             function = function.split(".")[-1]
         else:
@@ -204,6 +193,118 @@ def parse_mypy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
                 function=function,
             )
         )
+    return results
+
+
+def parse_actionlint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse actionlint JSON diagnostics."""
+
+    items = payload if isinstance(payload, list) else []
+    results: list[RawDiagnostic] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        path = item.get("path")
+        message = str(item.get("message", "")).strip()
+        severity = str(item.get("severity", "error")).lower()
+        code = item.get("kind")
+        sev_enum = {
+            "error": Severity.ERROR,
+            "warning": Severity.WARNING,
+            "note": Severity.NOTE,
+        }.get(severity, Severity.WARNING)
+        results.append(
+            RawDiagnostic(
+                file=path,
+                line=item.get("line"),
+                column=item.get("column"),
+                severity=sev_enum,
+                message=message,
+                code=str(code) if code else None,
+                tool="actionlint",
+            )
+        )
+    return results
+
+
+def parse_kube_linter(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse kube-linter JSON output."""
+
+    reports: Iterable[dict[str, Any]]
+    if isinstance(payload, dict):
+        raw_reports = payload.get("Reports", [])
+        reports = [item for item in raw_reports if isinstance(item, dict)]
+    elif isinstance(payload, list):
+        reports = [item for item in payload if isinstance(item, dict)]
+    else:
+        reports = []
+
+    diagnostics: list[RawDiagnostic] = []
+    for report in reports:
+        diagnostic_info = report.get("Diagnostic") if isinstance(report.get("Diagnostic"), dict) else {}
+        message = str(diagnostic_info.get("Message", "")).strip()
+        if not message:
+            continue
+
+        obj_info = report.get("Object") if isinstance(report.get("Object"), dict) else {}
+        metadata = obj_info.get("Metadata") if isinstance(obj_info, dict) else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        file_path = metadata.get("FilePath") or metadata.get("filePath")
+
+        diagnostics.append(
+            RawDiagnostic(
+                file=file_path,
+                line=None,
+                column=None,
+                severity=Severity.ERROR,
+                message=message,
+                code=str(report.get("Check")) if report.get("Check") else None,
+                tool="kube-linter",
+            )
+        )
+
+    return diagnostics
+
+
+def parse_sqlfluff(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse sqlfluff JSON diagnostics."""
+
+    items = payload if isinstance(payload, list) else []
+    results: list[RawDiagnostic] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        violations = item.get("violations")
+        path = item.get("filepath")
+        if not isinstance(violations, list):
+            continue
+        for violation in violations:
+            if not isinstance(violation, dict):
+                continue
+            message = str(violation.get("description", "")).strip()
+            code = violation.get("code")
+            line = violation.get("line_no")
+            column = violation.get("line_pos")
+            severity = str(violation.get("severity", "error")).lower()
+            sev_enum = {
+                "error": Severity.ERROR,
+                "critical": Severity.ERROR,
+                "warn": Severity.WARNING,
+                "warning": Severity.WARNING,
+                "info": Severity.NOTICE,
+            }.get(severity, Severity.WARNING)
+            results.append(
+                RawDiagnostic(
+                    file=path,
+                    line=line,
+                    column=column,
+                    severity=sev_enum,
+                    message=message,
+                    code=str(code) if code else None,
+                    tool="sqlfluff",
+                )
+            )
     return results
 
 
@@ -270,6 +371,749 @@ def parse_eslint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]
     return results
 
 
+def parse_stylelint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse stylelint JSON output."""
+
+    items = payload if isinstance(payload, list) else []
+    results: list[RawDiagnostic] = []
+    for entry in items:
+        if not isinstance(entry, dict):
+            continue
+        source = entry.get("source") or entry.get("file")
+        warnings = entry.get("warnings")
+        if not isinstance(warnings, list):
+            continue
+        for warning in warnings:
+            if not isinstance(warning, dict):
+                continue
+            message = str(warning.get("text", "")).strip()
+            if not message:
+                continue
+            severity_label = str(warning.get("severity", "warning")).lower()
+            severity = {
+                "error": Severity.ERROR,
+                "warning": Severity.WARNING,
+            }.get(severity_label, Severity.WARNING)
+            rule = warning.get("rule")
+            results.append(
+                RawDiagnostic(
+                    file=source,
+                    line=warning.get("line"),
+                    column=warning.get("column"),
+                    severity=severity,
+                    message=message,
+                    code=str(rule) if rule else None,
+                    tool="stylelint",
+                )
+            )
+    return results
+
+
+def parse_dockerfilelint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse dockerfilelint JSON output."""
+
+    files = []
+    if isinstance(payload, dict):
+        files = payload.get("files", [])
+    elif isinstance(payload, list):
+        files = payload
+
+    results: list[RawDiagnostic] = []
+    for entry in files:
+        if not isinstance(entry, dict):
+            continue
+        file_path = entry.get("file")
+        issues = entry.get("issues")
+        if not isinstance(issues, list):
+            continue
+        for issue in issues:
+            if not isinstance(issue, dict):
+                continue
+            title = str(issue.get("title", "")).strip()
+            description = str(issue.get("description", "")).strip()
+            message = title if description == "" else f"{title}: {description}" if title else description
+            if not message:
+                continue
+            results.append(
+                RawDiagnostic(
+                    file=file_path,
+                    line=int(issue.get("line", 0)) or None,
+                    column=None,
+                    severity=Severity.WARNING,
+                    message=message,
+                    code=str(issue.get("category")) if issue.get("category") else None,
+                    tool="dockerfilelint",
+                )
+            )
+    return results
+
+
+LUALINT_PATTERN = re.compile(r"^(?P<file>[^:]+):(?P<line>\d+):\s*(?:\*\*\*\s*)?(?P<message>.+)$")
+
+
+def parse_lualint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse lualint text output."""
+
+    results: list[RawDiagnostic] = []
+    for raw_line in stdout.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("Usage"):
+            continue
+        match = LUALINT_PATTERN.match(line)
+        if not match:
+            continue
+        results.append(
+            RawDiagnostic(
+                file=match.group("file"),
+                line=int(match.group("line")),
+                column=None,
+                severity=Severity.WARNING,
+                message=match.group("message").strip(),
+                code=None,
+                tool="lualint",
+            )
+        )
+    return results
+
+
+LUACHECK_PATTERN = re.compile(
+    r"^(?P<file>[^:]+):(?P<line>\d+):(?P<column>\d+):\s+\((?P<code>[A-Z]\d+)\)\s+(?P<message>.+)$"
+)
+
+
+def parse_luacheck(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse luacheck plain formatter output."""
+
+    results: list[RawDiagnostic] = []
+    for raw_line in stdout.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("Total:"):
+            continue
+        match = LUACHECK_PATTERN.match(line)
+        if not match:
+            continue
+        code = match.group("code")
+        severity = Severity.ERROR if code.startswith("E") else Severity.WARNING
+        results.append(
+            RawDiagnostic(
+                file=match.group("file"),
+                line=int(match.group("line")),
+                column=int(match.group("column")),
+                severity=severity,
+                message=match.group("message").strip(),
+                code=code,
+                tool="luacheck",
+            )
+        )
+    return results
+
+
+def parse_yamllint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse yamllint JSON output."""
+
+    items = payload if isinstance(payload, list) else []
+    results: list[RawDiagnostic] = []
+    for entry in items:
+        if not isinstance(entry, dict):
+            continue
+        path = entry.get("file")
+        problems = entry.get("problems") or entry.get("errors")
+        if not isinstance(problems, list):
+            continue
+        for problem in problems:
+            if not isinstance(problem, dict):
+                continue
+            message = str(problem.get("message", "")).strip()
+            if not message:
+                continue
+            level = str(problem.get("level", "warning")).lower()
+            severity = {
+                "error": Severity.ERROR,
+                "warning": Severity.WARNING,
+            }.get(level, Severity.WARNING)
+            results.append(
+                RawDiagnostic(
+                    file=path,
+                    line=problem.get("line"),
+                    column=problem.get("column"),
+                    severity=severity,
+                    message=message,
+                    code=str(problem.get("rule")) if problem.get("rule") else None,
+                    tool="yamllint",
+                )
+            )
+    return results
+
+
+def parse_hadolint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse hadolint JSON output."""
+
+    items = payload if isinstance(payload, list) else []
+    results: list[RawDiagnostic] = []
+    for entry in items:
+        if not isinstance(entry, dict):
+            continue
+        message = str(entry.get("message", "")).strip()
+        if not message:
+            continue
+        level = str(entry.get("level", "warning")).lower()
+        severity = {
+            "error": Severity.ERROR,
+            "warning": Severity.WARNING,
+            "info": Severity.NOTICE,
+            "style": Severity.NOTE,
+        }.get(level, Severity.WARNING)
+        results.append(
+            RawDiagnostic(
+                file=entry.get("file"),
+                line=entry.get("line"),
+                column=entry.get("column"),
+                severity=severity,
+                message=message,
+                code=str(entry.get("code")) if entry.get("code") else None,
+                tool="hadolint",
+            )
+        )
+    return results
+
+
+DOTENV_PATTERN = re.compile(r"^(?P<file>[^:]+):(?P<line>\d+)\s+(?P<code>[A-Za-z0-9_-]+):\s+(?P<message>.+)$")
+
+
+def parse_dotenv_linter(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse dotenv-linter text output."""
+
+    results: list[RawDiagnostic] = []
+    for raw_line in stdout.splitlines():
+        line = raw_line.strip()
+        if (
+            not line
+            or line.startswith("Checking")
+            or line.startswith("Nothing to check")
+            or line.startswith("No problems found")
+        ):
+            continue
+        match = DOTENV_PATTERN.match(line)
+        if not match:
+            continue
+        file_path = match.group("file")
+        line_no = int(match.group("line")) if match.group("line") else None
+        code = match.group("code")
+        message = match.group("message").strip()
+        results.append(
+            RawDiagnostic(
+                file=file_path,
+                line=line_no,
+                column=None,
+                severity=Severity.WARNING,
+                message=message,
+                code=code,
+                tool="dotenv-linter",
+            )
+        )
+    return results
+
+
+def parse_remark(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse remark/remark-lint JSON output."""
+
+    files: list[dict[str, Any]]
+    if isinstance(payload, list):
+        files = [item for item in payload if isinstance(item, dict)]
+    elif isinstance(payload, dict):
+        intermediate = payload.get("files") or payload.get("results") or []
+        files = [item for item in intermediate if isinstance(item, dict)]
+    else:
+        files = []
+
+    results: list[RawDiagnostic] = []
+    for entry in files:
+        file_path = entry.get("name") or entry.get("path") or entry.get("file")
+        messages = entry.get("messages")
+        if not isinstance(messages, list):
+            continue
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+            reason = str(message.get("reason", "")).strip()
+            if not reason:
+                continue
+            fatal = message.get("fatal")
+            severity_label = message.get("severity")
+            if isinstance(severity_label, str):
+                severity = {
+                    "error": Severity.ERROR,
+                    "warning": Severity.WARNING,
+                    "info": Severity.NOTICE,
+                }.get(severity_label.lower(), Severity.WARNING)
+            else:
+                severity = Severity.ERROR if fatal in (True, 1) else Severity.WARNING
+
+            line = message.get("line")
+            column = message.get("column")
+            location = message.get("location") if isinstance(message.get("location"), dict) else {}
+            start = location.get("start") if isinstance(location, dict) else {}
+            if line is None and isinstance(start, dict):
+                line = start.get("line")
+                column = start.get("column")
+
+            results.append(
+                RawDiagnostic(
+                    file=file_path,
+                    line=line,
+                    column=column,
+                    severity=severity,
+                    message=reason,
+                    code=message.get("ruleId") or message.get("rule"),
+                    tool="remark-lint",
+                )
+            )
+    return results
+
+
+def parse_remark(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse remark/remark-lint JSON output."""
+
+    if isinstance(payload, list):
+        files = [item for item in payload if isinstance(item, dict)]
+    elif isinstance(payload, dict):
+        intermediate = payload.get("files") or payload.get("results") or []
+        files = [item for item in intermediate if isinstance(item, dict)]
+    else:
+        files = []
+
+    results: list[RawDiagnostic] = []
+    for entry in files:
+        file_path = entry.get("name") or entry.get("path") or entry.get("file")
+        messages = entry.get("messages")
+        if not isinstance(messages, list):
+            continue
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+            reason = str(message.get("reason", "")).strip()
+            if not reason:
+                continue
+            fatal = message.get("fatal")
+            severity_label = message.get("severity")
+            if isinstance(severity_label, str):
+                severity = {
+                    "error": Severity.ERROR,
+                    "warning": Severity.WARNING,
+                    "info": Severity.NOTICE,
+                }.get(severity_label.lower(), Severity.WARNING)
+            else:
+                severity = Severity.ERROR if fatal in (True, 1) else Severity.WARNING
+
+            line = message.get("line")
+            column = message.get("column")
+            location = message.get("location") if isinstance(message.get("location"), dict) else {}
+            start = location.get("start") if isinstance(location, dict) else {}
+            if line is None and isinstance(start, dict):
+                line = start.get("line")
+                column = start.get("column")
+
+            results.append(
+                RawDiagnostic(
+                    file=file_path,
+                    line=line,
+                    column=column,
+                    severity=severity,
+                    message=reason,
+                    code=message.get("ruleId") or message.get("rule"),
+                    tool="remark-lint",
+                )
+            )
+    return results
+
+
+def parse_speccy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse Speccy JSON output."""
+
+    files: list[dict[str, Any]]
+    if isinstance(payload, list):
+        files = [item for item in payload if isinstance(item, dict)]
+    elif isinstance(payload, dict):
+        intermediate = payload.get("files") or payload.get("lint") or payload.get("results") or []
+        files = [item for item in intermediate if isinstance(item, dict)]
+    else:
+        files = []
+
+    results: list[RawDiagnostic] = []
+    for entry in files:
+        file_path = entry.get("file") or entry.get("path") or entry.get("name")
+        issues = entry.get("issues") or entry.get("errors") or []
+        if isinstance(issues, dict):
+            combined: list[tuple[str, dict[str, Any]]] = []
+            for key, value in issues.items():
+                if isinstance(value, list):
+                    combined.extend((key, item) for item in value if isinstance(item, dict))
+            issues_iter = combined
+        elif isinstance(issues, list):
+            issues_iter = [("error", issue) for issue in issues if isinstance(issue, dict)]
+        else:
+            issues_iter = []
+
+        for severity_key, issue in issues_iter:
+            message = str(issue.get("message", "")).strip() or str(issue.get("description", "")).strip()
+            if not message:
+                continue
+            severity_label = issue.get("type") or issue.get("severity") or severity_key
+            severity = {
+                "error": Severity.ERROR,
+                "warning": Severity.WARNING,
+                "info": Severity.NOTICE,
+            }.get(str(severity_label).lower(), Severity.WARNING)
+            loc = issue.get("location") or issue.get("path")
+            if isinstance(loc, list):
+                location_str = "/".join(str(part) for part in loc)
+            else:
+                location_str = str(loc) if loc else None
+            results.append(
+                RawDiagnostic(
+                    file=file_path,
+                    line=None,
+                    column=None,
+                    severity=severity,
+                    message=(message if not location_str else f"{location_str}: {message}"),
+                    code=issue.get("code") or issue.get("rule"),
+                    tool="speccy",
+                )
+            )
+    return results
+
+
+def parse_shfmt(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse shfmt diff output."""
+
+    results: list[RawDiagnostic] = []
+    current_file: str | None = None
+    for raw_line in stdout.splitlines():
+        line = raw_line.strip()
+        if line.startswith("diff -u"):
+            parts = line.split()
+            if len(parts) >= 4:
+                current_file = parts[-1]
+            continue
+        if line.startswith("--- "):
+            current_file = line[4:].strip()
+            if current_file.startswith("a/"):
+                current_file = current_file[2:]
+            continue
+        if line.startswith("+++"):
+            current_file = line[4:].strip()
+            if current_file.startswith("b/"):
+                current_file = current_file[2:]
+            results.append(
+                RawDiagnostic(
+                    file=current_file,
+                    line=None,
+                    column=None,
+                    severity=Severity.WARNING,
+                    message="File is not formatted according to shfmt",
+                    code="format",
+                    tool="shfmt",
+                )
+            )
+            continue
+    return results
+
+
+PHPLINT_PATTERN = re.compile(r"^Parse error: (?P<message>.+?) in (?P<file>.+) on line (?P<line>\d+)")
+
+
+def parse_phplint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse phplint textual output."""
+
+    results: list[RawDiagnostic] = []
+    for raw_line in stdout.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        match = PHPLINT_PATTERN.match(line)
+        if not match:
+            continue
+        try:
+            line_no = int(match.group("line"))
+        except ValueError:
+            line_no = None
+        results.append(
+            RawDiagnostic(
+                file=match.group("file"),
+                line=line_no,
+                column=None,
+                severity=Severity.ERROR,
+                message=match.group("message").strip(),
+                code="parse-error",
+                tool="phplint",
+            )
+        )
+    return results
+
+
+PERLCRITIC_PATTERN = re.compile(
+    r"^(?P<file>[^:]+):(?P<line>\d+):(?P<column>\d+):\s*(?P<message>.+?)\s*\((?P<rule>[^)]+)\)$"
+)
+
+
+def parse_perlcritic(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse perlcritic textual output using custom verbose template."""
+
+    results: list[RawDiagnostic] = []
+    for raw_line in stdout.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        match = PERLCRITIC_PATTERN.match(line)
+        if not match:
+            continue
+        message = match.group("message").strip()
+        results.append(
+            RawDiagnostic(
+                file=match.group("file"),
+                line=int(match.group("line")),
+                column=int(match.group("column")),
+                severity=Severity.WARNING,
+                message=message,
+                code=match.group("rule"),
+                tool="perlcritic",
+            )
+        )
+    return results
+
+
+def parse_checkmake(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse checkmake JSON output."""
+
+    files: list[dict[str, Any]]
+    if isinstance(payload, dict):
+        files = payload.get("files") or payload.get("results") or []
+    elif isinstance(payload, list):
+        files = [entry for entry in payload if isinstance(entry, dict)]
+    else:
+        files = []
+
+    results: list[RawDiagnostic] = []
+    for entry in files:
+        file_path = entry.get("file") or entry.get("filename") or entry.get("name")
+        issues = entry.get("errors") or entry.get("warnings") or entry.get("issues")
+        if not isinstance(issues, list):
+            continue
+        for issue in issues:
+            if not isinstance(issue, dict):
+                continue
+            message = issue.get("message") or issue.get("description")
+            if not message:
+                continue
+            rule = issue.get("rule") or issue.get("code")
+            severity_label = issue.get("severity") or issue.get("level") or "warning"
+            severity = {
+                "error": Severity.ERROR,
+                "warning": Severity.WARNING,
+                "info": Severity.NOTICE,
+            }.get(str(severity_label).lower(), Severity.WARNING)
+            line = issue.get("line")
+            column = issue.get("column") or issue.get("col")
+            results.append(
+                RawDiagnostic(
+                    file=file_path,
+                    line=line,
+                    column=column,
+                    severity=severity,
+                    message=str(message).strip(),
+                    code=str(rule) if rule else None,
+                    tool="checkmake",
+                )
+            )
+    return results
+
+
+_SELENE_SEVERITY = {
+    "error": Severity.ERROR,
+    "warning": Severity.WARNING,
+    "note": Severity.NOTE,
+    "help": Severity.NOTE,
+    "info": Severity.NOTICE,
+}
+
+
+def parse_selene(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse selene JSON output (display-style json2)."""
+
+    records: Iterable[dict[str, Any]]
+    if isinstance(payload, list):
+        records = [item for item in payload if isinstance(item, dict)]
+    elif isinstance(payload, dict):
+        records = [payload]
+    else:
+        records = []
+
+    results: list[RawDiagnostic] = []
+    for entry in records:
+        entry_type = str(entry.get("type", "")).lower()
+        if entry_type == "summary":
+            continue
+        if entry_type != "diagnostic":
+            continue
+
+        severity_label = str(entry.get("severity", "warning")).lower()
+        severity = _SELENE_SEVERITY.get(severity_label, Severity.WARNING)
+        primary = entry.get("primary_label") or {}
+        if not isinstance(primary, dict):
+            primary = {}
+        span = primary.get("span") or {}
+        if not isinstance(span, dict):
+            span = {}
+        line = span.get("start_line")
+        column = span.get("start_column")
+        if isinstance(line, int):
+            line += 1
+        if isinstance(column, int):
+            column += 1
+
+        notes = []
+        for note in entry.get("notes", []) or []:
+            text = str(note).strip()
+            if text:
+                notes.append(text)
+        for label in entry.get("secondary_labels", []) or []:
+            if isinstance(label, dict):
+                message = str(label.get("message", "")).strip()
+                if message:
+                    notes.append(message)
+
+        message = str(entry.get("message", "")).strip()
+        if notes:
+            message = f"{message} ({'; '.join(notes)})" if message else "; ".join(notes)
+
+        results.append(
+            RawDiagnostic(
+                file=primary.get("filename"),
+                line=line,
+                column=column,
+                severity=severity,
+                message=message,
+                code=entry.get("code"),
+                tool="selene",
+            )
+        )
+
+    return results
+
+
+_CPPLINT_PATTERN = re.compile(
+    r"^(?P<file>[^:]+):(?P<line>\d+):\s+(?P<message>.+?)\s+\[(?P<category>[^\]]+)\]\s+\[(?P<confidence>\d+)\]$"
+)
+
+
+def parse_cpplint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse cpplint text diagnostics."""
+
+    results: list[RawDiagnostic] = []
+    for line in stdout.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("Done processing") or stripped.startswith("Total errors"):
+            continue
+        match = _CPPLINT_PATTERN.match(stripped)
+        if not match:
+            continue
+        message = match.group("message").strip()
+        category = match.group("category").strip()
+        results.append(
+            RawDiagnostic(
+                file=match.group("file"),
+                line=int(match.group("line")),
+                column=None,
+                severity=Severity.WARNING,
+                message=message,
+                code=category,
+                tool="cpplint",
+            )
+        )
+    return results
+
+
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
+_TOMBI_HEADER_RE = re.compile(r"^(?P<level>Error|Warning|Info|Hint|Note):\s*(?P<message>.+)$", re.IGNORECASE)
+_TOMBI_LOCATION_RE = re.compile(
+    r"^at\s+(?P<file>.+?)(?::(?P<line>\d+))?(?::(?P<column>\d+))?$",
+    re.IGNORECASE,
+)
+
+
+def parse_tombi(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse tombi lint textual diagnostics."""
+
+    cleaned = _ANSI_ESCAPE_RE.sub("", stdout)
+    lines = cleaned.splitlines()
+    results: list[RawDiagnostic] = []
+    index = 0
+
+    def _severity(label: str) -> Severity:
+        return {
+            "error": Severity.ERROR,
+            "warning": Severity.WARNING,
+            "info": Severity.NOTICE,
+            "hint": Severity.NOTE,
+            "note": Severity.NOTE,
+        }.get(label.lower(), Severity.WARNING)
+
+    while index < len(lines):
+        header = _TOMBI_HEADER_RE.match(lines[index].strip())
+        if not header:
+            index += 1
+            continue
+
+        severity = _severity(header.group("level"))
+        message = header.group("message").strip()
+        file: str | None = None
+        line_no: int | None = None
+        column_no: int | None = None
+
+        index += 1
+        while index < len(lines):
+            candidate = lines[index].strip()
+            if not candidate:
+                index += 1
+                continue
+            if _TOMBI_HEADER_RE.match(candidate):
+                break
+            location = _TOMBI_LOCATION_RE.match(candidate)
+            if location:
+                file = location.group("file")
+                line_str = location.group("line")
+                column_str = location.group("column")
+                if line_str is not None:
+                    try:
+                        line_no = int(line_str)
+                    except ValueError:  # pragma: no cover - defensive
+                        line_no = None
+                if column_str is not None:
+                    try:
+                        column_no = int(column_str)
+                    except ValueError:  # pragma: no cover - defensive
+                        column_no = None
+            else:
+                note = candidate.strip()
+                if note:
+                    message = f"{message} ({note})" if message else note
+            index += 1
+
+        results.append(
+            RawDiagnostic(
+                file=file,
+                line=line_no,
+                column=column_no,
+                severity=severity,
+                message=message,
+                code=None,
+                tool="tombi",
+            )
+        )
+
+    return results
+
+
 _TSC_PATTERN = re.compile(
     r"^(?P<file>[^:(\n]+)\((?P<line>\d+),(?P<col>\d+)\):\s*"
     r"(?P<severity>error|warning)\s*(?P<code>[A-Z]+\d+)?\s*:?\s*(?P<message>.+)$"
@@ -283,9 +1127,7 @@ def parse_tsc(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
         match = _TSC_PATTERN.match(line.strip())
         if not match:
             continue
-        severity = (
-            Severity.ERROR if match.group("severity") == "error" else Severity.WARNING
-        )
+        severity = Severity.ERROR if match.group("severity") == "error" else Severity.WARNING
         code = match.group("code")
         results.append(
             RawDiagnostic(
@@ -325,15 +1167,18 @@ def parse_golangci_lint(payload: Any, _context: ToolContext) -> Sequence[RawDiag
             "warning": Severity.WARNING,
             "info": Severity.NOTICE,
         }.get(severity, Severity.WARNING)
+        sub_linter = issue.get("FromLinter") or issue.get("source") or "golangci-lint"
+        message = str(issue.get("Text", "") or issue.get("text", "")).strip()
+        code = issue.get("Code") or issue.get("code")
         results.append(
             RawDiagnostic(
                 file=path,
                 line=line,
                 column=column,
                 severity=sev_enum,
-                message=str(issue.get("Text", "") or issue.get("text", "")).strip(),
-                code=issue.get("FromLinter") or issue.get("source"),
-                tool="golangci-lint",
+                message=message,
+                code=code,
+                tool=str(sub_linter),
             )
         )
     return results
@@ -341,13 +1186,7 @@ def parse_golangci_lint(payload: Any, _context: ToolContext) -> Sequence[RawDiag
 
 def parse_cargo_clippy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse Cargo clippy JSON payloads."""
-    records = (
-        payload
-        if isinstance(payload, list)
-        else [payload]
-        if isinstance(payload, dict)
-        else []
-    )
+    records = payload if isinstance(payload, list) else [payload] if isinstance(payload, dict) else []
     results: list[RawDiagnostic] = []
     for record in records:
         if not isinstance(record, dict):
@@ -395,8 +1234,26 @@ __all__ = [
     "parse_pylint",
     "parse_pyright",
     "parse_mypy",
+    "parse_actionlint",
+    "parse_sqlfluff",
     "parse_bandit",
     "parse_eslint",
+    "parse_stylelint",
+    "parse_dockerfilelint",
+    "parse_lualint",
+    "parse_luacheck",
+    "parse_yamllint",
+    "parse_hadolint",
+    "parse_dotenv_linter",
+    "parse_remark",
+    "parse_speccy",
+    "parse_shfmt",
+    "parse_phplint",
+    "parse_perlcritic",
+    "parse_checkmake",
+    "parse_selene",
+    "parse_cpplint",
+    "parse_tombi",
     "parse_tsc",
     "parse_golangci_lint",
     "parse_cargo_clippy",

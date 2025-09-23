@@ -58,9 +58,7 @@ _PII_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"),
 ]
 
-_DOC_ENV_PATTERNS = re.compile(
-    r"os\.environ|process\.env|ENV\[|getenv\(|-e [A-Z_]+=|export [A-Z_]+=|\$\{?[A-Z_]+\}?"
-)
+_DOC_ENV_PATTERNS = re.compile(r"os\.environ|process\.env|ENV\[|getenv\(|-e [A-Z_]+=|export [A-Z_]+=|\$\{?[A-Z_]+\}?")
 
 _SKIP_PII_FILES = (
     "CONTRIBUTING.md",
@@ -127,9 +125,7 @@ class SecurityScanner:
         result = SecurityScanResult()
         resolved_files = self._resolve_files(files)
 
-        info(
-            "🔍 Scanning files for secrets and credentials...", use_emoji=self.use_emoji
-        )
+        info("🔍 Scanning files for secrets and credentials...", use_emoji=self.use_emoji)
         for path in resolved_files:
             self._scan_file(path, result)
 
@@ -193,9 +189,7 @@ class SecurityScanner:
             matches = _match_pattern(pattern, lines)
             if matches and not _should_skip_markdown(pattern, path, matches):
                 for line_no, snippet in matches[:3]:
-                    result.register_secret(
-                        relative_path, f"line {line_no}: {snippet.strip()}"
-                    )
+                    result.register_secret(relative_path, f"line {line_no}: {snippet.strip()}")
                 fail(
                     f"Potential secrets found in {relative_path}",
                     use_emoji=self.use_emoji,
@@ -216,9 +210,7 @@ class SecurityScanner:
             )
 
         # Temp/backup files
-        if relative_path.suffix in _TMP_FILE_SUFFIXES or relative_path.name.endswith(
-            "~"
-        ):
+        if relative_path.suffix in _TMP_FILE_SUFFIXES or relative_path.name.endswith("~"):
             result.register_temp(relative_path)
             warn(
                 f"Temporary/backup file should not be committed: {relative_path}",
@@ -232,9 +224,7 @@ class SecurityScanner:
                 pii_matches = _filter_comments(pii_matches)
                 if pii_matches:
                     for line_no, snippet in pii_matches[:3]:
-                        result.register_pii(
-                            relative_path, f"line {line_no}: {snippet.strip()}"
-                        )
+                        result.register_pii(relative_path, f"line {line_no}: {snippet.strip()}")
                     warn(
                         f"Potential PII found in {relative_path}",
                         use_emoji=self.use_emoji,
@@ -332,9 +322,7 @@ def _should_skip_pii(path: Path) -> bool:
     return any(fragment in path.as_posix() for fragment in _SKIP_PII_PATH_FRAGMENTS)
 
 
-def _should_skip_markdown(
-    pattern: re.Pattern[str], path: Path, matches: list[tuple[int, str]]
-) -> bool:
+def _should_skip_markdown(pattern: re.Pattern[str], path: Path, matches: list[tuple[int, str]]) -> bool:
     if path.suffix.lower() != ".md":
         return False
     return all(_DOC_ENV_PATTERNS.search(line) for _, line in matches)
@@ -343,9 +331,7 @@ def _should_skip_markdown(
 def _filter_entropy(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
     filtered: list[tuple[int, str]] = []
     for idx, line in matches:
-        if re.search(
-            r"sha256|md5|hash|digest|test|example|sample|hexsha", line, re.IGNORECASE
-        ):
+        if re.search(r"sha256|md5|hash|digest|test|example|sample|hexsha", line, re.IGNORECASE):
             continue
         if line.strip().startswith("#") or line.strip().startswith("//"):
             continue
@@ -355,9 +341,7 @@ def _filter_entropy(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
 
 def _filter_comments(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
     return [
-        (idx, line)
-        for idx, line in matches
-        if not line.lstrip().startswith("#") and not line.lstrip().startswith("//")
+        (idx, line) for idx, line in matches if not line.lstrip().startswith("#") and not line.lstrip().startswith("//")
     ]
 
 
@@ -374,10 +358,6 @@ def get_staged_files(root: Path) -> list[Path]:
         )
         if completed.returncode != 0:
             return []
-        return [
-            root / line.strip()
-            for line in completed.stdout.splitlines()
-            if line.strip()
-        ]
+        return [root / line.strip() for line in completed.stdout.splitlines() if line.strip()]
     except FileNotFoundError:  # git not installed
         return []

@@ -86,19 +86,19 @@ The Field() function itself provides extensive customization options:
 
 The transition from V1 to V2 involves numerous renamings and conceptual shifts. The following table serves as a quick reference for mapping common V1 patterns to their V2 equivalents.
 
-| Pydantic V1 Concept | Pydantic V2 Equivalent | Rationale & Notes |
+| Pydantic V1 Concept      | Pydantic V2 Equivalent                  | Rationale & Notes                                                             |
 | :----------------------- | :-------------------------------------- | :---------------------------------------------------------------------------- |
-| BaseModel.dict() | BaseModel.model_dump() | V2 standardizes on the model\_\* prefix for core methods.13 |
-| BaseModel.json() | BaseModel.model_dump_json() | Consistent naming with model_dump().13 |
-| BaseModel.parse_obj() | BaseModel.model_validate() | validate is a more accurate term for the operation.13 |
-| BaseModel.parse_raw() | BaseModel.model_validate_json() | More performant as it parses directly in the Rust core.3 |
-| Inner class Config: | model_config = ConfigDict(...) | A more explicit and standard class attribute pattern.13 |
-| orm_mode = True | from_attributes = True | Renamed for clarity; the functionality is the same.13 |
-| allow_mutation = False | frozen = True | Inverted logic to align with Python's dataclasses.3 |
-| min_items, max_items | min_length, max_length | Renamed for consistency across string, bytes, and list types.21 |
-| @validator | @field_validator | New decorator with more explicit modes ('before', 'after').13 |
-| @root_validator | @model_validator | New decorator with clearer modes and instance-based access.13 |
-| \_\_root\_\_ models | RootModel | Custom root types are now a dedicated, explicit model type.3 |
+| BaseModel.dict()         | BaseModel.model_dump()                  | V2 standardizes on the model\_\* prefix for core methods.13                   |
+| BaseModel.json()         | BaseModel.model_dump_json()             | Consistent naming with model_dump().13                                        |
+| BaseModel.parse_obj()    | BaseModel.model_validate()              | validate is a more accurate term for the operation.13                         |
+| BaseModel.parse_raw()    | BaseModel.model_validate_json()         | More performant as it parses directly in the Rust core.3                      |
+| Inner class Config:      | model_config = ConfigDict(...)          | A more explicit and standard class attribute pattern.13                       |
+| orm_mode = True          | from_attributes = True                  | Renamed for clarity; the functionality is the same.13                         |
+| allow_mutation = False   | frozen = True                           | Inverted logic to align with Python's dataclasses.3                           |
+| min_items, max_items     | min_length, max_length                  | Renamed for consistency across string, bytes, and list types.21               |
+| @validator               | @field_validator                        | New decorator with more explicit modes ('before', 'after').13                 |
+| @root_validator          | @model_validator                        | New decorator with clearer modes and instance-based access.13                 |
+| \_\_root\_\_ models      | RootModel                               | Custom root types are now a dedicated, explicit model type.3                  |
 | parse_obj_as(type, data) | TypeAdapter(type).validate_python(data) | TypeAdapter provides a full validation/serialization interface for any type.3 |
 
 ## **Section 3: Advanced Validation and Data Transformation**
@@ -245,15 +245,15 @@ The following practices, derived from official documentation and community exper
 
 The following table summarizes key optimization strategies and their underlying rationale.
 
-| Technique | Rationale | Source(s) |
+| Technique                                  | Rationale                                                                                                                            | Source(s) |
 | :----------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------- | :-------- |
-| **Use model_validate_json()** | Avoids intermediate Python dictionary creation by parsing and validating directly in the Rust core. | 10 |
-| **Prefer TypedDict over nested BaseModel** | Bypasses BaseModel instantiation overhead and reduces the memory footprint for simple data structures. | 8 |
-| **Use Discriminated Unions** | Eliminates trial-and-error validation by allowing the Rust core to directly select the correct model based on a discriminator field. | 16 |
-| **Instantiate TypeAdapter Once** | Reuses the compiled validator and serializer, avoiding redundant work in frequently called functions. | 16 |
-| **Use Concrete list and dict Types** | Avoids extra isinstance checks that are required when using abstract types like Sequence or Mapping. | 14 |
-| **Avoid Wrap Validators** | Prevents data from being unnecessarily materialized in Python, allowing the validation to remain within the optimized Rust engine. | 16 |
-| **Use FailFast for Sequences** | For list validation, Annotated, FailFast()\] stops validation on the first error, trading comprehensive error reporting for speed. | 16 |
+| **Use model_validate_json()**              | Avoids intermediate Python dictionary creation by parsing and validating directly in the Rust core.                                  | 10        |
+| **Prefer TypedDict over nested BaseModel** | Bypasses BaseModel instantiation overhead and reduces the memory footprint for simple data structures.                               | 8         |
+| **Use Discriminated Unions**               | Eliminates trial-and-error validation by allowing the Rust core to directly select the correct model based on a discriminator field. | 16        |
+| **Instantiate TypeAdapter Once**           | Reuses the compiled validator and serializer, avoiding redundant work in frequently called functions.                                | 16        |
+| **Use Concrete list and dict Types**       | Avoids extra isinstance checks that are required when using abstract types like Sequence or Mapping.                                 | 14        |
+| **Avoid Wrap Validators**                  | Prevents data from being unnecessarily materialized in Python, allowing the validation to remain within the optimized Rust engine.   | 16        |
+| **Use FailFast for Sequences**             | For list validation, Annotated, FailFast()\] stops validation on the first error, trading comprehensive error reporting for speed.   | 16        |
 
 ## **Section 7: Anti-Patterns and Common Pitfalls**
 

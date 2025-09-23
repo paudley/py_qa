@@ -86,6 +86,7 @@ class ExecutionConfig:
     bail: bool = False
     use_local_linters: bool = False
     line_length: int = 120
+    sql_dialect: str = "postgresql"
 
 
 @dataclass(slots=True)
@@ -144,14 +145,10 @@ class QualityConfigSection:
 
     checks: list[str] = field(default_factory=lambda: list(DEFAULT_QUALITY_CHECKS))
     skip_globs: list[str] = field(default_factory=list)
-    schema_targets: list[Path] = field(
-        default_factory=lambda: list(DEFAULT_SCHEMA_TARGETS)
-    )
+    schema_targets: list[Path] = field(default_factory=lambda: list(DEFAULT_SCHEMA_TARGETS))
     warn_file_size: int = 5 * 1024 * 1024
     max_file_size: int = 10 * 1024 * 1024
-    protected_branches: list[str] = field(
-        default_factory=lambda: list(DEFAULT_PROTECTED_BRANCHES)
-    )
+    protected_branches: list[str] = field(default_factory=lambda: list(DEFAULT_PROTECTED_BRANCHES))
 
 
 @dataclass(slots=True)
@@ -166,9 +163,7 @@ class CleanConfig:
 class UpdateConfig:
     """Configuration for workspace dependency updates."""
 
-    skip_patterns: list[str] = field(
-        default_factory=lambda: list(DEFAULT_UPDATE_SKIP_PATTERNS)
-    )
+    skip_patterns: list[str] = field(default_factory=lambda: list(DEFAULT_UPDATE_SKIP_PATTERNS))
     enabled_managers: list[str] = field(default_factory=list)
 
 
@@ -196,9 +191,7 @@ class Config:
             "execution": asdict(self.execution),
             "dedupe": asdict(self.dedupe),
             "severity_rules": list(self.severity_rules),
-            "tools": {
-                tool: dict(settings) for tool, settings in self.tool_settings.items()
-            },
+            "tools": {tool: dict(settings) for tool, settings in self.tool_settings.items()},
             "license": asdict(self.license),
             "quality": {
                 **asdict(self.quality),
