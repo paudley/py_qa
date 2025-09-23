@@ -26,6 +26,7 @@ from ..parsers import (
     parse_stylelint,
     parse_dockerfilelint,
     parse_yamllint,
+    parse_hadolint,
     parse_golangci_lint,
     parse_actionlint,
     parse_kube_linter,
@@ -83,6 +84,7 @@ def _as_bool(value: Any) -> bool | None:
 
 
 ACTIONLINT_VERSION_DEFAULT = "1.7.1"
+HADOLINT_VERSION_DEFAULT = "2.12.0"
 
 
 def _ensure_actionlint(version: str, cache_root: Path) -> Path:
@@ -133,6 +135,41 @@ def _ensure_actionlint(version: str, cache_root: Path) -> Path:
             else:
                 raise RuntimeError("Failed to locate actionlint binary in archive")
 
+    return binary
+
+
+def _ensure_hadolint(version: str, cache_root: Path) -> Path:
+    base_dir = cache_root / "hadolint" / version
+    binary = base_dir / "hadolint"
+    if binary.exists():
+        return binary
+
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    if system == "linux":
+        if machine in {"x86_64", "amd64"}:
+            asset = "hadolint-Linux-x86_64"
+        elif machine in {"aarch64", "arm64"}:
+            asset = "hadolint-Linux-arm64"
+        else:
+            raise RuntimeError(f"Unsupported Linux architecture '{machine}' for hadolint")
+    elif system == "darwin":
+        if machine in {"x86_64", "amd64"}:
+            asset = "hadolint-Darwin-x86_64"
+        elif machine in {"arm64", "aarch64"}:
+            asset = "hadolint-Darwin-arm64"
+        else:
+            raise RuntimeError(f"Unsupported macOS architecture '{machine}' for hadolint")
+    else:
+        raise RuntimeError(f"hadolint is not supported on platform '{system}'")
+
+    url = f"https://github.com/hadolint/hadolint/releases/download/v{version}/{asset}"
+    response = requests.get(url, timeout=60)
+    response.raise_for_status()
+    binary.write_bytes(response.content)
+    binary.chmod(binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return binary
 
 
@@ -1030,6 +1067,30 @@ class _DockerfilelintCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _HadolintCommand(CommandBuilder):
+    version: str
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cache_root = ctx.root / ".lint-cache"
+        binary = _ensure_hadolint(self.version, cache_root)
+        cmd = [str(binary), "--format", "json"]
+
+        config = _setting(ctx.settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(ctx.root, config))])
+
+        failure_threshold = _setting(ctx.settings, "failure-threshold", "failure_threshold")
+        if failure_threshold:
+            cmd.extend(["--failure-threshold", str(failure_threshold)])
+
+        args = _settings_list(_setting(ctx.settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _TscCommand(CommandBuilder):
     base: Sequence[str]
 
@@ -1526,6 +1587,23 @@ def _builtin_tools() -> Iterable[Tool]:
         package="dockerfilelint@1.8.0",
         min_version="1.8.0",
         version_command=("dockerfilelint", "--version"),
+    )
+
+    yield Tool(
+        name="hadolint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_HadolintCommand(version=HADOLINT_VERSION_DEFAULT),
+                append_files=True,
+                description="Dockerfile analysis via hadolint.",
+                parser=JsonParser(parse_hadolint),
+            ),
+        ),
+        languages=("docker",),
+        file_extensions=("Dockerfile", "dockerfile", "Containerfile"),
+        description="Dockerfile linter based on ShellCheck and best practices.",
+        runtime="binary",
     )
 
     yield Tool(

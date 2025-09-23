@@ -485,6 +485,38 @@ def parse_yamllint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnosti
     return results
 
 
+def parse_hadolint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse hadolint JSON output."""
+
+    items = payload if isinstance(payload, list) else []
+    results: list[RawDiagnostic] = []
+    for entry in items:
+        if not isinstance(entry, dict):
+            continue
+        message = str(entry.get("message", "")).strip()
+        if not message:
+            continue
+        level = str(entry.get("level", "warning")).lower()
+        severity = {
+            "error": Severity.ERROR,
+            "warning": Severity.WARNING,
+            "info": Severity.NOTICE,
+            "style": Severity.NOTE,
+        }.get(level, Severity.WARNING)
+        results.append(
+            RawDiagnostic(
+                file=entry.get("file"),
+                line=entry.get("line"),
+                column=entry.get("column"),
+                severity=severity,
+                message=message,
+                code=str(entry.get("code")) if entry.get("code") else None,
+                tool="hadolint",
+            )
+        )
+    return results
+
+
 _TSC_PATTERN = re.compile(
     r"^(?P<file>[^:(\n]+)\((?P<line>\d+),(?P<col>\d+)\):\s*"
     r"(?P<severity>error|warning)\s*(?P<code>[A-Z]+\d+)?\s*:?\s*(?P<message>.+)$"
@@ -609,6 +641,7 @@ __all__ = [
     "parse_stylelint",
     "parse_dockerfilelint",
     "parse_yamllint",
+    "parse_hadolint",
     "parse_tsc",
     "parse_golangci_lint",
     "parse_cargo_clippy",

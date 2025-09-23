@@ -19,6 +19,7 @@ from pyqa.parsers import (
     parse_stylelint,
     parse_yamllint,
     parse_dockerfilelint,
+    parse_hadolint,
     parse_golangci_lint,
     parse_kube_linter,
     parse_mypy,
@@ -242,6 +243,21 @@ def test_parse_tsc() -> None:
     assert len(diags) == 1
     diag = diags[0]
     assert diag.code == "TS2304"
+    severity = diag.severity
+    assert isinstance(severity, Severity)
+    assert severity.value == "error"
+
+
+def test_parse_hadolint() -> None:
+    parser = JsonParser(parse_hadolint)
+    stdout = """
+    [{"line": 3, "column": 1, "level": "error", "code": "DL3007", "message": "Using latest is prone to errors", "file": "Dockerfile"}]
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == "Dockerfile"
+    assert diag.code == "DL3007"
     severity = diag.severity
     assert isinstance(severity, Severity)
     assert severity.value == "error"
