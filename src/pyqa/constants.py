@@ -37,6 +37,7 @@ LANGUAGE_EXTENSIONS: Final[dict[str, set[str]]] = {
     "dotenv": set(),
     "lua": {".lua"},
     "openapi": set(),
+    "shell": {".sh", ".bash", ".zsh"},
 }
 
 LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
@@ -108,6 +109,9 @@ LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
         "speccy.yaml",
         "speccy.yml",
     },
+    "shell": {
+        "Shellfile",
+    },
 }
 
 LANGUAGE_FILENAMES: Final[dict[str, set[str]]] = {
@@ -115,4 +119,5 @@ LANGUAGE_FILENAMES: Final[dict[str, set[str]]] = {
     "dotenv": {".env", "env"},
     "lua": {"init.lua"},
     "openapi": {"openapi.yaml", "openapi.yml", "swagger.yaml", "swagger.yml", "speccy.yaml", "speccy.yml"},
+    "shell": {"shellfile"},
 }

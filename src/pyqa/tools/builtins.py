@@ -34,6 +34,7 @@ from ..parsers import (
     parse_luacheck,
     parse_remark,
     parse_speccy,
+    parse_shfmt,
     parse_golangci_lint,
     parse_actionlint,
     parse_kube_linter,
@@ -1303,6 +1304,46 @@ class _SpeccyCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _ShfmtCommand(CommandBuilder):
+    base: Sequence[str]
+    is_fix: bool = False
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        settings = ctx.settings
+
+        indent = _setting(settings, "indent", "spaces")
+        if indent is not None and "-i" not in cmd:
+            cmd.extend(["-i", str(indent)])
+
+        language = _setting(settings, "language")
+        if language and "-ln" not in cmd:
+            cmd.extend(["-ln", str(language)])
+
+        indent_case = _as_bool(_setting(settings, "indent-case", "indent_case"))
+        if indent_case:
+            cmd.append("-ci")
+
+        simplify = _as_bool(_setting(settings, "simplify"))
+        if simplify is True and "-s" not in cmd:
+            cmd.append("-s")
+
+        write_cmd = _as_bool(_setting(settings, "write"))
+        if self.is_fix:
+            cmd.append("-w")
+        elif write_cmd:
+            cmd.append("-w")
+        else:
+            cmd.append("-d")
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _TscCommand(CommandBuilder):
     base: Sequence[str]
 
@@ -1806,6 +1847,33 @@ def _builtin_tools() -> Iterable[Tool]:
         package="speccy@0.11.0",
         min_version="0.11.0",
         version_command=("speccy", "--version"),
+    )
+
+    yield Tool(
+        name="shfmt",
+        actions=(
+            ToolAction(
+                name="format",
+                command=_ShfmtCommand(base=("shfmt",), is_fix=True),
+                append_files=True,
+                is_fix=True,
+                description="Format shell scripts using shfmt.",
+            ),
+            ToolAction(
+                name="check",
+                command=_ShfmtCommand(base=("shfmt",), is_fix=False),
+                append_files=True,
+                description="Verify shell script formatting without modifying files.",
+                parser=TextParser(parse_shfmt),
+            ),
+        ),
+        languages=("shell",),
+        file_extensions=(".sh", ".bash", ".zsh"),
+        description="Shell script formatter.",
+        runtime="go",
+        package="mvdan.cc/sh/v3/cmd/shfmt@v3.9.0",
+        min_version="3.9.0",
+        version_command=("shfmt", "--version"),
     )
 
     yield Tool(

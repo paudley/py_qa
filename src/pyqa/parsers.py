@@ -778,6 +778,42 @@ def parse_speccy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]
     return results
 
 
+def parse_shfmt(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse shfmt diff output."""
+
+    results: list[RawDiagnostic] = []
+    current_file: str | None = None
+    for raw_line in stdout.splitlines():
+        line = raw_line.strip()
+        if line.startswith("diff -u"):
+            parts = line.split()
+            if len(parts) >= 4:
+                current_file = parts[-1]
+            continue
+        if line.startswith("--- "):
+            current_file = line[4:].strip()
+            if current_file.startswith("a/"):
+                current_file = current_file[2:]
+            continue
+        if line.startswith("+++"):
+            current_file = line[4:].strip()
+            if current_file.startswith("b/"):
+                current_file = current_file[2:]
+            results.append(
+                RawDiagnostic(
+                    file=current_file,
+                    line=None,
+                    column=None,
+                    severity=Severity.WARNING,
+                    message="File is not formatted according to shfmt",
+                    code="format",
+                    tool="shfmt",
+                )
+            )
+            continue
+    return results
+
+
 _TSC_PATTERN = re.compile(
     r"^(?P<file>[^:(\n]+)\((?P<line>\d+),(?P<col>\d+)\):\s*"
     r"(?P<severity>error|warning)\s*(?P<code>[A-Z]+\d+)?\s*:?\s*(?P<message>.+)$"
@@ -907,6 +943,8 @@ __all__ = [
     "parse_hadolint",
     "parse_dotenv_linter",
     "parse_remark",
+    "parse_speccy",
+    "parse_shfmt",
     "parse_speccy",
     "parse_tsc",
     "parse_golangci_lint",

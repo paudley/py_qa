@@ -32,6 +32,7 @@ from pyqa.parsers import (
     parse_dotenv_linter,
     parse_remark,
     parse_speccy,
+    parse_shfmt,
     parse_speccy,
 )
 from pyqa.severity import Severity
@@ -326,6 +327,23 @@ def test_parse_speccy() -> None:
     assert diag.file == "openapi.yaml"
     assert "paths/users" in diag.message
     assert diag.severity.value == "error"
+
+
+def test_parse_shfmt() -> None:
+    parser = TextParser(parse_shfmt)
+    stdout = """
+    diff -u a/script.sh b/script.sh
+    --- a/script.sh
+    +++ b/script.sh
+    @@
+    -echo  foo
+    +echo foo
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.tool == "shfmt"
+    assert "shfmt" in diag.message.lower()
 
 
 def test_parse_tsc() -> None:
