@@ -33,6 +33,7 @@ from ..parsers import (
     parse_lualint,
     parse_luacheck,
     parse_remark,
+    parse_speccy,
     parse_golangci_lint,
     parse_actionlint,
     parse_kube_linter,
@@ -1275,6 +1276,33 @@ class _RemarkCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _SpeccyCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        if "--reporter" not in cmd:
+            cmd.extend(["--reporter", "json"])
+
+        ruleset = _setting(settings, "ruleset")
+        if ruleset:
+            cmd.extend(["--ruleset", str(_resolve_path(root, ruleset))])
+
+        skip = _settings_list(_setting(settings, "skip"))
+        for value in skip:
+            cmd.extend(["--skip", str(value)])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _TscCommand(CommandBuilder):
     base: Sequence[str]
 
@@ -1758,6 +1786,26 @@ def _builtin_tools() -> Iterable[Tool]:
         package="remark-cli@12.0.1 remark-lint@9.1.2 remark-preset-lint-recommended@6.0.2",
         min_version="12.0.1",
         version_command=("remark", "--version"),
+    )
+
+    yield Tool(
+        name="speccy",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_SpeccyCommand(base=("speccy", "lint")),
+                append_files=True,
+                description="Lint OpenAPI specs using Speccy.",
+                parser=JsonParser(parse_speccy),
+            ),
+        ),
+        languages=("openapi",),
+        file_extensions=("openapi.yaml", "openapi.yml", "swagger.yaml", "swagger.yml", "speccy.yaml", "speccy.yml"),
+        description="OpenAPI linter powered by Speccy.",
+        runtime="npm",
+        package="speccy@0.11.0",
+        min_version="0.11.0",
+        version_command=("speccy", "--version"),
     )
 
     yield Tool(

@@ -36,6 +36,7 @@ LANGUAGE_EXTENSIONS: Final[dict[str, set[str]]] = {
     "docker": set(),
     "dotenv": set(),
     "lua": {".lua"},
+    "openapi": set(),
 }
 
 LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
@@ -99,10 +100,19 @@ LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
         ".luacheckrc",
         "init.lua",
     },
+    "openapi": {
+        "openapi.yaml",
+        "openapi.yml",
+        "swagger.yaml",
+        "swagger.yml",
+        "speccy.yaml",
+        "speccy.yml",
+    },
 }
 
 LANGUAGE_FILENAMES: Final[dict[str, set[str]]] = {
     "docker": {"dockerfile", "containerfile"},
     "dotenv": {".env", "env"},
     "lua": {"init.lua"},
+    "openapi": {"openapi.yaml", "openapi.yml", "swagger.yaml", "swagger.yml", "speccy.yaml", "speccy.yml"},
 }

@@ -31,6 +31,8 @@ from pyqa.parsers import (
     parse_luacheck,
     parse_dotenv_linter,
     parse_remark,
+    parse_speccy,
+    parse_speccy,
 )
 from pyqa.severity import Severity
 from pyqa.tools.base import ToolContext
@@ -301,6 +303,29 @@ def test_parse_remark() -> None:
     assert diag.file == "README.md"
     assert diag.code == "list-item-spacing"
     assert diag.severity.value == "warning"
+
+
+def test_parse_speccy() -> None:
+    parser = JsonParser(parse_speccy)
+    stdout = """
+    {
+      "files": [
+        {
+          "file": "openapi.yaml",
+          "issues": [
+            {"message": "Path must start with a slash", "location": ["paths", "users"], "type": "error", "code": "path-slash"}
+          ]
+        }
+      ],
+      "total": 1
+    }
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == "openapi.yaml"
+    assert "paths/users" in diag.message
+    assert diag.severity.value == "error"
 
 
 def test_parse_tsc() -> None:
