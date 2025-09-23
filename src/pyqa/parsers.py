@@ -775,7 +775,7 @@ def parse_speccy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]
                     line=None,
                     column=None,
                     severity=severity,
-                    message=message if not location_str else f"{location_str}: {message}",
+                    message=(message if not location_str else f"{location_str}: {message}"),
                     code=issue.get("code") or issue.get("rule"),
                     tool="speccy",
                 )

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Tests for kube-linter tool integration."""
 
 from __future__ import annotations
@@ -17,7 +20,11 @@ def test_kube_linter_command_build(tmp_path: Path) -> None:
         cfg=cfg,
         root=tmp_path,
         files=[tmp_path / "manifests" / "deployment.yaml"],
-        settings={"config": tmp_path / "config" / "custom.yaml", "include": ["check-a"], "verbose": True},
+        settings={
+            "config": tmp_path / "config" / "custom.yaml",
+            "include": ["check-a"],
+            "verbose": True,
+        },
     )
 
     action = ToolAction(

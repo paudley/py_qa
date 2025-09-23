@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Tests for remark-lint tool integration."""
 
 from __future__ import annotations
@@ -15,7 +18,10 @@ def test_remark_lint_command_build(tmp_path: Path) -> None:
         cfg=cfg,
         root=tmp_path,
         files=[tmp_path / "README.md"],
-        settings={"config": tmp_path / ".remarkrc.json", "use": ["remark-lint-ordered-list-marker-style"]},
+        settings={
+            "config": tmp_path / ".remarkrc.json",
+            "use": ["remark-lint-ordered-list-marker-style"],
+        },
     )
 
     action = ToolAction(

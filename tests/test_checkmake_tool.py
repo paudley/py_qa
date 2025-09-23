@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Tests for checkmake command builder."""
 
 from __future__ import annotations
@@ -15,7 +18,10 @@ def test_checkmake_command_build(tmp_path: Path) -> None:
         cfg=cfg,
         root=tmp_path,
         files=[tmp_path / "Makefile"],
-        settings={"config": tmp_path / "checkmake.yml", "ignore": ["missing-help-text"]},
+        settings={
+            "config": tmp_path / "checkmake.yml",
+            "ignore": ["missing-help-text"],
+        },
     )
 
     action = ToolAction(

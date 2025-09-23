@@ -302,6 +302,13 @@ def _strip_comment_prefix(line: str) -> str:
         if cleaned.startswith(token):
             cleaned = cleaned[len(token) :].lstrip(" -*#/")
             break
+    if cleaned.startswith('"') and ':' in cleaned:
+        _, remainder = cleaned.split(':', 1)
+        cleaned = remainder.strip()
+        if cleaned.endswith(','):
+            cleaned = cleaned[:-1].rstrip()
+        if cleaned.startswith('"') and cleaned.endswith('"'):
+            cleaned = cleaned[1:-1]
     if cleaned.endswith("*/"):
         cleaned = cleaned[:-2].rstrip()
     if cleaned.endswith("-->"):

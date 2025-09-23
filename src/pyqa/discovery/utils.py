@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Shared discovery helpers for filesystem traversal with exclusions."""
 
 from __future__ import annotations

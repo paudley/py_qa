@@ -211,13 +211,13 @@ To write truly high-performance code, one must be able to verify that the query 
 
 The following table summarizes the connection between the automatic optimizations performed by Polars and the specific user actions that enable them. Understanding these relationships is key to consistently writing high-performance lazy queries.
 
-| Optimization | How It Works (Under the Hood) | Actionable Best Practice (How to Enable It) |
+| Optimization                  | How It Works (Under the Hood)                                                       | Actionable Best Practice (How to Enable It)                                                    |
 | :---------------------------- | :---------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------- |
-| **Predicate Pushdown** | Moves filter conditions into the file scan to avoid reading unnecessary rows. | Start queries with scan\_\*. Apply filters as early as possible in your chain. |
-| **Projection Pushdown** | Only reads columns from disk that are actually used in the query. | Use select to specify only the columns you need. Avoid selecting all columns if not necessary. |
-| **Slice Pushdown** | Stops reading a file once the number of rows for a head, tail, or slice is reached. | Use fetch(n) for debugging instead of .collect().head(n) to avoid a full scan. |
-| **Expression Simplification** | Pre-calculates constants and simplifies algebraic expressions before execution. | This is fully automatic. Write clear, readable expressions; Polars will optimize them. |
-| **Streaming Engine** | Processes data in smaller, memory-fitting batches instead of all at once. | For larger-than-RAM datasets, use .collect(streaming=True) or .sink\_\*(). |
+| **Predicate Pushdown**        | Moves filter conditions into the file scan to avoid reading unnecessary rows.       | Start queries with scan\_\*. Apply filters as early as possible in your chain.                 |
+| **Projection Pushdown**       | Only reads columns from disk that are actually used in the query.                   | Use select to specify only the columns you need. Avoid selecting all columns if not necessary. |
+| **Slice Pushdown**            | Stops reading a file once the number of rows for a head, tail, or slice is reached. | Use fetch(n) for debugging instead of .collect().head(n) to avoid a full scan.                 |
+| **Expression Simplification** | Pre-calculates constants and simplifies algebraic expressions before execution.     | This is fully automatic. Write clear, readable expressions; Polars will optimize them.         |
+| **Streaming Engine**          | Processes data in smaller, memory-fitting batches instead of all at once.           | For larger-than-RAM datasets, use .collect(streaming=True) or .sink\_\*().                     |
 
 ______________________________________________________________________
 

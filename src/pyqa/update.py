@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Workspace discovery and dependency update orchestration."""
 
 from __future__ import annotations

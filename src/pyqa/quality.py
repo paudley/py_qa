@@ -143,7 +143,7 @@ class PythonHygieneCheck:
             except OSError as exc:
                 result.add_warning(f"Unable to read Python file: {exc}", path)
                 continue
-            if "pdb.set_trace(" in content or "breakpoint(" in content:
+            if re.search(r"(?<!['\"])pdb\.set_trace\(", content) or re.search(r"(?<!['\"])breakpoint\(", content):
                 result.add_error("Debug breakpoint detected", path)
             if re.search(r"except\s*:\s*(?:#.*)?$", content, re.MULTILINE):
                 result.add_warning("Bare except detected", path)
@@ -166,7 +166,21 @@ class SchemaCheck:
                 )
                 continue
             actual = target_path.read_text(encoding="utf-8")
-            if actual != expected:
+            if actual == expected:
+                continue
+            try:
+                parsed_actual = json.loads(actual)
+            except json.JSONDecodeError:
+                relative = _relative_to_root(target_path, ctx.root)
+                result.add_error(
+                    f"Schema documentation out of date. Run 'pyqa config export-tools {relative}' to refresh.",
+                    target_path,
+                )
+                continue
+            parsed_expected = json.loads(expected)
+            parsed_actual.pop("_license", None)
+            parsed_actual.pop("_copyright", None)
+            if parsed_actual != parsed_expected:
                 relative = _relative_to_root(target_path, ctx.root)
                 result.add_error(
                     f"Schema documentation out of date. Run 'pyqa config export-tools {relative}' to refresh.",

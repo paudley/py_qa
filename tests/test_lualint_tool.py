@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Tests for lualint tool integration."""
 
 from __future__ import annotations
@@ -19,7 +22,10 @@ def test_lualint_command_build(tmp_path: Path) -> None:
         settings={"relaxed": True},
     )
 
-    with patch("pyqa.tools.builtins._ensure_lualint", return_value=tmp_path / "cache" / "lualint"):
+    with patch(
+        "pyqa.tools.builtins._ensure_lualint",
+        return_value=tmp_path / "cache" / "lualint",
+    ):
         action = ToolAction(
             name="lint",
             command=_LualintCommand(base=("lua",)),
