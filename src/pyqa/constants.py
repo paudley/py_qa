@@ -38,6 +38,7 @@ LANGUAGE_EXTENSIONS: Final[dict[str, set[str]]] = {
     "lua": {".lua"},
     "openapi": set(),
     "shell": {".sh", ".bash", ".zsh"},
+    "php": {".php", ".phtml"},
 }
 
 LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
@@ -112,6 +113,10 @@ LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
     "shell": {
         "Shellfile",
     },
+    "php": {
+        "composer.json",
+        "phpunit.xml",
+    },
 }
 
 LANGUAGE_FILENAMES: Final[dict[str, set[str]]] = {
@@ -120,4 +125,5 @@ LANGUAGE_FILENAMES: Final[dict[str, set[str]]] = {
     "lua": {"init.lua"},
     "openapi": {"openapi.yaml", "openapi.yml", "swagger.yaml", "swagger.yml", "speccy.yaml", "speccy.yml"},
     "shell": {"shellfile"},
+    "php": {"index.php", "artisan", "server.php"},
 }

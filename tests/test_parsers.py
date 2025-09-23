@@ -33,6 +33,7 @@ from pyqa.parsers import (
     parse_remark,
     parse_speccy,
     parse_shfmt,
+    parse_phplint,
     parse_speccy,
 )
 from pyqa.severity import Severity
@@ -344,6 +345,18 @@ def test_parse_shfmt() -> None:
     diag = diags[0]
     assert diag.tool == "shfmt"
     assert "shfmt" in diag.message.lower()
+
+
+def test_parse_phplint() -> None:
+    parser = TextParser(parse_phplint)
+    stdout = "Parse error: syntax error, unexpected ';' in src/index.php on line 14\n"
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == "src/index.php"
+    assert diag.line == 14
+    assert diag.severity.value == "error"
+    assert diag.tool == "phplint"
 
 
 def test_parse_tsc() -> None:

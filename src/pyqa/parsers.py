@@ -814,6 +814,40 @@ def parse_shfmt(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
     return results
 
 
+PHPLINT_PATTERN = re.compile(
+    r"^Parse error: (?P<message>.+?) in (?P<file>.+) on line (?P<line>\d+)"
+)
+
+
+def parse_phplint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse phplint textual output."""
+
+    results: list[RawDiagnostic] = []
+    for raw_line in stdout.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        match = PHPLINT_PATTERN.match(line)
+        if not match:
+            continue
+        try:
+            line_no = int(match.group("line"))
+        except ValueError:
+            line_no = None
+        results.append(
+            RawDiagnostic(
+                file=match.group("file"),
+                line=line_no,
+                column=None,
+                severity=Severity.ERROR,
+                message=match.group("message").strip(),
+                code="parse-error",
+                tool="phplint",
+            )
+        )
+    return results
+
+
 _TSC_PATTERN = re.compile(
     r"^(?P<file>[^:(\n]+)\((?P<line>\d+),(?P<col>\d+)\):\s*"
     r"(?P<severity>error|warning)\s*(?P<code>[A-Z]+\d+)?\s*:?\s*(?P<message>.+)$"
@@ -945,6 +979,7 @@ __all__ = [
     "parse_remark",
     "parse_speccy",
     "parse_shfmt",
+    "parse_phplint",
     "parse_speccy",
     "parse_tsc",
     "parse_golangci_lint",

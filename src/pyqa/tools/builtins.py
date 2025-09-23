@@ -35,6 +35,7 @@ from ..parsers import (
     parse_remark,
     parse_speccy,
     parse_shfmt,
+    parse_phplint,
     parse_golangci_lint,
     parse_actionlint,
     parse_kube_linter,
@@ -1382,6 +1383,39 @@ class _TscCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _PhplintCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        if "--no-ansi" not in cmd:
+            cmd.append("--no-ansi")
+        if "--no-progress" not in cmd:
+            cmd.append("--no-progress")
+
+        config = _setting(settings, "configuration", "config")
+        if config:
+            cmd.extend(["--configuration", str(_resolve_path(root, config))])
+
+        exclude = _settings_list(_setting(settings, "exclude"))
+        for path in exclude:
+            cmd.extend(["--exclude", str(_resolve_path(root, path))])
+
+        include = _settings_list(_setting(settings, "include"))
+        for path in include:
+            cmd.extend(["--include", str(_resolve_path(root, path))])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _GolangciLintCommand(CommandBuilder):
     base: Sequence[str]
 
@@ -1874,6 +1908,26 @@ def _builtin_tools() -> Iterable[Tool]:
         package="mvdan.cc/sh/v3/cmd/shfmt@v3.9.0",
         min_version="3.9.0",
         version_command=("shfmt", "--version"),
+    )
+
+    yield Tool(
+        name="phplint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_PhplintCommand(base=("phplint",)),
+                append_files=True,
+                description="Lint PHP files using phplint.",
+                parser=TextParser(parse_phplint),
+            ),
+        ),
+        languages=("php",),
+        file_extensions=(".php", ".phtml"),
+        description="PHP syntax linter via phplint.",
+        runtime="npm",
+        package="phplint@2.0.5",
+        min_version="2.0.5",
+        version_command=("phplint", "--version"),
     )
 
     yield Tool(
