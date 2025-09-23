@@ -30,6 +30,10 @@ GO_CACHE_DIR = CACHE_ROOT / "go"
 GO_BIN_DIR = GO_CACHE_DIR / "bin"
 GO_META_DIR = GO_CACHE_DIR / "meta"
 GO_WORK_DIR = GO_CACHE_DIR / "work"
+LUA_CACHE_DIR = CACHE_ROOT / "lua"
+LUA_BIN_DIR = LUA_CACHE_DIR / "bin"
+LUA_META_DIR = LUA_CACHE_DIR / "meta"
+LUA_WORK_DIR = LUA_CACHE_DIR / "lua"
 RUST_CACHE_DIR = CACHE_ROOT / "rust"
 RUST_BIN_DIR = RUST_CACHE_DIR / "bin"
 RUST_META_DIR = RUST_CACHE_DIR / "meta"
@@ -507,6 +511,107 @@ class GoRuntime(RuntimeHandler):
         }
 
 
+class LuaRuntime(RuntimeHandler):
+    """Provision Lua tooling using luarocks."""
+
+    def _try_system(
+        self,
+        tool: Tool,
+        base_cmd: Sequence[str],
+        root: Path,
+        cache_dir: Path,
+        target_version: str | None,
+    ) -> PreparedCommand | None:
+        executable = shutil.which(base_cmd[0])
+        if not executable:
+            return None
+        version = None
+        if tool.version_command:
+            version = self._versions.capture(tool.version_command)
+        if not self._versions.is_compatible(version, target_version):
+            return None
+        return PreparedCommand(cmd=list(base_cmd), env={}, version=version, source="system")
+
+    def _prepare_local(
+        self,
+        tool: Tool,
+        base_cmd: Sequence[str],
+        root: Path,
+        cache_dir: Path,
+        target_version: str | None,
+    ) -> PreparedCommand:
+        if not shutil.which("luarocks"):
+            raise RuntimeError("luarocks is required to install Lua-based linters")
+
+        binary_name = Path(base_cmd[0]).name
+        binary_path = self._ensure_local_tool(tool, binary_name)
+        cmd = list(base_cmd)
+        cmd[0] = str(binary_path)
+
+        env = self._lua_env(binary_path.parent)
+        version = None
+        if tool.version_command:
+            version = self._versions.capture(tool.version_command, env=self._merge_env(env))
+        return PreparedCommand(cmd=cmd, env=env, version=version, source="local")
+
+    def _ensure_local_tool(self, tool: Tool, binary_name: str) -> Path:
+        package, version_spec = self._package_spec(tool)
+        requirement = f"{package}@{version_spec}" if version_spec else package
+        slug = _slugify(requirement)
+        prefix = LUA_CACHE_DIR / slug
+        binary = prefix / "bin" / binary_name
+        meta_file = LUA_META_DIR / f"{slug}.json"
+
+        if binary.exists() and meta_file.exists():
+            try:
+                meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                if meta.get("requirement") == requirement:
+                    return binary
+            except json.JSONDecodeError:
+                pass
+
+        meta_file.parent.mkdir(parents=True, exist_ok=True)
+        (prefix / "bin").mkdir(parents=True, exist_ok=True)
+
+        install_cmd = ["luarocks", "install", package]
+        if version_spec:
+            install_cmd.append(str(version_spec))
+        install_cmd.extend(["--tree", str(prefix)])
+
+        subprocess.run(  # nosec B603 - controlled luarocks install
+            install_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        if not binary.exists():
+            raise RuntimeError(f"Failed to install Lua tool '{tool.name}'")
+
+        meta_file.write_text(json.dumps({"requirement": requirement}), encoding="utf-8")
+        binary.chmod(binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        return binary
+
+    @staticmethod
+    def _package_spec(tool: Tool) -> tuple[str, str | None]:
+        if tool.package:
+            package, version = _split_package_spec(tool.package)
+            if version is None:
+                version = tool.min_version
+            return package, version
+        return tool.name, tool.min_version
+
+    @staticmethod
+    def _lua_env(bin_dir: Path) -> dict[str, str]:
+        path_value = os.environ.get("PATH", "")
+        entries = [str(bin_dir)]
+        if path_value:
+            entries.append(path_value)
+        return {
+            "PATH": os.pathsep.join(entries),
+        }
+
+
 class RustRuntime(RuntimeHandler):
     """Provision Rust tooling using ``cargo install`` with caching."""
 
@@ -637,6 +742,7 @@ class CommandPreparer:
             "python": PythonRuntime(self._versions),
             "npm": NpmRuntime(self._versions),
             "go": GoRuntime(self._versions),
+            "lua": LuaRuntime(self._versions),
             "rust": RustRuntime(self._versions),
             "binary": BinaryRuntime(self._versions),
         }
@@ -670,8 +776,12 @@ class CommandPreparer:
         NPM_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         GO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         GO_BIN_DIR.mkdir(parents=True, exist_ok=True)
+        LUA_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        LUA_BIN_DIR.mkdir(parents=True, exist_ok=True)
+        LUA_META_DIR.mkdir(parents=True, exist_ok=True)
         RUST_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         RUST_BIN_DIR.mkdir(parents=True, exist_ok=True)
+        RUST_META_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _split_package_spec(spec: str) -> tuple[str, str | None]:

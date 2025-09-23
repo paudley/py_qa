@@ -27,6 +27,9 @@ from pyqa.parsers import (
     parse_pyright,
     parse_ruff,
     parse_tsc,
+    parse_lualint,
+    parse_luacheck,
+    parse_dotenv_linter,
 )
 from pyqa.severity import Severity
 from pyqa.tools.base import ToolContext
@@ -234,6 +237,49 @@ def test_parse_dockerfilelint() -> None:
     assert diag.code == "Clarity"
     assert diag.line == 2
     assert "Avoid latest" in diag.message
+
+
+def test_parse_luacheck() -> None:
+    parser = TextParser(parse_luacheck)
+    stdout = """
+    lib/module.lua:10:5: (W113) unused argument x
+    lib/module.lua:12:1: (E011) expected assignment or function call
+    Total: 1 warning / 1 error in 1 file
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 2
+    first = diags[0]
+    assert first.code == "W113"
+    assert first.severity.value == "warning"
+    second = diags[1]
+    assert second.code == "E011"
+    assert second.severity.value == "error"
+
+
+def test_parse_lualint() -> None:
+    parser = TextParser(parse_lualint)
+    stdout = """
+    src/example.lua:4: *** global SET of realy_aborting
+    src/example.lua:5: global get of abortt
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 2
+    first = diags[0]
+    assert first.file == "src/example.lua"
+    assert first.line == 4
+    assert "SET of realy_aborting" in first.message
+
+
+def test_parse_dotenv_linter() -> None:
+    parser = TextParser(parse_dotenv_linter)
+    stdout = """
+    .env:3 LowercaseKey: The key should be uppercase
+    .env:5 LeadingSpace: Unexpected leading space
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 2
+    assert diags[0].code == "LowercaseKey"
+    assert diags[1].code == "LeadingSpace"
 
 
 def test_parse_tsc() -> None:

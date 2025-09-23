@@ -35,6 +35,7 @@ LANGUAGE_EXTENSIONS: Final[dict[str, set[str]]] = {
     "yaml": {".yml", ".yaml"},
     "docker": set(),
     "dotenv": set(),
+    "lua": {".lua"},
 }
 
 LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
@@ -94,9 +95,14 @@ LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
         ".env.example",
         ".env.template",
     },
+    "lua": {
+        ".luacheckrc",
+        "init.lua",
+    },
 }
 
 LANGUAGE_FILENAMES: Final[dict[str, set[str]]] = {
     "docker": {"dockerfile", "containerfile"},
     "dotenv": {".env", "env"},
+    "lua": {"init.lua"},
 }

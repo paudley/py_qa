@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 import requests
+import shutil
 
 from ..models import RawDiagnostic
 from ..parsers import (
@@ -28,6 +29,8 @@ from ..parsers import (
     parse_yamllint,
     parse_hadolint,
     parse_dotenv_linter,
+    parse_lualint,
+    parse_luacheck,
     parse_golangci_lint,
     parse_actionlint,
     parse_kube_linter,
@@ -86,6 +89,9 @@ def _as_bool(value: Any) -> bool | None:
 
 ACTIONLINT_VERSION_DEFAULT = "1.7.1"
 HADOLINT_VERSION_DEFAULT = "2.12.0"
+_LUAROCKS_AVAILABLE = shutil.which("luarocks") is not None
+_LUA_AVAILABLE = shutil.which("lua") is not None
+_CARGO_AVAILABLE = shutil.which("cargo") is not None
 
 
 def _ensure_actionlint(version: str, cache_root: Path) -> Path:
@@ -172,6 +178,22 @@ def _ensure_hadolint(version: str, cache_root: Path) -> Path:
     binary.write_bytes(response.content)
     binary.chmod(binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return binary
+
+
+def _ensure_lualint(cache_root: Path) -> Path:
+    base_dir = cache_root / "lualint"
+    script = base_dir / "lualint.lua"
+    if script.exists():
+        return script
+
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    url = "https://raw.githubusercontent.com/philips/lualint/master/lualint"
+    response = requests.get(url, timeout=30)
+    response.raise_for_status()
+    script.write_bytes(response.content)
+    script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return script
 
 
 def _parse_gofmt_check(stdout: str, _context: ToolContext) -> list[RawDiagnostic]:
@@ -1126,6 +1148,87 @@ class _DotenvLinterCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _LualintCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cache_root = ctx.root / ".lint-cache"
+        script = _ensure_lualint(cache_root)
+        cmd = list(self.base)
+        cmd.append(str(script))
+
+        relaxed = _as_bool(_setting(ctx.settings, "relaxed"))
+        strict = _as_bool(_setting(ctx.settings, "strict"))
+        if relaxed:
+            cmd.append("-r")
+        if strict:
+            cmd.append("-s")
+
+        args = _settings_list(_setting(ctx.settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
+class _LuacheckCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+
+        def ensure_flag(flag: str, *values: str) -> None:
+            if flag not in cmd:
+                cmd.append(flag)
+                cmd.extend(values)
+
+        ensure_flag("--formatter", "plain")
+        if "--codes" not in cmd:
+            cmd.append("--codes")
+        if "--ranges" not in cmd:
+            cmd.append("--ranges")
+        if "--no-color" not in cmd:
+            cmd.append("--no-color")
+
+        root = ctx.root
+        settings = ctx.settings
+
+        config = _setting(settings, "config")
+        if config:
+            cmd.extend(["--config", str(_resolve_path(root, config))])
+
+        std = _setting(settings, "std")
+        if std:
+            cmd.extend(["--std", str(std)])
+
+        globals_list = _settings_list(_setting(settings, "globals"))
+        if globals_list:
+            cmd.extend(["--globals", ",".join(globals_list)])
+
+        read_globals = _settings_list(_setting(settings, "read-globals", "read_globals"))
+        if read_globals:
+            cmd.extend(["--read-globals", ",".join(read_globals)])
+
+        ignore = _settings_list(_setting(settings, "ignore"))
+        if ignore:
+            cmd.extend(["--ignore", ",".join(ignore)])
+
+        exclude = _settings_list(_setting(settings, "exclude-files", "exclude_files"))
+        for value in exclude:
+            cmd.extend(["--exclude-files", str(_resolve_path(root, value))])
+
+        if _as_bool(_setting(settings, "quiet")):
+            cmd.append("--quiet")
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _TscCommand(CommandBuilder):
     base: Sequence[str]
 
@@ -1659,6 +1762,25 @@ def _builtin_tools() -> Iterable[Tool]:
         package="dotenv-linter",
         min_version="3.3.0",
         version_command=("dotenv-linter", "--version"),
+        default_enabled=_CARGO_AVAILABLE,
+    )
+
+    yield Tool(
+        name="lualint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_LualintCommand(base=("lua",)),
+                append_files=True,
+                description="Static analysis for Lua globals via lualint.",
+                parser=TextParser(parse_lualint),
+            ),
+        ),
+        languages=("lua",),
+        file_extensions=(".lua",),
+        description="Lua bytecode-based global usage linter.",
+        runtime="binary",
+        default_enabled=_LUA_AVAILABLE,
     )
 
     yield Tool(
@@ -1716,6 +1838,27 @@ def _builtin_tools() -> Iterable[Tool]:
         package="typescript@5.6.3",
         min_version="5.6.3",
         version_command=("tsc", "--version"),
+    )
+
+    yield Tool(
+        name="luacheck",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_LuacheckCommand(base=("luacheck",)),
+                append_files=True,
+                description="Lint Lua sources using luacheck.",
+                parser=TextParser(parse_luacheck),
+            ),
+        ),
+        languages=("lua",),
+        file_extensions=(".lua",),
+        description="Lua static analyzer supporting custom standards.",
+        runtime="lua",
+        package="luacheck",
+        min_version="1.2.0",
+        version_command=("luacheck", "--version"),
+        default_enabled=_LUAROCKS_AVAILABLE,
     )
 
     yield Tool(
