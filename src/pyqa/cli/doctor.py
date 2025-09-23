@@ -67,7 +67,11 @@ def run_doctor(root: Path, *, console: Console | None = None) -> int:
         load_result = loader.load_with_trace()
     except ConfigError as exc:  # pragma: no cover - defensive, surfaced to user
         console.print(
-            Panel(f"[red]Failed to load configuration:[/red] {exc}", title="Configuration", border_style="red")
+            Panel(
+                f"[red]Failed to load configuration:[/red] {exc}",
+                title="Configuration",
+                border_style="red",
+            )
         )
         return 1
 
@@ -82,7 +86,9 @@ def run_doctor(root: Path, *, console: Console | None = None) -> int:
     env_checks = _collect_environment_checks()
     for check in env_checks:
         status_style = "green" if check.ok else "red"
-        environment_table.add_row(check.name, f"[{status_style}]{check.status}[/]", check.detail or "-")
+        environment_table.add_row(
+            check.name, f"[{status_style}]{check.status}[/]", check.detail or "-"
+        )
 
     console.print(environment_table)
 
@@ -114,17 +120,26 @@ def run_doctor(root: Path, *, console: Console | None = None) -> int:
         console.print(warning_panel)
 
     if load_result.updates:
-        overrides_table = Table(title="Configuration Overrides", box=box.SIMPLE, expand=True)
+        overrides_table = Table(
+            title="Configuration Overrides", box=box.SIMPLE, expand=True
+        )
         overrides_table.add_column("Section", style="bold")
         overrides_table.add_column("Field")
         overrides_table.add_column("Source")
         overrides_table.add_column("Value", overflow="fold")
         for update in load_result.updates:
             pretty_value = Pretty(update.value)
-            overrides_table.add_row(update.section, str(update.field), update.source, pretty_value)
+            overrides_table.add_row(
+                update.section, str(update.field), update.source, pretty_value
+            )
         console.print(overrides_table)
     else:
-        console.print(Panel("[green]No configuration overrides detected.[/green]", title="Configuration"))
+        console.print(
+            Panel(
+                "[green]No configuration overrides detected.[/green]",
+                title="Configuration",
+            )
+        )
 
     # Tooling status
     tool_summaries = _collect_tool_summaries(config)
@@ -214,7 +229,9 @@ def _probe_program(executable: str, required: bool) -> EnvironmentCheck:
         detail = version or path
         return EnvironmentCheck(name=executable, status="ok", ok=True, detail=detail)
     status = "missing" if required else "missing (optional)"
-    return EnvironmentCheck(name=executable, status=status, ok=not required, detail="Not found in PATH")
+    return EnvironmentCheck(
+        name=executable, status=status, ok=not required, detail="Not found in PATH"
+    )
 
 
 def _probe_module(module: str, optional: bool) -> EnvironmentCheck:
@@ -224,7 +241,9 @@ def _probe_module(module: str, optional: bool) -> EnvironmentCheck:
         status = "missing" if optional else "not ok"
         detail = f"{type(exc).__name__}: {exc}"
         return EnvironmentCheck(name=module, status=status, ok=optional, detail=detail)
-    return EnvironmentCheck(name=module, status="ok", ok=True, detail="Import successful")
+    return EnvironmentCheck(
+        name=module, status="ok", ok=True, detail="Import successful"
+    )
 
 
 def _collect_tool_summaries(config: Config) -> list[ToolSummary]:
@@ -245,7 +264,9 @@ def _collect_tool_summaries(config: Config) -> list[ToolSummary]:
 def _collect_grammar_statuses() -> list[GrammarStatus]:
     resolver = TreeSitterContextResolver()
     statuses: list[GrammarStatus] = []
-    for language, grammar in sorted(resolver._GRAMMAR_NAMES.items()):  # pylint: disable=protected-access
+    for language, grammar in sorted(
+        resolver._GRAMMAR_NAMES.items()
+    ):  # pylint: disable=protected-access
         module_name = f"tree_sitter_{grammar.replace('-', '_')}"
         try:
             module = importlib.import_module(module_name)
@@ -254,7 +275,14 @@ def _collect_grammar_statuses() -> list[GrammarStatus]:
         except ModuleNotFoundError:
             available = False
             version = None
-        statuses.append(GrammarStatus(language=language, module=module_name, available=available, version=version))
+        statuses.append(
+            GrammarStatus(
+                language=language,
+                module=module_name,
+                available=available,
+                version=version,
+            )
+        )
     return statuses
 
 
@@ -262,7 +290,9 @@ def _grammar_version(module_name: str, module: object) -> str | None:
     dist_name = module_name.replace("_", "-")
     try:
         return importlib_metadata.version(dist_name)
-    except importlib_metadata.PackageNotFoundError:  # pragma: no cover - best effort metadata lookup
+    except (
+        importlib_metadata.PackageNotFoundError
+    ):  # pragma: no cover - best effort metadata lookup
         return getattr(module, "__version__", None)
 
 

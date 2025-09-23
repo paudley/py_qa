@@ -55,19 +55,19 @@ class TreeSitterContextResolver:
     """Enrich diagnostics with structural context using Tree-sitter."""
 
     _LANGUAGE_ALIASES = {
-    "python": {".py", ".pyi"},
-    "markdown": {".md", ".markdown", ".mdx"},
-    "json": {".json"},
-    "javascript": {".js", ".jsx", ".ts", ".tsx"},
-    "go": {".go"},
-    "rust": {".rs"},
-    "sql": {".sql"},
-    "yaml": {".yaml", ".yml"},
-    "shell": {".sh", ".bash", ".zsh"},
-    "lua": {".lua"},
-    "php": {".php", ".phtml"},
-    "toml": {".toml"},
-    "make": {".mk"},
+        "python": {".py", ".pyi"},
+        "markdown": {".md", ".markdown", ".mdx"},
+        "json": {".json"},
+        "javascript": {".js", ".jsx", ".ts", ".tsx"},
+        "go": {".go"},
+        "rust": {".rs"},
+        "sql": {".sql"},
+        "yaml": {".yaml", ".yml"},
+        "shell": {".sh", ".bash", ".zsh"},
+        "lua": {".lua"},
+        "php": {".php", ".phtml"},
+        "toml": {".toml"},
+        "make": {".mk"},
     }
 
     _GRAMMAR_NAMES = {
@@ -183,7 +183,9 @@ class TreeSitterContextResolver:
                 if context:
                     return context
             elif language == "markdown":
-                context = self._markdown_context(parsed.tree.root_node, line, parsed.source)
+                context = self._markdown_context(
+                    parsed.tree.root_node, line, parsed.source
+                )
                 if context:
                     return context
             elif language == "json":
@@ -325,7 +327,12 @@ class TreeSitterContextResolver:
             text = lines[idx].strip()
             if text.startswith("#"):
                 return text.lstrip("#").strip()
-            if text and idx > 0 and all(ch == text[0] for ch in text) and text[0] in "=-":
+            if (
+                text
+                and idx > 0
+                and all(ch == text[0] for ch in text)
+                and text[0] in "=-"
+            ):
                 heading = lines[idx - 1].strip()
                 if heading:
                     return heading

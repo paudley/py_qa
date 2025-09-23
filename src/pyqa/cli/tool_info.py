@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
@@ -25,14 +26,18 @@ def run_tool_info(tool_name: str, root: Path, *, console: Console | None = None)
 
     tool = DEFAULT_REGISTRY.try_get(tool_name)
     if tool is None:
-        console.print(Panel(f"[red]Unknown tool:[/red] {tool_name}", border_style="red"))
+        console.print(
+            Panel(f"[red]Unknown tool:[/red] {tool_name}", border_style="red")
+        )
         return 1
 
     loader = ConfigLoader.for_root(root)
     try:
         load_result = loader.load_with_trace()
     except ConfigError as exc:  # pragma: no cover - defensive
-        console.print(Panel(f"[red]Failed to load configuration:[/red] {exc}", border_style="red"))
+        console.print(
+            Panel(f"[red]Failed to load configuration:[/red] {exc}", border_style="red")
+        )
         return 1
 
     status = check_tool_status(tool)
@@ -52,7 +57,13 @@ def run_tool_info(tool_name: str, root: Path, *, console: Console | None = None)
             )
         )
     else:
-        console.print(Panel("No tool-specific overrides detected.", title="Configuration", border_style="green"))
+        console.print(
+            Panel(
+                "No tool-specific overrides detected.",
+                title="Configuration",
+                border_style="green",
+            )
+        )
 
     if status.raw_output:
         console.print(
@@ -64,7 +75,9 @@ def run_tool_info(tool_name: str, root: Path, *, console: Console | None = None)
         )
 
     warnings = [
-        update for update in load_result.updates if update.section == "tool_settings" and update.field == tool.name
+        update
+        for update in load_result.updates
+        if update.section == "tool_settings" and update.field == tool.name
     ]
     if warnings:
         warning_table = Table(title="Configuration Provenance", box=box.SIMPLE)
@@ -92,7 +105,9 @@ def _build_metadata_table(tool: Tool, status: ToolStatus) -> Table:
     table.add_row("Languages", ", ".join(tool.languages) or "-")
     table.add_row("File Extensions", ", ".join(tool.file_extensions) or "-")
     table.add_row("Config Files", ", ".join(tool.config_files) or "-")
-    version_cmd = " ".join(map(str, tool.version_command)) if tool.version_command else "-"
+    version_cmd = (
+        " ".join(map(str, tool.version_command)) if tool.version_command else "-"
+    )
     table.add_row("Version Command", version_cmd)
     table.add_row("Current Version", status.version or "-")
     table.add_row("Status", status.status)
