@@ -24,6 +24,7 @@ from ..parsers import (
     parse_cargo_clippy,
     parse_eslint,
     parse_stylelint,
+    parse_yamllint,
     parse_golangci_lint,
     parse_actionlint,
     parse_kube_linter,
@@ -978,6 +979,36 @@ class _StylelintCommand(CommandBuilder):
 
 
 @dataclass(slots=True)
+class _YamllintCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        root = ctx.root
+        settings = ctx.settings
+
+        config_file = _setting(settings, "config-file", "config_file")
+        if config_file:
+            cmd.extend(["--config-file", str(_resolve_path(root, config_file))])
+
+        config_data = _setting(settings, "config-data", "config_data")
+        if config_data:
+            cmd.extend(["--config-data", str(config_data)])
+
+        if _as_bool(_setting(settings, "strict")):
+            cmd.append("--strict")
+
+        if "--format" not in cmd and "-f" not in cmd:
+            cmd.extend(["--format", "json"])
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
+@dataclass(slots=True)
 class _TscCommand(CommandBuilder):
     base: Sequence[str]
 
@@ -1434,6 +1465,26 @@ def _builtin_tools() -> Iterable[Tool]:
         package="stylelint@16.11.0",
         min_version="16.11.0",
         version_command=("stylelint", "--version"),
+    )
+
+    yield Tool(
+        name="yamllint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=_YamllintCommand(base=("yamllint",)),
+                append_files=True,
+                description="Lint YAML files using yamllint.",
+                parser=JsonParser(parse_yamllint),
+            ),
+        ),
+        languages=("yaml",),
+        file_extensions=(".yml", ".yaml"),
+        description="YAML linter enforcing style and correctness rules.",
+        runtime="python",
+        package="yamllint",
+        min_version="1.35.1",
+        version_command=("yamllint", "--version"),
     )
 
     yield Tool(

@@ -409,6 +409,43 @@ def parse_stylelint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnost
     return results
 
 
+def parse_yamllint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse yamllint JSON output."""
+
+    items = payload if isinstance(payload, list) else []
+    results: list[RawDiagnostic] = []
+    for entry in items:
+        if not isinstance(entry, dict):
+            continue
+        path = entry.get("file")
+        problems = entry.get("problems") or entry.get("errors")
+        if not isinstance(problems, list):
+            continue
+        for problem in problems:
+            if not isinstance(problem, dict):
+                continue
+            message = str(problem.get("message", "")).strip()
+            if not message:
+                continue
+            level = str(problem.get("level", "warning")).lower()
+            severity = {
+                "error": Severity.ERROR,
+                "warning": Severity.WARNING,
+            }.get(level, Severity.WARNING)
+            results.append(
+                RawDiagnostic(
+                    file=path,
+                    line=problem.get("line"),
+                    column=problem.get("column"),
+                    severity=severity,
+                    message=message,
+                    code=str(problem.get("rule")) if problem.get("rule") else None,
+                    tool="yamllint",
+                )
+            )
+    return results
+
+
 _TSC_PATTERN = re.compile(
     r"^(?P<file>[^:(\n]+)\((?P<line>\d+),(?P<col>\d+)\):\s*"
     r"(?P<severity>error|warning)\s*(?P<code>[A-Z]+\d+)?\s*:?\s*(?P<message>.+)$"
@@ -531,6 +568,7 @@ __all__ = [
     "parse_bandit",
     "parse_eslint",
     "parse_stylelint",
+    "parse_yamllint",
     "parse_tsc",
     "parse_golangci_lint",
     "parse_cargo_clippy",

@@ -32,6 +32,7 @@ LANGUAGE_EXTENSIONS: Final[dict[str, set[str]]] = {
     "sql": {".sql"},
     "kubernetes": set(),
     "css": {".css", ".scss", ".sass", ".less"},
+    "yaml": {".yml", ".yaml"},
 }
 
 LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
@@ -73,5 +74,12 @@ LANGUAGE_MARKERS: Final[dict[str, set[str]]] = {
         "stylelint.config.mjs",
         "stylelint.config.ts",
         "stylelint.config.coffee",
+    },
+    "yaml": {
+        ".yamllint",
+        ".yamllint.yaml",
+        ".yamllint.yml",
+        "yamllint.yaml",
+        "yamllint.yml",
     },
 }

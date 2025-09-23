@@ -17,6 +17,7 @@ from pyqa.parsers import (
     parse_cargo_clippy,
     parse_eslint,
     parse_stylelint,
+    parse_yamllint,
     parse_golangci_lint,
     parse_kube_linter,
     parse_mypy,
@@ -184,6 +185,28 @@ def test_parse_stylelint() -> None:
     severity = diag.severity
     assert isinstance(severity, Severity)
     assert severity.value == "error"
+
+
+def test_parse_yamllint() -> None:
+    parser = JsonParser(parse_yamllint)
+    stdout = """
+    [
+      {
+        "file": "configs/app.yaml",
+        "problems": [
+          {"line": 5, "column": 3, "message": "too many spaces after colon", "level": "warning", "rule": "colons"}
+        ]
+      }
+    ]
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == "configs/app.yaml"
+    assert diag.code == "colons"
+    severity = diag.severity
+    assert isinstance(severity, Severity)
+    assert severity.value == "warning"
 
 
 def test_parse_tsc() -> None:
