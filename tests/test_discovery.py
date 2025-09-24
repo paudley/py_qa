@@ -2,8 +2,6 @@
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 """Tests for filesystem and git discovery strategies."""
 
-# pylint: disable=missing-function-docstring
-
 import subprocess
 from pathlib import Path
 
@@ -20,7 +18,9 @@ def test_filesystem_discovery_respects_excludes(tmp_path: Path) -> None:
 
     node_modules = project_root / "node_modules"
     node_modules.mkdir()
-    (node_modules / "ignored.js").write_text("console.log('ignore');\n", encoding="utf-8")
+    (node_modules / "ignored.js").write_text(
+        "console.log('ignore');\n", encoding="utf-8"
+    )
 
     excluded_dir = project_root / "app" / "generated"
     excluded_dir.mkdir()
@@ -37,6 +37,41 @@ def test_filesystem_discovery_respects_excludes(tmp_path: Path) -> None:
     assert included.resolve() in files
     assert not any(path.name == "ignored.js" for path in files)
     assert not any(path.name == "machine.py" for path in files)
+
+
+def test_filesystem_discovery_skips_embedded_py_qa(tmp_path: Path) -> None:
+    project_root = tmp_path
+    (project_root / "app").mkdir()
+    keep = project_root / "app" / "keep.py"
+    keep.write_text("print('keep')\n", encoding="utf-8")
+
+    vendor_py_qa = project_root / "vendor" / "py_qa"
+    vendor_py_qa.mkdir(parents=True)
+    ignored = vendor_py_qa / "ignored.py"
+    ignored.write_text("print('ignore')\n", encoding="utf-8")
+
+    cfg = FileDiscoveryConfig(roots=[Path(".")])
+    discovery = FilesystemDiscovery()
+    files = list(discovery.discover(cfg, project_root))
+
+    assert keep.resolve() in files
+    assert ignored.resolve() not in files
+
+
+def test_filesystem_discovery_includes_py_qa_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "py_qa"
+    workspace.mkdir()
+    (workspace / "pyproject.toml").write_text(
+        '[project]\nname = "py_qa"\n', encoding="utf-8"
+    )
+    tracked = workspace / "tracked.py"
+    tracked.write_text("print('tracked')\n", encoding="utf-8")
+
+    cfg = FileDiscoveryConfig(roots=[Path(".")])
+    discovery = FilesystemDiscovery()
+    files = list(discovery.discover(cfg, workspace))
+
+    assert tracked.resolve() in files
 
 
 def test_filesystem_discovery_respects_limit_to(tmp_path: Path) -> None:

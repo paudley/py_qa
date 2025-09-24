@@ -15,6 +15,7 @@ ANSI = {
     "green": "\033[32;1m",
     "yellow": "\033[33;1m",
     "white": "\033[37;1m",
+    "orange": "\033[38;5;208m",
 }
 
 
@@ -23,7 +24,7 @@ def is_tty() -> bool:
 
     try:
         return sys.stdout.isatty()
-    except (AttributeError, ValueError):  # pragma: no cover - defensive
+    except (AttributeError, ValueError):
         return False
 
 

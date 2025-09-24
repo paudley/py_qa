@@ -2,11 +2,10 @@
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 """Tests for the result cache helpers."""
 
-# pylint: disable=missing-function-docstring
-
 from pathlib import Path
 
 from pyqa.execution.cache import ResultCache
+from pyqa.metrics import compute_file_metrics, normalise_path_key
 from pyqa.models import Diagnostic, ToolOutcome
 from pyqa.severity import Severity
 
@@ -41,6 +40,8 @@ def test_result_cache_roundtrip(tmp_path: Path) -> None:
     outcome = make_outcome()
     cmd = ["demo", str(source)]
 
+    metrics = {normalise_path_key(source): compute_file_metrics(source)}
+
     cache.store(
         tool="demo",
         action="lint",
@@ -48,6 +49,7 @@ def test_result_cache_roundtrip(tmp_path: Path) -> None:
         files=[source],
         token="token",
         outcome=outcome,
+        file_metrics=metrics,
     )
 
     loaded = cache.load(
@@ -59,8 +61,11 @@ def test_result_cache_roundtrip(tmp_path: Path) -> None:
     )
 
     assert loaded is not None
-    assert loaded.tool == outcome.tool
-    assert loaded.diagnostics[0].severity == Severity.WARNING
+    assert loaded.outcome.tool == outcome.tool
+    assert loaded.outcome.diagnostics[0].severity == Severity.WARNING
+    key = normalise_path_key(source)
+    assert key in loaded.file_metrics
+    assert loaded.file_metrics[key].line_count == 1
 
 
 def test_result_cache_miss_on_modified_file(tmp_path: Path) -> None:
@@ -72,6 +77,8 @@ def test_result_cache_miss_on_modified_file(tmp_path: Path) -> None:
     outcome = make_outcome()
     cmd = ["demo", str(source)]
 
+    metrics = {normalise_path_key(source): compute_file_metrics(source)}
+
     cache.store(
         tool="demo",
         action="lint",
@@ -79,6 +86,7 @@ def test_result_cache_miss_on_modified_file(tmp_path: Path) -> None:
         files=[source],
         token="token",
         outcome=outcome,
+        file_metrics=metrics,
     )
 
     # Modify file to invalidate cache

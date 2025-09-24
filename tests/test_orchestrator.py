@@ -2,21 +2,21 @@
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 """Integration tests for orchestrator execution flow."""
 
-# pylint: disable=missing-function-docstring
-
 import subprocess
 from pathlib import Path
+from typing import Sequence
 
 from pyqa.config import Config
 from pyqa.execution.orchestrator import Orchestrator
-from pyqa.tools.base import Tool, ToolAction, ToolContext
+from pyqa.models import RawDiagnostic
+from pyqa.testing import flatten_test_suppressions
+from pyqa.tools.base import DeferredCommand, Tool, ToolAction, ToolContext
 from pyqa.tools.registry import ToolRegistry
 
 
 class FakeDiscovery:
     """Simple stub returning a pre-defined file list."""
 
-    # pylint: disable=too-few-public-methods
     def __init__(self, files: list[Path]) -> None:
         self._files = files
 
@@ -42,7 +42,10 @@ class SettingsCommand:
 
 def test_orchestrator_runs_registered_tool(tmp_path: Path) -> None:
     target = tmp_path / "module.py"
-    target.write_text("print('ok')\n", encoding="utf-8")
+    target.write_text(
+        "# SPDX-License-Identifier: MIT\nprint('ok')\n",
+        encoding="utf-8",
+    )
 
     registry = ToolRegistry()
 
@@ -66,7 +69,9 @@ def test_orchestrator_runs_registered_tool(tmp_path: Path) -> None:
         assert Path(cmd[2]) == target
         env = kwargs.get("env", {})
         assert env.get("DUMMY_ENV") == "1"
-        return subprocess.CompletedProcess(cmd, returncode=0, stdout="output", stderr="")
+        return subprocess.CompletedProcess(
+            cmd, returncode=0, stdout="output", stderr=""
+        )
 
     orchestrator = Orchestrator(
         registry=registry,
@@ -118,7 +123,9 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
 
     def runner(cmd, **kwargs):
         calls.append(list(cmd))
-        return subprocess.CompletedProcess(cmd, returncode=0, stdout="output", stderr="")
+        return subprocess.CompletedProcess(
+            cmd, returncode=0, stdout="output", stderr=""
+        )
 
     orchestrator = Orchestrator(
         registry=registry,
@@ -146,7 +153,9 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
 
     def runner_settings(cmd, **kwargs):
         calls_after.append(list(cmd))
-        return subprocess.CompletedProcess(cmd, returncode=0, stdout="updated", stderr="")
+        return subprocess.CompletedProcess(
+            cmd, returncode=0, stdout="updated", stderr=""
+        )
 
     orchestrator_settings = Orchestrator(
         registry=registry,
@@ -156,3 +165,84 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
     result_settings = orchestrator_settings.run(cfg, root=tmp_path)
     assert len(calls_after) == 1
     assert result_settings.outcomes[0].stdout == "updated"
+
+
+def test_orchestrator_filters_suppressed_diagnostics(tmp_path: Path) -> None:
+    target = tmp_path / "tests" / "test_tool_env.py"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("print('ok')\n", encoding="utf-8")
+
+    class StaticParser:
+        def __init__(self, *diagnostics: RawDiagnostic) -> None:
+            self._diagnostics = list(diagnostics)
+
+        def parse(
+            self,
+            stdout: str,
+            stderr: str,
+            *,
+            context: ToolContext,
+        ) -> Sequence[RawDiagnostic]:
+            del stdout, stderr, context
+            return list(self._diagnostics)
+
+    suppressed = RawDiagnostic(
+        file="tests/test_tool_env.py",
+        line=94,
+        column=None,
+        severity="warning",
+        message="W0613 Unused argument 'command'",
+        code="W0613",
+        tool="pylint",
+    )
+
+    duplicate_comment = RawDiagnostic(
+        file="tests/test_tool_env.py",
+        line=1,
+        column=None,
+        severity="refactor",
+        message=(
+            "Similar lines in 2 files\n"
+            "==tests/test_tool_env.py:[1:3]\n"
+            "==tests/other.py:[5:7]\n"
+            "    # SPDX-License-Identifier: MIT"
+        ),
+        code="R0801",
+        tool="pylint",
+    )
+
+    registry = ToolRegistry()
+    registry.register(
+        Tool(
+            name="pylint",
+            actions=(
+                ToolAction(
+                    name="lint",
+                    command=DeferredCommand(("pylint",)),
+                    append_files=False,
+                    parser=StaticParser(suppressed, duplicate_comment),
+                ),
+            ),
+            file_extensions=(".py",),
+            runtime="binary",
+        )
+    )
+
+    def runner(cmd, **_kwargs):
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    orchestrator = Orchestrator(
+        registry=registry,
+        discovery=FakeDiscovery([target]),
+        runner=runner,
+    )
+
+    cfg = Config()
+    cfg.output.tool_filters["pylint"] = flatten_test_suppressions(("python",))["pylint"]
+
+    result = orchestrator.run(cfg, root=tmp_path)
+
+    assert len(result.outcomes) == 1
+    outcome = result.outcomes[0]
+    assert outcome.stdout == ""
+    assert outcome.diagnostics == []

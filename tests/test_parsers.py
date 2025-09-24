@@ -2,8 +2,6 @@
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 """Tests covering parser adapters for supported tools."""
 
-# pylint: disable=missing-function-docstring
-
 from pathlib import Path
 
 from pyqa.config import Config
@@ -291,10 +289,14 @@ def test_parse_luacheck() -> None:
     assert len(diags) == 2
     first = diags[0]
     assert first.code == "W113"
-    assert first.severity.value == "warning"
+    first_severity = first.severity
+    assert isinstance(first_severity, Severity)
+    assert first_severity.value == "warning"
     second = diags[1]
     assert second.code == "E011"
-    assert second.severity.value == "error"
+    second_severity = second.severity
+    assert isinstance(second_severity, Severity)
+    assert second_severity.value == "error"
 
 
 def test_parse_lualint() -> None:
@@ -340,7 +342,9 @@ def test_parse_remark() -> None:
     diag = diags[0]
     assert diag.file == "README.md"
     assert diag.code == "list-item-spacing"
-    assert diag.severity.value == "warning"
+    severity = diag.severity
+    assert isinstance(severity, Severity)
+    assert severity.value == "warning"
 
 
 def test_parse_speccy() -> None:
@@ -363,7 +367,9 @@ def test_parse_speccy() -> None:
     diag = diags[0]
     assert diag.file == "openapi.yaml"
     assert "paths/users" in diag.message
-    assert diag.severity.value == "error"
+    severity = diag.severity
+    assert isinstance(severity, Severity)
+    assert severity.value == "error"
 
 
 def test_parse_shfmt() -> None:
@@ -391,7 +397,9 @@ def test_parse_phplint() -> None:
     diag = diags[0]
     assert diag.file == "src/index.php"
     assert diag.line == 14
-    assert diag.severity.value == "error"
+    severity = diag.severity
+    assert isinstance(severity, Severity)
+    assert severity.value == "error"
     assert diag.tool == "phplint"
 
 
@@ -447,7 +455,9 @@ def test_parse_checkmake() -> None:
     diag = diags[0]
     assert diag.file == "Makefile"
     assert diag.code == "missing-help-text"
-    assert diag.severity.value == "warning"
+    severity = diag.severity
+    assert isinstance(severity, Severity)
+    assert severity.value == "warning"
 
 
 def test_parse_tsc() -> None:

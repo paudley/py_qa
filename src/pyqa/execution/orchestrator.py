@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-import subprocess  # nosec B404 - required for executing configured tool commands
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Callable, Mapping, Sequence
+from typing import Any, Callable, Mapping, Protocol, Sequence
+
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from ..config import Config
 from ..context import CONTEXT_RESOLVER
@@ -22,16 +24,92 @@ from ..diagnostics import (
 )
 from ..discovery.base import SupportsDiscovery
 from ..environments import inject_node_defaults, prepend_venv_to_path
-from ..execution.cache import ResultCache
+from ..execution.cache import CachedEntry, ResultCache
 from ..languages import detect_languages
 from ..logging import info, warn
-from ..models import RunResult, ToolOutcome
+from ..metrics import FileMetrics, compute_file_metrics, normalise_path_key
+from ..models import Diagnostic, RunResult, ToolOutcome
 from ..severity import SeverityRuleView
-from ..tool_env import CommandPreparer
+from ..tool_env import CommandPreparer, PreparedCommand
 from ..tool_versions import load_versions, save_versions
-from ..tools import ToolAction, ToolContext
+from ..tools import Tool, ToolAction, ToolContext
 from ..tools.registry import ToolRegistry
 from .worker import run_command
+
+
+def _filter_diagnostics(
+    diagnostics: Sequence[Diagnostic],
+    tool_name: str,
+    patterns: Sequence[str],
+    root: Path,
+) -> list[Diagnostic]:
+    """Remove diagnostics matching suppression patterns for *tool_name*."""
+
+    if not diagnostics or not patterns:
+        return list(diagnostics)
+
+    compiled = [re.compile(pattern) for pattern in patterns]
+    kept: list[Diagnostic] = []
+    for diagnostic in diagnostics:
+        tool = diagnostic.tool or tool_name
+        location = diagnostic.file or "<unknown>"
+        if diagnostic.line is not None:
+            location = f"{location}:{diagnostic.line}"
+            if diagnostic.function:
+                location = f"{location}:{diagnostic.function}"
+        elif diagnostic.function:
+            location = f"{location}:{diagnostic.function}"
+
+        code = diagnostic.code or "-"
+        message = diagnostic.message.splitlines()[0].strip()
+        candidate = f"{tool}, {location}, {code}, {message}"
+
+        if any(pattern.search(candidate) for pattern in compiled):
+            continue
+
+        if tool == "pylint" and (diagnostic.code or "").upper() == "R0801":
+            lines = diagnostic.message.splitlines()
+            snippet: list[str] = []
+            for entry in lines[1:]:
+                stripped = entry.lstrip()
+                if not stripped or stripped.startswith("=="):
+                    continue
+                snippet.append(stripped)
+            context_line = (diagnostic.function or "").lstrip()
+            if context_line.startswith("#"):
+                continue
+            source_line = None
+            if diagnostic.line is not None and diagnostic.file:
+                source_line = _read_source_line(root, diagnostic.file, diagnostic.line)
+            if snippet and snippet[0].startswith("#"):
+                continue
+            if source_line is not None and source_line.lstrip().startswith("#"):
+                continue
+
+        if (
+            tool == "pylint"
+            and (diagnostic.code or "").upper() in {"W0613", "W0212", "R0801"}
+            and diagnostic.file
+            and "tests/" in diagnostic.file.replace("\\", "/")
+        ):
+            continue
+
+        kept.append(diagnostic)
+    return kept
+
+
+def _read_source_line(root: Path, file_str: str, line_no: int) -> str | None:
+    candidate = Path(file_str)
+    if not candidate.is_absolute():
+        candidate = (root / candidate).resolve()
+    try:
+        with candidate.open("r", encoding="utf-8", errors="ignore") as handle:
+            for idx, line in enumerate(handle, start=1):
+                if idx == line_no:
+                    return line.rstrip("\n")
+    except OSError:
+        return None
+    return None
 
 
 @dataclass
@@ -42,6 +120,21 @@ class OrchestratorHooks:
     after_tool: Callable[[ToolOutcome], None] | None = None
 
 
+class CommandPreparationService(Protocol):
+    """Dependency boundary for preparing commands prior to execution."""
+
+    def prepare(
+        self,
+        *,
+        tool: Tool,
+        base_cmd: Sequence[str],
+        root: Path,
+        cache_dir: Path,
+        system_preferred: bool,
+        use_local_override: bool,
+    ) -> PreparedCommand: ...
+
+
 class Orchestrator:
     """Coordinates discovery, tool selection, and execution."""
 
@@ -50,197 +143,303 @@ class Orchestrator:
         *,
         registry: ToolRegistry,
         discovery: SupportsDiscovery,
-        runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+        runner: Callable[..., Any] | None = None,
         hooks: OrchestratorHooks | None = None,
+        cmd_preparer: CommandPreparationService | None = None,
     ) -> None:
         self._registry = registry
         self._discovery = discovery
         self._runner = runner or run_command
         self._hooks = hooks or OrchestratorHooks()
-        self._cmd_preparer = CommandPreparer()
+        self._cmd_preparer = cmd_preparer or CommandPreparer()
 
     def run(self, cfg: Config, *, root: Path | None = None) -> RunResult:
-        root = root or Path.cwd()
-        prepend_venv_to_path(root)
-        inject_node_defaults()
+        root_path = self._prepare_runtime(root)
+        matched_files = self._discover_files(cfg, root_path)
+        severity_rules = build_severity_rules(cfg.severity_rules)
+        cache_ctx = self._initialize_cache(cfg, root_path)
+        state = _ExecutionState()
 
+        tool_names = self._select_tools(cfg, matched_files, root_path)
+        for name in tool_names:
+            if self._process_tool(
+                cfg=cfg,
+                tool_name=name,
+                root=root_path,
+                matched_files=matched_files,
+                severity_rules=severity_rules,
+                cache_ctx=cache_ctx,
+                state=state,
+            ):
+                break
+
+        self._execute_scheduled(cfg, root_path, severity_rules, cache_ctx, state)
+        outcomes = [state.outcomes[index] for index in sorted(state.outcomes)]
+        self._populate_missing_metrics(state, matched_files)
+        result = RunResult(
+            root=root_path,
+            files=matched_files,
+            outcomes=outcomes,
+            tool_versions=cache_ctx.versions,
+            file_metrics=dict(state.file_metrics),
+        )
+        dedupe_outcomes(result, cfg.dedupe)
+        if cache_ctx.cache and cache_ctx.versions_dirty:
+            save_versions(cache_ctx.cache_dir, cache_ctx.versions)
+        return result
+
+    def fetch_all_tools(
+        self, cfg: Config, *, root: Path | None = None
+    ) -> list[tuple[str, str, PreparedCommand]]:
+        """Prepare every tool action to warm caches without executing them."""
+
+        root_path = self._prepare_runtime(root)
+        cache_dir = (
+            cfg.execution.cache_dir
+            if cfg.execution.cache_dir.is_absolute()
+            else root_path / cfg.execution.cache_dir
+        )
+        system_preferred = not cfg.execution.use_local_linters
+        use_local_override = cfg.execution.use_local_linters
+        results: list[tuple[str, str, PreparedCommand]] = []
+        for tool in self._registry.tools():
+            settings_view = MappingProxyType(dict(cfg.tool_settings.get(tool.name, {})))
+            context = ToolContext(
+                cfg=cfg,
+                root=root_path,
+                files=tuple(),
+                settings=settings_view,
+            )
+            for action in tool.actions:
+                base_cmd = list(action.build_command(context))
+                prepared = self._cmd_preparer.prepare(
+                    tool=tool,
+                    base_cmd=base_cmd,
+                    root=root_path,
+                    cache_dir=cache_dir,
+                    system_preferred=system_preferred,
+                    use_local_override=use_local_override,
+                )
+                results.append((tool.name, action.name, prepared))
+        return results
+
+    def _prepare_runtime(self, root: Path | None) -> Path:
+        resolved = root or Path.cwd()
+        prepend_venv_to_path(resolved)
+        inject_node_defaults()
+        return resolved
+
+    def _discover_files(self, cfg: Config, root: Path) -> list[Path]:
         matched_files = self._discovery.run(cfg.file_discovery, root)
-        limits = [entry if entry.is_absolute() else (root / entry) for entry in cfg.file_discovery.limit_to]
+        limits = [
+            entry if entry.is_absolute() else (root / entry)
+            for entry in cfg.file_discovery.limit_to
+        ]
         limits = [limit.resolve() for limit in limits]
         if limits:
-            matched_files = [path for path in matched_files if self._is_within_limits(path, limits)]
+            matched_files = [
+                path for path in matched_files if self._is_within_limits(path, limits)
+            ]
         info(
             f"Discovered {len(matched_files)} file(s) to lint",
             use_emoji=cfg.output.emoji,
         )
+        return matched_files
 
-        tool_names = self._select_tools(cfg, matched_files, root)
-        severity_rules: SeverityRuleView = build_severity_rules(cfg.severity_rules)
-        cache_dir = cfg.execution.cache_dir if cfg.execution.cache_dir.is_absolute() else root / cfg.execution.cache_dir
-        cache = ResultCache(cache_dir) if cfg.execution.cache_enabled else None
-        token = self._cache_token(cfg) if cache else ""
-        tool_versions = load_versions(cache_dir) if cache else {}
-        versions_dirty = False
-        scheduled: list[_QueuedAction] = []
-        outcome_map: dict[int, ToolOutcome] = {}
-        order = 0
-        bail_triggered = False
-
-        for name in tool_names:
-            tool = self._registry.try_get(name)
-            if not tool:
-                warn(f"Unknown tool '{name}'", use_emoji=cfg.output.emoji)
-                continue
-            tool_files = self._filter_files_for_tool(tool.file_extensions, matched_files)
-            settings_view = MappingProxyType(dict(cfg.tool_settings.get(tool.name, {})))
-            context = ToolContext(
-                cfg=cfg,
-                root=root,
-                files=tool_files,
-                settings=settings_view,
+    def _initialize_cache(self, cfg: Config, root: Path) -> _CacheContext:
+        cache_dir = (
+            cfg.execution.cache_dir
+            if cfg.execution.cache_dir.is_absolute()
+            else root / cfg.execution.cache_dir
+        )
+        if not cfg.execution.cache_enabled:
+            return _CacheContext(
+                cache=None, token=None, cache_dir=cache_dir, versions={}
             )
-            if self._hooks.before_tool:
-                self._hooks.before_tool(tool.name)
-            for action in tool.actions:
-                if cfg.execution.fix_only and not action.is_fix:
-                    continue
-                if cfg.execution.check_only and action.is_fix:
-                    continue
-                cmd = list(action.build_command(context))
-                prepared = self._cmd_preparer.prepare(
-                    tool=tool,
-                    base_cmd=cmd,
-                    root=root,
-                    cache_dir=cfg.execution.cache_dir,
-                    system_preferred=not cfg.execution.use_local_linters,
-                    use_local_override=cfg.execution.use_local_linters,
+        cache = ResultCache(cache_dir)
+        token = self._cache_token(cfg)
+        versions = load_versions(cache_dir)
+        return _CacheContext(
+            cache=cache, token=token, cache_dir=cache_dir, versions=versions
+        )
+
+    def _process_tool(
+        self,
+        *,
+        cfg: Config,
+        tool_name: str,
+        root: Path,
+        matched_files: Sequence[Path],
+        severity_rules: SeverityRuleView,
+        cache_ctx: _CacheContext,
+        state: "_ExecutionState",
+    ) -> bool:
+        tool = self._registry.try_get(tool_name)
+        if tool is None:
+            warn(f"Unknown tool '{tool_name}'", use_emoji=cfg.output.emoji)
+            return False
+        tool_files = self._filter_files_for_tool(tool.file_extensions, matched_files)
+        settings_view = MappingProxyType(dict(cfg.tool_settings.get(tool.name, {})))
+        context = ToolContext(
+            cfg=cfg, root=root, files=tuple(tool_files), settings=settings_view
+        )
+        if self._hooks.before_tool:
+            self._hooks.before_tool(tool.name)
+
+        for action in tool.actions:
+            if not self._should_run_action(cfg, action):
+                continue
+            prepared = self._cmd_preparer.prepare(
+                tool=tool,
+                base_cmd=list(action.build_command(context)),
+                root=root,
+                cache_dir=cfg.execution.cache_dir,
+                system_preferred=not cfg.execution.use_local_linters,
+                use_local_override=cfg.execution.use_local_linters,
+            )
+            self._update_tool_version(cache_ctx, tool.name, prepared.version)
+            cached_entry = self._load_cached_outcome(
+                cache_ctx, tool.name, action, prepared.cmd, context.files
+            )
+            if cached_entry is not None:
+                outcome = cached_entry.outcome
+                self._record_outcome(
+                    state=state,
+                    order=state.order,
+                    tool=tool.name,
+                    action=action,
+                    context=context,
+                    cmd=tuple(prepared.cmd),
+                    outcome=outcome,
+                    file_metrics=cached_entry.file_metrics,
+                    cache_ctx=cache_ctx,
+                    from_cache=True,
                 )
-                actual_cmd = prepared.cmd
-                extra_env = prepared.env
-                if prepared.version and tool_versions.get(tool.name) != prepared.version:
-                    tool_versions[tool.name] = prepared.version
-                    versions_dirty = True
+                if cfg.execution.bail and outcome.returncode != 0:
+                    state.bail_triggered = True
+                    return True
+                state.order += 1
+                continue
 
-                if cache:
-                    cached = cache.load(
-                        tool=tool.name,
-                        action=action.name,
-                        cmd=actual_cmd,
-                        files=tool_files,
-                        token=token,
-                    )
-                    if cached:
-                        outcome_map[order] = cached
-                        if self._hooks.after_tool:
-                            self._hooks.after_tool(cached)
-                        order += 1
-                        if cfg.execution.bail and cached.returncode != 0:
-                            bail_triggered = True
-                            break
-                        continue
+            if action.is_fix:
+                outcome = self._run_action(
+                    tool.name,
+                    action,
+                    context,
+                    root,
+                    severity_rules,
+                    prepared.cmd,
+                    prepared.env,
+                )
+                self._record_outcome(
+                    state=state,
+                    order=state.order,
+                    tool=tool.name,
+                    action=action,
+                    context=context,
+                    cmd=tuple(prepared.cmd),
+                    outcome=outcome,
+                    file_metrics=None,
+                    cache_ctx=cache_ctx,
+                    from_cache=False,
+                )
+                state.order += 1
+                continue
 
-                if action.is_fix:
-                    outcome = self._run_action(
-                        tool.name,
-                        action,
-                        context,
-                        root,
-                        severity_rules,
-                        actual_cmd,
-                        extra_env,
-                    )
-                    outcome_map[order] = outcome
-                    if cache:
-                        cache.store(
-                            tool=tool.name,
-                            action=action.name,
-                            cmd=actual_cmd,
-                            files=context.files,
-                            token=token,
-                            outcome=outcome,
-                        )
-                    if self._hooks.after_tool:
-                        self._hooks.after_tool(outcome)
-                    order += 1
-                    continue
+            if cfg.execution.bail:
+                outcome = self._run_action(
+                    tool.name,
+                    action,
+                    context,
+                    root,
+                    severity_rules,
+                    prepared.cmd,
+                    prepared.env,
+                )
+                self._record_outcome(
+                    state=state,
+                    order=state.order,
+                    tool=tool.name,
+                    action=action,
+                    context=context,
+                    cmd=tuple(prepared.cmd),
+                    outcome=outcome,
+                    file_metrics=None,
+                    cache_ctx=cache_ctx,
+                    from_cache=False,
+                )
+                state.order += 1
+                if outcome.returncode != 0 and not action.ignore_exit:
+                    state.bail_triggered = True
+                    return True
+                continue
 
-                if cfg.execution.bail:
-                    outcome = self._run_action(
-                        tool.name,
-                        action,
-                        context,
-                        root,
-                        severity_rules,
-                        actual_cmd,
-                        extra_env,
-                    )
-                    outcome_map[order] = outcome
-                    if cache:
-                        cache.store(
-                            tool=tool.name,
-                            action=action.name,
-                            cmd=actual_cmd,
-                            files=context.files,
-                            token=token,
-                            outcome=outcome,
-                        )
-                    if self._hooks.after_tool:
-                        self._hooks.after_tool(outcome)
-                    order += 1
-                    if outcome.returncode != 0 and not action.ignore_exit:
-                        bail_triggered = True
-                        break
-                else:
-                    scheduled.append(
-                        _QueuedAction(
-                            order=order,
-                            tool=tool.name,
-                            action=action,
-                            context=context,
-                            cmd=actual_cmd,
-                            env=dict(extra_env),
-                        )
-                    )
-                    order += 1
-            if cfg.execution.bail and bail_triggered:
-                break
-        if cfg.execution.bail and bail_triggered:
-            scheduled = []
+            state.scheduled.append(
+                _QueuedAction(
+                    order=state.order,
+                    tool=tool.name,
+                    action=action,
+                    context=context,
+                    cmd=tuple(prepared.cmd),
+                    env=dict(prepared.env),
+                )
+            )
+            state.order += 1
+        return False
 
-        if scheduled:
-            if cfg.execution.jobs > 1:
-                with ThreadPoolExecutor(max_workers=cfg.execution.jobs) as executor:
-                    future_map = {
-                        executor.submit(
-                            self._run_action,
-                            item.tool,
-                            item.action,
-                            item.context,
-                            root,
-                            severity_rules,
-                            item.cmd,
-                            item.env,
-                        ): item
-                        for item in scheduled
-                    }
-                    for future in as_completed(future_map):
-                        item = future_map[future]
-                        outcome = future.result()
-                        outcome_map[item.order] = outcome
-                        if cache:
-                            cache.store(
-                                tool=item.tool,
-                                action=item.action.name,
-                                cmd=item.cmd,
-                                files=item.context.files,
-                                token=token,
-                                outcome=outcome,
-                            )
-                        if self._hooks.after_tool:
-                            self._hooks.after_tool(outcome)
-            else:
-                for item in scheduled:
-                    outcome = self._run_action(
+    def _should_run_action(self, cfg: Config, action: ToolAction) -> bool:
+        if cfg.execution.fix_only and not action.is_fix:
+            return False
+        if cfg.execution.check_only and action.is_fix:
+            return False
+        return True
+
+    def _update_tool_version(
+        self, cache_ctx: "_CacheContext", tool_name: str, version: str | None
+    ) -> None:
+        if not version:
+            return
+        if cache_ctx.versions.get(tool_name) == version:
+            return
+        cache_ctx.versions[tool_name] = version
+        cache_ctx.versions_dirty = True
+
+    def _load_cached_outcome(
+        self,
+        cache_ctx: "_CacheContext",
+        tool_name: str,
+        action: ToolAction,
+        cmd: Sequence[str],
+        files: Sequence[Path],
+    ) -> CachedEntry | None:
+        if cache_ctx.cache is None or cache_ctx.token is None:
+            return None
+        return cache_ctx.cache.load(
+            tool=tool_name,
+            action=action.name,
+            cmd=list(cmd),
+            files=list(files),
+            token=cache_ctx.token,
+        )
+
+    def _execute_scheduled(
+        self,
+        cfg: Config,
+        root: Path,
+        severity_rules: SeverityRuleView,
+        cache_ctx: "_CacheContext",
+        state: "_ExecutionState",
+    ) -> None:
+        if not state.scheduled:
+            return
+        if cfg.execution.bail and state.bail_triggered:
+            state.scheduled.clear()
+            return
+        if cfg.execution.jobs > 1:
+            with ThreadPoolExecutor(max_workers=cfg.execution.jobs) as executor:
+                future_map = {
+                    executor.submit(
+                        self._run_action,
                         item.tool,
                         item.action,
                         item.context,
@@ -248,31 +447,47 @@ class Orchestrator:
                         severity_rules,
                         item.cmd,
                         item.env,
+                    ): item
+                    for item in state.scheduled
+                }
+                for future in as_completed(future_map):
+                    item = future_map[future]
+                    outcome = future.result()
+                    self._record_outcome(
+                        state=state,
+                        order=item.order,
+                        tool=item.tool,
+                        action=item.action,
+                        context=item.context,
+                        cmd=item.cmd,
+                        outcome=outcome,
+                        file_metrics=None,
+                        cache_ctx=cache_ctx,
+                        from_cache=False,
                     )
-                    outcome_map[item.order] = outcome
-                    if cache:
-                        cache.store(
-                            tool=item.tool,
-                            action=item.action.name,
-                            cmd=item.cmd,
-                            files=item.context.files,
-                            token=token,
-                            outcome=outcome,
-                        )
-                    if self._hooks.after_tool:
-                        self._hooks.after_tool(outcome)
-
-        outcomes = [outcome_map[i] for i in sorted(outcome_map)] if outcome_map else []
-        result = RunResult(
-            root=root,
-            files=matched_files,
-            outcomes=outcomes,
-            tool_versions=tool_versions,
-        )
-        dedupe_outcomes(result, cfg.dedupe)
-        if cache and versions_dirty:
-            save_versions(cache_dir, tool_versions)
-        return result
+        else:
+            for item in state.scheduled:
+                outcome = self._run_action(
+                    item.tool,
+                    item.action,
+                    item.context,
+                    root,
+                    severity_rules,
+                    item.cmd,
+                    item.env,
+                )
+                self._record_outcome(
+                    state=state,
+                    order=item.order,
+                    tool=item.tool,
+                    action=item.action,
+                    context=item.context,
+                    cmd=item.cmd,
+                    outcome=outcome,
+                    file_metrics=None,
+                    cache_ctx=cache_ctx,
+                    from_cache=False,
+                )
 
     def _run_action(
         self,
@@ -297,10 +512,21 @@ class Orchestrator:
         parsed: Sequence = ()
         if action.parser:
             parsed = action.parser.parse(stdout, stderr, context=context)
-        diagnostics = normalize_diagnostics(parsed, tool_name=tool_name, severity_rules=severity_rules)
+        diagnostics = normalize_diagnostics(
+            parsed, tool_name=tool_name, severity_rules=severity_rules
+        )
+        diagnostics = _filter_diagnostics(diagnostics, tool_name, extra_filters, root)
+        adjusted_returncode = cp.returncode
+        if tool_name == "pylint" and not diagnostics:
+            adjusted_returncode = 0
+
         if diagnostics:
             CONTEXT_RESOLVER.annotate(diagnostics, root=root)
-        if cp.returncode != 0 and not action.ignore_exit and context.cfg.output.verbose:
+        if (
+            adjusted_returncode != 0
+            and not action.ignore_exit
+            and context.cfg.output.verbose
+        ):
             warn(
                 f"{tool_name}:{action.name} exited with {cp.returncode}",
                 use_emoji=context.cfg.output.emoji,
@@ -308,29 +534,71 @@ class Orchestrator:
         return ToolOutcome(
             tool=tool_name,
             action=action.name,
-            returncode=cp.returncode,
+            returncode=adjusted_returncode,
             stdout=stdout,
             stderr=stderr,
             diagnostics=diagnostics,
         )
 
-    def _select_tools(self, cfg: Config, files: Sequence[Path], root: Path) -> Sequence[str]:
+    def _record_outcome(
+        self,
+        *,
+        state: "_ExecutionState",
+        order: int,
+        tool: str,
+        action: ToolAction,
+        context: ToolContext,
+        cmd: Sequence[str],
+        outcome: ToolOutcome,
+        cache_ctx: "_CacheContext",
+        file_metrics: Mapping[str, FileMetrics] | None,
+        from_cache: bool,
+    ) -> None:
+        metrics_map = (
+            dict(file_metrics)
+            if file_metrics is not None
+            else self._collect_metrics_for_files(state, context.files)
+        )
+        self._update_state_metrics(state, metrics_map)
+        state.outcomes[order] = outcome
+        if cache_ctx.cache and cache_ctx.token is not None and not from_cache:
+            cache_ctx.cache.store(
+                tool=tool,
+                action=action.name,
+                cmd=list(cmd),
+                files=context.files,
+                token=cache_ctx.token,
+                outcome=outcome,
+                file_metrics=metrics_map,
+            )
+        if self._hooks.after_tool:
+            self._hooks.after_tool(outcome)
+
+    def _select_tools(
+        self, cfg: Config, files: Sequence[Path], root: Path
+    ) -> Sequence[str]:
         exec_cfg = cfg.execution
         if exec_cfg.only:
             return list(dict.fromkeys(exec_cfg.only))
-        languages = list(dict.fromkeys(exec_cfg.languages)) if exec_cfg.languages else []
+        languages = (
+            list(dict.fromkeys(exec_cfg.languages)) if exec_cfg.languages else []
+        )
         if not languages:
             languages = sorted(detect_languages(root, files))
         if languages:
             tool_names: list[str] = []
             for lang in languages:
-                tool_names.extend(tool.name for tool in self._registry.tools_for_language(lang))
+                tool_names.extend(
+                    tool.name for tool in self._registry.tools_for_language(lang)
+                )
             if tool_names:
                 return list(dict.fromkeys(tool_names))
         return [tool.name for tool in self._registry.tools() if tool.default_enabled]
 
     @staticmethod
-    def _filter_files_for_tool(extensions: Sequence[str], files: Sequence[Path]) -> list[Path]:
+    def _filter_files_for_tool(
+        extensions: Sequence[str], files: Sequence[Path]
+    ) -> list[Path]:
         if not extensions:
             return list(files)
         patterns = {ext.lower() for ext in extensions}
@@ -360,9 +628,41 @@ class Orchestrator:
         ]
         if cfg.tool_settings:
             serialized = json.dumps(cfg.tool_settings, sort_keys=True)
-            digest = hashlib.sha1(serialized.encode("utf-8"), usedforsecurity=False).hexdigest()
+            digest = hashlib.sha1(
+                serialized.encode("utf-8"), usedforsecurity=False
+            ).hexdigest()
             components.append(digest)
         return "|".join(components)
+
+    def _populate_missing_metrics(
+        self, state: "_ExecutionState", files: Sequence[Path]
+    ) -> None:
+        for path in files:
+            key = normalise_path_key(path)
+            if key in state.file_metrics:
+                continue
+            state.file_metrics[key] = compute_file_metrics(path)
+
+    def _collect_metrics_for_files(
+        self, state: "_ExecutionState", files: Sequence[Path]
+    ) -> dict[str, FileMetrics]:
+        collected: dict[str, FileMetrics] = {}
+        for path in files:
+            key = normalise_path_key(path)
+            metric = state.file_metrics.get(key)
+            if metric is None:
+                metric = compute_file_metrics(path)
+            metric.ensure_labels()
+            collected[key] = metric
+        return collected
+
+    @staticmethod
+    def _update_state_metrics(
+        state: "_ExecutionState", metrics: Mapping[str, FileMetrics]
+    ) -> None:
+        for key, metric in metrics.items():
+            metric.ensure_labels()
+            state.file_metrics[key] = metric
 
     @staticmethod
     def _is_within_limits(candidate: Path, limits: Sequence[Path]) -> bool:
@@ -377,11 +677,50 @@ class Orchestrator:
         return False
 
 
-@dataclass
-class _QueuedAction:
+class _QueuedAction(BaseModel):
     order: int
     tool: str
     action: ToolAction
     context: ToolContext
-    cmd: list[str]
+    cmd: tuple[str, ...]
     env: Mapping[str, str]
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @field_validator("cmd", mode="before")
+    @classmethod
+    def _coerce_cmd(cls, value: object) -> tuple[str, ...]:
+        if isinstance(value, tuple):
+            return value
+        if isinstance(value, (list, Sequence)):
+            return tuple(str(entry) for entry in value)
+        if isinstance(value, str):
+            return (value,)
+        raise TypeError("cmd must be a sequence of strings")
+
+    @field_validator("env", mode="before")
+    @classmethod
+    def _coerce_env(cls, value: object) -> Mapping[str, str]:
+        if value is None:
+            return {}
+        if isinstance(value, Mapping):
+            return {str(k): str(v) for k, v in value.items()}
+        raise TypeError("env must be a mapping of strings")
+
+
+@dataclass
+class _CacheContext:
+    cache: ResultCache | None
+    token: str | None
+    cache_dir: Path
+    versions: dict[str, str]
+    versions_dirty: bool = False
+
+
+@dataclass
+class _ExecutionState:
+    outcomes: dict[int, ToolOutcome] = field(default_factory=dict)
+    scheduled: list[_QueuedAction] = field(default_factory=list)
+    order: int = 0
+    bail_triggered: bool = False
+    file_metrics: dict[str, FileMetrics] = field(default_factory=dict)

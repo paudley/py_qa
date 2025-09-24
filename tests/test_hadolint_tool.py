@@ -14,7 +14,9 @@ from pyqa.tools.base import ToolAction, ToolContext
 from pyqa.tools.builtins import HADOLINT_VERSION_DEFAULT, _HadolintCommand
 
 
-def test_hadolint_command_download(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_hadolint_command_download(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     fake_binary = tmp_path / "bin" / "hadolint"
     fake_binary.parent.mkdir(parents=True, exist_ok=True)
     fake_binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")

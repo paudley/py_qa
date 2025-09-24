@@ -2,17 +2,17 @@
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 """Tests covering CLI configuration helpers."""
 
-# pylint: disable=missing-function-docstring
-
 from pathlib import Path
 
 import pytest
 
 from pyqa.cli.config_builder import DEFAULT_TOOL_FILTERS, build_config
 from pyqa.cli.options import LintOptions
+from pyqa.config import Config
 
 
 def test_build_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure CLI option translation produces a fully populated config."""
     home_dir = tmp_path / "home"
     home_dir.mkdir()
     monkeypatch.setattr(Path, "home", lambda: home_dir)
@@ -50,28 +50,33 @@ def test_build_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
         provided={"jobs", "no_cache", "cache_dir", "pr_summary_template"},
     )
 
-    cfg = build_config(options)
+    cfg: Config = build_config(options)
 
-    assert cfg.file_discovery.roots == [tmp_path.resolve()]
-    assert cfg.file_discovery.diff_ref == "HEAD"
-    assert not cfg.execution.only
-    assert not cfg.execution.languages
-    assert not cfg.execution.fix_only
-    assert not cfg.execution.check_only
-    assert cfg.execution.jobs == 2
-    assert not cfg.execution.cache_enabled
-    assert cfg.execution.cache_dir == tmp_path / ".cache"
-    assert not cfg.execution.bail
-    assert not cfg.execution.use_local_linters
-    assert cfg.output.pr_summary_limit == 100
-    assert cfg.output.pr_summary_min_severity == "warning"
-    assert cfg.output.pr_summary_template
-    assert not cfg.output.quiet
-    assert cfg.output.tool_filters == DEFAULT_TOOL_FILTERS
-    assert cfg.output.output == "concise"
-    assert cfg.output.color
-    assert cfg.output.emoji
-    exclude_names = {path.name for path in cfg.file_discovery.excludes}
+    dump = cfg.model_dump()
+    file_cfg = dump["file_discovery"]
+    exec_cfg = dump["execution"]
+    output_cfg = dump["output"]
+
+    assert file_cfg["roots"] == [tmp_path.resolve()]
+    assert file_cfg["diff_ref"] == "HEAD"
+    assert not exec_cfg["only"]
+    assert not exec_cfg["languages"]
+    assert not exec_cfg["fix_only"]
+    assert not exec_cfg["check_only"]
+    assert exec_cfg["jobs"] == 2
+    assert not exec_cfg["cache_enabled"]
+    assert exec_cfg["cache_dir"] == tmp_path / ".cache"
+    assert not exec_cfg["bail"]
+    assert not exec_cfg["use_local_linters"]
+    assert output_cfg["pr_summary_limit"] == 100
+    assert output_cfg["pr_summary_min_severity"] == "warning"
+    assert output_cfg["pr_summary_template"]
+    assert not output_cfg["quiet"]
+    assert output_cfg["tool_filters"] == DEFAULT_TOOL_FILTERS
+    assert output_cfg["output"] == "concise"
+    assert output_cfg["color"]
+    assert output_cfg["emoji"]
+    exclude_names = {path.name for path in file_cfg["excludes"]}
     assert ".lint-cache" in exclude_names
     assert ".cache" in exclude_names
     assert cfg.tool_settings == {}

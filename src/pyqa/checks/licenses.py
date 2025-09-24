@@ -6,29 +6,31 @@ from __future__ import annotations
 
 import re
 import tomllib
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Mapping, Optional, Sequence
+from typing import Final, Mapping, MutableMapping, Sequence
 
-from ..config import LicenseConfig
-from ..constants import ALWAYS_EXCLUDE_DIRS
+from pyqa.config import LicenseConfig
+from pyqa.constants import ALWAYS_EXCLUDE_DIRS
 
-KNOWN_LICENSE_SNIPPETS: Mapping[str, str] = {
+KNOWN_LICENSE_SNIPPETS: Final[Mapping[str, str]] = {
     "MIT": "Permission is hereby granted, free of charge",
     "Apache-2.0": "Licensed under the Apache License, Version 2.0",
     "BSD-3-Clause": "Redistribution and use in source and binary forms",
 }
 
 
-_COPYRIGHT_PATTERN = re.compile(r"copyright\s*\(c\)\s*(?P<body>.+)", re.IGNORECASE)
+_COPYRIGHT_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"copyright\s*\(c\)\s*(?P<body>.+)", re.IGNORECASE
+)
 
 
 @dataclass
 class LicenseMetadata:
-    spdx_id: Optional[str]
-    copyright_notice: Optional[str]
-    license_text: Optional[str]
+    spdx_id: str | None
+    copyright_notice: str | None
+    license_text: str | None
     overrides: Mapping[str, object]
 
 
@@ -36,9 +38,9 @@ class LicenseMetadata:
 class LicensePolicy:
     """Derived enforcement rules for repository licensing."""
 
-    spdx_id: Optional[str]
-    canonical_notice: Optional[str]
-    license_snippet: Optional[str]
+    spdx_id: str | None
+    canonical_notice: str | None
+    license_snippet: str | None
     require_spdx: bool = True
     require_notice: bool = True
     skip_globs: tuple[str, ...] = field(default_factory=tuple)
@@ -54,7 +56,7 @@ class LicensePolicy:
             return True
         return any(fnmatch(relative_str, pattern) for pattern in self.skip_globs)
 
-    def match_notice(self, content: str) -> Optional[str]:
+    def match_notice(self, content: str) -> str | None:
         for line in content.splitlines():
             match = _COPYRIGHT_PATTERN.search(line)
             if match:
@@ -66,10 +68,10 @@ def load_project_license(root: Path) -> LicenseMetadata:
     """Attempt to load license metadata from pyproject.toml or fallback."""
 
     pyproject = root / "pyproject.toml"
-    spdx_id: Optional[str] = None
-    copyright_str: Optional[str] = None
+    spdx_id: str | None = None
+    copyright_str: str | None = None
     overrides: Mapping[str, object] = {}
-    license_text: Optional[str] = None
+    license_text: str | None = None
 
     if pyproject.exists():
         data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
@@ -139,7 +141,7 @@ def load_license_policy(
     )
 
 
-def _extract_project_license(project: Mapping[str, object]) -> Optional[str]:
+def _extract_project_license(project: Mapping[str, object]) -> str | None:
     license_field = project.get("license")
     if isinstance(license_field, str):
         return license_field.strip()
@@ -151,7 +153,7 @@ def _extract_project_license(project: Mapping[str, object]) -> Optional[str]:
     return None
 
 
-def _extract_authors(project: Mapping[str, object]) -> Optional[str]:
+def _extract_authors(project: Mapping[str, object]) -> str | None:
     authors = project.get("authors")
     if isinstance(authors, list) and authors:
         first = authors[0]
@@ -162,7 +164,7 @@ def _extract_authors(project: Mapping[str, object]) -> Optional[str]:
     return None
 
 
-def _resolve_license_file(root: Path) -> Optional[Path]:
+def _resolve_license_file(root: Path) -> Path | None:
     for candidate in ("LICENSE", "LICENSE.txt", "LICENSE.md"):
         path = root / candidate
         if path.exists():
@@ -170,7 +172,7 @@ def _resolve_license_file(root: Path) -> Optional[Path]:
     return None
 
 
-def _infer_license_id(text: str) -> Optional[str]:
+def _infer_license_id(text: str) -> str | None:
     lower = text.lower()
     for spdx, snippet in KNOWN_LICENSE_SNIPPETS.items():
         if snippet.lower() in lower:
@@ -178,7 +180,7 @@ def _infer_license_id(text: str) -> Optional[str]:
     return None
 
 
-def _extract_license_copyright(text: str) -> Optional[str]:
+def _extract_license_copyright(text: str) -> str | None:
     for line in text.splitlines():
         line = line.strip()
         if line.lower().startswith("copyright"):
@@ -204,7 +206,8 @@ def verify_file_license(
         tag = f"SPDX-License-Identifier: {policy.spdx_id}"
         if tag not in content:
             if not any(
-                alt and f"SPDX-License-Identifier: {alt}" in content for alt in (policy.allow_alternate_spdx or ())
+                alt and f"SPDX-License-Identifier: {alt}" in content
+                for alt in (policy.allow_alternate_spdx or ())
             ) and not _matches_snippet(lower_content, policy.license_snippet):
                 issues.append(f"Missing SPDX license tag '{tag}'")
 
@@ -213,12 +216,14 @@ def verify_file_license(
         if not observed:
             issues.append(f"Missing copyright notice '{policy.canonical_notice}'")
         elif not _notices_equal(observed, policy.canonical_notice):
-            issues.append(f"Mismatched copyright notice. Found '{observed}' but expected '{policy.canonical_notice}'.")
+            issues.append(
+                f"Mismatched copyright notice. Found '{observed}' but expected '{policy.canonical_notice}'."
+            )
 
     return issues
 
 
-def _matches_snippet(lower_content: str, snippet: Optional[str]) -> bool:
+def _matches_snippet(lower_content: str, snippet: str | None) -> bool:
     if not snippet:
         return False
     return snippet.lower() in lower_content
@@ -233,7 +238,9 @@ def normalise_notice(value: str) -> str:
     return re.sub(r"\s+", " ", stripped).strip().lower()
 
 
-def _build_canonical_notice(config: Mapping[str, object], metadata: LicenseMetadata) -> Optional[str]:
+def _build_canonical_notice(
+    config: MutableMapping[str, object], metadata: LicenseMetadata
+) -> str | None:
     explicit_notice = _coerce_optional_str(config.pop("notice", None))
     if explicit_notice:
         return explicit_notice.strip()
@@ -254,7 +261,7 @@ def _build_canonical_notice(config: Mapping[str, object], metadata: LicenseMetad
     return None
 
 
-def _extract_year(notice: str) -> Optional[str]:
+def _extract_year(notice: str) -> str | None:
     year_match = re.search(r"(\d{4}(?:\s*[-–]\s*\d{4}|\s*\+?|\s*present)?)", notice)
     if year_match:
         return year_match.group(1).replace("  ", " ").strip()
@@ -272,7 +279,7 @@ def _extract_license_overrides(data: Mapping[str, object]) -> Mapping[str, objec
     return {}
 
 
-def _coerce_optional_str(value: object) -> Optional[str]:
+def _coerce_optional_str(value: object) -> str | None:
     if value is None:
         return None
     if isinstance(value, str):
@@ -302,10 +309,10 @@ def _strip_comment_prefix(line: str) -> str:
         if cleaned.startswith(token):
             cleaned = cleaned[len(token) :].lstrip(" -*#/")
             break
-    if cleaned.startswith('"') and ':' in cleaned:
-        _, remainder = cleaned.split(':', 1)
+    if cleaned.startswith('"') and ":" in cleaned:
+        _, remainder = cleaned.split(":", 1)
         cleaned = remainder.strip()
-        if cleaned.endswith(','):
+        if cleaned.endswith(","):
             cleaned = cleaned[:-1].rstrip()
         if cleaned.startswith('"') and cleaned.endswith('"'):
             cleaned = cleaned[1:-1]
@@ -317,6 +324,6 @@ def _strip_comment_prefix(line: str) -> str:
 
 
 def _license_config_to_mapping(config: LicenseConfig) -> dict[str, object]:
-    payload = asdict(config)
+    payload = config.model_dump(mode="python")
     # Drop keys with falsy values to reduce noise when merging defaults
     return {key: value for key, value in payload.items() if value not in (None, [], "")}

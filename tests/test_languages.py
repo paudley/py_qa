@@ -2,8 +2,6 @@
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 """Tests for language detection heuristics."""
 
-# pylint: disable=missing-function-docstring
-
 from pathlib import Path
 
 from pyqa.languages import detect_languages

@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Dict, List
 
 
-# pylint: disable=too-many-instance-attributes
 @dataclass(slots=True)
 class LintOptions:
     """Container for CLI options passed to the lint command."""

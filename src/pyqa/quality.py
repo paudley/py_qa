@@ -6,10 +6,13 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from enum import Enum
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Iterable, Literal, Mapping, Protocol, Sequence
+from typing import Iterable, Mapping, Protocol, Sequence
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from .banned import BannedWordChecker
 from .checks.licenses import (
@@ -22,35 +25,55 @@ from .config import FileDiscoveryConfig, LicenseConfig, QualityConfigSection
 from .constants import ALWAYS_EXCLUDE_DIRS
 from .discovery.filesystem import FilesystemDiscovery
 from .discovery.git import GitDiscovery, list_tracked_files
+from .process_utils import run_command
 from .tools.settings import TOOL_SETTING_SCHEMA
 
 
-@dataclass(slots=True)
-class QualityIssue:
-    level: Literal["error", "warning"]
+class QualityIssueLevel(str, Enum):
+    ERROR = "error"
+    WARNING = "warning"
+
+
+class QualityIssue(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    level: QualityIssueLevel
     message: str
     path: Path | None = None
 
 
-@dataclass(slots=True)
-class QualityCheckResult:
+class QualityCheckResult(BaseModel):
     """Aggregate quality issues collected during a run."""
 
-    issues: list[QualityIssue] = field(default_factory=list)
+    model_config = ConfigDict(validate_assignment=True)
+
+    issues: list[QualityIssue] = Field(default_factory=list)
 
     def add_error(self, message: str, path: Path | None = None) -> None:
-        self.issues.append(QualityIssue("error", message, path))
+        issues = list(self.issues)
+        issues.append(
+            QualityIssue(level=QualityIssueLevel.ERROR, message=message, path=path)
+        )
+        self.issues = issues
 
     def add_warning(self, message: str, path: Path | None = None) -> None:
-        self.issues.append(QualityIssue("warning", message, path))
+        issues = list(self.issues)
+        issues.append(
+            QualityIssue(level=QualityIssueLevel.WARNING, message=message, path=path)
+        )
+        self.issues = issues
 
     @property
     def errors(self) -> list[QualityIssue]:
-        return [issue for issue in self.issues if issue.level == "error"]
+        return [
+            issue for issue in self.issues if issue.level is QualityIssueLevel.ERROR
+        ]
 
     @property
     def warnings(self) -> list[QualityIssue]:
-        return [issue for issue in self.issues if issue.level == "warning"]
+        return [
+            issue for issue in self.issues if issue.level is QualityIssueLevel.WARNING
+        ]
 
     def exit_code(self) -> int:
         return 1 if self.errors else 0
@@ -114,7 +137,9 @@ class LicenseCheck:
             try:
                 content = path.read_text(encoding="utf-8", errors="replace")
             except OSError as exc:
-                result.add_warning(f"Unable to read file for license check: {exc}", path)
+                result.add_warning(
+                    f"Unable to read file for license check: {exc}", path
+                )
                 continue
 
             issues = verify_file_license(path, content, policy, ctx.root)
@@ -143,7 +168,9 @@ class PythonHygieneCheck:
             except OSError as exc:
                 result.add_warning(f"Unable to read Python file: {exc}", path)
                 continue
-            if re.search(r"(?<!['\"])pdb\.set_trace\(", content) or re.search(r"(?<!['\"])breakpoint\(", content):
+            if re.search(r"(?<!['\"])pdb\.set_trace\(", content) or re.search(
+                r"(?<!['\"])breakpoint\(", content
+            ):
                 result.add_error("Debug breakpoint detected", path)
             if re.search(r"except\s*:\s*(?:#.*)?$", content, re.MULTILINE):
                 result.add_warning("Bare except detected", path)
@@ -158,7 +185,9 @@ class SchemaCheck:
             return
         expected = json.dumps(TOOL_SETTING_SCHEMA, indent=2, sort_keys=True) + "\n"
         for target in ctx.quality.schema_targets:
-            target_path = target if target.is_absolute() else (ctx.root / target).resolve()
+            target_path = (
+                target if target.is_absolute() else (ctx.root / target).resolve()
+            )
             if not target_path.exists():
                 result.add_error(
                     "Schema documentation missing. Run 'pyqa config export-tools' to regenerate.",
@@ -196,20 +225,32 @@ class QualityFileCollector:
 
     def collect(self, files: Sequence[Path] | None, *, staged: bool) -> list[Path]:
         if files:
-            return [self._resolve(path) for path in files if self._resolve(path).exists()]
+            return [
+                self._resolve(path) for path in files if self._resolve(path).exists()
+            ]
 
         if staged:
-            discovery = GitDiscovery()
-            config = FileDiscoveryConfig(pre_commit=True, include_untracked=True, changed_only=True)
-            return [path.resolve() for path in discovery.discover(config, self.root) if path.exists()]
+            git_discovery = GitDiscovery()
+            config = FileDiscoveryConfig(
+                pre_commit=True, include_untracked=True, changed_only=True
+            )
+            return [
+                path.resolve()
+                for path in git_discovery.discover(config, self.root)
+                if path.exists()
+            ]
 
         tracked = list_tracked_files(self.root)
         if tracked:
             return [path for path in tracked if path.exists()]
 
-        discovery = FilesystemDiscovery()
+        filesystem_discovery = FilesystemDiscovery()
         config = FileDiscoveryConfig()
-        return [path.resolve() for path in discovery.discover(config, self.root) if path.exists()]
+        return [
+            path.resolve()
+            for path in filesystem_discovery.discover(config, self.root)
+            if path.exists()
+        ]
 
     def _resolve(self, path: Path) -> Path:
         return path if path.is_absolute() else (self.root / path).resolve()
@@ -233,10 +274,14 @@ class QualityChecker:
         self.root = root.resolve()
         self.quality = quality
         self._staged = staged
-        self._explicit_files = [self._resolve_path(path) for path in files] if files else None
+        self._explicit_files = (
+            [self._resolve_path(path) for path in files] if files else None
+        )
         self._collector = collector or QualityFileCollector(self.root)
         self._selected_checks = set(checks) if checks else set(quality.checks)
-        self.license_policy = license_policy or load_license_policy(self.root, license_overrides)
+        self.license_policy = license_policy or load_license_policy(
+            self.root, license_overrides
+        )
         self._available_checks: dict[str, QualityCheck] = {
             "file-size": FileSizeCheck(),
             "license": LicenseCheck(),
@@ -278,12 +323,13 @@ class QualityChecker:
         try:
             relative = path.relative_to(self.root)
         except ValueError:
-            relative = path.name if isinstance(path, Path) else Path(path).name
-            relative = Path(relative)
+            relative = Path(path.name)
         if any(part in ALWAYS_EXCLUDE_DIRS for part in relative.parts):
             return True
         relative_str = str(relative)
-        return any(fnmatch(relative_str, pattern) for pattern in self.quality.skip_globs)
+        return any(
+            fnmatch(relative_str, pattern) for pattern in self.quality.skip_globs
+        )
 
     def _resolve_path(self, path: Path) -> Path:
         return path if path.is_absolute() else (self.root / path).resolve()
@@ -335,29 +381,32 @@ def check_commit_message(root: Path, message_file: Path) -> QualityCheckResult:
     banned_matches = checker.scan(lines)
     if banned_matches:
         formatted = ", ".join(sorted(set(banned_matches)))
-        result.add_error(f"Commit message contains banned terms: {formatted}", message_path)
+        result.add_error(
+            f"Commit message contains banned terms: {formatted}", message_path
+        )
 
     return result
 
 
-def ensure_branch_protection(root: Path, quality: QualityConfigSection) -> QualityCheckResult:
+def ensure_branch_protection(
+    root: Path, quality: QualityConfigSection
+) -> QualityCheckResult:
     """Fail when attempting to operate on a protected branch."""
 
     result = QualityCheckResult()
     branch = _current_branch(root)
     if branch and branch in set(quality.protected_branches):
-        result.add_error(f"Branch '{branch}' is protected. Create a feature branch before pushing.")
+        result.add_error(
+            f"Branch '{branch}' is protected. Create a feature branch before pushing."
+        )
     return result
 
 
 def _current_branch(root: Path) -> str | None:
-    from subprocess import run  # local import to avoid global dependency
-
-    completed = run(
+    completed = run_command(
         ["git", "-C", str(root), "rev-parse", "--abbrev-ref", "HEAD"],
         check=False,
         capture_output=True,
-        text=True,
     )
     if completed.returncode != 0:
         return None

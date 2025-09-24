@@ -9,6 +9,12 @@ from typing import Iterable
 
 from ..config import OutputConfig
 from ..logging import colorize, emoji
+from ..metrics import (
+    SUPPRESSION_LABELS,
+    FileMetrics,
+    compute_file_metrics,
+    normalise_path_key,
+)
 from ..models import Diagnostic, RunResult
 from ..severity import Severity
 
@@ -58,13 +64,23 @@ def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
         )
 
     if entries:
-        for file_path, line_no, function, tool_name, code, message in sorted(entries, key=sort_key):
+        for file_path, line_no, function, tool_name, code, message in sorted(
+            entries, key=sort_key
+        ):
             location = file_path
             if line_no >= 0:
                 location = f"{file_path}:{line_no}"
             if function:
-                location = f"{location}:{function}" if line_no >= 0 else f"{location}:{function}"
+                location = (
+                    f"{location}:{function}"
+                    if line_no >= 0
+                    else f"{location}:{function}"
+                )
             print(f"{tool_name}, {location}, {code}, {message}")
+
+    diagnostics_count = len(entries)
+    files_count = len(result.files)
+    _emit_stats_line(result, cfg, diagnostics_count)
 
     symbol = "❌" if failed_actions else "✅"
     summary_symbol = emoji(symbol, cfg.emoji)
@@ -74,8 +90,6 @@ def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
         else ("Failed" if failed_actions else "Passed")
     )
     summary_color = "red" if failed_actions else "green"
-    diagnostics_count = len(entries)
-    files_count = len(result.files)
     stats_raw = (
         f"— {diagnostics_count} diagnostic(s) across {files_count} file(s); "
         f"{failed_actions} failing action(s) out of {total_actions}"
@@ -102,7 +116,11 @@ def _render_pretty(result: RunResult, cfg: OutputConfig) -> None:
     root_display = colorize(str(Path(result.root).resolve()), "blue", cfg.color)
     print(f"Root: {root_display}")
     for outcome in result.outcomes:
-        status = colorize("PASS", "green", cfg.color) if outcome.ok else colorize("FAIL", "red", cfg.color)
+        status = (
+            colorize("PASS", "green", cfg.color)
+            if outcome.ok
+            else colorize("FAIL", "red", cfg.color)
+        )
         print(f"\n{outcome.tool}:{outcome.action} — {status}")
         if outcome.stdout:
             print(colorize("stdout:", "cyan", cfg.color))
@@ -113,6 +131,12 @@ def _render_pretty(result: RunResult, cfg: OutputConfig) -> None:
         if outcome.diagnostics:
             print(colorize("diagnostics:", "bold", cfg.color))
             _dump_diagnostics(outcome.diagnostics, cfg)
+
+    if result.outcomes:
+        print()
+    _emit_stats_line(
+        result, cfg, sum(len(outcome.diagnostics) for outcome in result.outcomes)
+    )
 
 
 def _render_raw(result: RunResult) -> None:
@@ -168,3 +192,60 @@ def _severity_color(sev: Severity) -> str:
         Severity.NOTICE: "blue",
         Severity.NOTE: "cyan",
     }.get(sev, "yellow")
+
+
+def _emit_stats_line(
+    result: RunResult, cfg: OutputConfig, diagnostics_count: int
+) -> None:
+    metrics = _gather_metrics(result)
+    loc_count = sum(metric.line_count for metric in metrics.values())
+    suppression_counts = {
+        label: sum(metric.suppressions.get(label, 0) for metric in metrics.values())
+        for label in SUPPRESSION_LABELS
+    }
+    files_count = len(result.files)
+    total_suppressions = sum(suppression_counts.values())
+    detail_parts = [
+        f"{count} {label}" for label, count in suppression_counts.items() if count
+    ]
+    suppression_text = (
+        f"{total_suppressions} lint suppression{'s' if total_suppressions != 1 else ''}"
+    )
+    if detail_parts:
+        suppression_text = f"{suppression_text} ({', '.join(detail_parts)})"
+    warnings_per_loc = diagnostics_count / loc_count if loc_count else 0.0
+    warnings_text = f"{warnings_per_loc:.3f} lint warnings per LoC"
+    stats_components = [
+        f"{files_count} file{'s' if files_count != 1 else ''}",
+        f"{loc_count:,} LoC",
+        suppression_text,
+    ]
+    stats_symbol = emoji("📊", cfg.emoji)
+    prefix = f"{stats_symbol} " if stats_symbol else ""
+    stats_label = colorize("stats:", "yellow", cfg.color)
+    comma = colorize(", ", "white", cfg.color)
+    body_parts: list[str] = []
+    for index, component in enumerate(stats_components):
+        body_parts.append(colorize(component, "orange", cfg.color))
+        if index != len(stats_components) - 1:
+            body_parts.append(comma)
+    body = "".join(body_parts)
+    warnings_colored = colorize(warnings_text, "orange", cfg.color)
+    stats_line = f"{prefix}{stats_label} {body}   {warnings_colored}"
+    print(stats_line)
+
+
+def _gather_metrics(result: RunResult) -> dict[str, FileMetrics]:
+    metrics: dict[str, FileMetrics] = {}
+    seen: set[str] = set()
+    for candidate in result.files:
+        key = normalise_path_key(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        metric = result.file_metrics.get(key)
+        if metric is None:
+            metric = compute_file_metrics(candidate)
+        metric.ensure_labels()
+        metrics[key] = metric
+    return metrics

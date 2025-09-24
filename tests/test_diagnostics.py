@@ -2,8 +2,6 @@
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 """Tests for diagnostic normalization and deduplication."""
 
-# pylint: disable=missing-function-docstring
-
 from pathlib import Path
 
 from pyqa.config import DedupeConfig
@@ -62,8 +60,22 @@ def test_dedupe_prefers_higher_severity(tmp_path: Path) -> None:
         root=tmp_path,
         files=[tmp_path / "src" / "app.py"],
         outcomes=[
-            ToolOutcome("ruff", "lint", 1, "", "", diagnostics=[diag_warn]),
-            ToolOutcome("pylint", "lint", 1, "", "", diagnostics=[diag_error]),
+            ToolOutcome(
+                tool="ruff",
+                action="lint",
+                returncode=1,
+                stdout="",
+                stderr="",
+                diagnostics=[diag_warn],
+            ),
+            ToolOutcome(
+                tool="pylint",
+                action="lint",
+                returncode=1,
+                stdout="",
+                stderr="",
+                diagnostics=[diag_error],
+            ),
         ],
     )
 
@@ -103,8 +115,22 @@ def test_dedupe_prefer_list(tmp_path: Path) -> None:
         root=tmp_path,
         files=[tmp_path / "src" / "app.py"],
         outcomes=[
-            ToolOutcome("ruff", "lint", 1, "", "", diagnostics=[diag_a]),
-            ToolOutcome("pylint", "lint", 1, "", "", diagnostics=[diag_b]),
+            ToolOutcome(
+                tool="ruff",
+                action="lint",
+                returncode=1,
+                stdout="",
+                stderr="",
+                diagnostics=[diag_a],
+            ),
+            ToolOutcome(
+                tool="pylint",
+                action="lint",
+                returncode=1,
+                stdout="",
+                stderr="",
+                diagnostics=[diag_b],
+            ),
         ],
     )
 

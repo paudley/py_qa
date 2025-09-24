@@ -9,33 +9,43 @@ from pathlib import Path
 from typing import List
 
 import typer
-from click.core import ParameterSource
 
 from ..config import Config, ConfigError, default_parallel_jobs
+from ..constants import PY_QA_DIR_NAME
 from ..discovery import build_default_discovery
 from ..execution.orchestrator import Orchestrator
+from ..logging import info, warn
 from ..models import RunResult
 from ..reporting.emitters import write_json_report, write_pr_summary, write_sarif_report
 from ..reporting.formatters import render
 from ..tools.registry import DEFAULT_REGISTRY
+from ..workspace import is_py_qa_workspace
 from .config_builder import build_config
 from .doctor import run_doctor
 from .options import LintOptions
 from .tool_info import run_tool_info
 
-# pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
-
 
 def lint_command(
     ctx: typer.Context,
-    paths: List[Path] | None = typer.Argument(None, metavar="[PATH]", help="Specific files or directories to lint."),
+    paths: List[Path] | None = typer.Argument(
+        None, metavar="[PATH]", help="Specific files or directories to lint."
+    ),
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    changed_only: bool = typer.Option(False, help="Limit to files changed according to git."),
+    changed_only: bool = typer.Option(
+        False, help="Limit to files changed according to git."
+    ),
     diff_ref: str = typer.Option("HEAD", help="Git ref for change detection."),
-    include_untracked: bool = typer.Option(True, help="Include untracked files during git discovery."),
-    base_branch: str | None = typer.Option(None, help="Base branch for merge-base diffing."),
+    include_untracked: bool = typer.Option(
+        True, help="Include untracked files during git discovery."
+    ),
+    base_branch: str | None = typer.Option(
+        None, help="Base branch for merge-base diffing."
+    ),
     paths_from_stdin: bool = typer.Option(False, help="Read file paths from stdin."),
-    dirs: List[Path] = typer.Option([], "--dir", help="Add directory to discovery roots (repeatable)."),
+    dirs: List[Path] = typer.Option(
+        [], "--dir", help="Add directory to discovery roots (repeatable)."
+    ),
     exclude: List[Path] = typer.Option([], help="Exclude specific paths or globs."),
     filters: List[str] = typer.Option(
         [],
@@ -50,12 +60,24 @@ def lint_command(
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Minimal output."),
     no_color: bool = typer.Option(False, help="Disable ANSI colour output."),
     no_emoji: bool = typer.Option(False, help="Disable emoji output."),
-    output_mode: str = typer.Option("concise", "--output", help="Output mode: concise, pretty, or raw."),
-    show_passing: bool = typer.Option(False, help="Include successful diagnostics in output."),
-    report_json: Path | None = typer.Option(None, help="Write JSON report to the provided path."),
-    sarif_out: Path | None = typer.Option(None, help="Write SARIF 2.1.0 report to the provided path."),
-    pr_summary_out: Path | None = typer.Option(None, help="Write a Markdown PR summary of diagnostics."),
-    pr_summary_limit: int = typer.Option(100, "--pr-summary-limit", help="Maximum diagnostics in PR summary."),
+    output_mode: str = typer.Option(
+        "concise", "--output", help="Output mode: concise, pretty, or raw."
+    ),
+    show_passing: bool = typer.Option(
+        False, help="Include successful diagnostics in output."
+    ),
+    report_json: Path | None = typer.Option(
+        None, help="Write JSON report to the provided path."
+    ),
+    sarif_out: Path | None = typer.Option(
+        None, help="Write SARIF 2.1.0 report to the provided path."
+    ),
+    pr_summary_out: Path | None = typer.Option(
+        None, help="Write a Markdown PR summary of diagnostics."
+    ),
+    pr_summary_limit: int = typer.Option(
+        100, "--pr-summary-limit", help="Maximum diagnostics in PR summary."
+    ),
     pr_summary_min_severity: str = typer.Option(
         "warning",
         "--pr-summary-min-severity",
@@ -75,7 +97,9 @@ def lint_command(
     ),
     bail: bool = typer.Option(False, "--bail", help="Exit on first tool failure."),
     no_cache: bool = typer.Option(False, help="Disable on-disk result caching."),
-    cache_dir: Path = typer.Option(Path(".lint-cache"), "--cache-dir", help="Cache directory for tool results."),
+    cache_dir: Path = typer.Option(
+        Path(".lint-cache"), "--cache-dir", help="Cache directory for tool results."
+    ),
     use_local_linters: bool = typer.Option(
         False,
         "--use-local-linters",
@@ -96,18 +120,29 @@ def lint_command(
         "--sql-dialect",
         help="Default SQL dialect for dialect-aware tools (e.g. sqlfluff).",
     ),
-    doctor: bool = typer.Option(False, "--doctor", help="Run environment diagnostics and exit."),
+    doctor: bool = typer.Option(
+        False, "--doctor", help="Run environment diagnostics and exit."
+    ),
     tool_info: str | None = typer.Option(
         None,
         "--tool-info",
         metavar="TOOL",
         help="Display detailed information for TOOL and exit.",
     ),
+    fetch_all_tools: bool = typer.Option(
+        False,
+        "--fetch-all-tools",
+        help="Download or prepare runtimes for every registered tool and exit.",
+    ),
 ) -> None:
     """Entry point for the ``pyqa lint`` CLI command."""
 
     if doctor and tool_info:
         raise typer.BadParameter("--doctor and --tool-info cannot be combined")
+    if doctor and fetch_all_tools:
+        raise typer.BadParameter("--doctor and --fetch-all-tools cannot be combined")
+    if tool_info and fetch_all_tools:
+        raise typer.BadParameter("--tool-info and --fetch-all-tools cannot be combined")
 
     if fix_only and check_only:
         raise typer.BadParameter("--fix-only and --check-only are mutually exclusive")
@@ -118,12 +153,28 @@ def lint_command(
     provided_paths = list(paths or [])
     normalized_paths = [_normalise_path(arg, invocation_cwd) for arg in provided_paths]
 
-    root_source = ctx.get_parameter_source("root")
+    root_source = _parameter_source_name(ctx, "root")
     root = _normalise_path(root, invocation_cwd)
-    if root_source in (ParameterSource.DEFAULT, ParameterSource.DEFAULT_MAP) and normalized_paths:
+    if root_source in {"DEFAULT", "DEFAULT_MAP"} and normalized_paths:
         derived_root = _derive_default_root(normalized_paths)
         if derived_root is not None:
             root = derived_root
+
+    is_py_qa_root = is_py_qa_workspace(root)
+    ignored_py_qa = []
+    if not is_py_qa_root:
+        for candidate in normalized_paths:
+            if PY_QA_DIR_NAME in candidate.parts:
+                ignored_py_qa.append(_display_path(candidate, root))
+    if ignored_py_qa:
+        unique = ", ".join(dict.fromkeys(ignored_py_qa))
+        warn(
+            (
+                f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
+                "unless lint runs inside the py_qa workspace."
+            ),
+            use_emoji=not no_emoji,
+        )
 
     if doctor:
         exit_code = run_doctor(root)
@@ -189,6 +240,22 @@ def lint_command(
         registry=DEFAULT_REGISTRY,
         discovery=build_default_discovery(),
     )
+    if fetch_all_tools:
+        results = orchestrator.fetch_all_tools(config, root=root)
+        if not quiet:
+            for tool_name, action_name, prepared in results:
+                version_display = prepared.version or "unknown"
+                info(
+                    (
+                        f"{tool_name}:{action_name} ready via {prepared.source} (version {version_display})"
+                    ),
+                    use_emoji=config.output.emoji,
+                )
+            info(
+                f"Prepared {len(results)} tool action(s) without execution.",
+                use_emoji=config.output.emoji,
+            )
+        raise typer.Exit(code=0)
     result = orchestrator.run(config, root=root)
     _handle_reporting(
         result,
@@ -265,8 +332,8 @@ def _collect_provided_flags(
     }
     provided: set[str] = set()
     for name in tracked:
-        source = ctx.get_parameter_source(name)
-        if source not in (ParameterSource.DEFAULT, ParameterSource.DEFAULT_MAP):
+        source = _parameter_source_name(ctx, name)
+        if source not in {"DEFAULT", "DEFAULT_MAP", None}:
             provided.add(name)
     if paths_provided:
         provided.add("paths")
@@ -288,6 +355,14 @@ def _normalise_path(value: Path, cwd: Path) -> Path:
     return candidate.resolve()
 
 
+def _display_path(path: Path, root: Path) -> str:
+    try:
+        relative = path.relative_to(root)
+        return relative.as_posix()
+    except ValueError:
+        return str(path)
+
+
 def _derive_default_root(paths: List[Path]) -> Path | None:
     if not paths:
         return None
@@ -296,3 +371,17 @@ def _derive_default_root(paths: List[Path]) -> Path | None:
         return None
     common = Path(os.path.commonpath([str(candidate) for candidate in candidates]))
     return common.resolve()
+
+
+def _parameter_source_name(ctx: typer.Context, name: str) -> str | None:
+    getter = getattr(ctx, "get_parameter_source", None)
+    if not callable(getter):
+        return None
+    try:
+        source = getter(name)
+    except TypeError:
+        return None
+    if source is None:
+        return None
+    label = getattr(source, "name", None)
+    return label if isinstance(label, str) else str(source)

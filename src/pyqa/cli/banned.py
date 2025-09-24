@@ -11,29 +11,43 @@ import typer
 
 from ..banned import BannedWordChecker
 
-banned_app = typer.Typer(name="check-banned-words", help="Check text for banned words or phrases.")
+banned_app = typer.Typer(
+    name="check-banned-words", help="Check text for banned words or phrases."
+)
 
 
 @banned_app.command()
 def check_banned_words(
-    commit_messages_file: Optional[Path] = typer.Argument(None, metavar="[FILE]", help="Commit message file to scan."),
-    text: Optional[str] = typer.Option(None, "--text", help="Text content to scan directly."),
+    commit_messages_file: Optional[Path] = typer.Argument(
+        None, metavar="[FILE]", help="Commit message file to scan."
+    ),
+    text: Optional[str] = typer.Option(
+        None, "--text", help="Text content to scan directly."
+    ),
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Repository root."),
-    personal_list: Optional[Path] = typer.Option(None, "--personal-list", help="Override personal banned words list."),
-    repo_list: Optional[Path] = typer.Option(None, "--repo-list", help="Override repository banned words list."),
+    personal_list: Optional[Path] = typer.Option(
+        None, "--personal-list", help="Override personal banned words list."
+    ),
+    repo_list: Optional[Path] = typer.Option(
+        None, "--repo-list", help="Override repository banned words list."
+    ),
 ) -> None:
     """Scan commit message text for banned words or phrases."""
 
-    if commit_messages_file is None and text is None:
+    if text is None and commit_messages_file is None:
         raise typer.BadParameter("Provide either a commit messages file or --text.")
 
     lines: list[str]
     if text is not None:
         lines = text.splitlines()
     else:
-        file_path = commit_messages_file.expanduser().resolve()
-        if not file_path.is_file():
-            raise typer.BadParameter(f"Commit messages file not found: {file_path}")
+        file_path = (
+            commit_messages_file.expanduser().resolve()
+            if commit_messages_file
+            else None
+        )
+        if file_path is None or not file_path.is_file():
+            raise typer.BadParameter("Commit messages file not found or unreadable")
         lines = file_path.read_text(encoding="utf-8").splitlines()
 
     checker = BannedWordChecker(

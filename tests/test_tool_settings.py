@@ -7,18 +7,19 @@ from __future__ import annotations
 from pathlib import Path
 
 from pyqa.config import Config
-from pyqa.tools import builtins as builtins_module
-from pyqa.tools.base import ToolContext
+from pyqa.tools.base import Tool, ToolContext
+from pyqa.tools.builtins import _builtin_tools
 from pyqa.tools.registry import ToolRegistry
 
 
-def _tool(name: str):
+def _tool(name: str) -> Tool:
     registry = ToolRegistry()
-    for tool in builtins_module._builtin_tools():
+    for tool in _builtin_tools():
         registry.register(tool)
-    tool = registry.try_get(name)
-    assert tool is not None, f"Tool {name} missing"
-    return tool
+    result = registry.try_get(name)
+    if result is None:
+        raise AssertionError(f"Tool {name} missing")
+    return result
 
 
 def test_ruff_settings_inject_flags(tmp_path: Path) -> None:
@@ -185,7 +186,9 @@ def test_pyright_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--project" in cmd and str((tmp_path / "pyprojectconfig.json").resolve()) in cmd
+    assert (
+        "--project" in cmd and str((tmp_path / "pyprojectconfig.json").resolve()) in cmd
+    )
     assert "--pythonversion" in cmd and "3.11" in cmd
     assert "--warnings" in cmd
 
@@ -241,7 +244,9 @@ def test_prettier_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--config" in cmd and str((tmp_path / "prettier.config.cjs").resolve()) in cmd
+    assert (
+        "--config" in cmd and str((tmp_path / "prettier.config.cjs").resolve()) in cmd
+    )
     assert "--single-quote" in cmd
     assert "--tab-width" in cmd and "2" in cmd
     assert "--parser" in cmd and "typescript" in cmd

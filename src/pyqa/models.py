@@ -5,22 +5,29 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Sequence
+from typing import Pattern
 
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+
+from .metrics import FileMetrics
 from .severity import Severity
 
 
-@dataclass(slots=True)
-class OutputFilter:
+class OutputFilter(BaseModel):
     """A reusable regex filter applied to tool stdout/stderr."""
 
-    patterns: Sequence[str] = ()
-    _compiled: tuple[re.Pattern[str], ...] = field(init=False, repr=False)
+    model_config = ConfigDict(frozen=True)
 
-    def __post_init__(self) -> None:
-        self._compiled = tuple(re.compile(p) for p in self.patterns)
+    patterns: tuple[str, ...] = Field(default_factory=tuple)
+    _compiled: tuple[Pattern[str], ...] = PrivateAttr(default_factory=tuple)
+
+    @model_validator(mode="after")
+    def _compile_patterns(self) -> "OutputFilter":
+        """Compile the configured regex patterns for fast reuse."""
+
+        self._compiled = tuple(re.compile(pattern) for pattern in self.patterns)
+        return self
 
     def apply(self, text: str) -> str:
         """Return *text* with lines matching any configured pattern removed."""
@@ -28,18 +35,20 @@ class OutputFilter:
         if not text or not self._compiled:
             return text
         return "\n".join(
-            line for line in text.splitlines() if not any(pattern.search(line) for pattern in self._compiled)
+            line
+            for line in text.splitlines()
+            if not any(pattern.search(line) for pattern in self._compiled)
         )
 
 
-# pylint: disable=too-many-instance-attributes
-@dataclass(slots=True)
-class Diagnostic:
+class Diagnostic(BaseModel):
     """Normalized lint diagnostic returned by tools."""
 
-    file: str | None
-    line: int | None
-    column: int | None
+    model_config = ConfigDict(validate_assignment=True)
+
+    file: str | None = None
+    line: int | None = None
+    column: int | None = None
     severity: Severity
     message: str
     tool: str
@@ -48,14 +57,14 @@ class Diagnostic:
     function: str | None = None
 
 
-# pylint: disable=too-many-instance-attributes
-@dataclass(slots=True)
-class RawDiagnostic:
+class RawDiagnostic(BaseModel):
     """Intermediate diagnostic that resembles tool-native structure."""
 
-    file: str | None
-    line: int | None
-    column: int | None
+    model_config = ConfigDict(validate_assignment=True)
+
+    file: str | None = None
+    line: int | None = None
+    column: int | None = None
     severity: Severity | str | None
     message: str
     code: str | None = None
@@ -64,35 +73,48 @@ class RawDiagnostic:
     function: str | None = None
 
 
-@dataclass(slots=True)
-class ToolOutcome:
+class ToolOutcome(BaseModel):
     """Result bundle produced by each executed tool action."""
+
+    model_config = ConfigDict(validate_assignment=True)
 
     tool: str
     action: str
     returncode: int
     stdout: str
     stderr: str
-    diagnostics: list[Diagnostic] = field(default_factory=list)
+    diagnostics: list[Diagnostic] = Field(default_factory=list)
 
-    @property
-    def ok(self) -> bool:
+    def is_ok(self) -> bool:
         """Return ``True`` when the tool exited successfully."""
 
         return self.returncode == 0
 
+    @property
+    def ok(self) -> bool:
+        """Expose :meth:`is_ok` as an attribute-style accessor."""
 
-@dataclass(slots=True)
-class RunResult:
+        return self.is_ok()
+
+
+class RunResult(BaseModel):
     """Aggregate result for a full orchestrator run."""
+
+    model_config = ConfigDict(validate_assignment=True)
 
     root: Path
     files: list[Path]
     outcomes: list[ToolOutcome]
-    tool_versions: dict[str, str] = field(default_factory=dict)
+    tool_versions: dict[str, str] = Field(default_factory=dict)
+    file_metrics: dict[str, FileMetrics] = Field(default_factory=dict)
 
-    @property
-    def failed(self) -> bool:
+    def has_failures(self) -> bool:
         """Return ``True`` when any outcome failed."""
 
         return any(not outcome.ok for outcome in self.outcomes)
+
+    @property
+    def failed(self) -> bool:
+        """Expose :meth:`has_failures` as an attribute-style accessor."""
+
+        return self.has_failures()

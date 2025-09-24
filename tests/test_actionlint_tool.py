@@ -14,7 +14,9 @@ from pyqa.tools.base import ToolContext
 from pyqa.tools.builtins import _ActionlintCommand
 
 
-def test_actionlint_command_download(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_actionlint_command_download(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     binary_path = tmp_path / "bin" / "actionlint"
     binary_path.parent.mkdir(parents=True, exist_ok=True)
     binary_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")

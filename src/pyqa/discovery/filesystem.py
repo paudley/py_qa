@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Iterable, Iterator
 
 from ..config import FileDiscoveryConfig
-from ..constants import ALWAYS_EXCLUDE_DIRS
+from ..constants import ALWAYS_EXCLUDE_DIRS, PY_QA_DIR_NAME
+from ..workspace import is_py_qa_workspace
 from .base import DiscoveryStrategy
 
 
@@ -23,48 +24,92 @@ class FilesystemDiscovery(DiscoveryStrategy):
     def discover(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
         limits = self._normalise_limits(config, root)
 
-        if config.explicit_files:
-            for entry in config.explicit_files:
-                candidate = entry if entry.is_absolute() else root / entry
-                if not candidate.exists():
-                    continue
-                resolved = candidate.resolve()
-                if self._is_within_limits(resolved, limits):
-                    yield resolved
+        explicit = list(self._yield_explicit_files(config, root, limits))
+        if explicit:
+            yield from explicit
             return
+
         if config.paths_from_stdin:
             yield from self._paths_from_stdin(root)
             return
 
-        excludes = {root.joinpath(p).resolve() for p in config.excludes}
-        for base in self._resolve_roots(config, root):
-            if limits and not self._is_within_limits(base.resolve(), limits):
-                continue
-            if not base.exists():
-                continue
+        excludes = {root.joinpath(path).resolve() for path in config.excludes}
+        allow_root_py_qa = is_py_qa_workspace(root)
+        for base in self._iter_root_candidates(config, root, limits):
             if base.is_file():
                 resolved = base.resolve()
                 if self._is_within_limits(resolved, limits):
                     yield resolved
                 continue
-            yield from self._walk(base, excludes, limits)
+            yield from self._walk(
+                base,
+                excludes,
+                limits,
+                root=root,
+                allow_root_py_qa=allow_root_py_qa,
+            )
+
+    def _yield_explicit_files(
+        self,
+        config: FileDiscoveryConfig,
+        root: Path,
+        limits: list[Path],
+    ) -> Iterable[Path]:
+        for entry in config.explicit_files:
+            candidate = entry if entry.is_absolute() else root / entry
+            if not candidate.exists():
+                continue
+            resolved = candidate.resolve()
+            if self._is_within_limits(resolved, limits):
+                yield resolved
+
+    def _iter_root_candidates(
+        self,
+        config: FileDiscoveryConfig,
+        root: Path,
+        limits: list[Path],
+    ) -> Iterable[Path]:
+        for base in self._resolve_roots(config, root):
+            resolved = base.resolve()
+            if limits and not self._is_within_limits(resolved, limits):
+                continue
+            if not resolved.exists():
+                continue
+            yield resolved
 
     def _resolve_roots(self, config: FileDiscoveryConfig, root: Path) -> Iterator[Path]:
         for entry in config.roots:
             candidate = entry if entry.is_absolute() else root / entry
             yield candidate
 
-    def _walk(self, base: Path, excludes: set[Path], limits: list[Path]) -> Iterator[Path]:
+    def _walk(
+        self,
+        base: Path,
+        excludes: set[Path],
+        limits: list[Path],
+        *,
+        root: Path,
+        allow_root_py_qa: bool,
+    ) -> Iterator[Path]:
         follow_links = self.follow_symlinks
         for dirpath, dirnames, filenames in os.walk(base, followlinks=follow_links):
             current = Path(dirpath)
-            if current.name in ALWAYS_EXCLUDE_DIRS or any(self._is_child_of(current, ex) for ex in excludes):
+            if (
+                current.name in ALWAYS_EXCLUDE_DIRS
+                and not _should_include_py_qa(
+                    current,
+                    base,
+                    root,
+                    allow_root_py_qa=allow_root_py_qa,
+                )
+            ) or any(self._is_child_of(current, ex) for ex in excludes):
                 dirnames[:] = []
                 continue
             dirnames[:] = [
                 name
                 for name in dirnames
-                if name not in ALWAYS_EXCLUDE_DIRS and not any(self._is_child_of(current / name, ex) for ex in excludes)
+                if name not in ALWAYS_EXCLUDE_DIRS
+                and not any(self._is_child_of(current / name, ex) for ex in excludes)
             ]
             for filename in filenames:
                 candidate = current / filename
@@ -109,4 +154,19 @@ class FilesystemDiscovery(DiscoveryStrategy):
                 return True
             except ValueError:
                 continue
+        return False
+
+
+def _should_include_py_qa(
+    current: Path,
+    base: Path,
+    root: Path,
+    *,
+    allow_root_py_qa: bool,
+) -> bool:
+    if not allow_root_py_qa or current.name != PY_QA_DIR_NAME:
+        return False
+    try:
+        return current.resolve() == root.resolve() and base.resolve() == root.resolve()
+    except OSError:
         return False
