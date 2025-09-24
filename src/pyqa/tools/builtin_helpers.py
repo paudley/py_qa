@@ -35,6 +35,9 @@ __all__ = [
     "_ensure_actionlint",
     "_ensure_hadolint",
     "_ensure_lualint",
+    "ensure_actionlint",
+    "ensure_hadolint",
+    "ensure_lualint",
     "_parse_gofmt_check",
 ]
 
@@ -240,6 +243,24 @@ def _ensure_lualint(cache_root: Path) -> Path:
     script.write_bytes(response.content)
     script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return script
+
+
+def ensure_actionlint(version: str, cache_root: Path) -> Path:
+    """Public helper for installing actionlint."""
+
+    return _ensure_actionlint(version, cache_root)
+
+
+def ensure_hadolint(version: str, cache_root: Path) -> Path:
+    """Public helper for installing hadolint."""
+
+    return _ensure_hadolint(version, cache_root)
+
+
+def ensure_lualint(cache_root: Path) -> Path:
+    """Public helper for writing the lualint shim."""
+
+    return _ensure_lualint(cache_root)
 
 
 def _parse_gofmt_check(stdout: str, _context: ToolContext) -> list[RawDiagnostic]:

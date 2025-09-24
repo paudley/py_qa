@@ -25,7 +25,7 @@ from .config import FileDiscoveryConfig, LicenseConfig, QualityConfigSection
 from .constants import ALWAYS_EXCLUDE_DIRS
 from .discovery.filesystem import FilesystemDiscovery
 from .discovery.git import GitDiscovery, list_tracked_files
-from .subprocess_utils import run_command
+from .process_utils import run_command
 from .tools.settings import TOOL_SETTING_SCHEMA
 
 

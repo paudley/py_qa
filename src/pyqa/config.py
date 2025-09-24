@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 import os
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -198,35 +198,22 @@ class Config(BaseModel):
     def to_dict(self) -> dict[str, object]:
         """Return a dictionary representation suitable for serialization."""
 
-        file_discovery_cfg: FileDiscoveryConfig = self.file_discovery
-        output_cfg: OutputConfig = self.output
-        execution_cfg: ExecutionConfig = self.execution
-        dedupe_cfg: DedupeConfig = self.dedupe
-        license_cfg = self.license
-        quality_cfg: QualityConfigSection = self.quality
-        clean_cfg: CleanConfig = self.clean
-        update_cfg: UpdateConfig = self.update
-
-        tool_settings = {
-            tool: dict(settings) for tool, settings in self.tool_settings.items()
-        }
-        quality_dict = quality_cfg.model_dump(mode="python")
-        quality_dict["schema_targets"] = [
-            str(path) for path in quality_cfg.schema_targets
-        ]
-
-        return {
-            "file_discovery": file_discovery_cfg.model_dump(mode="python"),
-            "output": output_cfg.model_dump(mode="python"),
-            "execution": execution_cfg.model_dump(mode="python"),
-            "dedupe": dedupe_cfg.model_dump(mode="python"),
-            "severity_rules": list(self.severity_rules),
-            "tool_settings": tool_settings,
-            "license": license_cfg.model_dump(mode="python"),
-            "quality": quality_dict,
-            "clean": clean_cfg.model_dump(mode="python"),
-            "update": update_cfg.model_dump(mode="python"),
-        }
+        payload: dict[str, object] = dict(self.model_dump(mode="python"))
+        payload["severity_rules"] = list(self.severity_rules)
+        quality_cfg = cast(QualityConfigSection, self.quality)
+        raw_tool_settings = payload.get("tool_settings", {})
+        if isinstance(raw_tool_settings, dict):
+            tool_settings_map: dict[str, dict[str, object]] = {}
+            for tool, settings in raw_tool_settings.items():
+                if isinstance(settings, dict):
+                    tool_settings_map[str(tool)] = dict(settings.items())
+            payload["tool_settings"] = tool_settings_map
+        quality_section = payload.get("quality", {})
+        if isinstance(quality_section, dict):
+            schema_targets = getattr(quality_cfg, "schema_targets", [])
+            quality_section["schema_targets"] = [str(path) for path in schema_targets]
+            payload["quality"] = quality_section
+        return payload
 
 
 __all__ = [

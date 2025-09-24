@@ -4,14 +4,14 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 from shutil import which
-from typing import Callable, Iterable
+from types import SimpleNamespace
+from typing import Any, Callable, Iterable
 
 from .environments import find_venv_bin
 
-Runner = Callable[[list[str]], subprocess.CompletedProcess[str]]
+Runner = Callable[[list[str]], Any]
 Warn = Callable[[str], None]
 
 
@@ -21,7 +21,7 @@ def install_with_preferred_manager(
     runner: Runner,
     warn: Warn | None = None,
     project_root: Path | None = None,
-) -> subprocess.CompletedProcess[str]:
+) -> Any:
     """Install packages using uv/pip preferences.
 
     The resolution order matches the legacy script:
@@ -57,6 +57,9 @@ def install_with_preferred_manager(
     if pip_exe:
         return runner([pip_exe, "install", "-U", *args_list])
 
-    return subprocess.CompletedProcess(
-        args=[], returncode=1, stdout="", stderr="pip not found"
+    return SimpleNamespace(
+        args=[],
+        returncode=1,
+        stdout="",
+        stderr="pip not found",
     )

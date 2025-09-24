@@ -9,7 +9,10 @@ TestSuppressionsMap = dict[str, dict[str, tuple[str, ...]]]
 
 _TEST_SUPPRESSIONS: Final[TestSuppressionsMap] = {
     "python": {
-        "pylint": (r"^(?:.+/)?tests?/.*:\d+: W0212: Access to a protected member .*$",),
+        "pylint": (
+            r"^pylint, (?:.+/)?tests?/.*:.*W0212.*Access to a protected member .*$",
+            r"^pylint, (?:.+/)?tests?/.*:.*W0613.*Unused argument .*$",
+        ),
     },
 }
 

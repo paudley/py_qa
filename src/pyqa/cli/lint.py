@@ -11,12 +11,15 @@ from typing import List
 import typer
 
 from ..config import Config, ConfigError, default_parallel_jobs
+from ..constants import PY_QA_DIR_NAME
 from ..discovery import build_default_discovery
 from ..execution.orchestrator import Orchestrator
+from ..logging import info, warn
 from ..models import RunResult
 from ..reporting.emitters import write_json_report, write_pr_summary, write_sarif_report
 from ..reporting.formatters import render
 from ..tools.registry import DEFAULT_REGISTRY
+from ..workspace import is_py_qa_workspace
 from .config_builder import build_config
 from .doctor import run_doctor
 from .options import LintOptions
@@ -126,11 +129,20 @@ def lint_command(
         metavar="TOOL",
         help="Display detailed information for TOOL and exit.",
     ),
+    fetch_all_tools: bool = typer.Option(
+        False,
+        "--fetch-all-tools",
+        help="Download or prepare runtimes for every registered tool and exit.",
+    ),
 ) -> None:
     """Entry point for the ``pyqa lint`` CLI command."""
 
     if doctor and tool_info:
         raise typer.BadParameter("--doctor and --tool-info cannot be combined")
+    if doctor and fetch_all_tools:
+        raise typer.BadParameter("--doctor and --fetch-all-tools cannot be combined")
+    if tool_info and fetch_all_tools:
+        raise typer.BadParameter("--tool-info and --fetch-all-tools cannot be combined")
 
     if fix_only and check_only:
         raise typer.BadParameter("--fix-only and --check-only are mutually exclusive")
@@ -147,6 +159,22 @@ def lint_command(
         derived_root = _derive_default_root(normalized_paths)
         if derived_root is not None:
             root = derived_root
+
+    is_py_qa_root = is_py_qa_workspace(root)
+    ignored_py_qa = []
+    if not is_py_qa_root:
+        for candidate in normalized_paths:
+            if PY_QA_DIR_NAME in candidate.parts:
+                ignored_py_qa.append(_display_path(candidate, root))
+    if ignored_py_qa:
+        unique = ", ".join(dict.fromkeys(ignored_py_qa))
+        warn(
+            (
+                f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
+                "unless lint runs inside the py_qa workspace."
+            ),
+            use_emoji=not no_emoji,
+        )
 
     if doctor:
         exit_code = run_doctor(root)
@@ -212,6 +240,22 @@ def lint_command(
         registry=DEFAULT_REGISTRY,
         discovery=build_default_discovery(),
     )
+    if fetch_all_tools:
+        results = orchestrator.fetch_all_tools(config, root=root)
+        if not quiet:
+            for tool_name, action_name, prepared in results:
+                version_display = prepared.version or "unknown"
+                info(
+                    (
+                        f"{tool_name}:{action_name} ready via {prepared.source} (version {version_display})"
+                    ),
+                    use_emoji=config.output.emoji,
+                )
+            info(
+                f"Prepared {len(results)} tool action(s) without execution.",
+                use_emoji=config.output.emoji,
+            )
+        raise typer.Exit(code=0)
     result = orchestrator.run(config, root=root)
     _handle_reporting(
         result,
@@ -309,6 +353,14 @@ def _collect_provided_flags(
 def _normalise_path(value: Path, cwd: Path) -> Path:
     candidate = value if value.is_absolute() else cwd / value
     return candidate.resolve()
+
+
+def _display_path(path: Path, root: Path) -> str:
+    try:
+        relative = path.relative_to(root)
+        return relative.as_posix()
+    except ValueError:
+        return str(path)
 
 
 def _derive_default_root(paths: List[Path]) -> Path | None:

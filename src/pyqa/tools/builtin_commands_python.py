@@ -29,6 +29,7 @@ class _BanditCommand(CommandBuilder):
             exclude_paths.add(candidate)
             try:
                 exclude_args.add(str(candidate.relative_to(root)))
+                exclude_args.add(str(candidate))
             except ValueError:
                 exclude_args.add(str(candidate))
         for path in ctx.cfg.file_discovery.excludes:
@@ -36,6 +37,7 @@ class _BanditCommand(CommandBuilder):
             exclude_paths.add(resolved)
             try:
                 exclude_args.add(str(resolved.relative_to(root)))
+                exclude_args.add(str(resolved))
             except ValueError:
                 exclude_args.add(str(resolved))
         if exclude_args:

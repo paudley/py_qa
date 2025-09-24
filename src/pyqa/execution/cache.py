@@ -6,13 +6,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict
 
+from ..metrics import FileMetrics
 from ..models import ToolOutcome
 from ..serialization import deserialize_outcome, safe_int, serialize_outcome
+
+
+@dataclass(frozen=True)
+class CachedEntry:
+    outcome: ToolOutcome
+    file_metrics: dict[str, FileMetrics]
 
 
 class FileState(BaseModel):
@@ -56,7 +64,7 @@ class ResultCache:
         cmd: Sequence[str],
         files: Sequence[Path],
         token: str,
-    ) -> ToolOutcome | None:
+    ) -> CachedEntry | None:
         entry_path = self._entry_path(tool=tool, action=action, cmd=cmd, token=token)
         if not entry_path.is_file():
             return None
@@ -88,7 +96,9 @@ class ResultCache:
             ):
                 return None
 
-        return deserialize_outcome(data)
+        outcome = deserialize_outcome(data)
+        metrics = _coerce_metrics_payload(data.get("file_metrics"))
+        return CachedEntry(outcome=outcome, file_metrics=metrics)
 
     def store(
         self,
@@ -99,13 +109,14 @@ class ResultCache:
         files: Sequence[Path],
         token: str,
         outcome: ToolOutcome,
+        file_metrics: Mapping[str, FileMetrics] | None = None,
     ) -> None:
         self._dir.mkdir(parents=True, exist_ok=True)
         entry_path = self._entry_path(tool=tool, action=action, cmd=cmd, token=token)
         states = _collect_file_states(files)
         if files and not states:
             return
-        payload = _outcome_to_payload(outcome, states)
+        payload = _outcome_to_payload(outcome, states, file_metrics or {})
         try:
             entry_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         except OSError:
@@ -133,7 +144,9 @@ class ResultCache:
 
 
 def _outcome_to_payload(
-    outcome: ToolOutcome, states: Iterable[FileState]
+    outcome: ToolOutcome,
+    states: Iterable[FileState],
+    file_metrics: Mapping[str, FileMetrics],
 ) -> dict[str, object]:
     payload = serialize_outcome(outcome)
     payload["files"] = [
@@ -144,6 +157,8 @@ def _outcome_to_payload(
         }
         for state in states
     ]
+    if file_metrics:
+        payload["file_metrics"] = _metrics_to_payload(file_metrics)
     return payload
 
 
@@ -157,4 +172,32 @@ def _coerce_state_payload(value: object) -> list[dict[str, Any]]:
     return states
 
 
-__all__ = ["ResultCache"]
+def _metrics_to_payload(metrics: Mapping[str, FileMetrics]) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    for path_str, metric in metrics.items():
+        file_entry = {
+            "path": path_str,
+            "line_count": metric.line_count,
+            "suppressions": dict(metric.suppressions),
+        }
+        entries.append(file_entry)
+    return entries
+
+
+def _coerce_metrics_payload(value: object) -> dict[str, FileMetrics]:
+    if not isinstance(value, list):
+        return {}
+    metrics: dict[str, FileMetrics] = {}
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        path = item.get("path")
+        if not isinstance(path, str):
+            continue
+        metric = FileMetrics.from_payload(item)
+        metric.ensure_labels()
+        metrics[path] = metric
+    return metrics
+
+
+__all__ = ["CachedEntry", "ResultCache"]

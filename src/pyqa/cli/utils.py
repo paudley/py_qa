@@ -6,11 +6,11 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Sequence
 
+from ..process_utils import SubprocessExecutionError, run_command
 from ..tool_env import VersionResolver
 from ..tools.base import Tool
 
@@ -36,14 +36,13 @@ def installed_packages() -> set[str]:
     """Return the set of installed packages within the project environment."""
 
     try:
-        completed = subprocess.run(
+        completed = run_command(
             ["uv", "pip", "list", "--format=json"],
             check=True,
             capture_output=True,
-            text=True,
             cwd=PYQA_ROOT,
         )
-    except (OSError, subprocess.CalledProcessError):
+    except (OSError, SubprocessExecutionError):
         return set()
     try:
         data = json.loads(completed.stdout)
@@ -59,7 +58,7 @@ def installed_packages() -> set[str]:
 def run_uv(args: List[str], *, check: bool = True) -> None:
     """Invoke ``uv`` with *args* relative to the project root."""
 
-    subprocess.run(args, check=check, cwd=PYQA_ROOT)
+    run_command(args, check=check, cwd=PYQA_ROOT)
 
 
 def check_tool_status(tool: Tool) -> ToolStatus:
@@ -89,10 +88,9 @@ def check_tool_status(tool: Tool) -> ToolStatus:
         )
 
     try:
-        completed = subprocess.run(
+        completed = run_command(
             list(version_cmd),
             capture_output=True,
-            text=True,
             check=False,
         )
     except FileNotFoundError:

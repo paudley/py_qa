@@ -6,13 +6,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, List, Optional, Sequence
+from typing import Any, Final, List, Optional, Sequence
 
 import typer
 
 from ..config_loader import ConfigError, ConfigLoader, ConfigLoadResult
 from ..logging import fail, ok, warn
-from ..subprocess_utils import run_command
+from ..process_utils import run_command
 from ..update import (
     DEFAULT_STRATEGIES,
     CommandRunner,
@@ -24,15 +24,12 @@ from ..update import (
     ensure_lint_install,
 )
 
-if TYPE_CHECKING:
-    from subprocess import CompletedProcess
-
 update_app = typer.Typer(
     name="update", help="Update dependencies across detected workspaces."
 )
 
 
-def _default_runner(args: Sequence[str], cwd: Path | None) -> "CompletedProcess[str]":
+def _default_runner(args: Sequence[str], cwd: Path | None) -> Any:
     return run_command(args, cwd=cwd, check=False)
 
 

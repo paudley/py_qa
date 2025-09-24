@@ -10,7 +10,7 @@ import stat
 from pathlib import Path
 from typing import Sequence
 
-from ...subprocess_utils import run_command
+from ...process_utils import run_command
 from ...tools.base import Tool
 from .. import constants as tool_constants
 from ..models import PreparedCommand
@@ -39,6 +39,34 @@ class PerlRuntime(RuntimeHandler):
             return None
         return PreparedCommand.from_parts(
             cmd=base_cmd, env=None, version=version, source="system"
+        )
+
+    def _try_project(
+        self,
+        tool: Tool,
+        base_cmd: Sequence[str],
+        root: Path,
+        cache_dir: Path,
+        target_version: str | None,
+    ) -> PreparedCommand | None:
+        del cache_dir, target_version
+        binary_name = Path(base_cmd[0]).name
+        candidate = root / "bin" / binary_name
+        if not candidate.exists():
+            return None
+        cmd = list(base_cmd)
+        cmd[0] = str(candidate)
+        env = self._perl_env(root)
+        version = None
+        if tool.version_command:
+            version = self._versions.capture(
+                tool.version_command, env=self._merge_env(env)
+            )
+        return PreparedCommand.from_parts(
+            cmd=cmd,
+            env=env,
+            version=version,
+            source="project",
         )
 
     def _prepare_local(

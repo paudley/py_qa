@@ -84,6 +84,8 @@ DEFAULT_EXCLUDES: Final[tuple[Path, ...]] = (
     Path(".eggs"),
     Path(".lint-cache"),
     Path(".cache"),
+    Path(".aider.chat.history.md"),
+    Path("src/.lint-cache"),
 )
 
 

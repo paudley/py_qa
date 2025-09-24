@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .logging import fail, info, ok, warn
-from .subprocess_utils import run_command
+from .process_utils import run_command
 
 # Patterns for secret detection (compiled lazily)
 _SECRET_PATTERNS: list[re.Pattern[str]] = [

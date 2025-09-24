@@ -10,7 +10,7 @@ import shutil
 from enum import Enum
 from pathlib import Path
 from typing import (
-    TYPE_CHECKING,
+    Any,
     Callable,
     Final,
     Iterable,
@@ -25,12 +25,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .constants import ALWAYS_EXCLUDE_DIRS
 from .logging import fail, info, ok, warn
-from .subprocess_utils import run_command
+from .process_utils import run_command
 
-if TYPE_CHECKING:
-    from subprocess import CompletedProcess
-
-CommandRunner = Callable[[Sequence[str], Path | None], "CompletedProcess[str]"]
+CommandRunner = Callable[[Sequence[str], Path | None], Any]
 
 
 class WorkspaceKind(Enum):
@@ -493,7 +490,7 @@ def _manifest_for(kind: WorkspaceKind, directory: Path) -> Path:
     return directory / name if name else directory
 
 
-def _default_runner(args: Sequence[str], cwd: Path | None) -> "CompletedProcess[str]":
+def _default_runner(args: Sequence[str], cwd: Path | None) -> Any:
     return run_command(args, cwd=cwd, check=False)
 
 

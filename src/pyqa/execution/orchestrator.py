@@ -6,12 +6,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import subprocess
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Callable, Mapping, Protocol, Sequence
+from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -24,16 +24,92 @@ from ..diagnostics import (
 )
 from ..discovery.base import SupportsDiscovery
 from ..environments import inject_node_defaults, prepend_venv_to_path
-from ..execution.cache import ResultCache
+from ..execution.cache import CachedEntry, ResultCache
 from ..languages import detect_languages
 from ..logging import info, warn
-from ..models import RunResult, ToolOutcome
+from ..metrics import FileMetrics, compute_file_metrics, normalise_path_key
+from ..models import Diagnostic, RunResult, ToolOutcome
 from ..severity import SeverityRuleView
 from ..tool_env import CommandPreparer, PreparedCommand
 from ..tool_versions import load_versions, save_versions
 from ..tools import Tool, ToolAction, ToolContext
 from ..tools.registry import ToolRegistry
 from .worker import run_command
+
+
+def _filter_diagnostics(
+    diagnostics: Sequence[Diagnostic],
+    tool_name: str,
+    patterns: Sequence[str],
+    root: Path,
+) -> list[Diagnostic]:
+    """Remove diagnostics matching suppression patterns for *tool_name*."""
+
+    if not diagnostics or not patterns:
+        return list(diagnostics)
+
+    compiled = [re.compile(pattern) for pattern in patterns]
+    kept: list[Diagnostic] = []
+    for diagnostic in diagnostics:
+        tool = diagnostic.tool or tool_name
+        location = diagnostic.file or "<unknown>"
+        if diagnostic.line is not None:
+            location = f"{location}:{diagnostic.line}"
+            if diagnostic.function:
+                location = f"{location}:{diagnostic.function}"
+        elif diagnostic.function:
+            location = f"{location}:{diagnostic.function}"
+
+        code = diagnostic.code or "-"
+        message = diagnostic.message.splitlines()[0].strip()
+        candidate = f"{tool}, {location}, {code}, {message}"
+
+        if any(pattern.search(candidate) for pattern in compiled):
+            continue
+
+        if tool == "pylint" and (diagnostic.code or "").upper() == "R0801":
+            lines = diagnostic.message.splitlines()
+            snippet: list[str] = []
+            for entry in lines[1:]:
+                stripped = entry.lstrip()
+                if not stripped or stripped.startswith("=="):
+                    continue
+                snippet.append(stripped)
+            context_line = (diagnostic.function or "").lstrip()
+            if context_line.startswith("#"):
+                continue
+            source_line = None
+            if diagnostic.line is not None and diagnostic.file:
+                source_line = _read_source_line(root, diagnostic.file, diagnostic.line)
+            if snippet and snippet[0].startswith("#"):
+                continue
+            if source_line is not None and source_line.lstrip().startswith("#"):
+                continue
+
+        if (
+            tool == "pylint"
+            and (diagnostic.code or "").upper() in {"W0613", "W0212", "R0801"}
+            and diagnostic.file
+            and "tests/" in diagnostic.file.replace("\\", "/")
+        ):
+            continue
+
+        kept.append(diagnostic)
+    return kept
+
+
+def _read_source_line(root: Path, file_str: str, line_no: int) -> str | None:
+    candidate = Path(file_str)
+    if not candidate.is_absolute():
+        candidate = (root / candidate).resolve()
+    try:
+        with candidate.open("r", encoding="utf-8", errors="ignore") as handle:
+            for idx, line in enumerate(handle, start=1):
+                if idx == line_no:
+                    return line.rstrip("\n")
+    except OSError:
+        return None
+    return None
 
 
 @dataclass
@@ -67,7 +143,7 @@ class Orchestrator:
         *,
         registry: ToolRegistry,
         discovery: SupportsDiscovery,
-        runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+        runner: Callable[..., Any] | None = None,
         hooks: OrchestratorHooks | None = None,
         cmd_preparer: CommandPreparationService | None = None,
     ) -> None:
@@ -99,16 +175,53 @@ class Orchestrator:
 
         self._execute_scheduled(cfg, root_path, severity_rules, cache_ctx, state)
         outcomes = [state.outcomes[index] for index in sorted(state.outcomes)]
+        self._populate_missing_metrics(state, matched_files)
         result = RunResult(
             root=root_path,
             files=matched_files,
             outcomes=outcomes,
             tool_versions=cache_ctx.versions,
+            file_metrics=dict(state.file_metrics),
         )
         dedupe_outcomes(result, cfg.dedupe)
         if cache_ctx.cache and cache_ctx.versions_dirty:
             save_versions(cache_ctx.cache_dir, cache_ctx.versions)
         return result
+
+    def fetch_all_tools(
+        self, cfg: Config, *, root: Path | None = None
+    ) -> list[tuple[str, str, PreparedCommand]]:
+        """Prepare every tool action to warm caches without executing them."""
+
+        root_path = self._prepare_runtime(root)
+        cache_dir = (
+            cfg.execution.cache_dir
+            if cfg.execution.cache_dir.is_absolute()
+            else root_path / cfg.execution.cache_dir
+        )
+        system_preferred = not cfg.execution.use_local_linters
+        use_local_override = cfg.execution.use_local_linters
+        results: list[tuple[str, str, PreparedCommand]] = []
+        for tool in self._registry.tools():
+            settings_view = MappingProxyType(dict(cfg.tool_settings.get(tool.name, {})))
+            context = ToolContext(
+                cfg=cfg,
+                root=root_path,
+                files=tuple(),
+                settings=settings_view,
+            )
+            for action in tool.actions:
+                base_cmd = list(action.build_command(context))
+                prepared = self._cmd_preparer.prepare(
+                    tool=tool,
+                    base_cmd=base_cmd,
+                    root=root_path,
+                    cache_dir=cache_dir,
+                    system_preferred=system_preferred,
+                    use_local_override=use_local_override,
+                )
+                results.append((tool.name, action.name, prepared))
+        return results
 
     def _prepare_runtime(self, root: Path | None) -> Path:
         resolved = root or Path.cwd()
@@ -140,7 +253,9 @@ class Orchestrator:
             else root / cfg.execution.cache_dir
         )
         if not cfg.execution.cache_enabled:
-            return _CacheContext(cache=None, token="", cache_dir=cache_dir, versions={})
+            return _CacheContext(
+                cache=None, token=None, cache_dir=cache_dir, versions={}
+            )
         cache = ResultCache(cache_dir)
         token = self._cache_token(cfg)
         versions = load_versions(cache_dir)
@@ -183,10 +298,11 @@ class Orchestrator:
                 use_local_override=cfg.execution.use_local_linters,
             )
             self._update_tool_version(cache_ctx, tool.name, prepared.version)
-            cached = self._load_cached_outcome(
+            cached_entry = self._load_cached_outcome(
                 cache_ctx, tool.name, action, prepared.cmd, context.files
             )
-            if cached is not None:
+            if cached_entry is not None:
+                outcome = cached_entry.outcome
                 self._record_outcome(
                     state=state,
                     order=state.order,
@@ -194,10 +310,12 @@ class Orchestrator:
                     action=action,
                     context=context,
                     cmd=tuple(prepared.cmd),
-                    outcome=cached,
+                    outcome=outcome,
+                    file_metrics=cached_entry.file_metrics,
                     cache_ctx=cache_ctx,
+                    from_cache=True,
                 )
-                if cfg.execution.bail and cached.returncode != 0:
+                if cfg.execution.bail and outcome.returncode != 0:
                     state.bail_triggered = True
                     return True
                 state.order += 1
@@ -221,7 +339,9 @@ class Orchestrator:
                     context=context,
                     cmd=tuple(prepared.cmd),
                     outcome=outcome,
+                    file_metrics=None,
                     cache_ctx=cache_ctx,
+                    from_cache=False,
                 )
                 state.order += 1
                 continue
@@ -244,7 +364,9 @@ class Orchestrator:
                     context=context,
                     cmd=tuple(prepared.cmd),
                     outcome=outcome,
+                    file_metrics=None,
                     cache_ctx=cache_ctx,
+                    from_cache=False,
                 )
                 state.order += 1
                 if outcome.returncode != 0 and not action.ignore_exit:
@@ -289,8 +411,8 @@ class Orchestrator:
         action: ToolAction,
         cmd: Sequence[str],
         files: Sequence[Path],
-    ) -> ToolOutcome | None:
-        if cache_ctx.cache is None:
+    ) -> CachedEntry | None:
+        if cache_ctx.cache is None or cache_ctx.token is None:
             return None
         return cache_ctx.cache.load(
             tool=tool_name,
@@ -339,7 +461,9 @@ class Orchestrator:
                         context=item.context,
                         cmd=item.cmd,
                         outcome=outcome,
+                        file_metrics=None,
                         cache_ctx=cache_ctx,
+                        from_cache=False,
                     )
         else:
             for item in state.scheduled:
@@ -360,7 +484,9 @@ class Orchestrator:
                     context=item.context,
                     cmd=item.cmd,
                     outcome=outcome,
+                    file_metrics=None,
                     cache_ctx=cache_ctx,
+                    from_cache=False,
                 )
 
     def _run_action(
@@ -389,9 +515,18 @@ class Orchestrator:
         diagnostics = normalize_diagnostics(
             parsed, tool_name=tool_name, severity_rules=severity_rules
         )
+        diagnostics = _filter_diagnostics(diagnostics, tool_name, extra_filters, root)
+        adjusted_returncode = cp.returncode
+        if tool_name == "pylint" and not diagnostics:
+            adjusted_returncode = 0
+
         if diagnostics:
             CONTEXT_RESOLVER.annotate(diagnostics, root=root)
-        if cp.returncode != 0 and not action.ignore_exit and context.cfg.output.verbose:
+        if (
+            adjusted_returncode != 0
+            and not action.ignore_exit
+            and context.cfg.output.verbose
+        ):
             warn(
                 f"{tool_name}:{action.name} exited with {cp.returncode}",
                 use_emoji=context.cfg.output.emoji,
@@ -399,7 +534,7 @@ class Orchestrator:
         return ToolOutcome(
             tool=tool_name,
             action=action.name,
-            returncode=cp.returncode,
+            returncode=adjusted_returncode,
             stdout=stdout,
             stderr=stderr,
             diagnostics=diagnostics,
@@ -416,9 +551,17 @@ class Orchestrator:
         cmd: Sequence[str],
         outcome: ToolOutcome,
         cache_ctx: "_CacheContext",
+        file_metrics: Mapping[str, FileMetrics] | None,
+        from_cache: bool,
     ) -> None:
+        metrics_map = (
+            dict(file_metrics)
+            if file_metrics is not None
+            else self._collect_metrics_for_files(state, context.files)
+        )
+        self._update_state_metrics(state, metrics_map)
         state.outcomes[order] = outcome
-        if cache_ctx.cache:
+        if cache_ctx.cache and cache_ctx.token is not None and not from_cache:
             cache_ctx.cache.store(
                 tool=tool,
                 action=action.name,
@@ -426,6 +569,7 @@ class Orchestrator:
                 files=context.files,
                 token=cache_ctx.token,
                 outcome=outcome,
+                file_metrics=metrics_map,
             )
         if self._hooks.after_tool:
             self._hooks.after_tool(outcome)
@@ -490,6 +634,36 @@ class Orchestrator:
             components.append(digest)
         return "|".join(components)
 
+    def _populate_missing_metrics(
+        self, state: "_ExecutionState", files: Sequence[Path]
+    ) -> None:
+        for path in files:
+            key = normalise_path_key(path)
+            if key in state.file_metrics:
+                continue
+            state.file_metrics[key] = compute_file_metrics(path)
+
+    def _collect_metrics_for_files(
+        self, state: "_ExecutionState", files: Sequence[Path]
+    ) -> dict[str, FileMetrics]:
+        collected: dict[str, FileMetrics] = {}
+        for path in files:
+            key = normalise_path_key(path)
+            metric = state.file_metrics.get(key)
+            if metric is None:
+                metric = compute_file_metrics(path)
+            metric.ensure_labels()
+            collected[key] = metric
+        return collected
+
+    @staticmethod
+    def _update_state_metrics(
+        state: "_ExecutionState", metrics: Mapping[str, FileMetrics]
+    ) -> None:
+        for key, metric in metrics.items():
+            metric.ensure_labels()
+            state.file_metrics[key] = metric
+
     @staticmethod
     def _is_within_limits(candidate: Path, limits: Sequence[Path]) -> bool:
         if not limits:
@@ -537,7 +711,7 @@ class _QueuedAction(BaseModel):
 @dataclass
 class _CacheContext:
     cache: ResultCache | None
-    token: str
+    token: str | None
     cache_dir: Path
     versions: dict[str, str]
     versions_dirty: bool = False
@@ -549,3 +723,4 @@ class _ExecutionState:
     scheduled: list[_QueuedAction] = field(default_factory=list)
     order: int = 0
     bail_triggered: bool = False
+    file_metrics: dict[str, FileMetrics] = field(default_factory=dict)

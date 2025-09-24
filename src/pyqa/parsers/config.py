@@ -14,6 +14,10 @@ from ..tools.base import ToolContext
 DOTENV_PATTERN = re.compile(
     r"^(?P<file>[^:]+):(?P<line>\d+)\s+(?P<code>[A-Za-z0-9_-]+):\s+(?P<message>.+)$"
 )
+YAMLLINT_PATTERN = re.compile(
+    r"^(?P<file>.*?):(?P<line>\d+):(?P<column>\d+):\s+\[(?P<level>[^\]]+)\]\s+"
+    r"(?P<message>.*?)(?:\s+\((?P<rule>[^)]+)\))?$"
+)
 
 
 def parse_sqlfluff(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
@@ -57,40 +61,40 @@ def parse_sqlfluff(payload: Any, _context: ToolContext) -> Sequence[RawDiagnosti
     return results
 
 
-def parse_yamllint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse yamllint JSON output."""
+def parse_yamllint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse yamllint parsable text output."""
 
-    items = payload if isinstance(payload, list) else []
     results: list[RawDiagnostic] = []
-    for entry in items:
-        if not isinstance(entry, dict):
+    for raw_line in stdout.splitlines():
+        line = raw_line.strip()
+        if not line:
             continue
-        path = entry.get("file")
-        problems = entry.get("problems") or entry.get("errors")
-        if not isinstance(problems, list):
+        match = YAMLLINT_PATTERN.match(line)
+        if not match:
             continue
-        for problem in problems:
-            if not isinstance(problem, dict):
-                continue
-            message = str(problem.get("message", "")).strip()
-            if not message:
-                continue
-            level = str(problem.get("level", "warning")).lower()
-            severity = {
-                "error": Severity.ERROR,
-                "warning": Severity.WARNING,
-            }.get(level, Severity.WARNING)
-            results.append(
-                RawDiagnostic(
-                    file=path,
-                    line=problem.get("line"),
-                    column=problem.get("column"),
-                    severity=severity,
-                    message=message,
-                    code=str(problem.get("rule")) if problem.get("rule") else None,
-                    tool="yamllint",
-                )
+        file_path = match.group("file") or None
+        line_no = int(match.group("line")) if match.group("line") else None
+        column_no = int(match.group("column")) if match.group("column") else None
+        message = match.group("message") or ""
+        level = (match.group("level") or "warning").lower()
+        rule = match.group("rule")
+
+        severity = {
+            "error": Severity.ERROR,
+            "warning": Severity.WARNING,
+        }.get(level, Severity.WARNING)
+
+        results.append(
+            RawDiagnostic(
+                file=file_path,
+                line=line_no,
+                column=column_no,
+                severity=severity,
+                message=message.strip(),
+                code=rule,
+                tool="yamllint",
             )
+        )
     return results
 
 

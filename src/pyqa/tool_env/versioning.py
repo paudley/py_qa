@@ -4,12 +4,11 @@
 from __future__ import annotations
 
 import re
-from subprocess import CalledProcessError
 from typing import Mapping, Sequence
 
 from packaging.version import InvalidVersion, Version
 
-from ..subprocess_utils import run_command
+from ..process_utils import SubprocessExecutionError, run_command
 
 
 class VersionResolver:
@@ -31,7 +30,7 @@ class VersionResolver:
                 capture_output=True,
                 env=dict(env) if env else None,
             )
-        except (OSError, ValueError, CalledProcessError):
+        except (OSError, ValueError, SubprocessExecutionError):
             return None
         output = completed.stdout.strip() or completed.stderr.strip()
         if not output:

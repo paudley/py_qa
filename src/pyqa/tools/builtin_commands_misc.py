@@ -12,6 +12,9 @@ from .builtin_helpers import (
     _resolve_path,
     _setting,
     _settings_list,
+    ensure_actionlint,
+    ensure_hadolint,
+    ensure_lualint,
 )
 
 
@@ -261,14 +264,9 @@ class _ActionlintCommand(CommandBuilder):
     version: str
 
     def build(self, ctx: ToolContext) -> Sequence[str]:
-        from . import builtins as _builtins
-
         cache_root = ctx.root / ".lint-cache"
-        binary = _builtins._ensure_actionlint(self.version, cache_root)
-        cmd = [str(binary), "--format", "json", "--color", "never"]
-        workflows = ctx.root / ".github" / "workflows"
-        if workflows.exists():
-            cmd.append(str(workflows))
+        binary = ensure_actionlint(self.version, cache_root)
+        cmd = [str(binary), "-format", "{{json .}}", "-no-color"]
         return tuple(cmd)
 
 
@@ -393,7 +391,7 @@ class _YamllintCommand(CommandBuilder):
             cmd.append("--strict")
 
         if "--format" not in cmd and "-f" not in cmd:
-            cmd.extend(["--format", "json"])
+            cmd.extend(["--format", "parsable"])
 
         args = _settings_list(_setting(settings, "args"))
         if args:
@@ -427,10 +425,8 @@ class _HadolintCommand(CommandBuilder):
     version: str
 
     def build(self, ctx: ToolContext) -> Sequence[str]:
-        from . import builtins as _builtins
-
         cache_root = ctx.root / ".lint-cache"
-        binary = _builtins._ensure_hadolint(self.version, cache_root)
+        binary = ensure_hadolint(self.version, cache_root)
         cmd = [str(binary), "--format", "json"]
 
         config = _setting(ctx.settings, "config")
@@ -489,10 +485,8 @@ class _LualintCommand(CommandBuilder):
     base: Sequence[str]
 
     def build(self, ctx: ToolContext) -> Sequence[str]:
-        from . import builtins as _builtins
-
         cache_root = ctx.root / ".lint-cache"
-        script = _builtins._ensure_lualint(cache_root)
+        script = ensure_lualint(cache_root)
         cmd = list(self.base)
         cmd.append(str(script))
 
@@ -629,15 +623,13 @@ class _RemarkCommand(CommandBuilder):
         settings = ctx.settings
 
         if not self.is_fix and "--report" not in cmd:
-            cmd.extend(["--report", "json"])
+            cmd.extend(["--report", "vfile-reporter-json"])
         if not self.is_fix and "--frail" not in cmd:
             cmd.append("--frail")
         if not self.is_fix and "--quiet" not in cmd:
             cmd.append("--quiet")
         if not self.is_fix and "--no-color" not in cmd:
             cmd.append("--no-color")
-        if self.is_fix and "--output" not in cmd:
-            cmd.append("--output")
 
         config = _setting(settings, "config")
         if config:
@@ -658,6 +650,14 @@ class _RemarkCommand(CommandBuilder):
         args = _settings_list(_setting(settings, "args"))
         if args:
             cmd.extend(str(arg) for arg in args)
+
+        files = [str(path) for path in ctx.files]
+        if files:
+            cmd.extend(files)
+        elif self.is_fix:
+            cmd.append(str(root))
+        if self.is_fix and "-o" not in cmd and "--output" not in cmd:
+            cmd.append("-o")
 
         return tuple(cmd)
 

@@ -10,6 +10,7 @@ from typing import Pattern
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
+from .metrics import FileMetrics
 from .severity import Severity
 
 
@@ -105,6 +106,7 @@ class RunResult(BaseModel):
     files: list[Path]
     outcomes: list[ToolOutcome]
     tool_versions: dict[str, str] = Field(default_factory=dict)
+    file_metrics: dict[str, FileMetrics] = Field(default_factory=dict)
 
     def has_failures(self) -> bool:
         """Return ``True`` when any outcome failed."""

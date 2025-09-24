@@ -22,7 +22,7 @@ from rich.table import Table
 from ..config import Config, ConfigError
 from ..config_loader import ConfigLoader, ConfigLoadResult
 from ..context import TreeSitterContextResolver
-from ..subprocess_utils import run_command
+from ..process_utils import run_command
 from ..tools.registry import DEFAULT_REGISTRY
 from .utils import ToolStatus, check_tool_status
 
@@ -255,7 +255,7 @@ def _probe_program(executable: str, required: bool) -> EnvironmentCheck:
 def _probe_module(module: str, optional: bool) -> EnvironmentCheck:
     try:
         importlib.import_module(module)
-    except Exception as exc:
+    except ImportError as exc:
         status = "missing" if optional else "not ok"
         detail = f"{type(exc).__name__}: {exc}"
         return EnvironmentCheck(name=module, status=status, ok=optional, detail=detail)
@@ -282,7 +282,7 @@ def _collect_tool_summaries(config: Config) -> list[ToolSummary]:
 def _collect_grammar_statuses() -> list[GrammarStatus]:
     resolver = TreeSitterContextResolver()
     statuses: list[GrammarStatus] = []
-    for language, grammar in sorted(resolver._GRAMMAR_NAMES.items()):
+    for language, grammar in sorted(resolver.grammar_modules().items()):
         module_name = f"tree_sitter_{grammar.replace('-', '_')}"
         try:
             module = importlib.import_module(module_name)

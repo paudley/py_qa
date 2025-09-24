@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Iterable
 
 from .base import Tool
@@ -67,6 +68,9 @@ __all__ = [
     "_ensure_actionlint",
     "_ensure_hadolint",
     "_ensure_lualint",
+    "ensure_actionlint",
+    "ensure_hadolint",
+    "ensure_lualint",
     "_ActionlintCommand",
     "_BanditCommand",
     "_BlackCommand",
@@ -100,3 +104,21 @@ __all__ = [
     "_TscCommand",
     "_YamllintCommand",
 ]
+
+
+def ensure_actionlint(version: str, cache_root: Path) -> Path:
+    """Public wrapper exposing the actionlint installer."""
+
+    return _ensure_actionlint(version, cache_root)
+
+
+def ensure_hadolint(version: str, cache_root: Path) -> Path:
+    """Public wrapper exposing the hadolint installer."""
+
+    return _ensure_hadolint(version, cache_root)
+
+
+def ensure_lualint(cache_root: Path) -> Path:
+    """Public wrapper exposing the lualint installer."""
+
+    return _ensure_lualint(cache_root)

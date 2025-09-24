@@ -57,7 +57,7 @@ def _build_parser_loader() -> Callable[[str], Any] | None:
             elif hasattr(parser, "language"):
                 try:
                     parser.language = language  # type: ignore[assignment]
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
                     return None
             return parser
 
@@ -118,6 +118,11 @@ class TreeSitterContextResolver:
         self._parsers: dict[str, Any | None] = {}
         self._disabled: set[str] = set()
 
+    def grammar_modules(self) -> dict[str, str]:
+        """Expose supported grammar modules for diagnostic tooling."""
+
+        return dict(self._GRAMMAR_NAMES)
+
     def annotate(self, diagnostics: Iterable[Diagnostic], *, root: Path) -> None:
         root_path = root.resolve()
         for diag in diagnostics:
@@ -164,7 +169,7 @@ class TreeSitterContextResolver:
             return None
         try:
             parser = loader()
-        except Exception:
+        except (ImportError, OSError, ValueError, RuntimeError):
             self._disable_language(language)
             return None
         if parser is None or not hasattr(parser, "parse"):
@@ -195,7 +200,7 @@ class TreeSitterContextResolver:
 
     @lru_cache(maxsize=256)
     def _parse(
-        self, language: str, path: Path, mtime_ns: int
+        self, language: str, path: Path, _mtime_ns: int
     ) -> Optional[_ParseResult]:
         parser = self._get_parser(language)
         if parser is None:
@@ -250,44 +255,49 @@ class TreeSitterContextResolver:
         return None
 
     def _python_context(self, node: Any, line: int) -> Optional[str]:
-        best_node: Any | None = None
-        best_start = -1
-        best_named: tuple[int, str] | None = None
+        best_named_line = -1
+        best_named_value: str | None = None
+        best_generic_line = -1
+        best_generic_node: Any | None = None
         stack = [node]
         while stack:
             current = stack.pop()
             start_point = getattr(current, "start_point", None)
             end_point = getattr(current, "end_point", None)
-            if start_point and end_point:
-                start_row = start_point[0] + 1
-                end_row = end_point[0] + 1
-                if start_row <= line and line <= end_row:
-                    node_type = getattr(current, "type", "")
-                    if node_type in {"function_definition", "class_definition"}:
-                        name_node = getattr(
-                            current, "child_by_field_name", lambda _: None
-                        )("name")
-                        if name_node is not None and hasattr(name_node, "text"):
-                            decoded = name_node.text.decode("utf-8")
-                            if not best_named or start_row >= best_named[0]:
-                                best_named = (start_row, decoded)
-                                # continue exploring to find more specific matches
-                    if start_row >= best_start:
-                        best_node = current
-                        best_start = start_row
-            children = getattr(current, "children", [])
-            stack.extend(child for child in children if child is not None)
-        if best_named is not None:
-            return best_named[1]
-        if best_node is None:
+            children = getattr(current, "children", None)
+            if not start_point or not end_point:
+                if children:
+                    stack.extend(child for child in children if child is not None)
+                continue
+            start_row = start_point[0] + 1
+            end_row = end_point[0] + 1
+            if start_row > line or line > end_row:
+                if children:
+                    stack.extend(child for child in children if child is not None)
+                continue
+
+            node_type = getattr(current, "type", "")
+            if node_type in {"function_definition", "class_definition"}:
+                name = self._node_name(current)
+                if name and start_row >= best_named_line:
+                    best_named_line = start_row
+                    best_named_value = name
+
+            if start_row >= best_generic_line:
+                best_generic_line = start_row
+                best_generic_node = current
+
+            if children:
+                stack.extend(child for child in children if child is not None)
+
+        if best_named_value:
+            return best_named_value
+        if best_generic_node is None:
             return None
-        name_node = getattr(best_node, "child_by_field_name", lambda _: None)("name")
-        if name_node is not None and hasattr(name_node, "text"):
-            return name_node.text.decode("utf-8")
-        text = getattr(best_node, "text", None)
-        if isinstance(text, bytes):
-            return text.decode("utf-8")
-        node_type = getattr(best_node, "type", None)
+        fallback_name = self._node_name(best_generic_node)
+        if fallback_name:
+            return fallback_name
+        node_type = getattr(best_generic_node, "type", None)
         return str(node_type) if node_type else None
 
     def _markdown_context(self, node: Any, line: int, source: bytes) -> Optional[str]:
@@ -325,6 +335,23 @@ class TreeSitterContextResolver:
         if start_byte is None or end_byte is None:
             return None
         return source[start_byte:end_byte].decode("utf-8").strip()
+
+    @staticmethod
+    def _node_name(node: Any) -> Optional[str]:
+        extractor = getattr(node, "child_by_field_name", None)
+        if callable(extractor):
+            name_node = extractor("name")
+            raw = getattr(name_node, "text", None)
+            if isinstance(raw, bytes):
+                return raw.decode("utf-8")
+            if isinstance(raw, str):
+                return raw
+        text = getattr(node, "text", None)
+        if isinstance(text, bytes):
+            text = text.decode("utf-8")
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+        return None
 
     def _markdown_heading_context(self, path: Path, line: int) -> Optional[str]:
         try:
@@ -398,7 +425,7 @@ class TreeSitterContextResolver:
             end = getattr(node, "end_lineno", None)
             if start is None or end is None:
                 continue
-            if start <= line and line <= end:
+            if start <= line <= end:
                 if start >= best_start:
                     best_node = node
                     best_start = start

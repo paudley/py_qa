@@ -8,11 +8,10 @@ import os
 import shlex
 import shutil
 from pathlib import Path
-from subprocess import CalledProcessError
 from typing import Mapping, Sequence
 
 from ...environments import inject_node_defaults
-from ...subprocess_utils import run_command
+from ...process_utils import SubprocessExecutionError, run_command
 from ...tools.base import Tool
 from .. import constants as tool_constants
 from ..models import PreparedCommand
@@ -156,7 +155,7 @@ class NpmRuntime(RuntimeHandler):
                 capture_output=True,
                 env=dict(env),
             )
-        except (OSError, CalledProcessError):
+        except (OSError, SubprocessExecutionError):
             return None
         try:
             payload = json.loads(result.stdout)
