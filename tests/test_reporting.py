@@ -4,9 +4,12 @@
 
 import json
 from pathlib import Path
+from typing import Sequence, cast
 
+from pyqa.annotations import AnnotationEngine, MessageSpan
 from pyqa.config import OutputConfig
 from pyqa.models import Diagnostic, RunResult, ToolOutcome
+from pyqa.reporting.advice import AdviceBuilder, AdviceEntry, generate_advice
 from pyqa.reporting.emitters import (
     write_json_report,
     write_pr_summary,
@@ -53,11 +56,22 @@ def _run_result(tmp_path: Path) -> RunResult:
 
 def test_write_json_report(tmp_path: Path) -> None:
     result = _run_result(tmp_path)
+    result.analysis["refactor_navigator"] = [
+        {
+            "file": "src/app.py",
+            "function": "main",
+            "issue_tags": {"complexity": 2},
+            "size": 12,
+            "complexity": 4,
+            "diagnostics": [],
+        }
+    ]
     dest = tmp_path / "report.json"
     write_json_report(result, dest)
 
     data = json.loads(dest.read_text(encoding="utf-8"))
     assert data["outcomes"][0]["diagnostics"][0]["code"] == "F401"
+    assert data["analysis"]["refactor_navigator"][0]["function"] == "main"
 
 
 def test_write_sarif_report(tmp_path: Path) -> None:
@@ -100,6 +114,418 @@ def test_write_pr_summary_with_filter_and_template(tmp_path: Path) -> None:
     assert "F401" in content
     assert "W000" not in content
     assert "ruff:F401" in content
+
+
+def test_write_pr_summary_can_include_advice(tmp_path: Path) -> None:
+    module_path = tmp_path / "src" / "pkg" / "module.py"
+    module_path.parent.mkdir(parents=True, exist_ok=True)
+    module_path.write_text("""def build_widget(foo, bar):\n    return foo + bar\n""", encoding="utf-8")
+
+    diagnostics = [
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN001",
+            message="Missing type annotation for function argument foo",
+            function="build_widget",
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN001",
+            message="Missing type annotation for function argument bar",
+            function="build_widget",
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN201",
+            message="Missing return type annotation for public function build_widget",
+            function="build_widget",
+        ),
+    ]
+
+    outcome = ToolOutcome(
+        tool="ruff",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=diagnostics,
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[module_path],
+        outcomes=[outcome],
+        tool_versions={},
+    )
+    dest = tmp_path / "summary.md"
+    write_pr_summary(result, dest, include_advice=True, advice_limit=3)
+
+    content = dest.read_text(encoding="utf-8")
+    assert "## SOLID Advice" in content
+    assert "- **Types:** introduce explicit annotations in src/pkg/module.py" in content
+
+
+def test_write_pr_summary_allows_advice_template_override(tmp_path: Path) -> None:
+    module_path = tmp_path / "src" / "pkg" / "module.py"
+    module_path.parent.mkdir(parents=True, exist_ok=True)
+    module_path.write_text("""def build_widget(foo, bar):\n    return foo + bar\n""", encoding="utf-8")
+
+    diagnostics = [
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN001",
+            message="Missing type annotation for function argument foo",
+            function="build_widget",
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN201",
+            message="Missing return type annotation for public function build_widget",
+            function="build_widget",
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN202",
+            message="Missing type annotation for function argument baz",
+            function="build_widget",
+        ),
+    ]
+
+    outcome = ToolOutcome(
+        tool="ruff",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=diagnostics,
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[module_path],
+        outcomes=[outcome],
+        tool_versions={},
+    )
+    dest = tmp_path / "summary.md"
+    write_pr_summary(
+        result,
+        dest,
+        include_advice=True,
+        advice_limit=2,
+        advice_template="> [{category}] {body}",
+    )
+
+    content = dest.read_text(encoding="utf-8")
+    assert "> [Types] introduce explicit annotations" in content
+
+
+def test_write_pr_summary_template_can_reference_advice_summary(tmp_path: Path) -> None:
+    module_path = tmp_path / "src" / "pkg" / "module.py"
+    module_path.parent.mkdir(parents=True, exist_ok=True)
+    module_path.write_text(
+        """
+def build_widget(foo, bar, baz):
+    return foo + bar + baz
+""".strip(),
+        encoding="utf-8",
+    )
+
+    diagnostics = [
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN001",
+            message="Missing type annotation for function argument foo",
+            function="build_widget",
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN001",
+            message="Missing type annotation for function argument bar",
+            function="build_widget",
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN201",
+            message="Missing return type annotation for public function build_widget",
+            function="build_widget",
+        ),
+    ]
+
+    outcome = ToolOutcome(
+        tool="ruff",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=diagnostics,
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[module_path],
+        outcomes=[outcome],
+        tool_versions={},
+    )
+    dest = tmp_path / "summary.md"
+    write_pr_summary(
+        result,
+        dest,
+        template="- {code}: {message} (Top: {advice_primary_category})",
+        advice_limit=2,
+    )
+
+    content = dest.read_text(encoding="utf-8")
+    assert "Top: Types" in content
+
+
+def test_write_pr_summary_supports_custom_advice_builder(tmp_path: Path) -> None:
+    module_path = tmp_path / "src" / "pkg" / "module.py"
+    module_path.parent.mkdir(parents=True, exist_ok=True)
+    module_path.write_text("def build(foo, bar):\n    return foo + bar\n", encoding="utf-8")
+
+    diagnostics = [
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN001",
+            message="Missing type annotation for function argument foo",
+            function="build",
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN201",
+            message="Missing return type annotation for public function build",
+            function="build",
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN001",
+            message="Missing type annotation for function argument bar",
+            function="build",
+        ),
+    ]
+
+    outcome = ToolOutcome(
+        tool="ruff",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=diagnostics,
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[module_path],
+        outcomes=[outcome],
+        tool_versions={},
+    )
+    dest = tmp_path / "summary.md"
+
+    def builder(entries: Sequence[AdviceEntry]) -> Sequence[str]:
+        if not entries:
+            return []
+        body = ", ".join(f"{entry.category}:{entry.body}" for entry in entries[:1])
+        return ["", "## Custom Advice", "", f"* {body}"]
+
+    write_pr_summary(
+        result,
+        dest,
+        include_advice=True,
+        advice_section_builder=builder,
+    )
+
+    content = dest.read_text(encoding="utf-8")
+    assert "## Custom Advice" in content
+    assert "Types:" in content
+
+
+def test_write_pr_summary_custom_builder_respects_severity(tmp_path: Path) -> None:
+    module_path = tmp_path / "src" / "pkg" / "module.py"
+    module_path.parent.mkdir(parents=True, exist_ok=True)
+    module_path.write_text("def build(foo, bar, baz):\n    return foo + bar + baz\n", encoding="utf-8")
+
+    diagnostics = [
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN001",
+            message="Missing type annotation for function argument foo",
+            function="build",
+            severity=Severity.ERROR,
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN001",
+            message="Missing type annotation for function argument bar",
+            function="build",
+            severity=Severity.ERROR,
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN201",
+            message="Missing return type annotation for public function build",
+            function="build",
+            severity=Severity.ERROR,
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN001",
+            message="Missing type annotation for function argument baz",
+            function="build",
+            severity=Severity.WARNING,
+        ),
+    ]
+
+    outcome = ToolOutcome(
+        tool="ruff",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=diagnostics,
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[module_path],
+        outcomes=[outcome],
+        tool_versions={},
+    )
+    dest = tmp_path / "summary.md"
+
+    captured: dict[str, int] = {"count": -1}
+
+    def builder(entries: Sequence[AdviceEntry]) -> Sequence[str]:
+        captured["count"] = len(entries)
+        if not entries:
+            return []
+        return ["", "## Severity Advice", "", f"* total={len(entries)}"]
+
+    write_pr_summary(
+        result,
+        dest,
+        include_advice=True,
+        min_severity="error",
+        advice_limit=5,
+        advice_section_builder=builder,
+    )
+
+    content = dest.read_text(encoding="utf-8")
+    assert "## Severity Advice" in content
+    assert "total=1" in content
+    assert "baz" not in content
+    assert captured["count"] == 1
+
+
+def test_write_pr_summary_advice_integration_multiple_tools(tmp_path: Path) -> None:
+    pkg_dir = tmp_path / "src" / "pkg"
+    pkg_dir.mkdir(parents=True, exist_ok=True)
+    module_path = pkg_dir / "module.py"
+    module_path.write_text(
+        """
+def complex_func():
+    for i in range(3):
+        if i % 2:
+            print(i)
+
+
+def typed_func(arg1, arg2):
+    return arg1 + arg2
+""".strip(),
+        encoding="utf-8",
+    )
+
+    diagnostics = [
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="pylint",
+            code="R0915",
+            message="R0915 Too many statements",
+            function="complex_func",
+            severity=Severity.ERROR,
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN001",
+            message="Missing type annotation for function argument arg1",
+            function="typed_func",
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN201",
+            message="Missing return type annotation for public function typed_func",
+            function="typed_func",
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN202",
+            message="Missing type annotation for function argument arg2",
+            function="typed_func",
+        ),
+    ]
+
+    pylint_outcome = ToolOutcome(
+        tool="pylint",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=[diagnostics[0]],
+    )
+    ruff_outcome = ToolOutcome(
+        tool="ruff",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=diagnostics[1:],
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[module_path],
+        outcomes=[pylint_outcome, ruff_outcome],
+        tool_versions={},
+    )
+
+    dest = tmp_path / "summary.md"
+    captured: dict[str, Sequence[AdviceEntry] | int] = {}
+
+    def builder(entries: Sequence[AdviceEntry]) -> Sequence[str]:
+        captured["entries"] = entries
+        if not entries:
+            return []
+        return ["", "## Custom Integration Advice", "", *[f"* {entry.category}: {entry.body}" for entry in entries[:2]]]
+
+    write_pr_summary(
+        result,
+        dest,
+        include_advice=True,
+        advice_limit=3,
+        template="- {tool}:{code} {message} | Top:{advice_primary_category}",
+        advice_section_builder=builder,
+    )
+
+    content = dest.read_text(encoding="utf-8")
+    assert "Top:Refactor priority" in content
+    assert "## Custom Integration Advice" in content
+    entries = captured.get("entries")
+    assert entries is not None and len(entries) >= 2
+    categories = {entry.category for entry in entries}
+    assert "Refactor priority" in categories
+    assert "Types" in categories
 
 
 def test_render_concise_shows_diagnostics_for_failures(tmp_path: Path, capsys) -> None:
@@ -782,6 +1208,15 @@ def test_render_advice_panel_covers_runtime_and_tests(tmp_path: Path, capsys) ->
         outcomes=[outcome],
         tool_versions={},
     )
+    result.analysis["refactor_navigator"] = [
+        {
+            "file": "src/pkg/service.py",
+            "function": "handle_service",
+            "issue_tags": {"complexity": 2, "typing": 1},
+            "size": 50,
+            "complexity": 9,
+        }
+    ]
     config = OutputConfig(color=False, emoji=False, advice=True, show_stats=False)
     render(result, config)
     output = capsys.readouterr().out
@@ -793,3 +1228,36 @@ def test_render_advice_panel_covers_runtime_and_tests(tmp_path: Path, capsys) ->
     assert "Refactor priority: focus on" in output
     assert "function handle_service in src/pkg/service.py" in output
     assert "function perform_hooks in src/pkg/hooks.py" in output
+    assert "Refactor Navigator" in output
+    assert "handle_service" in output
+
+
+def test_advice_builder_delegates_to_generate_advice() -> None:
+    entries = [
+        (
+            "src/sample.py",
+            4,
+            "example",
+            "ruff",
+            "ANN001",
+            "Missing type annotation for function argument foo",
+        )
+    ]
+
+    class DummyAnnotationEngine:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def message_spans(self, message: str) -> tuple[MessageSpan, ...]:
+            self.calls.append(message)
+            return ()
+
+    dummy = DummyAnnotationEngine()
+    engine = cast(AnnotationEngine, dummy)
+    builder = AdviceBuilder(annotation_engine=engine)
+
+    expected = generate_advice(entries, engine)
+    result = builder.build(entries)
+
+    assert result == expected
+    assert dummy.calls

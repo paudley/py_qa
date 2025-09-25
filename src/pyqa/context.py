@@ -133,6 +133,29 @@ class TreeSitterContextResolver:
             if context:
                 diag.function = context
 
+    def resolve_context_for_lines(
+        self,
+        file_path: str,
+        *,
+        root: Path,
+        lines: Iterable[int],
+    ) -> dict[int, str]:
+        language = self._detect_language(file_path)
+        if language is None:
+            return {}
+        location = self._resolve_path(file_path, root)
+        if location is None or not location.is_file():
+            return {}
+
+        contexts: dict[int, str] = {}
+        for line in lines:
+            if line in contexts:
+                continue
+            context = self._find_context(language, location, line)
+            if context:
+                contexts[line] = context
+        return contexts
+
     def _detect_language(self, file_str: str) -> str | None:
         path = Path(file_str)
         suffix = path.suffix.lower()

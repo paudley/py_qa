@@ -16,6 +16,8 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from ..analysis import apply_change_impact, apply_suppression_hints, build_refactor_navigator
+from ..annotations import AnnotationEngine
 from ..config import Config
 from ..context import CONTEXT_RESOLVER
 from ..diagnostics import (
@@ -38,6 +40,9 @@ from ..tools.registry import ToolRegistry
 from .worker import run_command
 
 FetchEvent = Literal["start", "completed", "error"]
+
+
+_ANALYSIS_ENGINE = AnnotationEngine()
 FetchCallback = Callable[[FetchEvent, str, str, int, int, str | None], None]
 
 
@@ -187,6 +192,10 @@ class Orchestrator:
             file_metrics=dict(state.file_metrics),
         )
         dedupe_outcomes(result, cfg.dedupe)
+        _ANALYSIS_ENGINE.annotate_run(result)
+        apply_suppression_hints(result, _ANALYSIS_ENGINE)
+        apply_change_impact(result)
+        build_refactor_navigator(result, _ANALYSIS_ENGINE)
         if cache_ctx.cache and cache_ctx.versions_dirty:
             save_versions(cache_ctx.cache_dir, cache_ctx.versions)
         return result

@@ -5,15 +5,20 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 
 from ..models import Diagnostic, RunResult
+from ..annotations import HighlightKind
+from .advice import AdviceBuilder, AdviceEntry
 from ..serialization import serialize_outcome
 from ..severity import Severity, severity_to_sarif
 
 SARIF_VERSION = "2.1.0"
 SARIF_SCHEMA = "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json"
+
+_ADVICE_BUILDER = AdviceBuilder()
+_ANNOTATION_ENGINE = _ADVICE_BUILDER.annotation_engine
 
 
 def write_json_report(result: RunResult, path: Path) -> None:
@@ -22,6 +27,7 @@ def write_json_report(result: RunResult, path: Path) -> None:
         "root": str(result.root),
         "files": [str(p) for p in result.files],
         "outcomes": [serialize_outcome(outcome) for outcome in result.outcomes],
+        "analysis": result.analysis,
     }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
@@ -98,6 +104,10 @@ def write_pr_summary(
     limit: int = 100,
     min_severity: str = "warning",
     template: str = "- **{severity}** `{tool}` {message} ({location})",
+    include_advice: bool = False,
+    advice_limit: int = 5,
+    advice_template: str = "- **{category}:** {body}",
+    advice_section_builder: Callable[[Sequence[AdviceEntry]], Sequence[str]] | None = None,
 ) -> None:
     """Render a Markdown summary for pull requests."""
     diagnostics: list[tuple[Diagnostic, str]] = []
@@ -128,6 +138,31 @@ def write_pr_summary(
         ),
     )
 
+    needs_advice = (
+        include_advice
+        or "{advice" in template
+        or "{advice" in advice_template
+    )
+    needs_highlight = "{highlighted_message" in template
+
+    advice_entries: list[AdviceEntry] = []
+    advice_summary = ""
+    advice_primary = ""
+    advice_primary_category = ""
+    advice_count = 0
+
+    if needs_advice:
+        advice_inputs = _diagnostics_to_advice_inputs(filtered)
+        advice_entries = _ADVICE_BUILDER.build(advice_inputs)
+        advice_count = len(advice_entries)
+        if advice_entries:
+            limited = advice_entries[:advice_limit]
+            advice_summary = "; ".join(
+                f"{entry.category}: {entry.body}" for entry in limited
+            )
+            advice_primary_category = advice_entries[0].category
+            advice_primary = advice_entries[0].body
+
     lines = ["# Lint Summary", ""]
     shown = 0
     for diag, tool in filtered:
@@ -138,12 +173,22 @@ def write_pr_summary(
             location += f":{diag.line}"
             if diag.column is not None:
                 location += f":{diag.column}"
+        highlighted_message = (
+            _highlight_markdown(diag.message)
+            if needs_highlight
+            else diag.message
+        )
         entry = template.format(
             severity=diag.severity.value.upper(),
             tool=tool,
             message=diag.message,
+            highlighted_message=highlighted_message,
             location=location,
             code=diag.code or "",
+            advice_summary=advice_summary,
+            advice_primary=advice_primary,
+            advice_primary_category=advice_primary_category,
+            advice_count=advice_count,
         )
         lines.append(entry)
         shown += 1
@@ -151,6 +196,18 @@ def write_pr_summary(
     if len(filtered) > limit:
         lines.append("")
         lines.append(f"…and {len(filtered) - limit} more diagnostics.")
+
+    if include_advice:
+        section_lines: Sequence[str]
+        if advice_section_builder is not None:
+            section_lines = advice_section_builder(advice_entries)
+        else:
+            section_lines = _build_advice_section(advice_entries, advice_limit, advice_template)
+        section_lines = list(section_lines)
+        if section_lines:
+            if lines[-1] != "":
+                lines.append("")
+            lines.extend(section_lines)
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -174,3 +231,63 @@ def _severity_rank(value: str | Severity, mapping: dict[Severity, int]) -> int:
         if sev.value == normalized:
             return rank
     return mapping[Severity.WARNING]
+
+
+def _build_advice_section(
+    advice_entries: Sequence[AdviceEntry],
+    limit: int,
+    template: str,
+) -> list[str]:
+    if not advice_entries:
+        return []
+
+    section: list[str] = ["", "## SOLID Advice", ""]
+    for entry in advice_entries[:limit]:
+        rendered = template.format(category=entry.category, body=entry.body)
+        section.append(rendered)
+    if len(advice_entries) > limit:
+        section.append(f"- …and {len(advice_entries) - limit} more advice items.")
+    return section
+
+
+def _diagnostics_to_advice_inputs(
+    diagnostics: Sequence[tuple[Diagnostic, str]],
+) -> list[tuple[str, int, str, str, str, str]]:
+    entries: list[tuple[str, int, str, str, str, str]] = []
+    for diag, tool in diagnostics:
+        file_path = diag.file or ""
+        line_no = diag.line if diag.line is not None else -1
+        function = diag.function or ""
+        tool_name = (diag.tool or tool or "").strip()
+        code = (diag.code or "-").strip() or "-"
+        message = diag.message.splitlines()[0]
+        entries.append((file_path, line_no, function, tool_name, code, message))
+    return entries
+
+
+def _highlight_markdown(message: str) -> str:
+    spans = _ANNOTATION_ENGINE.message_spans(message)
+    if not spans:
+        return message
+    spans = sorted(spans, key=lambda span: (span.start, span.end))
+    wrappers: dict[HighlightKind, tuple[str, str]] = {
+        "function": ("**`", "`**"),
+        "class": ("**`", "`**"),
+        "argument": ("`", "`"),
+        "variable": ("`", "`"),
+        "attribute": ("`", "`"),
+        "file": ("`", "`"),
+    }
+    result: list[str] = []
+    cursor = 0
+    for span in spans:
+        start, end = span.start, span.end
+        if start < cursor:
+            continue
+        result.append(message[cursor:start])
+        token = message[start:end]
+        prefix, suffix = wrappers.get(span.kind or "argument", ("`", "`"))
+        result.append(f"{prefix}{token}{suffix}")
+        cursor = end
+    result.append(message[cursor:])
+    return "".join(result)

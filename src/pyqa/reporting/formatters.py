@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import re
-from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
@@ -14,6 +13,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from ..annotations import AnnotationEngine, MessageSpan
 from ..config import OutputConfig
 from ..console import console_manager
 from ..logging import colorize, emoji
@@ -25,28 +25,13 @@ from ..metrics import (
 )
 from ..models import Diagnostic, RunResult
 from ..severity import Severity
+from .advice import AdviceEntry, generate_advice
 
-_DUPLICATE_HINT_CODES: dict[str, set[str]] = {
-    "pylint": {"R0801"},
-    "ruff": {
-        "B014",
-        "B025",
-        "B033",
-        "PIE794",
-        "PIE796",
-        "PYI016",
-        "PYI062",
-        "PT014",
-        "SIM101",
-        "PLE0241",
-        "PLE1132",
-        "PLE1310",
-        "PLR0804",
-    },
-}
+_ANNOTATION_ENGINE = AnnotationEngine()
 
 
 def render(result: RunResult, cfg: OutputConfig) -> None:
+    _ANNOTATION_ENGINE.annotate_run(result)
     if cfg.quiet:
         _render_quiet(result, cfg)
         return
@@ -118,7 +103,11 @@ def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
     for tool_name, file_part, suffix, code, message in formatted:
         spacer = " " * max(tool_width - len(tool_name), 0) if tool_width else ""
         location = (file_part or "") + suffix
-        location_display = _highlight_for_output(location, color=cfg.color)
+        location_display = _highlight_for_output(
+            location,
+            color=cfg.color,
+            extra_spans=_location_function_spans(location),
+        )
         message_display = _highlight_for_output(message, color=cfg.color)
         print(f"{tint_tool(tool_name)}, {spacer}{location_display}, {code}, {message_display}")
 
@@ -126,6 +115,7 @@ def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
     files_count = len(result.files)
     if getattr(cfg, "advice", False):
         _render_advice(entries, cfg)
+        _render_refactor_navigator(result, cfg)
     _emit_stats_line(result, cfg, diagnostics_count)
 
     symbol = "❌" if failed_actions else "✅"
@@ -186,156 +176,51 @@ def _normalise_symbol(value: str | None) -> str:
     return candidate
 
 
-def _summarise_paths(paths: Sequence[str], *, limit: int = 5) -> str:
-    if not paths:
-        return ""
-    shown = [path for path in paths[:limit]]
-    summary = ", ".join(shown)
-    remainder = len(paths) - len(shown)
-    if remainder > 0:
-        summary = f"{summary}, ... (+{remainder} more)"
-    return summary
+def _collect_highlight_spans(text: str) -> list[MessageSpan]:
+    return list(_ANNOTATION_ENGINE.message_spans(text))
 
 
-def _estimate_function_scale(path: Path, function: str) -> tuple[int | None, int | None]:
-    if not function:
-        return (None, None)
-    try:
-        text = path.read_text(encoding="utf-8", errors="ignore")
-    except OSError:
-        return (None, None)
-    lines = text.splitlines()
-    pattern = re.compile(rf"^\s*(?:async\s+)?def\s+{re.escape(function)}\b")
-    start_index: int | None = None
-    indent_level: int | None = None
-    for idx, line in enumerate(lines):
-        if pattern.match(line):
-            start_index = idx
-            indent_level = len(line) - len(line.lstrip(" \t"))
-            break
-    if start_index is None or indent_level is None:
-        return (None, None)
-
-    count = 1  # include signature
-    complexity = 0
-    keywords = re.compile(r"\b(if|for|while|elif|case|except|and|or|try|with)\b")
-    for line in lines[start_index + 1 :]:
-        stripped = line.strip()
-        if not stripped:
-            continue
-        current_indent = len(line) - len(line.lstrip(" \t"))
-        if current_indent <= indent_level:
-            break
-        count += 1
-        complexity += len(keywords.findall(stripped))
-    return (count if count else None, complexity if complexity else None)
+def _location_function_spans(location: str) -> list[MessageSpan]:
+    if ":" not in location:
+        return []
+    candidate = location.split(":")[-1].strip()
+    if not candidate or not candidate.isidentifier():
+        return []
+    start = location.rfind(candidate)
+    if start == -1:
+        return []
+    return [MessageSpan(start=start, end=start + len(candidate), style="ansi256:208")]
 
 
-_FILE_HIGHLIGHT = "ansi256:81"  # vivid cyan
-_FUNCTION_HIGHLIGHT = "ansi256:208"  # warm orange
-_CLASS_HIGHLIGHT = "ansi256:154"  # bright green
-_ARG_HIGHLIGHT = "ansi256:213"  # soft magenta
-_VAR_HIGHLIGHT = "ansi256:156"  # mint
-
-_PATH_PATTERN = re.compile(
-    r"((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+(?:\.[A-Za-z0-9_]+)?|[A-Za-z0-9_.-]+\.[A-Za-z0-9_]+)",
-)
-_CLASS_PATTERN = re.compile(r"\b([A-Z][A-Za-z0-9]+(?:[A-Z][A-Za-z0-9]+)+)\b")
-_FUNCTION_PATTERN = re.compile(
-    r"\bfunction\s+(?!argument\b|parameter\b)([A-Za-z_][\w\.]+)",
-    re.IGNORECASE,
-)
-_FUNCTION_INLINE_PATTERN = re.compile(
-    r"\b(?!argument\b|parameter\b)([A-Za-z_][\w\.]+)\s+in\s+(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+(?:\.[A-Za-z0-9_]+)?",
-    re.IGNORECASE,
-)
-_ARGUMENT_PATTERN = re.compile(r"\b(?:argument|parameter)\s+([A-Za-z_][\w\.]+)", re.IGNORECASE)
-_VARIABLE_PATTERN = re.compile(r"\bvariable(?:\s+name)?\s+([A-Za-z_][\w\.]+)", re.IGNORECASE)
-_ATTRIBUTE_PATTERN = re.compile(r"attribute\s+[\"']([A-Za-z_][\w\.]*)[\"']", re.IGNORECASE)
-
-_HIGHLIGHT_PATTERNS: tuple[tuple[re.Pattern[str], int, str], ...] = (
-    (_PATH_PATTERN, 0, _FILE_HIGHLIGHT),
-    (_CLASS_PATTERN, 1, _CLASS_HIGHLIGHT),
-    (_FUNCTION_PATTERN, 1, _FUNCTION_HIGHLIGHT),
-    (_FUNCTION_INLINE_PATTERN, 1, _FUNCTION_HIGHLIGHT),
-    (_ARGUMENT_PATTERN, 1, _ARG_HIGHLIGHT),
-    (_VARIABLE_PATTERN, 1, _VAR_HIGHLIGHT),
-    (_ATTRIBUTE_PATTERN, 1, _FUNCTION_HIGHLIGHT),
-)
-
-_ANNOTATION_ARG_PATTERNS = (
-    re.compile(r"function argument(?:s)?\s+([A-Za-z0-9_,\s]+)", re.IGNORECASE),
-    re.compile(r"function parameter(?:s)?\s+([A-Za-z0-9_,\s]+)", re.IGNORECASE),
-    re.compile(r"parameter(?:s)?\s+([A-Za-z0-9_,\s]+)", re.IGNORECASE),
-)
-
-
-def _collect_highlight_spans(text: str) -> list[tuple[int, int, str]]:
-    spans: list[tuple[int, int, str]] = []
-    for pattern, group_index, style in _HIGHLIGHT_PATTERNS:
-        for match in pattern.finditer(text):
-            try:
-                segment = match.group(group_index)
-                base = match.start(group_index)
-            except IndexError:
-                segment = match.group(0)
-                base = match.start(0)
-
-            if style == _ARG_HIGHLIGHT:
-                offset = 0
-                for part in segment.split(","):
-                    name = part.strip(" \t.:;'\"")
-                    if not name:
-                        offset += len(part) + 1
-                        continue
-                    local_start = segment.find(name, offset)
-                    offset = local_start + len(name)
-                    start = base + local_start
-                    end = start + len(name)
-                    spans.append((start, end, style))
-                continue
-
-            if style == _VAR_HIGHLIGHT:
-                name = segment.strip(" \t.:;'\"")
-                if not name:
-                    continue
-                start = base + segment.find(name)
-                end = start + len(name)
-                spans.append((start, end, style))
-                continue
-
-            spans.append((base, base + len(segment), style))
-    spans.sort(key=lambda item: (item[0], -(item[1] - item[0])))
-    filtered: list[tuple[int, int, str]] = []
-    last_end = -1
-    for start, end, style in spans:
-        if start < last_end:
-            continue
-        filtered.append((start, end, style))
-        last_end = end
-    return filtered
-
-
-def _apply_highlighting_text(message: str, base_style: str | None = "white") -> Text:
+def _apply_highlighting_text(message: str, base_style: str | None = None) -> Text:
     clean = message.replace("`", "")
     text = Text(clean)
     if base_style:
         text.stylize(base_style, 0, len(text))
-    for start, end, style in _collect_highlight_spans(clean):
-        text.stylize(style, start, end)
+    for span in _collect_highlight_spans(clean):
+        text.stylize(span.style, span.start, span.end)
     return text
 
 
-def _highlight_for_output(message: str, *, color: bool) -> str:
+def _highlight_for_output(message: str, *, color: bool, extra_spans: Sequence[MessageSpan] | None = None) -> str:
     clean = message.replace("`", "")
     if not color:
         return clean
-    spans = _collect_highlight_spans(clean)
+    spans = list(_collect_highlight_spans(clean))
+    if extra_spans:
+        spans.extend(extra_spans)
     if not spans:
         return clean
+    spans.sort(key=lambda span: (span.start, span.end - span.start))
+    merged: list[MessageSpan] = []
+    for span in spans:
+        if merged and span.start < merged[-1].end:
+            continue
+        merged.append(span)
     result: list[str] = []
     cursor = 0
-    for start, end, style in spans:
+    for span in merged:
+        start, end, style = span.start, span.end, span.style
         if start < cursor:
             continue
         result.append(clean[cursor:start])
@@ -347,17 +232,8 @@ def _highlight_for_output(message: str, *, color: bool) -> str:
 
 
 def _infer_annotation_targets(message: str) -> int:
-    clean = message.replace("`", "")
-    for pattern in _ANNOTATION_ARG_PATTERNS:
-        match = pattern.search(clean)
-        if not match:
-            continue
-        raw = match.group(1)
-        candidates = [token.strip(" ,.:;'\"") for token in raw.split(",")]
-        names = [name for name in candidates if name]
-        if names:
-            return len(names)
-    return 0
+    spans = _ANNOTATION_ENGINE.message_spans(message)
+    return sum(1 for span in spans if span.style == "ansi256:213")
 
 
 _MERGEABLE_MESSAGE = re.compile(r"^(?P<prefix>.*?)(`(?P<detail>[^`]+)`)(?P<suffix>.*)$")
@@ -526,7 +402,11 @@ def _dump_diagnostics(diags: Iterable[Diagnostic], cfg: OutputConfig) -> None:
         padded_location = location.ljust(location_width) if location_width else location
         padding = " " if padded_location else ""
         message = _clean_message(code_value, diag.message)
-        location_display = _highlight_for_output(padded_location, color=cfg.color)
+        location_display = _highlight_for_output(
+            padded_location,
+            color=cfg.color,
+            extra_spans=_location_function_spans(location),
+        )
         message_display = _highlight_for_output(message, color=cfg.color)
         print(f"  {sev_display} {location_display}{padding}{message_display}{code_display}")
 
@@ -659,297 +539,59 @@ def _render_advice(
     if not entries:
         return
 
-    diagnostics = [
-        {
-            "file": item[0],
-            "line": item[1] if item[1] >= 0 else None,
-            "function": item[2],
-            "tool": (item[3] or "").lower(),
-            "code": ("" if item[4] == "-" else item[4]).upper(),
-            "message": item[5],
-        }
-        for item in entries
-    ]
-
-    advice_messages: list[str] = []
-    seen: set[str] = set()
-
-    def add_advice(message: str) -> None:
-        if message in seen:
-            return
-        seen.add(message)
-        advice_messages.append(message)
-
-    def is_test_path(path: str | None) -> bool:
-        if not path:
-            return False
-        normalized = path.replace("\\", "/")
-        segments = normalized.split("/")
-        return any(segment.startswith("test") or segment == "tests" for segment in segments)
-
-    # Complexity hotspots
-    complexity_codes = {
-        ("pylint", "R1260"),
-        ("pylint", "R0915"),
-        ("ruff", "C901"),
-        ("ruff", "PLR0915"),
-    }
-    complexity_targets: dict[tuple[str, str], tuple[str, str]] = {}
-    for record in diagnostics:
-        key = (record["tool"], record["code"])
-        if key not in complexity_codes:
-            continue
-        file_path = record["file"] or "this module"
-        function = record["function"] or ""
-        complexity_targets[(file_path, function)] = (file_path, function)
-
-    if complexity_targets:
-        function_targets: list[tuple[str, str]] = []
-        file_only_targets: list[str] = []
-        for file_path, function in complexity_targets.values():
-            if function:
-                function_targets.append((file_path, function))
-            elif file_path:
-                file_only_targets.append(file_path)
-
-        if function_targets:
-            hot_spots: list[tuple[str, str, int | None, int | None]] = []
-            for file_path, function in function_targets:
-                size, complexity = _estimate_function_scale(Path(file_path), function)
-                hot_spots.append((file_path, function, size, complexity))
-
-            def sort_key(item: tuple[str, str, int | None, int | None]) -> tuple[int, int, str]:
-                locs = item[2] if isinstance(item[2], int) else -1
-                compl = item[3] if isinstance(item[3], int) else -1
-                return (-locs, -compl, f"{item[0]}::{item[1]}")
-
-            top_spots = sorted(hot_spots, key=sort_key)[:5]
-            if top_spots:
-                summary_bits = []
-                for file_path, function, size, complexity in top_spots:
-                    descriptor = f"function {function} in {file_path}"
-                    details: list[str] = []
-                    if isinstance(size, int) and size >= 0:
-                        details.append(f"~{size} lines")
-                    if isinstance(complexity, int) and complexity >= 0:
-                        details.append(f"complexity≈{complexity}")
-                    if details:
-                        descriptor = f"{descriptor} ({', '.join(details)})"
-                    summary_bits.append(descriptor)
-                add_advice(
-                    "Refactor priority: focus on "
-                    + "; ".join(summary_bits)
-                    + " to restore single-responsibility boundaries before tuning the rest.",
-                )
-
-        if file_only_targets:
-            summary = _summarise_paths(sorted(set(file_only_targets)))
-            if summary:
-                add_advice(
-                    f"Refactor: break {summary} into smaller pieces to uphold Single Responsibility and keep cyclomatic complexity in check.",
-                )
-
-    # Documentation gaps
-    doc_counts: defaultdict[str, int] = defaultdict(int)
-    for record in diagnostics:
-        code = record["code"]
-        if not code:
-            continue
-        if (
-            record["tool"] == "ruff" and (code.startswith("D1") or code in {"D401", "D402"})
-        ) or code in {"TC002", "TC003"}:
-            doc_counts[record["file"]] += 1
-    doc_targets = [
-        file_path
-        for file_path, count in sorted(doc_counts.items(), key=lambda item: item[1], reverse=True)
-        if count >= 3 and file_path
-    ]
-    if doc_targets:
-        summary = _summarise_paths(doc_targets)
-        if summary:
-            add_advice(
-                "Documentation: add module/function docstrings in "
-                f"{summary} so collaborators can follow intent without reading every branch—Google-style docstrings are recommended for clarity and consistency.",
-            )
-
-    # Type-annotation hygiene
-    type_counts: defaultdict[str, int] = defaultdict(int)
-    annotation_keywords = {"annotation", "typed", "type hint"}
-    for record in diagnostics:
-        code = record["code"]
-        msg_lower = record["message"].lower()
-        file_path = record["file"]
-        if not file_path:
-            continue
-        if record["tool"] == "ruff" and code.startswith("ANN"):
-            multiplier = _infer_annotation_targets(record["message"])
-            type_counts[file_path] += multiplier if multiplier > 0 else 1
-        elif record["tool"] in {"mypy", "pyright"}:
-            if (
-                code.startswith("ARG")
-                or code.startswith("VAR")
-                or any(keyword in msg_lower for keyword in annotation_keywords)
-            ):
-                multiplier = _infer_annotation_targets(record["message"])
-                type_counts[file_path] += multiplier if multiplier > 0 else 1
-    type_targets = [
-        file_path
-        for file_path, count in sorted(type_counts.items(), key=lambda item: item[1], reverse=True)
-        if count >= 3
-    ]
-    if type_targets:
-        summary = _summarise_paths(type_targets)
-        if summary:
-            add_advice(
-                f"Types: introduce explicit annotations in {summary} to narrow interfaces and align with Interface Segregation.",
-            )
-
-    # Stub maintenance issues
-    stub_flags = {
-        record["file"]
-        for record in diagnostics
-        if (record["file"] or "").endswith(".pyi")
-        and record["tool"] == "ruff"
-        and record["code"].startswith("ANN")
-    }
-    override_flags = {
-        record["file"]
-        for record in diagnostics
-        if record["tool"] == "pyright"
-        and (
-            "override" in record["message"].lower()
-            or record["code"].startswith("REPORTINCOMPATIBLE")
-            or record["code"] == "REPORTMETHODOVERRIDESIGNATURE"
-        )
-    }
-    if stub_flags and override_flags:
-        add_advice(
-            "Typing: align stubs with implementations—double-check stub signatures against code and update when upstream changes land.",
-        )
-
-    # Implicit namespace packages
-    for record in diagnostics:
-        if record["code"] == "INP001":
-            target = record["file"] or record["message"].split()[0]
-            directory = str(Path(target).parent) if target else "this package"
-            location = directory or "."
-            add_advice(
-                f"Packaging: add an __init__.py to {location} so imports stay predictable and tooling can locate modules.",
-            )
-            break
-
-    # Private/internal imports
-    private_codes = {"SLF001", "TID252"}
-    private_keywords = {"private import", "module is internal"}
-    for record in diagnostics:
-        code = record["code"]
-        message = record["message"].lower()
-        if code in private_codes:
-            add_advice(
-                "Encapsulation: expose public APIs instead of importing internal members; re-export what callers need.",
-            )
-            break
-        if record["tool"] == "pyright" and (
-            code == "REPORTPRIVATEIMPORTUSAGE"
-            or any(keyword in message for keyword in private_keywords)
-        ):
-            add_advice(
-                "Encapsulation: expose public APIs instead of importing internal members; re-export what callers need.",
-            )
-            break
-
-    # Magic values
-    magic_counts: defaultdict[str, int] = defaultdict(int)
-    for record in diagnostics:
-        if record["code"] == "PLR2004" and record["file"]:
-            magic_counts[record["file"]] += 1
-    magic_targets = [
-        file_path
-        for file_path, count in sorted(magic_counts.items(), key=lambda item: item[1], reverse=True)
-        if count >= 2
-    ]
-    if magic_targets:
-        summary = _summarise_paths(magic_targets)
-        if summary:
-            add_advice(
-                f"Constants: move magic numbers in {summary} into named constants or configuration objects for clarity.",
-            )
-
-    # Debug artifacts
-    debug_codes = {"T201", "ERA001"}
-    if any(record["code"] in debug_codes for record in diagnostics):
-        add_advice(
-            "Logging: replace debugging prints or commented blocks with structured logging or tests before merging.",
-        )
-
-    # Production assertions
-    for record in diagnostics:
-        if record["code"] in {"S101", "B101"} and not is_test_path(record["file"]):
-            add_advice(
-                "Runtime safety: swap bare assert with explicit condition checks or exceptions so optimized builds keep validation.",
-            )
-            break
-
-    # Test hygiene
-    test_diagnostics = [record for record in diagnostics if is_test_path(record["file"])]
-    if len(test_diagnostics) >= 5:
-        add_advice(
-            "Test hygiene: refactor noisy tests to shared helpers or fixtures and split long assertions so failures isolate quickly.",
-        )
-
-    # Duplicate code
-    duplicate_hit = False
-    for record in diagnostics:
-        tool_codes = _DUPLICATE_HINT_CODES.get(record["tool"], set())
-        if record["code"] in tool_codes:
-            duplicate_hit = True
-            break
-    if duplicate_hit:
-        add_advice(
-            "Structure: deduplicate repeated logic or declarations—extract helpers or consolidate definitions to stay Open/Closed and reduce drift.",
-        )
-
-    # Undef interfaces / attribute access across modules
-    for record in diagnostics:
-        if record["tool"] in {"pyright", "mypy"} and record["code"] in {
-            "REPORTUNDEFINEDVARIABLE",
-            "ATTR-DEFINED",
-            "ATTRDEFINED",
-        }:
-            file_path = record["file"] or "this module"
-            add_advice(
-                f"Interface: reconcile module boundaries in {file_path} by defining the missing attribute or exporting it explicitly.",
-            )
-            break
-
-    # Focus suggestion for highest density file
-    file_counter = Counter(record["file"] for record in diagnostics if record["file"])
-    if file_counter:
-        file_path, count = file_counter.most_common(1)[0]
-        if count >= 8:
-            add_advice(
-                f"Prioritise: focus on {file_path} first; it triggered {count} diagnostics in this run.",
-            )
-
-    if not advice_messages:
+    advice_entries = generate_advice(list(entries), _ANNOTATION_ENGINE)
+    if not advice_entries:
         return
 
     console = console_manager.get(color=cfg.color, emoji=cfg.emoji)
 
-    def stylise(line: str) -> Text:
+    def stylise(entry: AdviceEntry) -> Text:
         if not cfg.color:
-            return Text(line)
-        parts = line.split(": ", 1)
-        if len(parts) == 2:
-            label, rest = parts
-            prefix = Text(f"{label}: ", style="bold yellow")
-            rest_text = _apply_highlighting_text(rest)
-            return prefix + rest_text
-        return _apply_highlighting_text(line)
+            return Text(f"{entry.category}: {entry.body}")
+        prefix = Text(f"{entry.category}: ", style="bold yellow")
+        rest_text = _apply_highlighting_text(entry.body)
+        return prefix + rest_text
 
     panel = Panel(
-        Text("\n").join(stylise(message) for message in advice_messages),
+        Text("\n").join(stylise(entry) for entry in advice_entries),
         title="SOLID Advice",
         border_style="cyan" if cfg.color else "none",
+    )
+    console.print(panel)
+
+
+def _render_refactor_navigator(result: RunResult, cfg: OutputConfig) -> None:
+    navigator = result.analysis.get("refactor_navigator")
+    if not navigator:
+        return
+
+    console = console_manager.get(color=cfg.color, emoji=cfg.emoji)
+    table = Table(box=box.SIMPLE_HEAVY if cfg.color else box.SIMPLE)
+    table.add_column("Function", overflow="fold")
+    table.add_column("Issues", justify="right")
+    table.add_column("Tags", overflow="fold")
+    table.add_column("Size", justify="right")
+    table.add_column("Complexity", justify="right")
+
+    for entry in navigator[:5]:
+        function = entry.get("function") or "<module>"
+        file_path = entry.get("file") or ""
+        location = f"{file_path}:{function}" if file_path else function
+        issues = sum(int(value) for value in entry.get("issue_tags", {}).values())
+        tags = ", ".join(sorted(entry.get("issue_tags", {}).keys()))
+        size = entry.get("size")
+        complexity = entry.get("complexity")
+        table.add_row(
+            location,
+            str(issues),
+            tags or "-",
+            "-" if size is None else str(size),
+            "-" if complexity is None else str(complexity),
+        )
+
+    panel = Panel(
+        table,
+        title="Refactor Navigator",
+        border_style="magenta" if cfg.color else "none",
     )
     console.print(panel)
