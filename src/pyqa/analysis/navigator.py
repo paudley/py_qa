@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Assemble a refactor navigator from diagnostics."""
 
 from __future__ import annotations

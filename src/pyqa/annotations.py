@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Helpers for enriching diagnostics with Tree-sitter and spaCy hints.
 
 The :class:`AnnotationEngine` resolves structural context via Tree-sitter and

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Runtime abstraction for preparing tool commands."""
 
 from __future__ import annotations

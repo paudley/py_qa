@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Custom Typer helpers for consistent, sorted CLI help output."""
 
 from __future__ import annotations

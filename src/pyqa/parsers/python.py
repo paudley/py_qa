@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Parsers for Python-related tooling output."""
 
 from __future__ import annotations

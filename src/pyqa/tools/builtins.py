@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Compatibility wrapper exposing built-in tool registration and exports."""
 
 from __future__ import annotations

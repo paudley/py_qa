@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # Tree-sitter & spaCy Enhancements
 
 ## Goals
@@ -20,4 +23,3 @@
 - How to cache AST parses to avoid repeated disk reads in change-impact analysis?
 - What thresholds should trigger suppression hints vs. advice?
 - Should refactor navigator output integrate into CLI or stay as documentation/report artifact?
-

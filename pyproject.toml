@@ -120,4 +120,7 @@ pythonpath = ["src"]
 [tool.pyqa.quality]
 skip_globs = [
     "ref_docs/**",
+    "lint_report*.json",
+    "py_qa/**",
+    "pyreadstat_patch/**",
 ]

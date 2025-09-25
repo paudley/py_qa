@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Filesystem locations used by tool environment management."""
 
 from __future__ import annotations

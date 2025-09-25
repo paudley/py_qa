@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Utility helpers shared across tool environment modules."""
 
 from __future__ import annotations

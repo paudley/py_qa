@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Public exports for the tool environment orchestration layer."""
 
 from __future__ import annotations

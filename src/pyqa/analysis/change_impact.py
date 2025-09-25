@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Estimate change-impact scores for diagnostics based on Git diffs."""
 
 from __future__ import annotations

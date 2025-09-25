@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Behavioural tests for :mod:`pyqa.tools.registry`."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
 # Advice & Highlighting Refactor Plan
 
 ## 1. Audit current pipeline

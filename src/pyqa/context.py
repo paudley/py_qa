@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Context extraction using Tree-sitter grammars."""
 
 from __future__ import annotations

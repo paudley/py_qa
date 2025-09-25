@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Default warning suppressions applied to test suites per language."""
 
 from __future__ import annotations

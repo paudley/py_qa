@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """SOLID-oriented lint advice builders.
 
 This module centralises the heuristics that translate normalised diagnostics

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Public parser exports for converting tool output into diagnostics."""
 
 from __future__ import annotations
