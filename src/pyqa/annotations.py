@@ -150,11 +150,11 @@ def _heuristic_spans(message: str) -> tuple[list[MessageSpan], list[str]]:
         tokens.append(value.lower())
         add_span(match.start(1), match.end(1), "ansi256:81", "file")
 
-    camel_pattern = re.compile(r"\b([A-Z][A-Za-z0-9]+(?:[A-Z][A-Za-z0-9]+)+)\b")
-    for match in camel_pattern.finditer(message):
-        value = message[match.start(1) : match.end(1)]
-        tokens.append(value.lower())
-        add_span(match.start(1), match.end(1), "ansi256:154", "class")
+    for match in re.finditer(r"[A-Za-z][A-Za-z0-9]+", message):
+        value = match.group(0)
+        if _looks_camel_case(value):
+            tokens.append(value.lower())
+            add_span(match.start(0), match.end(0), "ansi256:154", "class")
 
     argument_pattern = re.compile(r"function argument(?:s)?\s+([A-Za-z0-9_,\s]+)", re.IGNORECASE)
     variable_pattern = re.compile(r"variable(?:\s+name)?\s+([A-Za-z_][\w\.]*)", re.IGNORECASE)
@@ -238,6 +238,17 @@ def _fallback_signature_tokens(message: str) -> list[str]:
     import re
 
     return re.findall(r"[a-zA-Z_]{3,}", message.lower())
+
+
+def _looks_camel_case(token: str) -> bool:
+    if len(token) < 2 or not token[0].isupper():
+        return False
+    if "_" in token:
+        return False
+    rest = token[1:]
+    has_lower = any(ch.islower() for ch in rest)
+    has_upper = any(ch.isupper() for ch in rest)
+    return has_lower and has_upper
 
 
 def _dedupe_spans(spans: Sequence[MessageSpan]) -> list[MessageSpan]:
