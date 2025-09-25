@@ -116,3 +116,8 @@ managed = true
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+
+[tool.pyqa.quality]
+skip_globs = [
+    "ref_docs/**",
+]
