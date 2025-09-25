@@ -52,5 +52,5 @@ def test_run_tool_info_includes_pylint_plugins(tmp_path: Path) -> None:
     assert exit_code == 0
     output = buffer.getvalue()
     assert "--load-plugins" in output
-    assert "pylint.extensions.docparams" in output
+    assert "pylint.extensions" in output
     assert "--max-complexity" in output

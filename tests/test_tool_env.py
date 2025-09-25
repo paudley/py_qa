@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -375,6 +376,7 @@ def test_lua_runtime_install_failure_propagates(
 
     monkeypatch.setattr(tool_constants, "LUA_CACHE_DIR", tmp_path / "lua-cache")
     monkeypatch.setattr(tool_constants, "LUA_META_DIR", tmp_path / "lua-meta")
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/luarocks")
 
     def fail_install(*args, **kwargs):
         raise subprocess.CalledProcessError(1, args[0], "out", "err")
