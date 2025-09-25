@@ -4,20 +4,17 @@
 from __future__ import annotations
 
 import re
-from typing import Sequence
+from collections.abc import Sequence
 
 from ..models import RawDiagnostic
 from ..severity import Severity
 from ..tools.base import ToolContext
 
-LUALINT_PATTERN = re.compile(
-    r"^(?P<file>[^:]+):(?P<line>\d+):\s*(?:\*\*\*\s*)?(?P<message>.+)$"
-)
+LUALINT_PATTERN = re.compile(r"^(?P<file>[^:]+):(?P<line>\d+):\s*(?:\*\*\*\s*)?(?P<message>.+)$")
 
 
 def parse_lualint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse lualint text output."""
-
     results: list[RawDiagnostic] = []
     for raw_line in stdout.splitlines():
         line = raw_line.strip()
@@ -35,19 +32,18 @@ def parse_lualint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]
                 message=match.group("message").strip(),
                 code=None,
                 tool="lualint",
-            )
+            ),
         )
     return results
 
 
 LUACHECK_PATTERN = re.compile(
-    r"^(?P<file>[^:]+):(?P<line>\d+):(?P<column>\d+):\s+\((?P<code>[A-Z]\d+)\)\s+(?P<message>.+)$"
+    r"^(?P<file>[^:]+):(?P<line>\d+):(?P<column>\d+):\s+\((?P<code>[A-Z]\d+)\)\s+(?P<message>.+)$",
 )
 
 
 def parse_luacheck(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse luacheck plain formatter output."""
-
     results: list[RawDiagnostic] = []
     for raw_line in stdout.splitlines():
         line = raw_line.strip()
@@ -67,12 +63,12 @@ def parse_luacheck(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic
                 message=match.group("message").strip(),
                 code=code,
                 tool="luacheck",
-            )
+            ),
         )
     return results
 
 
 __all__ = [
-    "parse_lualint",
     "parse_luacheck",
+    "parse_lualint",
 ]

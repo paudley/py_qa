@@ -7,8 +7,8 @@ import json
 import os
 import shutil
 import stat
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from ...process_utils import run_command
 from ...tools.base import Tool
@@ -37,9 +37,7 @@ class RustRuntime(RuntimeHandler):
             version = self._versions.capture(tool.version_command)
         if not self._versions.is_compatible(version, target_version):
             return None
-        return PreparedCommand.from_parts(
-            cmd=base_cmd, env=None, version=version, source="system"
-        )
+        return PreparedCommand.from_parts(cmd=base_cmd, env=None, version=version, source="system")
 
     def _try_project(
         self,
@@ -75,9 +73,7 @@ class RustRuntime(RuntimeHandler):
         target_version: str | None,
     ) -> PreparedCommand:
         if not shutil.which("cargo"):
-            raise RuntimeError(
-                "Cargo toolchain is required to install rust-based linters"
-            )
+            raise RuntimeError("Cargo toolchain is required to install rust-based linters")
 
         binary_name = Path(base_cmd[0]).name
         binary_path = self._ensure_local_tool(tool, binary_name)
@@ -88,9 +84,7 @@ class RustRuntime(RuntimeHandler):
         version = None
         if tool.version_command:
             version = self._versions.capture(tool.version_command)
-        return PreparedCommand.from_parts(
-            cmd=cmd, env=env, version=version, source="local"
-        )
+        return PreparedCommand.from_parts(cmd=cmd, env=env, version=version, source="local")
 
     def _ensure_local_tool(self, tool: Tool, binary_name: str) -> Path:
         crate, version_spec = self._crate_spec(tool)
@@ -102,9 +96,7 @@ class RustRuntime(RuntimeHandler):
             meta_file.parent.mkdir(parents=True, exist_ok=True)
             if not meta_file.exists():
                 self._install_rustup_component(component)
-                meta_file.write_text(
-                    json.dumps({"requirement": requirement}), encoding="utf-8"
-                )
+                meta_file.write_text(json.dumps({"requirement": requirement}), encoding="utf-8")
             cargo_path = shutil.which("cargo")
             if not cargo_path:
                 raise RuntimeError("cargo executable not found for rust tool")

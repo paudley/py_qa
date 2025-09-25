@@ -3,7 +3,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from ..models import RawDiagnostic
 from ..severity import Severity
@@ -13,7 +14,6 @@ from .base import _coerce_dict_sequence, _coerce_object_mapping, _coerce_optiona
 
 def parse_actionlint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse actionlint JSON diagnostics."""
-
     items = payload if isinstance(payload, list) else []
     results: list[RawDiagnostic] = []
     for item in items:
@@ -37,14 +37,13 @@ def parse_actionlint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnos
                 message=message,
                 code=str(code) if code else None,
                 tool="actionlint",
-            )
+            ),
         )
     return results
 
 
 def parse_kube_linter(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse kube-linter JSON output."""
-
     reports: list[dict[str, object]] = []
     if isinstance(payload, dict):
         reports.extend(_coerce_dict_sequence(payload.get("Reports")))
@@ -61,9 +60,7 @@ def parse_kube_linter(payload: Any, _context: ToolContext) -> Sequence[RawDiagno
 
         obj_info = _coerce_object_mapping(report.get("Object"))
         metadata = _coerce_object_mapping(obj_info.get("Metadata"))
-        file_path = _coerce_optional_str(
-            metadata.get("FilePath") or metadata.get("filePath")
-        )
+        file_path = _coerce_optional_str(metadata.get("FilePath") or metadata.get("filePath"))
 
         diagnostics.append(
             RawDiagnostic(
@@ -74,17 +71,14 @@ def parse_kube_linter(payload: Any, _context: ToolContext) -> Sequence[RawDiagno
                 message=message,
                 code=_coerce_optional_str(report.get("Check")),
                 tool="kube-linter",
-            )
+            ),
         )
 
     return diagnostics
 
 
-def parse_dockerfilelint(
-    payload: Any, _context: ToolContext
-) -> Sequence[RawDiagnostic]:
+def parse_dockerfilelint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse dockerfilelint JSON output."""
-
     files = []
     if isinstance(payload, dict):
         files = payload.get("files", [])
@@ -105,9 +99,7 @@ def parse_dockerfilelint(
             title = str(issue.get("title", "")).strip()
             description = str(issue.get("description", "")).strip()
             message = (
-                title
-                if description == ""
-                else f"{title}: {description}" if title else description
+                title if description == "" else f"{title}: {description}" if title else description
             )
             if not message:
                 continue
@@ -120,14 +112,13 @@ def parse_dockerfilelint(
                     message=message,
                     code=str(issue.get("category")) if issue.get("category") else None,
                     tool="dockerfilelint",
-                )
+                ),
             )
     return results
 
 
 def parse_hadolint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse hadolint JSON output."""
-
     items = payload if isinstance(payload, list) else []
     results: list[RawDiagnostic] = []
     for entry in items:
@@ -152,7 +143,7 @@ def parse_hadolint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnosti
                 message=message,
                 code=str(entry.get("code")) if entry.get("code") else None,
                 tool="hadolint",
-            )
+            ),
         )
     return results
 
@@ -182,15 +173,15 @@ def parse_bandit(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]
                 message=str(result.get("issue_text", "")).strip(),
                 code=result.get("test_id"),
                 tool="bandit",
-            )
+            ),
         )
     return results
 
 
 __all__ = [
     "parse_actionlint",
-    "parse_kube_linter",
+    "parse_bandit",
     "parse_dockerfilelint",
     "parse_hadolint",
-    "parse_bandit",
+    "parse_kube_linter",
 ]

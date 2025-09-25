@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Mapping
+from collections.abc import Mapping
 
 ToolSettingField = Mapping[str, str | list[str]]
 ToolSettingSchema = dict[str, dict[str, ToolSettingField]]
@@ -225,6 +225,14 @@ TOOL_SETTING_SCHEMA: ToolSettingSchema = {
         },
     },
     "mypy": {
+        "exclude-gitignore": {
+            "type": "bool",
+            "description": "Respect .gitignore entries when discovering modules.",
+        },
+        "sqlite-cache": {
+            "type": "bool",
+            "description": "Enable SQLite cache backend for mypy.",
+        },
         "config": {
             "type": "path",
             "description": "Custom mypy configuration file to load.",
@@ -248,6 +256,42 @@ TOOL_SETTING_SCHEMA: ToolSettingSchema = {
         "warn-return-any": {
             "type": "bool",
             "description": "Warn when returning Any typed values.",
+        },
+        "warn-redundant-casts": {
+            "type": "bool",
+            "description": "Warn when casting yields the same type.",
+        },
+        "warn-unused-ignores": {
+            "type": "bool",
+            "description": "Warn about unused # type: ignore directives.",
+        },
+        "warn-unreachable": {
+            "type": "bool",
+            "description": "Warn when statements are statically unreachable.",
+        },
+        "disallow-untyped-decorators": {
+            "type": "bool",
+            "description": "Error on decorators without type annotations.",
+        },
+        "disallow-any-generics": {
+            "type": "bool",
+            "description": "Error when using generic types with implicit Any.",
+        },
+        "check-untyped-defs": {
+            "type": "bool",
+            "description": "Type check function bodies with no type hints.",
+        },
+        "no-implicit-reexport": {
+            "type": "bool",
+            "description": "Disable implicit re-exporting of imported names.",
+        },
+        "show-error-codes": {
+            "type": "bool",
+            "description": "Display error codes alongside messages.",
+        },
+        "show-column-numbers": {
+            "type": "bool",
+            "description": "Include column numbers in diagnostic output.",
         },
         "python-version": {
             "type": "str",
@@ -306,6 +350,18 @@ TOOL_SETTING_SCHEMA: ToolSettingSchema = {
         "max-line-length": {
             "type": "int",
             "description": "Maximum allowed source line length.",
+        },
+        "max-complexity": {
+            "type": "int",
+            "description": "Upper bound for cyclomatic complexity.",
+        },
+        "max-args": {
+            "type": "int",
+            "description": "Maximum number of arguments permitted on functions/methods.",
+        },
+        "max-positional-arguments": {
+            "type": "int",
+            "description": "Maximum positional arguments allowed before flagging.",
         },
         "args": {
             "type": "list[str]",
@@ -449,6 +505,60 @@ TOOL_SETTING_SCHEMA: ToolSettingSchema = {
         "args": {
             "type": "list[str]",
             "description": "Additional arguments appended to ESLint.",
+        },
+    },
+    "luacheck": {
+        "config": {
+            "type": "path",
+            "description": "luacheck configuration file.",
+        },
+        "std": {
+            "type": "str",
+            "description": "Standard globals set to load (e.g. luajit, love, ngx).",
+        },
+        "globals": {
+            "type": "list[str]",
+            "description": "Global identifiers treated as defined.",
+        },
+        "read-globals": {
+            "type": "list[str]",
+            "description": "Globals allowed for read-only access.",
+        },
+        "ignore": {
+            "type": "list[str]",
+            "description": "Diagnostic codes or patterns to ignore.",
+        },
+        "exclude-files": {
+            "type": "list[str]",
+            "description": "Paths or globs excluded from linting.",
+        },
+        "max-line-length": {
+            "type": "int",
+            "description": "Maximum permitted line length.",
+        },
+        "max-code-line-length": {
+            "type": "int",
+            "description": "Maximum length for code lines (excluding comments/strings).",
+        },
+        "max-string-line-length": {
+            "type": "int",
+            "description": "Maximum length for lines inside multi-line strings.",
+        },
+        "max-comment-line-length": {
+            "type": "int",
+            "description": "Maximum length for comment lines.",
+        },
+        "max-cyclomatic-complexity": {
+            "type": "int",
+            "description": "Upper limit for function cyclomatic complexity.",
+        },
+        "quiet": {
+            "type": "bool",
+            "description": "Suppress non-critical luacheck output.",
+        },
+        "args": {
+            "type": "list[str]",
+            "description": "Additional arguments appended to luacheck.",
         },
     },
     "prettier": {

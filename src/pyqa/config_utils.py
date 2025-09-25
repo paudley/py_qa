@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -61,14 +61,10 @@ def _coerce_string_sequence(value: Any, context: str) -> list[str]:
     return result
 
 
-def _normalize_tool_filters(
-    raw: Any, existing: Mapping[str, list[str]]
-) -> Dict[str, list[str]]:
+def _normalize_tool_filters(raw: Any, existing: Mapping[str, list[str]]) -> dict[str, list[str]]:
     if not isinstance(raw, Mapping):
         raise ConfigError("output.tool_filters must be a table")
-    result: Dict[str, list[str]] = {
-        tool: patterns.copy() for tool, patterns in existing.items()
-    }
+    result: dict[str, list[str]] = {tool: patterns.copy() for tool, patterns in existing.items()}
     for tool, patterns in raw.items():
         patterns_iterable = _coerce_iterable(patterns, f"output.tool_filters.{tool}")
         bucket = result.setdefault(tool, [])
@@ -119,14 +115,10 @@ def _existing_unique_paths(paths: Iterable[Path]) -> list[Path]:
     return collected
 
 
-def _deep_merge(base: Mapping[str, Any], override: Mapping[str, Any]) -> Dict[str, Any]:
-    result: Dict[str, Any] = dict(base)
+def _deep_merge(base: Mapping[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = dict(base)
     for key, value in override.items():
-        if (
-            key in result
-            and isinstance(result[key], Mapping)
-            and isinstance(value, Mapping)
-        ):
+        if key in result and isinstance(result[key], Mapping) and isinstance(value, Mapping):
             result[key] = _deep_merge(result[key], value)
         else:
             result[key] = value
@@ -191,8 +183,8 @@ def _normalise_fragment(fragment: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _expand_env(data: Mapping[str, Any], env: Mapping[str, str]) -> Dict[str, Any]:
-    expanded: Dict[str, Any] = {}
+def _expand_env(data: Mapping[str, Any], env: Mapping[str, str]) -> dict[str, Any]:
+    expanded: dict[str, Any] = {}
     for key, value in data.items():
         expanded[key] = _expand_env_value(value, env)
     return expanded
@@ -220,7 +212,6 @@ def _expand_env_string(value: str, env: Mapping[str, str]) -> str:
 
 def generate_config_schema() -> dict[str, Any]:
     """Return a JSON-serializable schema describing configuration sections."""
-
     defaults = Config()
     tool_defaults = dict(defaults.tool_settings)
     return {
@@ -228,15 +219,16 @@ def generate_config_schema() -> dict[str, Any]:
         "output": _describe_model(defaults.output),
         "execution": _describe_model(defaults.execution),
         "dedupe": _describe_model(defaults.dedupe),
+        "complexity": _describe_model(defaults.complexity),
+        "strictness": _describe_model(defaults.strictness),
+        "severity": _describe_model(defaults.severity),
         "severity_rules": {
             "type": "list[str]",
             "default": list(defaults.severity_rules),
         },
         "tool_settings": {
             "type": "dict[str, dict[str, object]]",
-            "default": {
-                tool: dict(settings) for tool, settings in tool_defaults.items()
-            },
+            "default": {tool: dict(settings) for tool, settings in tool_defaults.items()},
             "tools": TOOL_SETTING_SCHEMA,
         },
     }
@@ -266,18 +258,18 @@ def _render_field_type(annotation: Any) -> str:
 
 
 __all__ = [
-    "generate_config_schema",
+    "_KNOWN_SECTIONS",
+    "_coerce_iterable",
     "_coerce_optional_int",
     "_coerce_string_sequence",
-    "_normalize_tool_filters",
-    "_normalize_output_mode",
-    "_normalize_min_severity",
-    "_unique_paths",
-    "_existing_unique_paths",
     "_deep_merge",
-    "_coerce_iterable",
-    "_normalise_pyproject_payload",
-    "_normalise_fragment",
+    "_existing_unique_paths",
     "_expand_env",
-    "_KNOWN_SECTIONS",
+    "_normalise_fragment",
+    "_normalise_pyproject_payload",
+    "_normalize_min_severity",
+    "_normalize_output_mode",
+    "_normalize_tool_filters",
+    "_unique_paths",
+    "generate_config_schema",
 ]

@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-import typer
-
 from .banned import check_banned_words
 from .clean import clean_app
 from .config_cmd import config_app
@@ -14,9 +12,10 @@ from .install import install_command
 from .lint import lint_command
 from .quality import quality_app
 from .security import security_scan_command
+from .typer_ext import create_typer
 from .update import update_app
 
-app = typer.Typer(help="Polyglot lint orchestrator.")
+app = create_typer(help="Polyglot lint orchestrator.")
 app.command("lint")(lint_command)
 app.command("install")(install_command)
 app.add_typer(config_app, name="config")

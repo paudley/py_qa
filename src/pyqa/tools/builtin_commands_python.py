@@ -1,14 +1,125 @@
 # SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: MIT
 """Command builder implementations for built-in tools."""
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
+import re
+import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
 from .base import CommandBuilder, ToolContext
 from .builtin_helpers import _as_bool, _resolve_path, _setting, _settings_list
+
+_BASE_PYLINT_PLUGINS: tuple[str, ...] = (
+    "pylint.extensions.bad_builtin",
+    "pylint.extensions.broad_try_clause",
+    "pylint.extensions.check_elif",
+    "pylint.extensions.code_style",
+    "pylint.extensions.comparison_placement",
+    "pylint.extensions.confusing_elif",
+    "pylint.extensions.consider_ternary_expression",
+    "pylint.extensions.dict_init_mutate",
+    "pylint.extensions.docparams",
+    "pylint.extensions.docstyle",
+    "pylint.extensions.empty_comment",
+    "pylint.extensions.eq_without_hash",
+    "pylint.extensions.for_any_all",
+    "pylint.extensions.magic_value",
+    "pylint.extensions.mccabe",
+    "pylint.extensions.overlapping_exceptions",
+    "pylint.extensions.redefined_loop_name",
+    "pylint.extensions.redefined_variable_type",
+    "pylint.extensions.set_membership",
+    "pylint.extensions.typing",
+    "pylint.extensions.while_used",
+    "pylint_htmf",
+    "pylint_pydantic",
+)
+
+_OPTIONAL_PYLINT_PLUGINS: dict[str, str] = {
+    "django": "pylint_django",
+    "celery": "pylint_celery",
+    "flask": "pylint_flask",
+    "pytest": "pylint_pytest",
+    "sqlalchemy": "pylint_sqlalchemy",
+    "odoo": "pylint_odoo",
+    "quotes": "pylint_quotes",
+}
+
+
+def _python_target_version(ctx: ToolContext) -> str:
+    version = getattr(ctx.cfg.execution, "python_version", None)
+    if version:
+        return str(version)
+    info = sys.version_info
+    return f"{info.major}.{info.minor}"
+
+
+def _python_version_components(version: str) -> tuple[int, int]:
+    match = re.search(r"(\d{1,2})(?:[._-]?(\d{1,2}))?", version)
+    if not match:
+        return sys.version_info.major, sys.version_info.minor
+    major = int(match.group(1))
+    minor = int(match.group(2)) if match.group(2) is not None else 0
+    return major, minor
+
+
+def _python_version_tag(version: str) -> str:
+    major, minor = _python_version_components(version)
+    return f"py{major}{minor}"
+
+
+def _python_version_number(version: str) -> str:
+    major, minor = _python_version_components(version)
+    return f"{major}{minor}"
+
+
+def _pyupgrade_flag_from_version(version: str) -> str:
+    normalized = version.lower().lstrip("py").rstrip("+")
+    if not normalized:
+        normalized = f"{sys.version_info.major}.{sys.version_info.minor}"
+    parts = normalized.split(".")
+    if len(parts) > 1:
+        major, minor = parts[0], parts[1]
+    else:
+        major = parts[0][:1] if parts[0] else str(sys.version_info.major)
+        minor = parts[0][1:] if len(parts[0]) > 1 else "0"
+        if not minor:
+            minor = "0"
+    return f"--py{major}{minor}-plus"
+
+
+def _discover_pylint_plugins(root: Path) -> tuple[str, ...]:
+    """Return the set of pylint plugins that should be enabled by default."""
+    discovered: set[str] = set()
+
+    def _loadable(module: str) -> bool:
+        try:
+            spec = importlib.util.find_spec(module)
+            if spec is None:
+                return False
+            mod = importlib.import_module(module)
+            return hasattr(mod, "register")
+        except Exception:
+            return False
+
+    for plugin in _BASE_PYLINT_PLUGINS:
+        if _loadable(plugin):
+            discovered.add(plugin)
+
+    for requirement, plugin in _OPTIONAL_PYLINT_PLUGINS.items():
+        if _loadable(requirement) and _loadable(plugin):
+            discovered.add(plugin)
+
+    if (root / ".venv").is_dir() and _loadable("pylint_venv"):
+        discovered.add("pylint_venv")
+
+    return tuple(sorted(discovered))
 
 
 @dataclass(slots=True)
@@ -151,6 +262,13 @@ class _RuffCommand(CommandBuilder):
         target_version = _setting(settings, "target-version")
         if target_version:
             cmd.extend(["--target-version", str(target_version)])
+        else:
+            cmd.extend(
+                [
+                    "--target-version",
+                    _python_version_tag(_python_target_version(ctx)),
+                ],
+            )
 
         per_file_ignores = _settings_list(_setting(settings, "per-file-ignores"))
         if per_file_ignores:
@@ -182,9 +300,8 @@ class _RuffCommand(CommandBuilder):
         if self.mode == "lint":
             if _as_bool(_setting(settings, "fix")):
                 cmd.append("--fix")
-        else:
-            if _as_bool(_setting(settings, "fix")) is False:
-                cmd = [part for part in cmd if part != "--fix"]
+        elif _as_bool(_setting(settings, "fix")) is False:
+            cmd = [part for part in cmd if part != "--fix"]
 
         additional_args = _settings_list(_setting(settings, "args"))
         if additional_args:
@@ -215,6 +332,13 @@ class _RuffFormatCommand(CommandBuilder):
         target_version = _setting(settings, "target-version")
         if target_version:
             cmd.extend(["--target-version", str(target_version)])
+        else:
+            cmd.extend(
+                [
+                    "--target-version",
+                    _python_version_tag(_python_target_version(ctx)),
+                ],
+            )
 
         exclude = _settings_list(_setting(settings, "exclude"))
         if exclude:
@@ -263,12 +387,20 @@ class _IsortCommand(CommandBuilder):
         profile = _setting(settings, "profile")
         if profile:
             cmd.extend(["--profile", str(profile)])
+        else:
+            cmd.extend(["--profile", "black"])
 
         line_length = _setting(settings, "line-length")
         if line_length is None:
             line_length = ctx.cfg.execution.line_length
         if line_length is not None:
             cmd.extend(["--line-length", str(line_length)])
+
+        py_version = _setting(settings, "py", "python-version")
+        if py_version is not None:
+            cmd.extend(["--py", str(py_version)])
+        else:
+            cmd.extend(["--py", _python_version_number(_python_target_version(ctx))])
 
         multi_line = _setting(settings, "multi-line", "multi_line")
         if multi_line:
@@ -295,9 +427,7 @@ class _IsortCommand(CommandBuilder):
         for pattern in _settings_list(_setting(settings, "skip-glob", "skip_glob")):
             cmd.extend(["--skip-glob", str(pattern)])
 
-        for pattern in _settings_list(
-            _setting(settings, "extend-skip-glob", "extend_skip_glob")
-        ):
+        for pattern in _settings_list(_setting(settings, "extend-skip-glob", "extend_skip_glob")):
             cmd.extend(["--extend-skip-glob", str(pattern)])
 
         if _as_bool(_setting(settings, "filter-files", "filter_files")):
@@ -346,6 +476,13 @@ class _BlackCommand(CommandBuilder):
         target_versions = _settings_list(_setting(settings, "target-version"))
         for version in target_versions:
             cmd.extend(["--target-version", str(version)])
+        if not target_versions:
+            cmd.extend(
+                [
+                    "--target-version",
+                    _python_version_tag(_python_target_version(ctx)),
+                ],
+            )
 
         if _as_bool(_setting(settings, "preview")):
             cmd.append("--preview")
@@ -380,6 +517,12 @@ class _MypyCommand(CommandBuilder):
         if config_file:
             cmd.extend(["--config-file", str(_resolve_path(root, config_file))])
 
+        if _as_bool(_setting(settings, "exclude-gitignore")):
+            cmd.append("--exclude-gitignore")
+
+        if _as_bool(_setting(settings, "sqlite-cache")):
+            cmd.append("--sqlite-cache")
+
         if _as_bool(_setting(settings, "strict")):
             cmd.append("--strict")
 
@@ -395,7 +538,36 @@ class _MypyCommand(CommandBuilder):
         if _as_bool(_setting(settings, "warn-return-any")):
             cmd.append("--warn-return-any")
 
+        if _as_bool(_setting(settings, "warn-redundant-casts")):
+            cmd.append("--warn-redundant-casts")
+
+        if _as_bool(_setting(settings, "warn-unused-ignores")):
+            cmd.append("--warn-unused-ignores")
+
+        if _as_bool(_setting(settings, "warn-unreachable")):
+            cmd.append("--warn-unreachable")
+
+        if _as_bool(_setting(settings, "disallow-untyped-decorators")):
+            cmd.append("--disallow-untyped-decorators")
+
+        if _as_bool(_setting(settings, "disallow-any-generics")):
+            cmd.append("--disallow-any-generics")
+
+        if _as_bool(_setting(settings, "check-untyped-defs")):
+            cmd.append("--check-untyped-defs")
+
+        if _as_bool(_setting(settings, "no-implicit-reexport")):
+            cmd.append("--no-implicit-reexport")
+
+        if _as_bool(_setting(settings, "show-error-codes")):
+            cmd.append("--show-error-codes")
+
+        if _as_bool(_setting(settings, "show-column-numbers")):
+            cmd.append("--show-column-numbers")
+
         python_version = _setting(settings, "python-version")
+        if not python_version:
+            python_version = _python_target_version(ctx)
         if python_version:
             cmd.extend(["--python-version", str(python_version)])
 
@@ -489,8 +661,14 @@ class _PylintCommand(CommandBuilder):
         if rcfile:
             cmd.extend(["--rcfile", str(_resolve_path(root, rcfile))])
 
-        for plugin in _settings_list(_setting(settings, "load-plugins", "plugins")):
-            cmd.extend(["--load-plugins", str(plugin)])
+        explicit_plugins = _settings_list(_setting(settings, "load-plugins", "plugins"))
+        if explicit_plugins:
+            for plugin in explicit_plugins:
+                cmd.extend(["--load-plugins", str(plugin)])
+        else:
+            default_plugins = _discover_pylint_plugins(root)
+            if default_plugins:
+                cmd.extend(["--load-plugins", ",".join(default_plugins)])
 
         disable = _settings_list(_setting(settings, "disable"))
         if disable:
@@ -530,6 +708,34 @@ class _PylintCommand(CommandBuilder):
         if max_line_length is not None:
             cmd.extend(["--max-line-length", str(max_line_length)])
 
+        max_complexity = _setting(settings, "max-complexity", "max_complexity")
+        if max_complexity is None:
+            max_complexity = ctx.cfg.complexity.max_complexity
+        if max_complexity is not None:
+            cmd.extend(["--max-complexity", str(max_complexity)])
+
+        max_args = _setting(settings, "max-args", "max_args")
+        if max_args is None:
+            max_args = ctx.cfg.complexity.max_arguments
+        if max_args is not None:
+            cmd.extend(["--max-args", str(max_args)])
+
+        max_pos_args = _setting(settings, "max-positional-arguments", "max_positional_arguments")
+        if max_pos_args is None:
+            max_pos_args = ctx.cfg.complexity.max_arguments
+        if max_pos_args is not None:
+            cmd.extend(["--max-positional-arguments", str(max_pos_args)])
+
+        init_import = _setting(settings, "init-import", "init_import")
+        if init_import is not None:
+            cmd.append(f"--init-import={'y' if _as_bool(init_import) else 'n'}")
+
+        py_version = _setting(settings, "py-version", "py_version")
+        if py_version is None:
+            py_version = _python_target_version(ctx)
+        if py_version:
+            cmd.extend(["--py-version", str(py_version)])
+
         args = _settings_list(_setting(settings, "args"))
         if args:
             cmd.extend(str(arg) for arg in args)
@@ -567,6 +773,8 @@ class _PyrightCommand(CommandBuilder):
             cmd.extend(["--pythonplatform", str(python_platform)])
 
         python_version = _setting(settings, "python-version", "python_version")
+        if not python_version:
+            python_version = _python_target_version(ctx)
         if python_version:
             cmd.extend(["--pythonversion", str(python_version)])
 
@@ -639,9 +847,7 @@ class _TombiCommand(CommandBuilder):
             if value == "-":
                 cmd.extend(["--stdin-filename", value])
             else:
-                cmd.extend(
-                    ["--stdin-filename", str(_resolve_path(root, stdin_filename))]
-                )
+                cmd.extend(["--stdin-filename", str(_resolve_path(root, stdin_filename))])
 
         if _as_bool(_setting(settings, "offline")):
             cmd.append("--offline")
@@ -668,16 +874,55 @@ class _TombiCommand(CommandBuilder):
         return tuple(cmd)
 
 
+@dataclass(slots=True)
+class _PyupgradeCommand(CommandBuilder):
+    base: Sequence[str]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        cmd = list(self.base)
+        settings = ctx.settings
+
+        pyplus_value = _setting(settings, "pyplus", "py_plus", "py_version")
+        if pyplus_value:
+            flag = str(pyplus_value).strip()
+            if not flag.startswith("--"):
+                flag = _pyupgrade_flag_from_version(flag)
+            cmd.append(flag)
+        else:
+            cmd.append(_pyupgrade_flag_from_version(_python_target_version(ctx)))
+
+        bool_flags = {
+            "keep-mock": "--keep-mock",
+            "keep-runtime-typing": "--keep-runtime-typing",
+            "keep-percent-format": "--keep-percent-format",
+            "keep-annotations": "--keep-annotations",
+            "keep-logging-format": "--keep-logging-format",
+            "exit-zero-even-if-changed": "--exit-zero-even-if-changed",
+            "no-verify": "--no-verify",
+        }
+
+        for key, flag in bool_flags.items():
+            if _as_bool(_setting(settings, key, key.replace("-", "_"))):
+                cmd.append(flag)
+
+        args = _settings_list(_setting(settings, "args"))
+        if args:
+            cmd.extend(str(arg) for arg in args)
+
+        return tuple(cmd)
+
+
 __all__ = [
     "_BanditCommand",
-    "_RuffCommand",
-    "_RuffFormatCommand",
-    "_IsortCommand",
     "_BlackCommand",
+    "_CpplintCommand",
+    "_IsortCommand",
     "_MypyCommand",
     "_PylintCommand",
     "_PyrightCommand",
+    "_PyupgradeCommand",
+    "_RuffCommand",
+    "_RuffFormatCommand",
     "_SqlfluffCommand",
     "_TombiCommand",
-    "_CpplintCommand",
 ]

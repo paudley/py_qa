@@ -18,16 +18,14 @@ def test_filesystem_discovery_respects_excludes(tmp_path: Path) -> None:
 
     node_modules = project_root / "node_modules"
     node_modules.mkdir()
-    (node_modules / "ignored.js").write_text(
-        "console.log('ignore');\n", encoding="utf-8"
-    )
+    (node_modules / "ignored.js").write_text("console.log('ignore');\n", encoding="utf-8")
 
     excluded_dir = project_root / "app" / "generated"
     excluded_dir.mkdir()
     (excluded_dir / "machine.py").write_text("# generated\n", encoding="utf-8")
 
     cfg = FileDiscoveryConfig(
-        roots=[Path(".")],
+        roots=[Path()],
         excludes=[Path("app/generated")],
     )
 
@@ -50,7 +48,7 @@ def test_filesystem_discovery_skips_embedded_py_qa(tmp_path: Path) -> None:
     ignored = vendor_py_qa / "ignored.py"
     ignored.write_text("print('ignore')\n", encoding="utf-8")
 
-    cfg = FileDiscoveryConfig(roots=[Path(".")])
+    cfg = FileDiscoveryConfig(roots=[Path()])
     discovery = FilesystemDiscovery()
     files = list(discovery.discover(cfg, project_root))
 
@@ -61,13 +59,11 @@ def test_filesystem_discovery_skips_embedded_py_qa(tmp_path: Path) -> None:
 def test_filesystem_discovery_includes_py_qa_workspace(tmp_path: Path) -> None:
     workspace = tmp_path / "py_qa"
     workspace.mkdir()
-    (workspace / "pyproject.toml").write_text(
-        '[project]\nname = "py_qa"\n', encoding="utf-8"
-    )
+    (workspace / "pyproject.toml").write_text('[project]\nname = "py_qa"\n', encoding="utf-8")
     tracked = workspace / "tracked.py"
     tracked.write_text("print('tracked')\n", encoding="utf-8")
 
-    cfg = FileDiscoveryConfig(roots=[Path(".")])
+    cfg = FileDiscoveryConfig(roots=[Path()])
     discovery = FilesystemDiscovery()
     files = list(discovery.discover(cfg, workspace))
 
@@ -136,7 +132,7 @@ def test_git_discovery_limit_to_filters_changes(tmp_path: Path) -> None:
     outside.write_text("outside v2\n", encoding="utf-8")
 
     cfg = FileDiscoveryConfig(
-        roots=[Path(".")],
+        roots=[Path()],
         limit_to=[Path("pkg")],
         changed_only=True,
         include_untracked=True,

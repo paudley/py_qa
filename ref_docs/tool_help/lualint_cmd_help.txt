@@ -1,0 +1,3 @@
+lua /home/paudley/Active/py_qa/.lint-cache/lualint/lualint.lua --help
+
+--help:1: *** could not parse: file --help does not exist 

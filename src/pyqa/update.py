@@ -7,17 +7,14 @@ from __future__ import annotations
 
 import os
 import shutil
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from enum import Enum
 from pathlib import Path
 from typing import (
     Any,
-    Callable,
     Final,
-    Iterable,
     Literal,
-    Mapping,
     Protocol,
-    Sequence,
     cast,
 )
 
@@ -39,7 +36,7 @@ class WorkspaceKind(Enum):
     RUST = "rust"
 
     @classmethod
-    def from_str(cls, value: str) -> "WorkspaceKind":
+    def from_str(cls, value: str) -> WorkspaceKind:
         for member in cls:
             if member.value == value:
                 return member
@@ -123,21 +120,20 @@ class UpdateResult(BaseModel):
     skipped: list[Workspace] = Field(default_factory=list)
     details: list[tuple[Workspace, list[ExecutionDetail]]] = Field(default_factory=list)
 
-    def register_success(
-        self, workspace: Workspace, executions: list[ExecutionDetail]
-    ) -> None:
+    def register_success(self, workspace: Workspace, executions: list[ExecutionDetail]) -> None:
         self.successes = [*self.successes, workspace]
         self.details = [*self.details, (workspace, executions)]
 
     def register_failure(
-        self, workspace: Workspace, message: str, executions: list[ExecutionDetail]
+        self,
+        workspace: Workspace,
+        message: str,
+        executions: list[ExecutionDetail],
     ) -> None:
         self.failures = [*self.failures, (workspace, message)]
         self.details = [*self.details, (workspace, executions)]
 
-    def register_skip(
-        self, workspace: Workspace, executions: list[ExecutionDetail]
-    ) -> None:
+    def register_skip(self, workspace: Workspace, executions: list[ExecutionDetail]) -> None:
         self.skipped = [*self.skipped, workspace]
         self.details = [*self.details, (workspace, executions)]
 
@@ -167,7 +163,7 @@ class PythonStrategy:
                     args=("uv", "venv"),
                     description="Create virtual env",
                     requires=("uv",),
-                )
+                ),
             )
         commands.append(
             CommandSpec(
@@ -183,7 +179,7 @@ class PythonStrategy:
                 ),
                 description="Synchronise Python dependencies",
                 requires=("uv",),
-            )
+            ),
         )
         return commands
 
@@ -200,7 +196,7 @@ class PnpmStrategy:
                 args=("pnpm", "up", "--latest"),
                 description="Update pnpm workspace",
                 requires=("pnpm",),
-            )
+            ),
         ]
 
 
@@ -216,7 +212,7 @@ class YarnStrategy:
                 args=("yarn", "upgrade", "--latest"),
                 description="Upgrade yarn dependencies",
                 requires=("yarn",),
-            )
+            ),
         ]
 
 
@@ -232,7 +228,7 @@ class NpmStrategy:
                 args=("npm", "update"),
                 description="Update npm dependencies",
                 requires=("npm",),
-            )
+            ),
         ]
 
 
@@ -249,9 +245,7 @@ class GoStrategy:
                 description="Update Go modules",
                 requires=("go",),
             ),
-            CommandSpec(
-                args=("go", "mod", "tidy"), description="Tidy go.mod", requires=("go",)
-            ),
+            CommandSpec(args=("go", "mod", "tidy"), description="Tidy go.mod", requires=("go",)),
         ]
 
 
@@ -267,17 +261,17 @@ class RustStrategy:
                 args=("cargo", "update"),
                 description="Update Cargo dependencies",
                 requires=("cargo",),
-            )
+            ),
         ]
 
 
 DEFAULT_STRATEGIES: Final[tuple[WorkspaceStrategy, ...]] = (
-    cast(WorkspaceStrategy, PythonStrategy()),
-    cast(WorkspaceStrategy, PnpmStrategy()),
-    cast(WorkspaceStrategy, YarnStrategy()),
-    cast(WorkspaceStrategy, NpmStrategy()),
-    cast(WorkspaceStrategy, GoStrategy()),
-    cast(WorkspaceStrategy, RustStrategy()),
+    cast("WorkspaceStrategy", PythonStrategy()),
+    cast("WorkspaceStrategy", PnpmStrategy()),
+    cast("WorkspaceStrategy", YarnStrategy()),
+    cast("WorkspaceStrategy", NpmStrategy()),
+    cast("WorkspaceStrategy", GoStrategy()),
+    cast("WorkspaceStrategy", RustStrategy()),
 )
 
 
@@ -306,9 +300,7 @@ class WorkspaceDiscovery:
                 if strategy.detect(directory, names):
                     manifest = _manifest_for(strategy.kind, directory)
                     workspaces.append(
-                        Workspace(
-                            directory=directory, kind=strategy.kind, manifest=manifest
-                        )
+                        Workspace(directory=directory, kind=strategy.kind, manifest=manifest),
                     )
                     break
         workspaces.sort(key=lambda ws: (ws.directory, ws.kind.value))
@@ -357,7 +349,7 @@ class WorkspacePlanner:
                 UpdatePlanItem(
                     workspace=workspace,
                     commands=[PlanCommand(spec=command) for command in commands],
-                )
+                ),
             )
         return UpdatePlan(items=items)
 
@@ -382,9 +374,7 @@ class WorkspaceUpdater:
             self._process_plan_item(item=item, root=root, result=result)
         return result
 
-    def _process_plan_item(
-        self, *, item: UpdatePlanItem, root: Path, result: UpdateResult
-    ) -> None:
+    def _process_plan_item(self, *, item: UpdatePlanItem, root: Path, result: UpdateResult) -> None:
         workspace = item.workspace
         rel_path = _format_relative(workspace.directory, root)
         info(
@@ -450,7 +440,9 @@ class WorkspaceUpdater:
 
         completed = self._runner(spec.args, workspace.directory)
         if completed.returncode != 0:
-            message = f"Command '{' '.join(spec.args)}' failed with exit code {completed.returncode}"
+            message = (
+                f"Command '{' '.join(spec.args)}' failed with exit code {completed.returncode}"
+            )
             fail(message, use_emoji=self._use_emoji)
             detail = ExecutionDetail(command=spec, status="failed", message=message)
             summary = f"{rel_path}: {message}"
@@ -503,18 +495,18 @@ def _format_relative(path: Path, root: Path) -> str:
 
 
 __all__ = [
-    "Workspace",
-    "WorkspaceKind",
-    "WorkspaceDiscovery",
-    "WorkspacePlanner",
-    "WorkspaceUpdater",
+    "DEFAULT_STRATEGIES",
+    "CommandRunner",
+    "CommandSpec",
+    "ExecutionDetail",
+    "PlanCommand",
     "UpdatePlan",
     "UpdatePlanItem",
     "UpdateResult",
-    "CommandRunner",
-    "CommandSpec",
-    "PlanCommand",
-    "ExecutionDetail",
-    "DEFAULT_STRATEGIES",
+    "Workspace",
+    "WorkspaceDiscovery",
+    "WorkspaceKind",
+    "WorkspacePlanner",
+    "WorkspaceUpdater",
     "ensure_lint_install",
 ]

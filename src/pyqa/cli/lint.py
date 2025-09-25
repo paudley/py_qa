@@ -6,18 +6,28 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import List
 
 import typer
+from rich import box
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
+from rich.table import Table
 
 from ..config import Config, ConfigError, default_parallel_jobs
+from ..console import console_manager, is_tty
 from ..constants import PY_QA_DIR_NAME
 from ..discovery import build_default_discovery
-from ..execution.orchestrator import Orchestrator
+from ..execution.orchestrator import FetchEvent, Orchestrator
 from ..logging import info, warn
 from ..models import RunResult
 from ..reporting.emitters import write_json_report, write_pr_summary, write_sarif_report
 from ..reporting.formatters import render
+from ..tool_env.models import PreparedCommand
 from ..tools.registry import DEFAULT_REGISTRY
 from ..workspace import is_py_qa_workspace
 from .config_builder import build_config
@@ -28,32 +38,33 @@ from .tool_info import run_tool_info
 
 def lint_command(
     ctx: typer.Context,
-    paths: List[Path] | None = typer.Argument(
-        None, metavar="[PATH]", help="Specific files or directories to lint."
+    paths: list[Path] | None = typer.Argument(
+        None,
+        metavar="[PATH]",
+        help="Specific files or directories to lint.",
     ),
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    changed_only: bool = typer.Option(
-        False, help="Limit to files changed according to git."
-    ),
+    changed_only: bool = typer.Option(False, help="Limit to files changed according to git."),
     diff_ref: str = typer.Option("HEAD", help="Git ref for change detection."),
     include_untracked: bool = typer.Option(
-        True, help="Include untracked files during git discovery."
+        True,
+        help="Include untracked files during git discovery.",
     ),
-    base_branch: str | None = typer.Option(
-        None, help="Base branch for merge-base diffing."
-    ),
+    base_branch: str | None = typer.Option(None, help="Base branch for merge-base diffing."),
     paths_from_stdin: bool = typer.Option(False, help="Read file paths from stdin."),
-    dirs: List[Path] = typer.Option(
-        [], "--dir", help="Add directory to discovery roots (repeatable)."
+    dirs: list[Path] = typer.Option(
+        [],
+        "--dir",
+        help="Add directory to discovery roots (repeatable).",
     ),
-    exclude: List[Path] = typer.Option([], help="Exclude specific paths or globs."),
-    filters: List[str] = typer.Option(
+    exclude: list[Path] = typer.Option([], help="Exclude specific paths or globs."),
+    filters: list[str] = typer.Option(
         [],
         "--filter",
         help="Filter stdout/stderr from TOOL using regex (TOOL:pattern).",
     ),
-    only: List[str] = typer.Option([], help="Run only the selected tool(s)."),
-    language: List[str] = typer.Option([], help="Filter tools by language."),
+    only: list[str] = typer.Option([], help="Run only the selected tool(s)."),
+    language: list[str] = typer.Option([], help="Filter tools by language."),
     fix_only: bool = typer.Option(False, help="Run only fix-capable actions."),
     check_only: bool = typer.Option(False, help="Run only check actions."),
     verbose: bool = typer.Option(False, help="Verbose output."),
@@ -61,22 +72,25 @@ def lint_command(
     no_color: bool = typer.Option(False, help="Disable ANSI colour output."),
     no_emoji: bool = typer.Option(False, help="Disable emoji output."),
     output_mode: str = typer.Option(
-        "concise", "--output", help="Output mode: concise, pretty, or raw."
+        "concise",
+        "--output",
+        help="Output mode: concise, pretty, or raw.",
     ),
-    show_passing: bool = typer.Option(
-        False, help="Include successful diagnostics in output."
-    ),
-    report_json: Path | None = typer.Option(
-        None, help="Write JSON report to the provided path."
-    ),
+    show_passing: bool = typer.Option(False, help="Include successful diagnostics in output."),
+    no_stats: bool = typer.Option(False, help="Suppress summary statistics."),
+    report_json: Path | None = typer.Option(None, help="Write JSON report to the provided path."),
     sarif_out: Path | None = typer.Option(
-        None, help="Write SARIF 2.1.0 report to the provided path."
+        None,
+        help="Write SARIF 2.1.0 report to the provided path.",
     ),
     pr_summary_out: Path | None = typer.Option(
-        None, help="Write a Markdown PR summary of diagnostics."
+        None,
+        help="Write a Markdown PR summary of diagnostics.",
     ),
     pr_summary_limit: int = typer.Option(
-        100, "--pr-summary-limit", help="Maximum diagnostics in PR summary."
+        100,
+        "--pr-summary-limit",
+        help="Maximum diagnostics in PR summary.",
     ),
     pr_summary_min_severity: str = typer.Option(
         "warning",
@@ -98,7 +112,9 @@ def lint_command(
     bail: bool = typer.Option(False, "--bail", help="Exit on first tool failure."),
     no_cache: bool = typer.Option(False, help="Disable on-disk result caching."),
     cache_dir: Path = typer.Option(
-        Path(".lint-cache"), "--cache-dir", help="Cache directory for tool results."
+        Path(".lint-cache"),
+        "--cache-dir",
+        help="Cache directory for tool results.",
     ),
     use_local_linters: bool = typer.Option(
         False,
@@ -115,14 +131,53 @@ def lint_command(
         "--line-length",
         help="Global preferred maximum line length applied to supported tools.",
     ),
+    max_complexity: int | None = typer.Option(
+        None,
+        "--max-complexity",
+        min=1,
+        help="Override maximum cyclomatic complexity shared across supported tools.",
+    ),
+    max_arguments: int | None = typer.Option(
+        None,
+        "--max-arguments",
+        min=1,
+        help="Override maximum function arguments shared across supported tools.",
+    ),
+    type_checking: str | None = typer.Option(
+        None,
+        "--type-checking",
+        case_sensitive=False,
+        help="Override type-checking strictness (lenient, standard, or strict).",
+    ),
+    bandit_severity: str | None = typer.Option(
+        None,
+        "--bandit-severity",
+        case_sensitive=False,
+        help="Override Bandit's minimum severity (low, medium, high).",
+    ),
+    bandit_confidence: str | None = typer.Option(
+        None,
+        "--bandit-confidence",
+        case_sensitive=False,
+        help="Override Bandit's minimum confidence (low, medium, high).",
+    ),
+    pylint_fail_under: float | None = typer.Option(
+        None,
+        "--pylint-fail-under",
+        help="Override pylint fail-under score (0-10).",
+    ),
+    sensitivity: str | None = typer.Option(
+        None,
+        "--sensitivity",
+        case_sensitive=False,
+        help="Overall sensitivity (low, medium, high, maximum) to cascade severity tweaks.",
+    ),
     sql_dialect: str = typer.Option(
         "postgresql",
         "--sql-dialect",
         help="Default SQL dialect for dialect-aware tools (e.g. sqlfluff).",
     ),
-    doctor: bool = typer.Option(
-        False, "--doctor", help="Run environment diagnostics and exit."
-    ),
+    doctor: bool = typer.Option(False, "--doctor", help="Run environment diagnostics and exit."),
     tool_info: str | None = typer.Option(
         None,
         "--tool-info",
@@ -134,9 +189,13 @@ def lint_command(
         "--fetch-all-tools",
         help="Download or prepare runtimes for every registered tool and exit.",
     ),
+    advice: bool = typer.Option(
+        False,
+        "--advice",
+        help="Provide SOLID-aligned refactoring suggestions alongside diagnostics.",
+    ),
 ) -> None:
     """Entry point for the ``pyqa lint`` CLI command."""
-
     if doctor and tool_info:
         raise typer.BadParameter("--doctor and --tool-info cannot be combined")
     if doctor and fetch_all_tools:
@@ -180,11 +239,33 @@ def lint_command(
         exit_code = run_doctor(root)
         raise typer.Exit(code=exit_code)
 
-    if tool_info:
-        exit_code = run_tool_info(tool_info, root=root)
-        raise typer.Exit(code=exit_code)
-
     effective_jobs = jobs if jobs is not None else default_parallel_jobs()
+
+    if type_checking is not None:
+        normalized_strictness = type_checking.lower()
+        if normalized_strictness not in {"lenient", "standard", "strict"}:
+            raise typer.BadParameter("--type-checking must be one of: lenient, standard, strict")
+        type_checking = normalized_strictness
+
+    def _normalise_bandit(value: str | None, option: str) -> str | None:
+        if value is None:
+            return None
+        normalized = value.lower()
+        if normalized not in {"low", "medium", "high"}:
+            raise typer.BadParameter(f"{option} must be one of: low, medium, high")
+        return normalized
+
+    bandit_severity = _normalise_bandit(bandit_severity, "--bandit-severity")
+    bandit_confidence = _normalise_bandit(bandit_confidence, "--bandit-confidence")
+
+    if pylint_fail_under is not None and not (0 <= pylint_fail_under <= 10):
+        raise typer.BadParameter("--pylint-fail-under must be between 0 and 10")
+
+    if sensitivity is not None:
+        sensitivity_normalized = sensitivity.lower()
+        if sensitivity_normalized not in {"low", "medium", "high", "maximum"}:
+            raise typer.BadParameter("--sensitivity must be one of: low, medium, high, maximum")
+        sensitivity = sensitivity_normalized
 
     provided = _collect_provided_flags(
         ctx,
@@ -215,6 +296,7 @@ def lint_command(
         quiet=quiet,
         no_color=no_color,
         no_emoji=no_emoji,
+        no_stats=no_stats,
         output_mode=output_mode,
         show_passing=show_passing,
         jobs=effective_jobs,
@@ -229,6 +311,14 @@ def lint_command(
         strict_config=strict_config,
         line_length=line_length,
         sql_dialect=sql_dialect,
+        max_complexity=max_complexity,
+        max_arguments=max_arguments,
+        type_checking=type_checking,
+        bandit_severity=bandit_severity,
+        bandit_confidence=bandit_confidence,
+        pylint_fail_under=pylint_fail_under,
+        sensitivity=sensitivity,
+        advice=advice,
         provided=provided,
     )
 
@@ -240,21 +330,100 @@ def lint_command(
         registry=DEFAULT_REGISTRY,
         discovery=build_default_discovery(),
     )
+
+    if tool_info:
+        exit_code = run_tool_info(tool_info, root=root, cfg=config)
+        raise typer.Exit(code=exit_code)
     if fetch_all_tools:
-        results = orchestrator.fetch_all_tools(config, root=root)
-        if not quiet:
-            for tool_name, action_name, prepared in results:
-                version_display = prepared.version or "unknown"
-                info(
-                    (
-                        f"{tool_name}:{action_name} ready via {prepared.source} (version {version_display})"
-                    ),
-                    use_emoji=config.output.emoji,
+        total_actions = sum(len(tool.actions) for tool in DEFAULT_REGISTRY.tools())
+        progress_enabled = total_actions > 0 and not quiet and config.output.color and is_tty()
+        console = console_manager.get(color=config.output.color, emoji=config.output.emoji)
+        results: list[tuple[str, str, PreparedCommand | None, str | None]]
+
+        if progress_enabled:
+            progress = Progress(
+                SpinnerColumn(),
+                TextColumn("{task.description}"),
+                BarColumn(bar_width=None),
+                TimeElapsedColumn(),
+                console=console,
+                transient=not verbose,
+            )
+            task_id = progress.add_task("Preparing tools", total=total_actions)
+
+            def progress_callback(
+                event: FetchEvent,
+                tool_name: str,
+                action_name: str,
+                index: int,
+                total: int,
+                message: str | None,
+            ) -> None:
+                description = f"{tool_name}:{action_name}"
+                if event == "start":
+                    status = "Preparing"
+                    completed = index - 1
+                elif event == "completed":
+                    status = "Prepared"
+                    completed = index
+                else:
+                    status = "Error"
+                    completed = index
+                    if message and verbose:
+                        console.print(f"[red]{description} failed: {message}[/red]")
+                progress.update(
+                    task_id,
+                    completed=completed,
+                    total=total,
+                    description=f"{status} {description}",
                 )
+
+            with progress:
+                results = orchestrator.fetch_all_tools(
+                    config,
+                    root=root,
+                    callback=progress_callback,
+                )
+        else:
+            results = orchestrator.fetch_all_tools(config, root=root)
+        results.sort(key=lambda item: (item[0], item[1]))
+
+        if not quiet:
+            table = Table(
+                title="Tool Preparation",
+                box=box.ROUNDED,
+                show_header=True,
+                header_style="bold" if config.output.color else None,
+            )
+            table.add_column("Tool", style="cyan" if config.output.color else None)
+            table.add_column("Action", style="cyan" if config.output.color else None)
+            table.add_column("Status", style="magenta" if config.output.color else None)
+            table.add_column("Source", style="magenta" if config.output.color else None)
+            table.add_column("Version", style="green" if config.output.color else None)
+            failures: list[tuple[str, str, str]] = []
+            for tool_name, action_name, prepared, error in results:
+                if prepared is None:
+                    status = "error"
+                    source = "-"
+                    version = "-"
+                    failures.append((tool_name, action_name, error or "unknown error"))
+                else:
+                    status = "ready"
+                    source = prepared.source
+                    version = prepared.version or "unknown"
+                table.add_row(tool_name, action_name, status, source, version)
+            console.print(table)
             info(
                 f"Prepared {len(results)} tool action(s) without execution.",
                 use_emoji=config.output.emoji,
+                use_color=config.output.color,
             )
+            for tool_name, action_name, message in failures:
+                warn(
+                    f"Failed to prepare {tool_name}:{action_name} — {message}",
+                    use_emoji=config.output.emoji,
+                    use_color=config.output.color,
+                )
         raise typer.Exit(code=0)
     result = orchestrator.run(config, root=root)
     _handle_reporting(
@@ -293,11 +462,11 @@ def _collect_provided_flags(
     ctx: typer.Context,
     *,
     paths_provided: bool,
-    dirs: List[Path],
-    exclude: List[Path],
-    filters: List[str],
-    only: List[str],
-    language: List[str],
+    dirs: list[Path],
+    exclude: list[Path],
+    filters: list[str],
+    only: list[str],
+    language: list[str],
 ) -> set[str]:
     tracked = {
         "changed_only",
@@ -316,6 +485,7 @@ def _collect_provided_flags(
         "quiet",
         "no_color",
         "no_emoji",
+        "no_stats",
         "output_mode",
         "show_passing",
         "jobs",
@@ -328,7 +498,15 @@ def _collect_provided_flags(
         "pr_summary_template",
         "use_local_linters",
         "line_length",
+        "max_complexity",
+        "max_arguments",
+        "type_checking",
+        "bandit_severity",
+        "bandit_confidence",
+        "pylint_fail_under",
+        "sensitivity",
         "sql_dialect",
+        "advice",
     }
     provided: set[str] = set()
     for name in tracked:
@@ -363,7 +541,7 @@ def _display_path(path: Path, root: Path) -> str:
         return str(path)
 
 
-def _derive_default_root(paths: List[Path]) -> Path | None:
+def _derive_default_root(paths: list[Path]) -> Path | None:
     if not paths:
         return None
     candidates = [path if path.is_dir() else path.parent for path in paths]

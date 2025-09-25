@@ -1,0 +1,34 @@
+selene --display-style Json2 --color Never --help
+
+selene 0.29.0
+
+USAGE:
+    selene [FLAGS] [OPTIONS] <files>...
+    selene <SUBCOMMAND>
+
+FLAGS:
+        --allow-warnings    Pass when only warnings occur
+    -h, --help              Prints help information
+        --no-exclude        
+    -n, --no-summary        Suppress summary information
+    -q, --quiet             Display only the necessary information. Equivalent to --display-style="quiet"
+    -V, --version           Prints version information
+
+OPTIONS:
+        --color <color>                     [default: auto]  [possible values: Always, Auto, Never]
+        --config <config>                  A toml file to configure the behavior of selene [default: selene.toml]
+        --display-style <display-style>    Sets the display method [possible values: Json, Json2, Rich, Quiet]
+        --num-threads <num-threads>        Number of threads to run on, default to the numbers of logical cores on your
+                                           system [default: 20]
+        --pattern <pattern>...             A glob to match files with to check
+
+ARGS:
+    <files>...    
+
+SUBCOMMANDS:
+    capabilities           Prints the capabilities of the current build
+    generate-roblox-std    
+    help                   Prints this message or the help of the given subcommand(s)
+    update-roblox-std      
+    upgrade-std            
+    validate-config        

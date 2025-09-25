@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Protocol, Sequence
+from typing import Protocol
 
 from ..config import FileDiscoveryConfig
 

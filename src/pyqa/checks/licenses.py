@@ -6,10 +6,11 @@ from __future__ import annotations
 
 import re
 import tomllib
+from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Final, Mapping, MutableMapping, Sequence
+from typing import Final
 
 from pyqa.config import LicenseConfig
 from pyqa.constants import ALWAYS_EXCLUDE_DIRS
@@ -22,7 +23,8 @@ KNOWN_LICENSE_SNIPPETS: Final[Mapping[str, str]] = {
 
 
 _COPYRIGHT_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"copyright\s*\(c\)\s*(?P<body>.+)", re.IGNORECASE
+    r"copyright\s*\(c\)\s*(?P<body>.+)",
+    re.IGNORECASE,
 )
 
 
@@ -66,7 +68,6 @@ class LicensePolicy:
 
 def load_project_license(root: Path) -> LicenseMetadata:
     """Attempt to load license metadata from pyproject.toml or fallback."""
-
     pyproject = root / "pyproject.toml"
     spdx_id: str | None = None
     copyright_str: str | None = None
@@ -102,7 +103,6 @@ def load_license_policy(
     overrides: LicenseConfig | Mapping[str, object] | None = None,
 ) -> LicensePolicy:
     """Derive a license enforcement policy from project metadata and overrides."""
-
     metadata = load_project_license(root)
     if isinstance(overrides, LicenseConfig):
         config: dict[str, object] = _license_config_to_mapping(overrides)
@@ -195,7 +195,6 @@ def verify_file_license(
     root: Path,
 ) -> list[str]:
     """Return list of issues detected for *path* under the provided *policy*."""
-
     if policy.should_skip(path, root):
         return []
 
@@ -217,7 +216,7 @@ def verify_file_license(
             issues.append(f"Missing copyright notice '{policy.canonical_notice}'")
         elif not _notices_equal(observed, policy.canonical_notice):
             issues.append(
-                f"Mismatched copyright notice. Found '{observed}' but expected '{policy.canonical_notice}'."
+                f"Mismatched copyright notice. Found '{observed}' but expected '{policy.canonical_notice}'.",
             )
 
     return issues
@@ -239,7 +238,8 @@ def normalise_notice(value: str) -> str:
 
 
 def _build_canonical_notice(
-    config: MutableMapping[str, object], metadata: LicenseMetadata
+    config: MutableMapping[str, object],
+    metadata: LicenseMetadata,
 ) -> str | None:
     explicit_notice = _coerce_optional_str(config.pop("notice", None))
     if explicit_notice:

@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import shutil
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from ...tools.base import Tool
 from ..constants import PYQA_ROOT, UV_CACHE_DIR
@@ -32,9 +32,7 @@ class PythonRuntime(RuntimeHandler):
             version = self._versions.capture(tool.version_command)
         if not self._versions.is_compatible(version, target_version):
             return None
-        return PreparedCommand.from_parts(
-            cmd=base_cmd, env=None, version=version, source="system"
-        )
+        return PreparedCommand.from_parts(cmd=base_cmd, env=None, version=version, source="system")
 
     def _try_project(
         self,
@@ -51,9 +49,7 @@ class PythonRuntime(RuntimeHandler):
             return None
         if not self._versions.is_compatible(version, target_version):
             return None
-        return PreparedCommand.from_parts(
-            cmd=base_cmd, env=None, version=version, source="project"
-        )
+        return PreparedCommand.from_parts(cmd=base_cmd, env=None, version=version, source="project")
 
     def _prepare_local(
         self,
@@ -82,9 +78,7 @@ class PythonRuntime(RuntimeHandler):
         version = None
         if tool.version_command:
             version = self._versions.capture(tool.version_command)
-        return PreparedCommand.from_parts(
-            cmd=cmd, env=env, version=version, source="local"
-        )
+        return PreparedCommand.from_parts(cmd=cmd, env=env, version=version, source="local")
 
 
 __all__ = ["PythonRuntime"]

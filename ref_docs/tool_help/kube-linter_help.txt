@@ -1,0 +1,18 @@
+/home/paudley/Active/py_qa/src/.lint-cache/tools/go/bin/kube-linter --help
+
+Usage:
+  kube-linter [command]
+
+Available Commands:
+  checks      View more information on lint checks
+  completion  Generate the autocompletion script for the specified shell
+  help        Help about any command
+  lint        Lint Kubernetes YAML files and Helm charts
+  templates   View more information on check templates
+  version     Print version and exit
+
+Flags:
+  -h, --help         help for kube-linter
+      --with-color   Force color output (default true)
+
+Use "kube-linter [command] --help" for more information about a command.

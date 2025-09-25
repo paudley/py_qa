@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +18,6 @@ except ModuleNotFoundError as exc:  # pragma: no cover - environment invariant
 
 def is_py_qa_workspace(root: Path) -> bool:
     """Return ``True`` when *root* appears to be the py_qa project itself."""
-
     try:
         resolved = root.resolve()
     except OSError:
@@ -26,7 +25,7 @@ def is_py_qa_workspace(root: Path) -> bool:
     return _is_py_qa_workspace_cached(str(resolved))
 
 
-@lru_cache(maxsize=None)
+@cache
 def _is_py_qa_workspace_cached(root_str: str) -> bool:
     root = Path(root_str)
     pyproject = root / "pyproject.toml"

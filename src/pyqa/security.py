@@ -8,9 +8,9 @@ import json
 import re
 import shutil
 import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Sequence
 
 from .logging import fail, info, ok, warn
 from .process_utils import run_command
@@ -59,7 +59,7 @@ _PII_PATTERNS: list[re.Pattern[str]] = [
 ]
 
 _DOC_ENV_PATTERNS = re.compile(
-    r"os\.environ|process\.env|ENV\[|getenv\(|-e [A-Z_]+=|export [A-Z_]+=|\$\{?[A-Z_]+\}?"
+    r"os\.environ|process\.env|ENV\[|getenv\(|-e [A-Z_]+=|export [A-Z_]+=|\$\{?[A-Z_]+\}?",
 )
 
 _SKIP_PII_FILES = (
@@ -127,9 +127,7 @@ class SecurityScanner:
         result = SecurityScanResult()
         resolved_files = self._resolve_files(files)
 
-        info(
-            "🔍 Scanning files for secrets and credentials...", use_emoji=self.use_emoji
-        )
+        info("🔍 Scanning files for secrets and credentials...", use_emoji=self.use_emoji)
         for path in resolved_files:
             self._scan_file(path, result)
 
@@ -190,9 +188,7 @@ class SecurityScanner:
         pii_flag = self._scan_pii(path, relative_path, lines, result)
 
         if secrets or entropy:
-            fail(
-                f"Potential secrets found in {relative_path}", use_emoji=self.use_emoji
-            )
+            fail(f"Potential secrets found in {relative_path}", use_emoji=self.use_emoji)
         if temp_flag:
             warn(
                 f"Temporary/backup file should not be committed: {relative_path}",
@@ -223,9 +219,7 @@ class SecurityScanner:
             if not matches or _should_skip_markdown(pattern, path, matches):
                 continue
             for line_no, snippet in matches[:3]:
-                result.register_secret(
-                    relative_path, f"line {line_no}: {snippet.strip()}"
-                )
+                result.register_secret(relative_path, f"line {line_no}: {snippet.strip()}")
             found = True
         return found
 
@@ -247,9 +241,7 @@ class SecurityScanner:
         return True
 
     def _scan_temp_files(self, relative_path: Path, result: SecurityScanResult) -> bool:
-        if relative_path.suffix in _TMP_FILE_SUFFIXES or relative_path.name.endswith(
-            "~"
-        ):
+        if relative_path.suffix in _TMP_FILE_SUFFIXES or relative_path.name.endswith("~"):
             result.register_temp(relative_path)
             return True
         return False
@@ -350,7 +342,10 @@ class SecurityScanner:
 
 
 def _match_pattern(
-    pattern: re.Pattern[str], lines: Sequence[str], *, case_sensitive: bool = False
+    pattern: re.Pattern[str],
+    lines: Sequence[str],
+    *,
+    case_sensitive: bool = False,
 ) -> list[tuple[int, str]]:
     matches: list[tuple[int, str]] = []
     compiled = pattern if case_sensitive else re.compile(pattern.pattern, re.IGNORECASE)
@@ -367,7 +362,9 @@ def _should_skip_pii(path: Path) -> bool:
 
 
 def _should_skip_markdown(
-    _pattern: re.Pattern[str], path: Path, matches: list[tuple[int, str]]
+    _pattern: re.Pattern[str],
+    path: Path,
+    matches: list[tuple[int, str]],
 ) -> bool:
     if path.suffix.lower() != ".md":
         return False
@@ -377,9 +374,7 @@ def _should_skip_markdown(
 def _filter_entropy(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
     filtered: list[tuple[int, str]] = []
     for idx, line in matches:
-        if re.search(
-            r"sha256|md5|hash|digest|test|example|sample|hexsha", line, re.IGNORECASE
-        ):
+        if re.search(r"sha256|md5|hash|digest|test|example|sample|hexsha", line, re.IGNORECASE):
             continue
         if line.strip().startswith("#") or line.strip().startswith("//"):
             continue
@@ -397,7 +392,6 @@ def _filter_comments(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
 
 def get_staged_files(root: Path) -> list[Path]:
     """Return files with staged changes in git."""
-
     try:
         completed = run_command(
             ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
@@ -407,10 +401,6 @@ def get_staged_files(root: Path) -> list[Path]:
         )
         if completed.returncode != 0:
             return []
-        return [
-            root / line.strip()
-            for line in completed.stdout.splitlines()
-            if line.strip()
-        ]
+        return [root / line.strip() for line in completed.stdout.splitlines() if line.strip()]
     except FileNotFoundError:  # git not installed
         return []

@@ -7,7 +7,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict
 
 
 @dataclass(slots=True)
@@ -15,7 +14,7 @@ class FileMetrics:
     """Lightweight container for line counts and suppression totals."""
 
     line_count: int = 0
-    suppressions: Dict[str, int] = field(default_factory=dict)
+    suppressions: dict[str, int] = field(default_factory=dict)
 
     def to_payload(self) -> dict[str, object]:
         return {
@@ -24,7 +23,7 @@ class FileMetrics:
         }
 
     @classmethod
-    def from_payload(cls, payload: dict[str, object] | None) -> "FileMetrics":
+    def from_payload(cls, payload: dict[str, object] | None) -> FileMetrics:
         if not isinstance(payload, dict):
             return cls()
         raw_line = payload.get("line_count", 0)
@@ -36,7 +35,7 @@ class FileMetrics:
         else:
             line_count = 0
         raw_suppressions = payload.get("suppressions", {})
-        suppressions: dict[str, int] = {label: 0 for label in SUPPRESSION_LABELS}
+        suppressions: dict[str, int] = dict.fromkeys(SUPPRESSION_LABELS, 0)
         if isinstance(raw_suppressions, dict):
             for label, value in raw_suppressions.items():
                 if isinstance(value, (int, float, str)):
@@ -60,18 +59,14 @@ _SUPPRESSION_PATTERNS_RAW: tuple[tuple[str, str], ...] = (
     ("nosec", r"#\s*nosec\b"),
 )
 SUPPRESSION_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
-    (label, re.compile(pattern, re.IGNORECASE))
-    for label, pattern in _SUPPRESSION_PATTERNS_RAW
+    (label, re.compile(pattern, re.IGNORECASE)) for label, pattern in _SUPPRESSION_PATTERNS_RAW
 )
 SUPPRESSION_LABELS: tuple[str, ...] = tuple(label for label, _ in SUPPRESSION_PATTERNS)
 
 
 def compute_file_metrics(path: Path) -> FileMetrics:
     """Return :class:`FileMetrics` for ``path``, handling unreadable files."""
-
-    metrics = FileMetrics(
-        line_count=0, suppressions={label: 0 for label in SUPPRESSION_LABELS}
-    )
+    metrics = FileMetrics(line_count=0, suppressions=dict.fromkeys(SUPPRESSION_LABELS, 0))
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
@@ -87,7 +82,6 @@ def compute_file_metrics(path: Path) -> FileMetrics:
 
 def normalise_path_key(path: Path) -> str:
     """Return a canonical string key for *path* suitable for metric caches."""
-
     try:
         return str(path.resolve())
     except OSError:
@@ -95,9 +89,9 @@ def normalise_path_key(path: Path) -> str:
 
 
 __all__ = [
-    "FileMetrics",
     "SUPPRESSION_LABELS",
     "SUPPRESSION_PATTERNS",
+    "FileMetrics",
     "compute_file_metrics",
     "normalise_path_key",
 ]

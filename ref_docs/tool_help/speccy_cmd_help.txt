@@ -1,0 +1,13 @@
+/home/paudley/Active/py_qa/src/.lint-cache/tools/node/speccy-0.11.0/node_modules/.bin/speccy lint --reporter json --help
+
+Usage: lint [options] [file-or-url]
+
+ensure specs are not just valid OpenAPI, but lint against specified rules. If no argument is passed, then standard input will be used (please note that in this case the provided spec must be fully resolved)
+
+Options:
+  -q, --quiet             reduce verbosity
+  -r, --rules [ruleFile]  provide multiple rules files (default: [])
+  -s, --skip [ruleName]   provide multiple rules to skip (default: [])
+  -j, --json-schema       treat $ref like JSON Schema and convert to OpenAPI Schema Objects (default: false)
+  -v, --verbose           increase verbosity
+  -h, --help              output usage information

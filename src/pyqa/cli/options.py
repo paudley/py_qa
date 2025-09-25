@@ -6,31 +6,31 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List
 
 
 @dataclass(slots=True)
 class LintOptions:
     """Container for CLI options passed to the lint command."""
 
-    paths: List[Path]
+    paths: list[Path]
     root: Path
     changed_only: bool
     diff_ref: str
     include_untracked: bool
     base_branch: str | None
     paths_from_stdin: bool
-    dirs: List[Path] = field(default_factory=list)
-    exclude: List[Path] = field(default_factory=list)
-    filters: List[str] = field(default_factory=list)
-    only: List[str] = field(default_factory=list)
-    language: List[str] = field(default_factory=list)
+    dirs: list[Path] = field(default_factory=list)
+    exclude: list[Path] = field(default_factory=list)
+    filters: list[str] = field(default_factory=list)
+    only: list[str] = field(default_factory=list)
+    language: list[str] = field(default_factory=list)
     fix_only: bool = False
     check_only: bool = False
     verbose: bool = False
     quiet: bool = False
     no_color: bool = False
     no_emoji: bool = False
+    no_stats: bool = False
     output_mode: str = "concise"
     show_passing: bool = False
     jobs: int = 1
@@ -46,6 +46,15 @@ class LintOptions:
     provided: set[str] = field(default_factory=set)
     line_length: int = 120
     sql_dialect: str = "postgresql"
+    python_version: str | None = None
+    max_complexity: int | None = None
+    max_arguments: int | None = None
+    type_checking: str | None = None
+    bandit_severity: str | None = None
+    bandit_confidence: str | None = None
+    pylint_fail_under: float | None = None
+    sensitivity: str | None = None
+    advice: bool = False
 
 
 @dataclass(slots=True)
@@ -56,4 +65,4 @@ class InstallOptions:
     generate_stubs: bool = True
 
 
-ToolFilters = Dict[str, List[str]]
+ToolFilters = dict[str, list[str]]

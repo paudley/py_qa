@@ -4,10 +4,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, Literal, Mapping, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
 from ..config import Config
 from ..models import Diagnostic, OutputFilter, RawDiagnostic
@@ -46,9 +47,7 @@ class ToolContext(BaseModel):
         if isinstance(value, tuple):
             return value
         if isinstance(value, Sequence):
-            return tuple(
-                Path(item) if not isinstance(item, Path) else item for item in value
-            )
+            return tuple(Path(item) if not isinstance(item, Path) else item for item in value)
         raise TypeError("files must be a sequence of paths")
 
 
@@ -152,17 +151,13 @@ class ToolAction(BaseModel):
             cmd.extend(str(path) for path in ctx.files)
         return cmd
 
-    def filter_stdout(
-        self, text: str, extra_patterns: Sequence[str] | None = None
-    ) -> str:
+    def filter_stdout(self, text: str, extra_patterns: Sequence[str] | None = None) -> str:
         patterns = list(self.filter_patterns)
         if extra_patterns:
             patterns.extend(extra_patterns)
         return OutputFilter(patterns=tuple(patterns)).apply(text)
 
-    def filter_stderr(
-        self, text: str, extra_patterns: Sequence[str] | None = None
-    ) -> str:
+    def filter_stderr(self, text: str, extra_patterns: Sequence[str] | None = None) -> str:
         patterns = list(self.filter_patterns)
         if extra_patterns:
             patterns.extend(extra_patterns)
@@ -188,6 +183,8 @@ class Tool(BaseModel):
     prefer_local: bool = False
     version_command: tuple[str, ...] | None = None
 
+    _actions_by_name: dict[str, ToolAction] = PrivateAttr(default_factory=dict)
+
     @field_validator("actions", mode="before")
     @classmethod
     def _coerce_actions(cls, value: object) -> tuple[ToolAction, ...]:
@@ -201,6 +198,51 @@ class Tool(BaseModel):
                 items.append(item)
             return tuple(items)
         raise TypeError("actions must be an iterable of ToolAction instances")
+
+    def model_post_init(self, __context: Any) -> None:  # pragma: no cover - pydantic hook
+        self._refresh_action_index()
+
+    def _refresh_action_index(self) -> None:
+        object.__setattr__(
+            self,
+            "_actions_by_name",
+            {action.name: action for action in self.actions},
+        )
+
+    def __iter__(self) -> Iterator[ToolAction]:
+        return iter(self.actions)
+
+    def __len__(self) -> int:
+        return len(self.actions)
+
+    def __contains__(self, item: object) -> bool:  # type: ignore[override]
+        if isinstance(item, ToolAction):
+            return item in self.actions
+        if isinstance(item, str):
+            return item in self._actions_by_name
+        return False
+
+    def __getitem__(self, key: int | str) -> ToolAction:
+        if isinstance(key, int):
+            return self.actions[key]
+        if isinstance(key, str):
+            return self._actions_by_name[key]
+        raise TypeError("Tool indices must be integers or action names")
+
+    def keys(self) -> Iterable[str]:
+        return self._actions_by_name.keys()
+
+    def values(self) -> Iterable[ToolAction]:
+        return self._actions_by_name.values()
+
+    def items(self) -> Iterable[tuple[str, ToolAction]]:
+        return self._actions_by_name.items()
+
+    def get(self, name: str, default: ToolAction | None = None) -> ToolAction | None:
+        return self._actions_by_name.get(name, default)
+
+    def action_names(self) -> tuple[str, ...]:
+        return tuple(self._actions_by_name.keys())
 
     @field_validator("languages", "file_extensions", "config_files", mode="before")
     @classmethod
@@ -225,12 +267,15 @@ class Tool(BaseModel):
         raise TypeError("version_command must be a sequence of strings or None")
 
     def is_applicable(
-        self, *, language: str | None = None, files: Sequence[Path] | None = None
+        self,
+        *,
+        language: str | None = None,
+        files: Sequence[Path] | None = None,
     ) -> bool:
         if language and self.languages and language not in self.languages:
             return False
         if files:
-            allowed = set(ext.lower() for ext in self.file_extensions)
+            allowed = {ext.lower() for ext in self.file_extensions}
             if allowed and not any(path.suffix.lower() in allowed for path in files):
                 return False
         return True

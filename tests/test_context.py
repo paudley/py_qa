@@ -29,7 +29,7 @@ def test_python_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
             def inner():
                 return 1
             return inner()
-        """
+        """,
     ).strip()
     file_path = tmp_path / "sample.py"
     file_path.write_text(source, encoding="utf-8")
@@ -48,9 +48,7 @@ def test_python_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     def fail_fallback(path: Path, line: int) -> str:
         raise AssertionError("fallback should not be used")
 
-    monkeypatch.setattr(
-        TreeSitterContextResolver, "_python_fallback", staticmethod(fail_fallback)
-    )
+    monkeypatch.setattr(TreeSitterContextResolver, "_python_fallback", staticmethod(fail_fallback))
 
     resolver.annotate([diag], root=tmp_path)
 
@@ -68,7 +66,7 @@ def test_markdown_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
         ## Section
 
         Content line
-        """
+        """,
     ).strip()
     file_path = tmp_path / "doc.md"
     file_path.write_text(source, encoding="utf-8")

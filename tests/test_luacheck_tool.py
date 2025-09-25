@@ -39,4 +39,6 @@ def test_luacheck_command_build(tmp_path: Path) -> None:
     assert "--formatter" in command and "plain" in command
     assert "--codes" in command
     assert "--no-color" in command
+    assert "--max-cyclomatic-complexity" in command
+    assert "--max-line-length" in command
     assert command[-1].endswith("module.lua")

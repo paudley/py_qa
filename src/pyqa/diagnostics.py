@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, MutableMapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Iterable, MutableMapping, Sequence
 
 from .config import DedupeConfig
 from .models import Diagnostic, RawDiagnostic, RunResult
@@ -26,10 +26,17 @@ _SEVERITY_RANK: MutableMapping[Severity, int] = {
     Severity.NOTE: 0,
 }
 
+_CROSS_TOOL_EQUIVALENT_CODES = {
+    frozenset({"override", "W0221"}),
+    frozenset({"TC002", "reportPrivateImportUsage"}),
+    frozenset({"F822", "reportUnsupportedDunderAll"}),
+    frozenset({"F821", "reportUndefinedVariable"}),
+    frozenset({"PLR2004", "R2004"}),
+}
+
 
 def build_severity_rules(custom_rules: Iterable[str]) -> SeverityRuleMap:
     """Return severity rules including any custom overrides."""
-
     rules = deepcopy(DEFAULT_SEVERITY_RULES)
     for rule in custom_rules:
         add_custom_rule(rule, rules=rules)
@@ -43,7 +50,6 @@ def normalize_diagnostics(
     severity_rules: SeverityRuleView,
 ) -> list[Diagnostic]:
     """Normalize diagnostics into the canonical :class:`Diagnostic` form."""
-
     normalized: list[Diagnostic] = []
     for candidate in candidates:
         if isinstance(candidate, Diagnostic):
@@ -54,7 +60,9 @@ def normalize_diagnostics(
 
 
 def _normalize_raw(
-    raw: RawDiagnostic, tool_name: str, severity_rules: SeverityRuleView
+    raw: RawDiagnostic,
+    tool_name: str,
+    severity_rules: SeverityRuleView,
 ) -> Diagnostic:
     message = raw.message.strip()
     code = raw.code
@@ -78,9 +86,7 @@ def _normalize_raw(
         if not message.startswith(code):
             message = f"{code} {message}".strip()
 
-    severity = apply_severity_rules(
-        tool, code or message, severity, rules=severity_rules
-    )
+    severity = apply_severity_rules(tool, code or message, severity, rules=severity_rules)
 
     return Diagnostic(
         file=raw.file,
@@ -114,7 +120,6 @@ class _DedupEntry:
 
 def dedupe_outcomes(result: RunResult, cfg: DedupeConfig) -> None:
     """Mutate ``result`` so that diagnostics are deduplicated according to *cfg*."""
-
     if not cfg.dedupe:
         return
 
@@ -146,23 +151,23 @@ def dedupe_outcomes(result: RunResult, cfg: DedupeConfig) -> None:
         result.outcomes[entry.outcome_index].diagnostics.append(entry.diagnostic)
 
 
-def _is_duplicate(
-    existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig
-) -> bool:
+def _is_duplicate(existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig) -> bool:
     if cfg.dedupe_same_file_only and existing.file != candidate.file:
         return False
 
-    if (existing.code or "") != (candidate.code or ""):
+    existing_code = existing.code or ""
+    candidate_code = candidate.code or ""
+    if existing_code != candidate_code:
+        if existing.function == candidate.function and existing.line == candidate.line:
+            pair = frozenset(code for code in (existing_code, candidate_code) if code)
+            if pair in _CROSS_TOOL_EQUIVALENT_CODES:
+                return True
         return False
 
     if existing.message != candidate.message:
         return False
 
-    if (
-        cfg.dedupe_same_file_only
-        and existing.file is None
-        and candidate.file is not None
-    ):
+    if cfg.dedupe_same_file_only and existing.file is None and candidate.file is not None:
         return False
 
     if (existing.function or "") != (candidate.function or ""):
@@ -181,9 +186,7 @@ def _line_distance(lhs: int | None, rhs: int | None) -> int:
     return abs(lhs - rhs)
 
 
-def _prefer(
-    existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig
-) -> Diagnostic:
+def _prefer(existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig) -> Diagnostic:
     if cfg.dedupe_by == "first":
         return existing
     if cfg.dedupe_by == "severity":

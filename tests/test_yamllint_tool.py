@@ -32,7 +32,7 @@ def test_yamllint_command_includes_json_format(tmp_path: Path) -> None:
 
     command = action.build_command(ctx)
     assert command[0] == "yamllint"
-    assert "--format" in command and "json" in command
+    assert "--format" in command and "parsable" in command
     assert "--config-file" in command
     assert command[-1].endswith("app.yaml")
 

@@ -11,8 +11,9 @@ import typer
 
 from ..hooks import install_hooks
 from ..logging import fail
+from .typer_ext import create_typer
 
-hooks_app = typer.Typer(
+hooks_app = create_typer(
     name="install-hooks",
     help="Install py-qa git hooks (pre-commit, pre-push, commit-msg).",
 )
@@ -23,11 +24,11 @@ def main(
     ctx: typer.Context,
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Repository root."),
     hooks_dir: Path = typer.Option(
-        Path(".git/hooks"), "--hooks-dir", help="Overrides the hooks directory."
+        Path(".git/hooks"),
+        "--hooks-dir",
+        help="Overrides the hooks directory.",
     ),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="Show actions without modifying files."
-    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show actions without modifying files."),
 ) -> None:
     if ctx.invoked_subcommand:
         return

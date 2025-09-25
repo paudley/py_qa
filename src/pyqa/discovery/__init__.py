@@ -37,5 +37,4 @@ class DefaultDiscovery(DiscoveryService):
 
 def build_default_discovery() -> DefaultDiscovery:
     """Factory for the default discovery pipeline."""
-
     return DefaultDiscovery(filesystem=FilesystemDiscovery(), git=GitDiscovery())

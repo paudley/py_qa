@@ -24,17 +24,17 @@ from .tools.registry import DEFAULT_REGISTRY
 __all__ = [
     "Config",
     "ConfigError",
+    "ConfigLoader",
     "DedupeConfig",
     "ExecutionConfig",
     "FileDiscoveryConfig",
-    "OutputConfig",
-    "ConfigLoader",
-    "generate_config_schema",
-    "load_config",
     "Orchestrator",
     "OrchestratorHooks",
-    "build_default_discovery",
+    "OutputConfig",
     "SecurityScanner",
+    "build_default_discovery",
+    "generate_config_schema",
+    "load_config",
 ]
 
 

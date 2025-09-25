@@ -15,7 +15,6 @@ from ..tools.base import ToolContext
 
 def parse_shfmt(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse shfmt diff output."""
-
     results: list[RawDiagnostic] = []
     current_file: str | None = None
     for raw_line in stdout.splitlines():
@@ -27,13 +26,11 @@ def parse_shfmt(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
             continue
         if line.startswith("--- "):
             current_file = line[4:].strip()
-            if current_file.startswith("a/"):
-                current_file = current_file[2:]
+            current_file = current_file.removeprefix("a/")
             continue
         if line.startswith("+++"):
             current_file = line[4:].strip()
-            if current_file.startswith("b/"):
-                current_file = current_file[2:]
+            current_file = current_file.removeprefix("b/")
             results.append(
                 RawDiagnostic(
                     file=current_file,
@@ -43,20 +40,19 @@ def parse_shfmt(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
                     message="File is not formatted according to shfmt",
                     code="format",
                     tool="shfmt",
-                )
+                ),
             )
             continue
     return results
 
 
 PHPLINT_PATTERN = re.compile(
-    r"^Parse error: (?P<message>.+?) in (?P<file>.+) on line (?P<line>\d+)"
+    r"^Parse error: (?P<message>.+?) in (?P<file>.+) on line (?P<line>\d+)",
 )
 
 
 def parse_phplint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse phplint textual output."""
-
     results: list[RawDiagnostic] = []
     for raw_line in stdout.splitlines():
         line = raw_line.strip()
@@ -78,19 +74,18 @@ def parse_phplint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]
                 message=match.group("message").strip(),
                 code="parse-error",
                 tool="phplint",
-            )
+            ),
         )
     return results
 
 
 PERLCRITIC_PATTERN = re.compile(
-    r"^(?P<file>[^:]+):(?P<line>\d+):(?P<column>\d+):\s*(?P<message>.+?)\s*\((?P<rule>[^)]+)\)$"
+    r"^(?P<file>[^:]+):(?P<line>\d+):(?P<column>\d+):\s*(?P<message>.+?)\s*\((?P<rule>[^)]+)\)$",
 )
 
 
 def parse_perlcritic(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse perlcritic textual output using custom verbose template."""
-
     results: list[RawDiagnostic] = []
     for raw_line in stdout.splitlines():
         line = raw_line.strip()
@@ -109,14 +104,13 @@ def parse_perlcritic(stdout: str, _context: ToolContext) -> Sequence[RawDiagnost
                 message=message,
                 code=match.group("rule"),
                 tool="perlcritic",
-            )
+            ),
         )
     return results
 
 
 def parse_checkmake(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse checkmake JSON output."""
-
     files: list[dict[str, Any]]
     if isinstance(payload, dict):
         files = payload.get("files") or payload.get("results") or []
@@ -155,19 +149,18 @@ def parse_checkmake(payload: Any, _context: ToolContext) -> Sequence[RawDiagnost
                     message=str(message).strip(),
                     code=str(rule) if rule else None,
                     tool="checkmake",
-                )
+                ),
             )
     return results
 
 
 _CPPLINT_PATTERN = re.compile(
-    r"^(?P<file>[^:]+):(?P<line>\d+):\s+(?P<message>.+?)\s+\[(?P<category>[^\]]+)\]\s+\[(?P<confidence>\d+)\]$"
+    r"^(?P<file>[^:]+):(?P<line>\d+):\s+(?P<message>.+?)\s+\[(?P<category>[^\]]+)\]\s+\[(?P<confidence>\d+)\]$",
 )
 
 
 def parse_cpplint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse cpplint text diagnostics."""
-
     results: list[RawDiagnostic] = []
     for line in stdout.splitlines():
         stripped = line.strip()
@@ -191,14 +184,15 @@ def parse_cpplint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]
                 message=message,
                 code=category,
                 tool="cpplint",
-            )
+            ),
         )
     return results
 
 
 _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
 _TOMBI_HEADER_RE = re.compile(
-    r"^(?P<level>Error|Warning|Info|Hint|Note):\s*(?P<message>.+)$", re.IGNORECASE
+    r"^(?P<level>Error|Warning|Info|Hint|Note):\s*(?P<message>.+)$",
+    re.IGNORECASE,
 )
 _TOMBI_LOCATION_RE = re.compile(
     r"^at\s+(?P<file>.+?)(?::(?P<line>\d+))?(?::(?P<column>\d+))?$",
@@ -216,7 +210,6 @@ TOMBI_SEVERITY_MAP: Final[dict[str, Severity]] = {
 
 def parse_tombi(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse tombi lint textual diagnostics."""
-
     cleaned = _ANSI_ESCAPE_RE.sub("", stdout)
     results: list[RawDiagnostic] = []
     for header, body in _split_tombi_blocks(cleaned.splitlines()):
@@ -244,9 +237,7 @@ def _split_tombi_blocks(lines: Sequence[str]) -> Iterable[tuple[str, list[str]]]
         yield current_header, current_body
 
 
-def _build_tombi_diagnostic(
-    header_line: str, body: Sequence[str]
-) -> RawDiagnostic | None:
+def _build_tombi_diagnostic(header_line: str, body: Sequence[str]) -> RawDiagnostic | None:
     header = _TOMBI_HEADER_RE.match(header_line)
     if not header:
         return None
@@ -312,7 +303,7 @@ def parse_golangci_lint(payload: Any, _context: ToolContext) -> Sequence[RawDiag
                 message=message,
                 code=code,
                 tool=str(sub_linter),
-            )
+            ),
         )
     return results
 
@@ -320,9 +311,7 @@ def parse_golangci_lint(payload: Any, _context: ToolContext) -> Sequence[RawDiag
 def parse_cargo_clippy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse Cargo clippy JSON payloads."""
     records = (
-        payload
-        if isinstance(payload, list)
-        else [payload] if isinstance(payload, dict) else []
+        payload if isinstance(payload, list) else [payload] if isinstance(payload, dict) else []
     )
     results: list[RawDiagnostic] = []
     for record in records:
@@ -359,18 +348,18 @@ def parse_cargo_clippy(payload: Any, _context: ToolContext) -> Sequence[RawDiagn
                 message=str(message.get("message", "")).strip(),
                 code=code,
                 tool="cargo-clippy",
-            )
+            ),
         )
     return results
 
 
 __all__ = [
-    "parse_shfmt",
-    "parse_phplint",
-    "parse_perlcritic",
+    "parse_cargo_clippy",
     "parse_checkmake",
     "parse_cpplint",
-    "parse_tombi",
     "parse_golangci_lint",
-    "parse_cargo_clippy",
+    "parse_perlcritic",
+    "parse_phplint",
+    "parse_shfmt",
+    "parse_tombi",
 ]

@@ -59,7 +59,6 @@ class GrammarStatus:
 
 def run_doctor(root: Path, *, console: Console | None = None) -> int:
     """Run diagnostic checks and return an exit status (0 healthy, 1 otherwise)."""
-
     console = console or Console()
     console.print(Rule("[bold cyan]pyqa Doctor[/bold cyan]"))
 
@@ -98,7 +97,7 @@ def _load_configuration(root: Path, console: Console) -> ConfigLoadResult | None
                 f"[red]Failed to load configuration:[/red] {exc}",
                 title="Configuration",
                 border_style="red",
-            )
+            ),
         )
         return None
 
@@ -144,7 +143,7 @@ def _render_configuration_section(console: Console, result: ConfigLoadResult) ->
                 Pretty(result.warnings),
                 title="Configuration Warnings",
                 border_style="yellow",
-            )
+            ),
         )
 
     if not result.updates:
@@ -152,7 +151,7 @@ def _render_configuration_section(console: Console, result: ConfigLoadResult) ->
             Panel(
                 "[green]No configuration overrides detected.[/green]",
                 title="Configuration",
-            )
+            ),
         )
         return
 
@@ -162,9 +161,7 @@ def _render_configuration_section(console: Console, result: ConfigLoadResult) ->
     table.add_column("Source")
     table.add_column("Value", overflow="fold")
     for update in result.updates:
-        table.add_row(
-            update.section, str(update.field), update.source, Pretty(update.value)
-        )
+        table.add_row(update.section, str(update.field), update.source, Pretty(update.value))
     console.print(table)
 
 
@@ -192,9 +189,7 @@ def _render_tooling_section(console: Console, config: Config) -> bool:
     unhealthy = False
     for summary in summaries:
         status = summary.status
-        style = TOOL_STATUS_STYLE.get(
-            status.status, "red" if status.status else "yellow"
-        )
+        style = TOOL_STATUS_STYLE.get(status.status, "red" if status.status else "yellow")
         if status.status in {"not ok", "uninstalled"}:
             unhealthy = True
         default_label = "yes" if summary.default_enabled else "no"
@@ -220,7 +215,7 @@ def _render_summary(console: Console, unhealthy: bool) -> None:
         Panel(
             f"[{overall_style}]Doctor completed[/]",
             border_style=overall_style,
-        )
+        ),
     )
 
 
@@ -232,7 +227,7 @@ def _collect_environment_checks() -> list[EnvironmentCheck]:
             status="ok",
             ok=True,
             detail=platform.python_version(),
-        )
+        ),
     )
     checks.extend(_probe_program(name, required) for name, required in PROGRAM_PROBES)
     checks.append(_probe_module("tree_sitter_languages", optional=False))
@@ -248,7 +243,10 @@ def _probe_program(executable: str, required: bool) -> EnvironmentCheck:
         return EnvironmentCheck(name=executable, status="ok", ok=True, detail=detail)
     status = "missing" if required else "missing (optional)"
     return EnvironmentCheck(
-        name=executable, status=status, ok=not required, detail="Not found in PATH"
+        name=executable,
+        status=status,
+        ok=not required,
+        detail="Not found in PATH",
     )
 
 
@@ -259,9 +257,7 @@ def _probe_module(module: str, optional: bool) -> EnvironmentCheck:
         status = "missing" if optional else "not ok"
         detail = f"{type(exc).__name__}: {exc}"
         return EnvironmentCheck(name=module, status=status, ok=optional, detail=detail)
-    return EnvironmentCheck(
-        name=module, status="ok", ok=True, detail="Import successful"
-    )
+    return EnvironmentCheck(name=module, status="ok", ok=True, detail="Import successful")
 
 
 def _collect_tool_summaries(config: Config) -> list[ToolSummary]:
@@ -297,7 +293,7 @@ def _collect_grammar_statuses() -> list[GrammarStatus]:
                 module=module_name,
                 available=available,
                 version=version,
-            )
+            ),
         )
     return statuses
 
@@ -331,4 +327,4 @@ def _capture_version(executable: str) -> str | None:
     return None
 
 
-__all__ = ["run_doctor", "EnvironmentCheck", "ToolSummary", "GrammarStatus"]
+__all__ = ["EnvironmentCheck", "GrammarStatus", "ToolSummary", "run_doctor"]

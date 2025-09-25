@@ -11,12 +11,12 @@ from .python import PythonRuntime
 from .rust import RustRuntime
 
 __all__ = [
-    "RuntimeHandler",
     "BinaryRuntime",
     "GoRuntime",
     "LuaRuntime",
     "NpmRuntime",
     "PerlRuntime",
     "PythonRuntime",
+    "RuntimeHandler",
     "RustRuntime",
 ]

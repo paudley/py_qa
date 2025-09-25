@@ -106,14 +106,43 @@ def test_render_concise_shows_diagnostics_for_failures(tmp_path: Path, capsys) -
     result = _run_result(tmp_path)
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [
-        line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()
-    ]
-    assert output_lines == [
+    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    panel_start = next(
+        (idx for idx, line in enumerate(output_lines) if line.startswith("╭")),
+        -1,
+    )
+    assert panel_start != -1
+    panel_end = next(
+        (idx for idx in range(panel_start, len(output_lines)) if output_lines[idx].startswith("╰")),
+        -1,
+    )
+    assert panel_end != -1
+    panel_lines = output_lines[panel_start : panel_end + 1]
+    assert "Files" in " ".join(panel_lines)
+    normalised = [", ".join(part.strip() for part in line.split(",")) for line in output_lines[:2]]
+    assert normalised == [
         "ruff, src/app.py:10, F401, bad things",
         "ruff, src/app.py:20, W000, meh",
-        "Failed — 2 diagnostic(s) across 1 file(s); 1 failing action(s) out of 1",
     ]
+    assert output_lines[-1] == (
+        "Failed — 2 diagnostic(s) across 1 file(s); 1 failing action(s) out of 1"
+    )
+
+
+def test_render_concise_omits_stats_when_disabled(tmp_path: Path, capsys) -> None:
+    result = _run_result(tmp_path)
+    config = OutputConfig(color=False, emoji=False, show_stats=False)
+    render(result, config)
+    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert all(not line.startswith("╭") for line in output_lines)
+    normalised = [", ".join(part.strip() for part in line.split(",")) for line in output_lines[:2]]
+    assert normalised == [
+        "ruff, src/app.py:10, F401, bad things",
+        "ruff, src/app.py:20, W000, meh",
+    ]
+    assert output_lines[-1] == (
+        "Failed — 2 diagnostic(s) across 1 file(s); 1 failing action(s) out of 1"
+    )
 
 
 def test_render_concise_fallbacks_to_stderr(tmp_path: Path, capsys) -> None:
@@ -133,12 +162,167 @@ def test_render_concise_fallbacks_to_stderr(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [
-        line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()
+    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    panel_lines = [
+        line
+        for line in output_lines
+        if line.startswith("╭") or line.startswith("│") or line.startswith("╰")
     ]
-    assert output_lines == [
-        "Failed — 0 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1",
+    assert panel_lines
+    assert output_lines[-1] == (
+        "Failed — 0 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1"
+    )
+
+
+def test_render_concise_trims_code_prefix(tmp_path: Path, capsys) -> None:
+    diag = Diagnostic(
+        file="mod.py",
+        line=7,
+        column=None,
+        severity=Severity.WARNING,
+        message="C0415: import outside toplevel",
+        tool="pylint",
+        code="C0415",
+    )
+    outcome = ToolOutcome(
+        tool="pylint",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=[diag],
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[tmp_path / "mod.py"],
+        outcomes=[outcome],
+        tool_versions={},
+    )
+    config = OutputConfig(color=False, emoji=False)
+    render(result, config)
+    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    row = next(line for line in output_lines if line.startswith("pylint"))
+    parts = [part.strip() for part in row.split(",")]
+    assert parts[0] == "pylint"
+    assert parts[1] == "mod.py:7"
+    assert parts[2] == "C0415"
+    assert parts[3] == "import outside toplevel"
+
+
+def test_render_concise_does_not_pad_codes(tmp_path: Path, capsys) -> None:
+    diag_short = Diagnostic(
+        file="pkg/mod.py",
+        line=4,
+        column=None,
+        severity=Severity.ERROR,
+        message="short code",
+        tool="flake8",
+        code="E1",
+    )
+    diag_long = Diagnostic(
+        file="pkg/mod.py",
+        line=5,
+        column=None,
+        severity=Severity.ERROR,
+        message="long code",
+        tool="flake8",
+        code="ERROR-LONG-CODE",
+    )
+    outcome = ToolOutcome(
+        tool="flake8",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=[diag_short, diag_long],
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[tmp_path / "pkg" / "mod.py"],
+        outcomes=[outcome],
+        tool_versions={},
+    )
+    config = OutputConfig(color=False, emoji=False)
+    render(result, config)
+    raw_lines = capsys.readouterr().out.splitlines()
+    short_line = next(line for line in raw_lines if "short code" in line)
+    long_line = next(line for line in raw_lines if "long code" in line)
+
+    short_code_segment = short_line.split(",")[2]
+    long_code_segment = long_line.split(",")[2]
+
+    assert short_code_segment == " E1"
+    assert long_code_segment == " ERROR-LONG-CODE"
+
+
+def test_render_concise_trims_code_whitespace(tmp_path: Path, capsys) -> None:
+    diag = Diagnostic(
+        file="src/typer_ext.py",
+        line=59,
+        column=None,
+        severity=Severity.ERROR,
+        message="Line too long (130/120)",
+        tool="pylint",
+        code="C0301   ",
+        function="command",
+    )
+    outcome = ToolOutcome(
+        tool="pylint",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=[diag],
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[tmp_path / "src" / "typer_ext.py"],
+        outcomes=[outcome],
+        tool_versions={},
+    )
+    config = OutputConfig(color=False, emoji=False)
+    render(result, config)
+    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    row = next(line for line in output_lines if line.startswith("pylint"))
+    parts = [part.strip() for part in row.split(",")]
+    assert parts == [
+        "pylint",
+        "src/typer_ext.py:59:command",
+        "C0301",
+        "Line too long (130/120)",
     ]
+
+
+def test_render_pretty_trims_code_whitespace(tmp_path: Path, capsys) -> None:
+    diag = Diagnostic(
+        file="src/typer_ext.py",
+        line=59,
+        column=None,
+        severity=Severity.ERROR,
+        message="Line too long (130/120)",
+        tool="pylint",
+        code="C0301   ",
+        function="command",
+    )
+    outcome = ToolOutcome(
+        tool="pylint",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=[diag],
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[tmp_path / "src" / "typer_ext.py"],
+        outcomes=[outcome],
+        tool_versions={},
+    )
+    config = OutputConfig(color=False, emoji=False, output="pretty")
+    render(result, config)
+    output = capsys.readouterr().out.splitlines()
+    diag_line = next(line for line in output if "Line too long" in line)
+    assert diag_line.strip().endswith("Line too long (130/120) [C0301]")
 
 
 def test_render_concise_sorted_and_deduped(tmp_path: Path, capsys) -> None:
@@ -197,15 +381,21 @@ def test_render_concise_sorted_and_deduped(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [
-        line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()
-    ]
-    assert output_lines == [
+    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    panel_start = next(
+        (idx for idx, line in enumerate(output_lines) if line.startswith("╭")),
+        -1,
+    )
+    assert panel_start != -1
+    normalised = [", ".join(part.strip() for part in line.split(",")) for line in output_lines[:3]]
+    assert normalised == [
         "bandit, a.py:3:check_func, B000, warn early",
         "bandit, a.py:5, B001, warn a",
         "ruff, b.py:2:resolve_b, F001, issue b",
-        "Failed — 3 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1",
     ]
+    assert output_lines[-1] == (
+        "Failed — 3 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1"
+    )
 
 
 def test_render_concise_normalizes_paths(tmp_path: Path, capsys) -> None:
@@ -239,10 +429,367 @@ def test_render_concise_normalizes_paths(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [
-        line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()
+    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    panel_start = next(
+        (idx for idx, line in enumerate(output_lines) if line.startswith("╭")),
+        -1,
+    )
+    assert panel_start != -1
+    assert output_lines[0] == (
+        "mypy, src/pkg/module.py:7:resolve_value, attr-defined, absolute issue"
+    )
+    assert output_lines[-1] == (
+        "Failed — 1 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1"
+    )
+
+
+def test_render_concise_sanitizes_function_field(tmp_path: Path, capsys) -> None:
+    noisy = Diagnostic(
+        file="pkg/mod.py",
+        line=4,
+        column=None,
+        severity=Severity.WARNING,
+        message="multiline function noise",
+        tool="pyright",
+        code="reportGeneralTypeIssues",
+        function="# SPDX comment\nshould not leak",
+    )
+    clean = Diagnostic(
+        file="pkg/mod.py",
+        line=9,
+        column=None,
+        severity=Severity.ERROR,
+        message="legit",
+        tool="pyright",
+        code="reportUndefinedVariable",
+        function="Module.resolve",
+    )
+    outcome = ToolOutcome(
+        tool="pyright",
+        action="check",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=[noisy, clean],
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[],
+        outcomes=[outcome],
+        tool_versions={},
+    )
+    config = OutputConfig(color=False, emoji=False)
+    render(result, config)
+    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert output_lines[0] == (
+        "pyright, pkg/mod.py:4, reportGeneralTypeIssues, multiline function noise"
+    )
+    assert output_lines[1] == (
+        "pyright, pkg/mod.py:9:Module.resolve, reportUndefinedVariable, legit"
+    )
+
+
+def test_render_concise_merges_argument_annotations(tmp_path: Path, capsys) -> None:
+    details = ["cfg", "console", "root", "tool_name"]
+    diagnostics = [
+        Diagnostic(
+            file="tests/test_tool_info.py",
+            line=21,
+            column=None,
+            severity=Severity.WARNING,
+            message=f"Missing type annotation for function argument `{detail}`",
+            tool="ruff",
+            code="ANN001",
+            function="fake_run_tool_info",
+        )
+        for detail in details
     ]
-    assert output_lines == [
-        "mypy, src/pkg/module.py:7:resolve_value, attr-defined, absolute issue",
-        "Failed — 1 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1",
+    outcome = ToolOutcome(
+        tool="ruff",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=diagnostics,
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[tmp_path / "tests" / "test_tool_info.py"],
+        outcomes=[outcome],
+        tool_versions={},
+    )
+    config = OutputConfig(color=False, emoji=False)
+    render(result, config)
+    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert output_lines[0] == (
+        "ruff, tests/test_tool_info.py:21:fake_run_tool_info, ANN001, Missing type annotation for function argument cfg, console, root, tool_name"
+    )
+
+
+def _advice_diag(
+    *,
+    file: str,
+    tool: str,
+    code: str,
+    message: str,
+    severity: Severity = Severity.WARNING,
+    function: str | None = None,
+) -> Diagnostic:
+    return Diagnostic(
+        file=file,
+        line=1,
+        column=None,
+        severity=severity,
+        message=message,
+        tool=tool,
+        code=code,
+        function=function,
+    )
+
+
+def test_render_advice_panel_highlights_structural_gaps(tmp_path: Path, capsys) -> None:
+    diagnostics = [
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="D100",
+            message="D100 Missing docstring",
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="D101",
+            message="D101 Missing docstring",
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="D102",
+            message="D102 Missing docstring",
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN001",
+            message="ANN001 Missing type annotation",
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN201",
+            message="ANN201 Missing type annotation",
+        ),
+        _advice_diag(
+            file="src/pkg/module.py",
+            tool="ruff",
+            code="ANN202",
+            message="ANN202 Missing type annotation",
+        ),
+        _advice_diag(
+            file="src/pkg/__init__.py",
+            tool="ruff",
+            code="INP001",
+            message="INP001 Missing package init",
+        ),
+        _advice_diag(
+            file="src/pkg/private_use.py",
+            tool="pyright",
+            code="reportPrivateImportUsage",
+            message="Importing private module",
+        ),
+        _advice_diag(
+            file="src/pkg/data.py",
+            tool="ruff",
+            code="PLR2004",
+            message="PLR2004 Magic number",
+        ),
+        _advice_diag(
+            file="src/pkg/data.py",
+            tool="ruff",
+            code="PLR2004",
+            message="PLR2004 Magic number second",
+        ),
     ]
+    outcome = ToolOutcome(
+        tool="composite",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=diagnostics,
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[tmp_path / "src" / "pkg" / "module.py"],
+        outcomes=[outcome],
+        tool_versions={},
+    )
+    config = OutputConfig(color=False, emoji=False, advice=True, show_stats=False)
+    render(result, config)
+    output = capsys.readouterr().out
+    assert "SOLID Advice" in output
+    assert "Documentation: add module/function docstrings" in output
+    assert "Types: introduce explicit annotations" in output
+    assert "Packaging: add an __init__.py to src/pkg" in output
+    assert "Encapsulation: expose public APIs" in output
+    assert "Constants: move magic numbers" in output
+
+
+def test_render_advice_summarises_annotations_and_magic(tmp_path: Path, capsys) -> None:
+    diagnostics: list[Diagnostic] = []
+    for idx in range(6):
+        file_path = f"src/pkg/module{idx}.py"
+        for detail in ("alpha", "beta", "gamma"):
+            diagnostics.append(
+                Diagnostic(
+                    file=file_path,
+                    line=idx + 1,
+                    column=None,
+                    severity=Severity.WARNING,
+                    message=f"Missing type annotation for function argument `{detail}`",
+                    tool="ruff",
+                    code="ANN001",
+                    function="heavy_worker",
+                ),
+            )
+    for idx in range(6):
+        file_path = f"src/pkg/config{idx}.py"
+        diagnostics.append(
+            Diagnostic(
+                file=file_path,
+                line=idx + 10,
+                column=None,
+                severity=Severity.WARNING,
+                message="Magic constant 42",
+                tool="ruff",
+                code="PLR2004",
+                function="configure",
+            ),
+        )
+        diagnostics.append(
+            Diagnostic(
+                file=file_path,
+                line=idx + 11,
+                column=None,
+                severity=Severity.WARNING,
+                message="Magic constant 7",
+                tool="ruff",
+                code="PLR2004",
+                function="configure",
+            ),
+        )
+    outcome = ToolOutcome(
+        tool="ruff",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=diagnostics,
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[tmp_path / "src" / "pkg" / "module0.py"],
+        outcomes=[outcome],
+        tool_versions={},
+    )
+    config = OutputConfig(color=False, emoji=False, advice=True, show_stats=False)
+    render(result, config)
+    output = capsys.readouterr().out
+    type_lines = [
+        line for line in output.splitlines() if "Types: introduce explicit annotations" in line
+    ]
+    assert len(type_lines) == 1
+    type_line = type_lines[0]
+    for idx in range(5):
+        assert f"src/pkg/module{idx}.py" in type_line
+    assert "(+1 more)" in type_line
+
+    magic_lines = [line for line in output.splitlines() if "Constants: move magic numbers" in line]
+    assert len(magic_lines) == 1
+    magic_line = magic_lines[0]
+    for idx in range(5):
+        assert f"src/pkg/config{idx}.py" in magic_line
+    assert "(+1 more)" in magic_line
+
+
+def test_render_advice_panel_covers_runtime_and_tests(tmp_path: Path, capsys) -> None:
+    diagnostics = [
+        _advice_diag(
+            file="src/pkg/runtime.py",
+            tool="ruff",
+            code="T201",
+            message="T201 print detected",
+        ),
+        _advice_diag(
+            file="src/pkg/runtime.py",
+            tool="ruff",
+            code="S101",
+            message="S101 assert used",
+        ),
+        _advice_diag(
+            file="src/pkg/service.py",
+            tool="ruff",
+            code="C901",
+            message="C901 complexity",
+            function="handle_service",
+        ),
+        _advice_diag(
+            file="src/pkg/hooks.py",
+            tool="pylint",
+            code="R0915",
+            message="R0915 complexity",
+            function="perform_hooks",
+        ),
+        _advice_diag(
+            file="src/pkg/duplicate.py",
+            tool="ruff",
+            code="SIM101",
+            message="SIM101 Multiple isinstance calls",
+        ),
+        _advice_diag(
+            file="stubs/pkg.pyi",
+            tool="ruff",
+            code="ANN401",
+            message="ANN401 Missing type annotation",
+        ),
+        _advice_diag(
+            file="src/pkg/impl.py",
+            tool="pyright",
+            code="reportIncompatibleMethodOverride",
+            message="Method override incompatible",
+        ),
+    ]
+    diagnostics.extend(
+        _advice_diag(
+            file="tests/test_example.py",
+            tool="ruff",
+            code=f"TST{i}",
+            message="Generic test warning",
+        )
+        for i in range(5)
+    )
+    outcome = ToolOutcome(
+        tool="composite",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=diagnostics,
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[tmp_path / "src" / "pkg" / "runtime.py"],
+        outcomes=[outcome],
+        tool_versions={},
+    )
+    config = OutputConfig(color=False, emoji=False, advice=True, show_stats=False)
+    render(result, config)
+    output = capsys.readouterr().out
+    assert "Logging: replace debugging prints" in output
+    assert "Runtime safety: swap bare assert" in output
+    assert "Structure: deduplicate repeated logic" in output
+    assert "Test hygiene: refactor noisy tests" in output
+    assert "Typing: align stubs with implementations" in output
+    assert "Refactor priority: focus on" in output
+    assert "function handle_service in src/pkg/service.py" in output
+    assert "function perform_hooks in src/pkg/hooks.py" in output

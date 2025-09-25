@@ -118,9 +118,7 @@ def test_schema_check_reports_outdated_file(tmp_path: Path) -> None:
     result = checker.run()
 
     assert result.errors
-    assert any(
-        "Schema documentation out of date" in issue.message for issue in result.errors
-    )
+    assert any("Schema documentation out of date" in issue.message for issue in result.errors)
 
 
 def test_commit_message_validation(tmp_path: Path) -> None:

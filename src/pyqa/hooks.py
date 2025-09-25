@@ -28,7 +28,6 @@ def install_hooks(
     dry_run: bool = False,
 ) -> InstallResult:
     """Install git hooks by symlinking py-qa templates into ``.git/hooks``."""
-
     project_root = root.resolve()
     git_dir = project_root / ".git"
     if not git_dir.exists():
@@ -57,9 +56,7 @@ def install_hooks(
 
         if destination.exists() and not destination.is_symlink():
             timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            backup_path = destination.with_suffix(
-                destination.suffix + f".backup.{timestamp}"
-            )
+            backup_path = destination.with_suffix(destination.suffix + f".backup.{timestamp}")
             info(f"Backing up existing {name} hook to {backup_path}", use_emoji=True)
             if not dry_run:
                 destination.rename(backup_path)
@@ -84,4 +81,4 @@ def install_hooks(
     return InstallResult(installed=installed, skipped=skipped, backups=backups)
 
 
-__all__ = ["install_hooks", "InstallResult", "HOOK_NAMES"]
+__all__ = ["HOOK_NAMES", "InstallResult", "install_hooks"]

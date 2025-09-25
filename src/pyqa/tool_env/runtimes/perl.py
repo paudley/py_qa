@@ -7,8 +7,8 @@ import json
 import os
 import shutil
 import stat
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from ...process_utils import run_command
 from ...tools.base import Tool
@@ -37,9 +37,7 @@ class PerlRuntime(RuntimeHandler):
             version = self._versions.capture(tool.version_command)
         if not self._versions.is_compatible(version, target_version):
             return None
-        return PreparedCommand.from_parts(
-            cmd=base_cmd, env=None, version=version, source="system"
-        )
+        return PreparedCommand.from_parts(cmd=base_cmd, env=None, version=version, source="system")
 
     def _try_project(
         self,
@@ -59,9 +57,7 @@ class PerlRuntime(RuntimeHandler):
         env = self._perl_env(root)
         version = None
         if tool.version_command:
-            version = self._versions.capture(
-                tool.version_command, env=self._merge_env(env)
-            )
+            version = self._versions.capture(tool.version_command, env=self._merge_env(env))
         return PreparedCommand.from_parts(
             cmd=cmd,
             env=env,
@@ -84,12 +80,8 @@ class PerlRuntime(RuntimeHandler):
         env = self._perl_env(root)
         version = None
         if tool.version_command:
-            version = self._versions.capture(
-                tool.version_command, env=self._merge_env(env)
-            )
-        return PreparedCommand.from_parts(
-            cmd=cmd, env=env, version=version, source="local"
-        )
+            version = self._versions.capture(tool.version_command, env=self._merge_env(env))
+        return PreparedCommand.from_parts(cmd=cmd, env=env, version=version, source="local")
 
     def _ensure_local_tool(self, tool: Tool, binary_name: str) -> Path:
         requirement = tool.package or tool.name
@@ -110,15 +102,15 @@ class PerlRuntime(RuntimeHandler):
         tool_constants.PERL_META_DIR.mkdir(parents=True, exist_ok=True)
         tool_constants.PERL_BIN_DIR.mkdir(parents=True, exist_ok=True)
 
-        env = os.environ.copy()
-        env.setdefault("PERL_CARTON_PATH", str(prefix))
-        env.setdefault("PERL_MM_OPT", f"INSTALL_BASE={prefix}")
-        env.setdefault("PERL_MB_OPT", f"--install_base {prefix}")
-        env.setdefault(
-            "PATH", f"{tool_constants.PERL_BIN_DIR}{os.pathsep}" + env.get("PATH", "")
-        )
-
-        run_command(["cpanm", "--notest", requirement], capture_output=True, env=env)
+        cmd = [
+            "cpanm",
+            "--notest",
+            "--reinstall",
+            "--local-lib-contained",
+            str(prefix),
+            requirement,
+        ]
+        run_command(cmd, capture_output=True)
 
         target = prefix / "bin" / binary_name
         if not target.exists():

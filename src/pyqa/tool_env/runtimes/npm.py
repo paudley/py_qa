@@ -7,8 +7,8 @@ import json
 import os
 import shlex
 import shutil
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Mapping, Sequence
 
 from ...environments import inject_node_defaults
 from ...process_utils import SubprocessExecutionError, run_command
@@ -40,9 +40,7 @@ class NpmRuntime(RuntimeHandler):
             version = self._versions.capture(tool.version_command)
         if not self._versions.is_compatible(version, target_version):
             return None
-        return PreparedCommand.from_parts(
-            cmd=base_cmd, env=None, version=version, source="system"
-        )
+        return PreparedCommand.from_parts(cmd=base_cmd, env=None, version=version, source="system")
 
     def _try_project(
         self,
@@ -60,14 +58,18 @@ class NpmRuntime(RuntimeHandler):
         version = None
         if tool.version_command:
             version = self._versions.capture(
-                tool.version_command, env=self._merge_env(env_overrides)
+                tool.version_command,
+                env=self._merge_env(env_overrides),
             )
         if not self._versions.is_compatible(version, target_version):
             return None
         cmd = list(base_cmd)
         cmd[0] = str(executable)
         return PreparedCommand.from_parts(
-            cmd=cmd, env=env_overrides, version=version, source="project"
+            cmd=cmd,
+            env=env_overrides,
+            version=version,
+            source="project",
         )
 
     def _prepare_local(
@@ -86,12 +88,8 @@ class NpmRuntime(RuntimeHandler):
         env = self._local_env(bin_dir, prefix, root)
         version = cached_version
         if version is None and tool.version_command:
-            version = self._versions.capture(
-                tool.version_command, env=self._merge_env(env)
-            )
-        return PreparedCommand.from_parts(
-            cmd=cmd, env=env, version=version, source="local"
-        )
+            version = self._versions.capture(tool.version_command, env=self._merge_env(env))
+        return PreparedCommand.from_parts(cmd=cmd, env=env, version=version, source="local")
 
     def _ensure_local_package(self, tool: Tool) -> tuple[Path, str | None]:
         requirement = self._npm_requirement(tool)

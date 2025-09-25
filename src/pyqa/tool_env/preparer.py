@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from ..tools.base import Tool
 from . import constants as tool_constants

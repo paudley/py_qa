@@ -26,9 +26,7 @@ def test_remark_lint_command_build(tmp_path: Path) -> None:
 
     action = ToolAction(
         name="lint",
-        command=_RemarkCommand(
-            base=("remark", "--use", "remark-preset-lint-recommended")
-        ),
+        command=_RemarkCommand(base=("remark", "--use", "remark-preset-lint-recommended")),
         append_files=True,
     )
 
@@ -52,7 +50,8 @@ def test_remark_fix_command_build(tmp_path: Path) -> None:
     action = ToolAction(
         name="fix",
         command=_RemarkCommand(
-            base=("remark", "--use", "remark-preset-lint-recommended"), is_fix=True
+            base=("remark", "--use", "remark-preset-lint-recommended"),
+            is_fix=True,
         ),
         append_files=True,
         is_fix=True,

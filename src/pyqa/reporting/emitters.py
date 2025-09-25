@@ -5,8 +5,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Sequence
 
 from ..models import Diagnostic, RunResult
 from ..serialization import serialize_outcome
@@ -18,7 +18,6 @@ SARIF_SCHEMA = "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.j
 
 def write_json_report(result: RunResult, path: Path) -> None:
     """Write a JSON report summarising tool outcomes."""
-
     payload = {
         "root": str(result.root),
         "files": [str(p) for p in result.files],
@@ -29,7 +28,6 @@ def write_json_report(result: RunResult, path: Path) -> None:
 
 def write_sarif_report(result: RunResult, path: Path) -> None:
     """Emit a SARIF document compatible with GitHub and other tools."""
-
     runs: list[dict[str, object]] = []
     for tool_name, diagnostics in _group_diagnostics_by_tool(result):
         version = result.tool_versions.get(tool_name)
@@ -45,10 +43,11 @@ def write_sarif_report(result: RunResult, path: Path) -> None:
 
 
 def _build_sarif_run(
-    tool_name: str, diagnostics: Sequence[Diagnostic], version: str | None
+    tool_name: str,
+    diagnostics: Sequence[Diagnostic],
+    version: str | None,
 ) -> dict[str, object]:
     """Construct the SARIF run dictionary for a single tool."""
-
     rules: dict[str, dict[str, object]] = {}
     results: list[dict[str, object]] = []
 
@@ -86,7 +85,7 @@ def _build_sarif_run(
                 "name": tool_name,
                 "version": version or "unknown",
                 "rules": list(rules.values()) or None,
-            }
+            },
         },
         "results": results,
     }
@@ -101,7 +100,6 @@ def write_pr_summary(
     template: str = "- **{severity}** `{tool}` {message} ({location})",
 ) -> None:
     """Render a Markdown summary for pull requests."""
-
     diagnostics: list[tuple[Diagnostic, str]] = []
     for outcome in result.outcomes:
         for diag in outcome.diagnostics:
@@ -127,7 +125,7 @@ def write_pr_summary(
             severity_order.get(item[0].severity, 99),
             item[0].file or "",
             item[0].line or 0,
-        )
+        ),
     )
 
     lines = ["# Lint Summary", ""]

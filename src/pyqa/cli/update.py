@@ -5,8 +5,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Final, List, Optional, Sequence
+from typing import Any, Final
 
 import typer
 
@@ -23,10 +24,9 @@ from ..update import (
     WorkspaceUpdater,
     ensure_lint_install,
 )
+from .typer_ext import create_typer
 
-update_app = typer.Typer(
-    name="update", help="Update dependencies across detected workspaces."
-)
+update_app = create_typer(name="update", help="Update dependencies across detected workspaces.")
 
 
 def _default_runner(args: Sequence[str], cwd: Path | None) -> Any:
@@ -37,7 +37,7 @@ def _default_runner(args: Sequence[str], cwd: Path | None) -> Any:
 def main(
     ctx: typer.Context,
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root to scan."),
-    manager: Optional[List[str]] = typer.Option(  # type: ignore[assignment]
+    manager: list[str] | None = typer.Option(  # type: ignore[assignment]
         None,
         "--manager",
         "-m",
@@ -49,7 +49,9 @@ def main(
         help="Skip running the py-qa lint install bootstrap step.",
     ),
     dry_run: bool = typer.Option(
-        False, "--dry-run", help="Print planned commands without executing."
+        False,
+        "--dry-run",
+        help="Print planned commands without executing.",
     ),
     emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji output."),
 ) -> None:
@@ -78,9 +80,7 @@ def main(
     _emit_update_summary(result, dry_run=dry_run, use_emoji=emoji)
 
 
-VALID_MANAGERS: Final[set[str]] = {
-    strategy.kind.value for strategy in DEFAULT_STRATEGIES
-}
+VALID_MANAGERS: Final[set[str]] = {strategy.kind.value for strategy in DEFAULT_STRATEGIES}
 
 
 def _load_update_configuration(root: Path, use_emoji: bool) -> ConfigLoadResult:
@@ -92,9 +92,7 @@ def _load_update_configuration(root: Path, use_emoji: bool) -> ConfigLoadResult:
         raise typer.Exit(code=1) from exc
 
 
-def _normalise_cli_managers(
-    values: Optional[List[str]], use_emoji: bool
-) -> set[str] | None:
+def _normalise_cli_managers(values: list[str] | None, use_emoji: bool) -> set[str] | None:
     if not values:
         return None
     normalized = {value.lower() for value in values}
@@ -109,11 +107,11 @@ def _normalise_cli_managers(
 
 
 def _discover_workspaces(
-    root: Path, skip_patterns: Sequence[str], use_emoji: bool
+    root: Path,
+    skip_patterns: Sequence[str],
+    use_emoji: bool,
 ) -> list[Workspace]:
-    discovery = WorkspaceDiscovery(
-        strategies=DEFAULT_STRATEGIES, skip_patterns=skip_patterns
-    )
+    discovery = WorkspaceDiscovery(strategies=DEFAULT_STRATEGIES, skip_patterns=skip_patterns)
     workspaces = discovery.discover(root)
     if not workspaces:
         warn("No workspaces discovered.", use_emoji=use_emoji)
@@ -121,9 +119,7 @@ def _discover_workspaces(
     return workspaces
 
 
-def _normalise_config_managers(
-    values: Sequence[str], use_emoji: bool
-) -> set[str] | None:
+def _normalise_config_managers(values: Sequence[str], use_emoji: bool) -> set[str] | None:
     if not values:
         return None
     normalized = {value.lower() for value in values}
@@ -137,9 +133,7 @@ def _normalise_config_managers(
     return normalized
 
 
-def _emit_update_summary(
-    result: UpdateResult, *, dry_run: bool, use_emoji: bool
-) -> None:
+def _emit_update_summary(result: UpdateResult, *, dry_run: bool, use_emoji: bool) -> None:
     if dry_run:
         ok(
             f"Planned updates for {len(result.skipped)} workspace(s).",

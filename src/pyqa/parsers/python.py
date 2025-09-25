@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from typing import Any, Final, Sequence
+from collections.abc import Iterable, Sequence
+from typing import Any, Final
 
 from ..models import RawDiagnostic
 from ..severity import Severity, severity_from_code
@@ -37,7 +37,7 @@ def parse_ruff(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
                 message=message,
                 code=code,
                 tool="ruff",
-            )
+            ),
         )
     return results
 
@@ -72,7 +72,7 @@ def parse_pylint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]
                 message=message,
                 code=code,
                 tool="pylint",
-            )
+            ),
         )
     return results
 
@@ -81,9 +81,7 @@ def parse_pyright(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic
     """Parse Pyright JSON diagnostics."""
     diagnostics = []
     if isinstance(payload, dict):
-        diagnostics = payload.get("generalDiagnostics", []) or payload.get(
-            "diagnostics", []
-        )
+        diagnostics = payload.get("generalDiagnostics", []) or payload.get("diagnostics", [])
     results: list[RawDiagnostic] = []
     for item in diagnostics:
         if not isinstance(item, dict):
@@ -108,7 +106,7 @@ def parse_pyright(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic
                 message=str(item.get("message", "")).strip(),
                 code=rule,
                 tool="pyright",
-            )
+            ),
         )
     return results
 
@@ -125,10 +123,7 @@ def parse_mypy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
         severity = str(item.get("severity", "error")).lower()
         code = item.get("code") or item.get("error_code")
         function = (
-            item.get("function")
-            or item.get("name")
-            or item.get("target")
-            or item.get("symbol")
+            item.get("function") or item.get("name") or item.get("target") or item.get("symbol")
         )
         if isinstance(function, str) and function:
             function = function.split(".")[-1]
@@ -149,7 +144,7 @@ def parse_mypy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
                 code=code,
                 tool="mypy",
                 function=function,
-            )
+            ),
         )
     return results
 
@@ -165,7 +160,6 @@ SELENE_SEVERITY_MAP: Final[dict[str, Severity]] = {
 
 def parse_selene(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse selene JSON output (display-style json2)."""
-
     records: Iterable[dict[str, Any]]
     if isinstance(payload, list):
         records = [item for item in payload if isinstance(item, dict)]
@@ -221,16 +215,16 @@ def parse_selene(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]
                 message=message,
                 code=entry.get("code"),
                 tool="selene",
-            )
+            ),
         )
 
     return results
 
 
 __all__ = [
-    "parse_ruff",
+    "parse_mypy",
     "parse_pylint",
     "parse_pyright",
-    "parse_mypy",
+    "parse_ruff",
     "parse_selene",
 ]

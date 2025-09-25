@@ -7,11 +7,12 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Callable, Mapping, Protocol, Sequence
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -36,6 +37,9 @@ from ..tools import Tool, ToolAction, ToolContext
 from ..tools.registry import ToolRegistry
 from .worker import run_command
 
+FetchEvent = Literal["start", "completed", "error"]
+FetchCallback = Callable[[FetchEvent, str, str, int, int, str | None], None]
+
 
 def _filter_diagnostics(
     diagnostics: Sequence[Diagnostic],
@@ -44,7 +48,6 @@ def _filter_diagnostics(
     root: Path,
 ) -> list[Diagnostic]:
     """Remove diagnostics matching suppression patterns for *tool_name*."""
-
     if not diagnostics or not patterns:
         return list(diagnostics)
 
@@ -189,10 +192,13 @@ class Orchestrator:
         return result
 
     def fetch_all_tools(
-        self, cfg: Config, *, root: Path | None = None
-    ) -> list[tuple[str, str, PreparedCommand]]:
+        self,
+        cfg: Config,
+        *,
+        root: Path | None = None,
+        callback: FetchCallback | None = None,
+    ) -> list[tuple[str, str, PreparedCommand | None, str | None]]:
         """Prepare every tool action to warm caches without executing them."""
-
         root_path = self._prepare_runtime(root)
         cache_dir = (
             cfg.execution.cache_dir
@@ -201,8 +207,14 @@ class Orchestrator:
         )
         system_preferred = not cfg.execution.use_local_linters
         use_local_override = cfg.execution.use_local_linters
-        results: list[tuple[str, str, PreparedCommand]] = []
-        for tool in self._registry.tools():
+        tool_actions: list[tuple[Tool, ToolAction]] = [
+            (tool, action) for tool in self._registry.tools() for action in tool.actions
+        ]
+        total = len(tool_actions)
+        results: list[tuple[str, str, PreparedCommand | None, str | None]] = []
+        for index, (tool, action) in enumerate(tool_actions, start=1):
+            if callback:
+                callback("start", tool.name, action.name, index, total, None)
             settings_view = MappingProxyType(dict(cfg.tool_settings.get(tool.name, {})))
             context = ToolContext(
                 cfg=cfg,
@@ -210,8 +222,8 @@ class Orchestrator:
                 files=tuple(),
                 settings=settings_view,
             )
-            for action in tool.actions:
-                base_cmd = list(action.build_command(context))
+            base_cmd = list(action.build_command(context))
+            try:
                 prepared = self._cmd_preparer.prepare(
                     tool=tool,
                     base_cmd=base_cmd,
@@ -220,7 +232,27 @@ class Orchestrator:
                     system_preferred=system_preferred,
                     use_local_override=use_local_override,
                 )
-                results.append((tool.name, action.name, prepared))
+                results.append((tool.name, action.name, prepared, None))
+                if callback:
+                    callback(
+                        "completed",
+                        tool.name,
+                        action.name,
+                        index,
+                        total,
+                        None,
+                    )
+            except RuntimeError as exc:  # installation or preparation failure
+                results.append((tool.name, action.name, None, str(exc)))
+                if callback:
+                    callback(
+                        "error",
+                        tool.name,
+                        action.name,
+                        index,
+                        total,
+                        str(exc),
+                    )
         return results
 
     def _prepare_runtime(self, root: Path | None) -> Path:
@@ -237,9 +269,7 @@ class Orchestrator:
         ]
         limits = [limit.resolve() for limit in limits]
         if limits:
-            matched_files = [
-                path for path in matched_files if self._is_within_limits(path, limits)
-            ]
+            matched_files = [path for path in matched_files if self._is_within_limits(path, limits)]
         info(
             f"Discovered {len(matched_files)} file(s) to lint",
             use_emoji=cfg.output.emoji,
@@ -253,15 +283,11 @@ class Orchestrator:
             else root / cfg.execution.cache_dir
         )
         if not cfg.execution.cache_enabled:
-            return _CacheContext(
-                cache=None, token=None, cache_dir=cache_dir, versions={}
-            )
+            return _CacheContext(cache=None, token=None, cache_dir=cache_dir, versions={})
         cache = ResultCache(cache_dir)
         token = self._cache_token(cfg)
         versions = load_versions(cache_dir)
-        return _CacheContext(
-            cache=cache, token=token, cache_dir=cache_dir, versions=versions
-        )
+        return _CacheContext(cache=cache, token=token, cache_dir=cache_dir, versions=versions)
 
     def _process_tool(
         self,
@@ -272,7 +298,7 @@ class Orchestrator:
         matched_files: Sequence[Path],
         severity_rules: SeverityRuleView,
         cache_ctx: _CacheContext,
-        state: "_ExecutionState",
+        state: _ExecutionState,
     ) -> bool:
         tool = self._registry.try_get(tool_name)
         if tool is None:
@@ -280,9 +306,7 @@ class Orchestrator:
             return False
         tool_files = self._filter_files_for_tool(tool.file_extensions, matched_files)
         settings_view = MappingProxyType(dict(cfg.tool_settings.get(tool.name, {})))
-        context = ToolContext(
-            cfg=cfg, root=root, files=tuple(tool_files), settings=settings_view
-        )
+        context = ToolContext(cfg=cfg, root=root, files=tuple(tool_files), settings=settings_view)
         if self._hooks.before_tool:
             self._hooks.before_tool(tool.name)
 
@@ -299,7 +323,11 @@ class Orchestrator:
             )
             self._update_tool_version(cache_ctx, tool.name, prepared.version)
             cached_entry = self._load_cached_outcome(
-                cache_ctx, tool.name, action, prepared.cmd, context.files
+                cache_ctx,
+                tool.name,
+                action,
+                prepared.cmd,
+                context.files,
             )
             if cached_entry is not None:
                 outcome = cached_entry.outcome
@@ -382,7 +410,7 @@ class Orchestrator:
                     context=context,
                     cmd=tuple(prepared.cmd),
                     env=dict(prepared.env),
-                )
+                ),
             )
             state.order += 1
         return False
@@ -395,7 +423,10 @@ class Orchestrator:
         return True
 
     def _update_tool_version(
-        self, cache_ctx: "_CacheContext", tool_name: str, version: str | None
+        self,
+        cache_ctx: _CacheContext,
+        tool_name: str,
+        version: str | None,
     ) -> None:
         if not version:
             return
@@ -406,7 +437,7 @@ class Orchestrator:
 
     def _load_cached_outcome(
         self,
-        cache_ctx: "_CacheContext",
+        cache_ctx: _CacheContext,
         tool_name: str,
         action: ToolAction,
         cmd: Sequence[str],
@@ -427,8 +458,8 @@ class Orchestrator:
         cfg: Config,
         root: Path,
         severity_rules: SeverityRuleView,
-        cache_ctx: "_CacheContext",
-        state: "_ExecutionState",
+        cache_ctx: _CacheContext,
+        state: _ExecutionState,
     ) -> None:
         if not state.scheduled:
             return
@@ -513,7 +544,9 @@ class Orchestrator:
         if action.parser:
             parsed = action.parser.parse(stdout, stderr, context=context)
         diagnostics = normalize_diagnostics(
-            parsed, tool_name=tool_name, severity_rules=severity_rules
+            parsed,
+            tool_name=tool_name,
+            severity_rules=severity_rules,
         )
         diagnostics = _filter_diagnostics(diagnostics, tool_name, extra_filters, root)
         adjusted_returncode = cp.returncode
@@ -522,11 +555,7 @@ class Orchestrator:
 
         if diagnostics:
             CONTEXT_RESOLVER.annotate(diagnostics, root=root)
-        if (
-            adjusted_returncode != 0
-            and not action.ignore_exit
-            and context.cfg.output.verbose
-        ):
+        if adjusted_returncode != 0 and not action.ignore_exit and context.cfg.output.verbose:
             warn(
                 f"{tool_name}:{action.name} exited with {cp.returncode}",
                 use_emoji=context.cfg.output.emoji,
@@ -543,14 +572,14 @@ class Orchestrator:
     def _record_outcome(
         self,
         *,
-        state: "_ExecutionState",
+        state: _ExecutionState,
         order: int,
         tool: str,
         action: ToolAction,
         context: ToolContext,
         cmd: Sequence[str],
         outcome: ToolOutcome,
-        cache_ctx: "_CacheContext",
+        cache_ctx: _CacheContext,
         file_metrics: Mapping[str, FileMetrics] | None,
         from_cache: bool,
     ) -> None:
@@ -574,31 +603,23 @@ class Orchestrator:
         if self._hooks.after_tool:
             self._hooks.after_tool(outcome)
 
-    def _select_tools(
-        self, cfg: Config, files: Sequence[Path], root: Path
-    ) -> Sequence[str]:
+    def _select_tools(self, cfg: Config, files: Sequence[Path], root: Path) -> Sequence[str]:
         exec_cfg = cfg.execution
         if exec_cfg.only:
             return list(dict.fromkeys(exec_cfg.only))
-        languages = (
-            list(dict.fromkeys(exec_cfg.languages)) if exec_cfg.languages else []
-        )
+        languages = list(dict.fromkeys(exec_cfg.languages)) if exec_cfg.languages else []
         if not languages:
             languages = sorted(detect_languages(root, files))
         if languages:
             tool_names: list[str] = []
             for lang in languages:
-                tool_names.extend(
-                    tool.name for tool in self._registry.tools_for_language(lang)
-                )
+                tool_names.extend(tool.name for tool in self._registry.tools_for_language(lang))
             if tool_names:
                 return list(dict.fromkeys(tool_names))
         return [tool.name for tool in self._registry.tools() if tool.default_enabled]
 
     @staticmethod
-    def _filter_files_for_tool(
-        extensions: Sequence[str], files: Sequence[Path]
-    ) -> list[Path]:
+    def _filter_files_for_tool(extensions: Sequence[str], files: Sequence[Path]) -> list[Path]:
         if not extensions:
             return list(files)
         patterns = {ext.lower() for ext in extensions}
@@ -628,15 +649,11 @@ class Orchestrator:
         ]
         if cfg.tool_settings:
             serialized = json.dumps(cfg.tool_settings, sort_keys=True)
-            digest = hashlib.sha1(
-                serialized.encode("utf-8"), usedforsecurity=False
-            ).hexdigest()
+            digest = hashlib.sha1(serialized.encode("utf-8"), usedforsecurity=False).hexdigest()
             components.append(digest)
         return "|".join(components)
 
-    def _populate_missing_metrics(
-        self, state: "_ExecutionState", files: Sequence[Path]
-    ) -> None:
+    def _populate_missing_metrics(self, state: _ExecutionState, files: Sequence[Path]) -> None:
         for path in files:
             key = normalise_path_key(path)
             if key in state.file_metrics:
@@ -644,7 +661,9 @@ class Orchestrator:
             state.file_metrics[key] = compute_file_metrics(path)
 
     def _collect_metrics_for_files(
-        self, state: "_ExecutionState", files: Sequence[Path]
+        self,
+        state: _ExecutionState,
+        files: Sequence[Path],
     ) -> dict[str, FileMetrics]:
         collected: dict[str, FileMetrics] = {}
         for path in files:
@@ -657,9 +676,7 @@ class Orchestrator:
         return collected
 
     @staticmethod
-    def _update_state_metrics(
-        state: "_ExecutionState", metrics: Mapping[str, FileMetrics]
-    ) -> None:
+    def _update_state_metrics(state: _ExecutionState, metrics: Mapping[str, FileMetrics]) -> None:
         for key, metric in metrics.items():
             metric.ensure_labels()
             state.file_metrics[key] = metric

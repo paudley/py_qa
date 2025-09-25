@@ -1,0 +1,33 @@
+mdformat --help
+
+usage: mdformat [-h] [--check] [--no-validate] [--version] [--number] [--wrap {keep,no,INTEGER}] [--end-of-line {lf,crlf,keep}] [--exclude PATTERN] [--extensions EXTENSION] [--codeformatters LANGUAGE] [--compact-tables] [paths ...]
+
+CommonMark compliant Markdown formatter
+
+positional arguments:
+  paths                 files to format
+
+options:
+  -h, --help            show this help message and exit
+  --check               do not apply changes to files
+  --no-validate         do not validate that the rendered HTML is consistent
+  --version             show program's version number and exit
+  --number              apply consecutive numbering to ordered lists
+  --wrap {keep,no,INTEGER}
+                        paragraph word wrap mode (default: keep)
+  --end-of-line {lf,crlf,keep}
+                        output file line ending mode (default: lf)
+  --exclude PATTERN     exclude files that match the Unix-style glob pattern (multiple allowed)
+  --extensions EXTENSION
+                        require and enable an extension plugin (multiple allowed) (use `--no-extensions` to disable) (default: all enabled)
+  --codeformatters LANGUAGE
+                        require and enable a code formatter plugin (multiple allowed) (use `--no-codeformatters` to disable) (default: all enabled)
+  --compact-tables      If specified, do not add padding to table cells.
+
+installed extensions:
+  mdformat_gfm_alerts: gfm_alerts
+  mdformat-gfm: gfm
+  mdformat_frontmatter: frontmatter
+  mdformat_footnote: footnote
+  mdformat_tables: tables
+  mdformat_myst: myst

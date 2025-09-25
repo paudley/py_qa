@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal, Sequence, cast
+from typing import Literal, cast
 
 import pytest
 
@@ -76,7 +77,8 @@ def test_desired_version_prefers_package_spec() -> None:
 
 
 def test_npm_runtime_falls_back_to_local_when_system_version_too_low(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tool = _make_tool(
         name="eslint",
@@ -125,7 +127,8 @@ def test_npm_runtime_falls_back_to_local_when_system_version_too_low(
 
 
 def test_npm_runtime_prefers_system_when_version_sufficient(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tool = _make_tool(
         name="eslint",
@@ -165,7 +168,8 @@ def test_npm_runtime_prefers_system_when_version_sufficient(
 
 
 def test_npm_runtime_install_failure_propagates(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tool = _make_tool(
         name="remark",
@@ -174,7 +178,7 @@ def test_npm_runtime_install_failure_propagates(
     )
 
     preparer = CommandPreparer()
-    runtime = cast(NpmRuntime, preparer._handlers["npm"])
+    runtime = cast("NpmRuntime", preparer._handlers["npm"])
 
     monkeypatch.setattr(tool_constants, "NODE_CACHE_DIR", tmp_path / "node-cache")
     monkeypatch.setattr(tool_constants, "NPM_CACHE_DIR", tmp_path / "npm-cache")
@@ -189,7 +193,8 @@ def test_npm_runtime_install_failure_propagates(
 
 
 def test_go_runtime_installs_when_system_too_old(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tool = _make_tool(
         name="kube-linter",
@@ -242,7 +247,8 @@ def test_go_runtime_installs_when_system_too_old(
 
 
 def test_go_runtime_prefers_system_when_version_ok(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tool = _make_tool(
         name="kube-linter",
@@ -287,7 +293,8 @@ def test_go_runtime_prefers_system_when_version_ok(
 
 
 def test_go_runtime_installs_when_no_version_spec(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tool = _make_tool(
         name="checkmake",
@@ -332,7 +339,8 @@ def test_go_runtime_installs_when_no_version_spec(
 
 
 def test_go_runtime_install_failure_propagates(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tool = _make_tool(
         name="kube-linter",
@@ -341,7 +349,7 @@ def test_go_runtime_install_failure_propagates(
     )
 
     preparer = CommandPreparer()
-    runtime = cast(GoRuntime, preparer._handlers["go"])
+    runtime = cast("GoRuntime", preparer._handlers["go"])
 
     monkeypatch.setattr(tool_constants, "GO_BIN_DIR", tmp_path / "go-bin")
     monkeypatch.setattr(tool_constants, "GO_META_DIR", tmp_path / "go-meta")
@@ -357,12 +365,13 @@ def test_go_runtime_install_failure_propagates(
 
 
 def test_lua_runtime_install_failure_propagates(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tool = _make_tool(name="luacheck", runtime="lua", package="luacheck")
 
     preparer = CommandPreparer()
-    runtime = cast(LuaRuntime, preparer._handlers["lua"])
+    runtime = cast("LuaRuntime", preparer._handlers["lua"])
 
     monkeypatch.setattr(tool_constants, "LUA_CACHE_DIR", tmp_path / "lua-cache")
     monkeypatch.setattr(tool_constants, "LUA_META_DIR", tmp_path / "lua-meta")
@@ -377,12 +386,13 @@ def test_lua_runtime_install_failure_propagates(
 
 
 def test_perl_runtime_install_failure_propagates(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tool = _make_tool(name="perlcritic", runtime="perl", package="Perl::Critic")
 
     preparer = CommandPreparer()
-    runtime = cast(PerlRuntime, preparer._handlers["perl"])
+    runtime = cast("PerlRuntime", preparer._handlers["perl"])
 
     monkeypatch.setattr(tool_constants, "PERL_CACHE_DIR", tmp_path / "perl-cache")
     monkeypatch.setattr(tool_constants, "PERL_META_DIR", tmp_path / "perl-meta")
@@ -397,7 +407,8 @@ def test_perl_runtime_install_failure_propagates(
 
 
 def test_rust_runtime_installs_when_system_too_old(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tool = _make_tool(
         name="dotenv-linter",
@@ -456,7 +467,8 @@ def test_rust_runtime_installs_when_system_too_old(
 
 
 def test_rust_runtime_prefers_system_when_version_ok(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tool = _make_tool(
         name="dotenv-linter",
@@ -507,12 +519,13 @@ def test_rust_runtime_prefers_system_when_version_ok(
 
 
 def test_rust_runtime_install_failure_propagates(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tool = _make_tool(name="dotenv-linter", runtime="rust", package="dotenv-linter")
 
     preparer = CommandPreparer()
-    runtime = cast(RustRuntime, preparer._handlers["rust"])
+    runtime = cast("RustRuntime", preparer._handlers["rust"])
 
     monkeypatch.setattr(tool_constants, "RUST_CACHE_DIR", tmp_path / "rust-cache")
     monkeypatch.setattr(tool_constants, "RUST_META_DIR", tmp_path / "rust-meta")
@@ -527,7 +540,8 @@ def test_rust_runtime_install_failure_propagates(
 
 
 def test_rust_runtime_install_rustup_component(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tool = _make_tool(
         name="cargo-clippy",
@@ -579,7 +593,4 @@ def test_rust_runtime_install_rustup_component(
     )
 
     assert result.cmd[0] == "/usr/bin/cargo"
-    assert any(
-        Path(cmd[0]).name == "rustup" and cmd[1:3] == ["component", "add"]
-        for cmd in calls
-    )
+    assert any(Path(cmd[0]).name == "rustup" and cmd[1:3] == ["component", "add"] for cmd in calls)

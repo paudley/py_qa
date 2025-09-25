@@ -6,6 +6,7 @@ from .base import CommandBuilder, DeferredCommand, Parser, Tool, ToolAction, Too
 from .registry import DEFAULT_REGISTRY, ToolRegistry, register_tool
 
 __all__ = [
+    "DEFAULT_REGISTRY",
     "CommandBuilder",
     "DeferredCommand",
     "Parser",
@@ -13,6 +14,5 @@ __all__ = [
     "ToolAction",
     "ToolContext",
     "ToolRegistry",
-    "DEFAULT_REGISTRY",
     "register_tool",
 ]

@@ -3,8 +3,8 @@
 """Integration tests for orchestrator execution flow."""
 
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from pyqa.config import Config
 from pyqa.execution.orchestrator import Orchestrator
@@ -60,7 +60,7 @@ def test_orchestrator_runs_registered_tool(tmp_path: Path) -> None:
             ),
             file_extensions=(".py",),
             runtime="binary",
-        )
+        ),
     )
 
     def runner(cmd, **kwargs):
@@ -69,9 +69,7 @@ def test_orchestrator_runs_registered_tool(tmp_path: Path) -> None:
         assert Path(cmd[2]) == target
         env = kwargs.get("env", {})
         assert env.get("DUMMY_ENV") == "1"
-        return subprocess.CompletedProcess(
-            cmd, returncode=0, stdout="output", stderr=""
-        )
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="output", stderr="")
 
     orchestrator = Orchestrator(
         registry=registry,
@@ -111,7 +109,7 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
             ),
             file_extensions=(".py",),
             runtime="binary",
-        )
+        ),
     )
 
     cfg = Config()
@@ -123,9 +121,7 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
 
     def runner(cmd, **kwargs):
         calls.append(list(cmd))
-        return subprocess.CompletedProcess(
-            cmd, returncode=0, stdout="output", stderr=""
-        )
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="output", stderr="")
 
     orchestrator = Orchestrator(
         registry=registry,
@@ -153,9 +149,7 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
 
     def runner_settings(cmd, **kwargs):
         calls_after.append(list(cmd))
-        return subprocess.CompletedProcess(
-            cmd, returncode=0, stdout="updated", stderr=""
-        )
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="updated", stderr="")
 
     orchestrator_settings = Orchestrator(
         registry=registry,
@@ -225,7 +219,7 @@ def test_orchestrator_filters_suppressed_diagnostics(tmp_path: Path) -> None:
             ),
             file_extensions=(".py",),
             runtime="binary",
-        )
+        ),
     )
 
     def runner(cmd, **_kwargs):

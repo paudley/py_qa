@@ -1,0 +1,17 @@
+/home/paudley/Active/py_qa/src/.lint-cache/tools/go/bin/checkmake lint --format json --help
+
+checkmake.
+
+  Usage:
+  checkmake [options] [<makefile>...]
+  checkmake -h | --help
+  checkmake --version
+  checkmake --list-rules
+
+  Options:
+  -h --help               Show this screen.
+  --version               Show version.
+  --debug                 Enable debug mode
+  --config=<configPath>   Configuration file to read
+  --format=<format>       Output format as a Golang text/template template
+  --list-rules            List registered rules

@@ -12,11 +12,7 @@
     },
     "confidence": {
       "description": "Minimum confidence level (low/medium/high).",
-      "enum": [
-        "low",
-        "medium",
-        "high"
-      ],
+      "enum": ["low", "medium", "high"],
       "type": "str"
     },
     "config": {
@@ -29,21 +25,12 @@
     },
     "format": {
       "description": "Output format (json, txt, etc.).",
-      "enum": [
-        "json",
-        "txt",
-        "yaml",
-        "xml"
-      ],
+      "enum": ["json", "txt", "yaml", "xml"],
       "type": "str"
     },
     "severity": {
       "description": "Minimum severity level (low/medium/high).",
-      "enum": [
-        "low",
-        "medium",
-        "high"
-      ],
+      "enum": ["low", "medium", "high"],
       "type": "str"
     },
     "skip": {
@@ -82,15 +69,7 @@
     },
     "target-version": {
       "description": "Allowed Python target versions (e.g. py311).",
-      "enum": [
-        "py37",
-        "py38",
-        "py39",
-        "py310",
-        "py311",
-        "py312",
-        "py313"
-      ],
+      "enum": ["py37", "py38", "py39", "py310", "py311", "py312", "py313"],
       "type": "list[str]"
     },
     "workers": {
@@ -335,12 +314,7 @@
     },
     "end-of-line": {
       "description": "End-of-line style (lf, crlf, auto).",
-      "enum": [
-        "lf",
-        "crlf",
-        "cr",
-        "auto"
-      ],
+      "enum": ["lf", "crlf", "cr", "auto"],
       "type": "str"
     },
     "ignore-path": {
@@ -381,11 +355,7 @@
     },
     "trailing-comma": {
       "description": "Specify trailing comma behaviour (all, es5, none).",
-      "enum": [
-        "all",
-        "es5",
-        "none"
-      ],
+      "enum": ["all", "es5", "none"],
       "type": "str"
     },
     "use-tabs": {
@@ -454,24 +424,12 @@
     },
     "python-platform": {
       "description": "Target execution platform (e.g. Linux, Darwin).",
-      "enum": [
-        "Linux",
-        "Darwin",
-        "Windows"
-      ],
+      "enum": ["Linux", "Darwin", "Windows"],
       "type": "str"
     },
     "python-version": {
       "description": "Python version string to target.",
-      "enum": [
-        "3.7",
-        "3.8",
-        "3.9",
-        "3.10",
-        "3.11",
-        "3.12",
-        "3.13"
-      ],
+      "enum": ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13"],
       "type": "str"
     },
     "pythonpath": {
@@ -546,15 +504,7 @@
     },
     "target-version": {
       "description": "Python version passed to ruff (e.g. py311).",
-      "enum": [
-        "py37",
-        "py38",
-        "py39",
-        "py310",
-        "py311",
-        "py312",
-        "py313"
-      ],
+      "enum": ["py37", "py38", "py39", "py310", "py311", "py312", "py313"],
       "type": "str"
     },
     "unsafe-fixes": {
@@ -597,15 +547,7 @@
     },
     "target-version": {
       "description": "Python version passed to the formatter.",
-      "enum": [
-        "py37",
-        "py38",
-        "py39",
-        "py310",
-        "py311",
-        "py312",
-        "py313"
-      ],
+      "enum": ["py37", "py38", "py39", "py310", "py311", "py312", "py313"],
       "type": "str"
     }
   },

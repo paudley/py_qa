@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 from .base import CommandBuilder, ToolContext
 from .builtin_helpers import (
@@ -113,14 +113,16 @@ class _EslintCommand(CommandBuilder):
             cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
 
         resolve_plugins = _setting(
-            settings, "resolve-plugins-relative-to", "resolve_plugins_relative_to"
+            settings,
+            "resolve-plugins-relative-to",
+            "resolve_plugins_relative_to",
         )
         if resolve_plugins:
             cmd.extend(
                 [
                     "--resolve-plugins-relative-to",
                     str(_resolve_path(root, resolve_plugins)),
-                ]
+                ],
             )
 
         for directory in _settings_list(_setting(settings, "rulesdir", "rules-dir")):
@@ -152,7 +154,7 @@ class _EslintCommand(CommandBuilder):
                 settings,
                 "no-error-on-unmatched-pattern",
                 "no_error_on_unmatched_pattern",
-            )
+            ),
         )
         if no_error_unmatched is True:
             cmd.append("--no-error-on-unmatched-pattern")
@@ -169,7 +171,7 @@ class _EslintCommand(CommandBuilder):
                 [
                     "--report-unused-disable-directives",
                     str(report_unused),
-                ]
+                ],
             )
 
         args = _settings_list(_setting(settings, "args"))
@@ -201,7 +203,7 @@ class _PrettierCommand(CommandBuilder):
             cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
 
         for directory in _settings_list(
-            _setting(settings, "plugin-search-dir", "plugin_search_dir")
+            _setting(settings, "plugin-search-dir", "plugin_search_dir"),
         ):
             cmd.extend(["--plugin-search-dir", str(_resolve_path(root, directory))])
 
@@ -267,6 +269,21 @@ class _ActionlintCommand(CommandBuilder):
         cache_root = ctx.root / ".lint-cache"
         binary = ensure_actionlint(self.version, cache_root)
         cmd = [str(binary), "-format", "{{json .}}", "-no-color"]
+
+        workflow_files = [
+            path
+            for path in ctx.files
+            if str(path).endswith(".yml") and "/.github/workflows/" in str(path)
+        ]
+        if workflow_files:
+            cmd.extend(str(path) for path in workflow_files)
+        else:
+            workflows_dir = ctx.root / ".github" / "workflows"
+            if workflows_dir.exists():
+                cmd.append(str(workflows_dir))
+            else:
+                cmd.append(str(ctx.root))
+
         return tuple(cmd)
 
 
@@ -344,9 +361,7 @@ class _StylelintCommand(CommandBuilder):
         if _as_bool(_setting(settings, "allow-empty-input", "allow_empty_input")):
             cmd.append("--allow-empty-input")
 
-        if _as_bool(
-            _setting(settings, "disable-default-ignores", "disable_default_ignores")
-        ):
+        if _as_bool(_setting(settings, "disable-default-ignores", "disable_default_ignores")):
             cmd.append("--disable-default-ignores")
 
         if _as_bool(_setting(settings, "quiet")):
@@ -356,11 +371,7 @@ class _StylelintCommand(CommandBuilder):
         if max_warnings is not None:
             cmd.extend(["--max-warnings", str(max_warnings)])
 
-        if (
-            not self.is_fix
-            and "--formatter" not in cmd
-            and "--custom-formatter" not in cmd
-        ):
+        if not self.is_fix and "--formatter" not in cmd and "--custom-formatter" not in cmd:
             cmd.extend(["--formatter", "json"])
 
         args = _settings_list(_setting(settings, "args"))
@@ -433,9 +444,7 @@ class _HadolintCommand(CommandBuilder):
         if config:
             cmd.extend(["--config", str(_resolve_path(ctx.root, config))])
 
-        failure_threshold = _setting(
-            ctx.settings, "failure-threshold", "failure_threshold"
-        )
+        failure_threshold = _setting(ctx.settings, "failure-threshold", "failure_threshold")
         if failure_threshold:
             cmd.extend(["--failure-threshold", str(failure_threshold)])
 
@@ -531,6 +540,44 @@ class _LuacheckCommand(CommandBuilder):
         if config:
             cmd.extend(["--config", str(_resolve_path(root, config))])
 
+        line_length = _setting(settings, "max-line-length", "max_line_length")
+        if line_length is None:
+            line_length = ctx.cfg.execution.line_length
+        if line_length is not None:
+            ensure_flag("--max-line-length", str(line_length))
+
+        max_code_length = _setting(settings, "max-code-line-length", "max_code_line_length")
+        if max_code_length is None:
+            max_code_length = line_length
+        if max_code_length is not None:
+            ensure_flag("--max-code-line-length", str(max_code_length))
+
+        max_string_length = _setting(settings, "max-string-line-length", "max_string_line_length")
+        if max_string_length is None:
+            max_string_length = line_length
+        if max_string_length is not None:
+            ensure_flag("--max-string-line-length", str(max_string_length))
+
+        max_comment_length = _setting(
+            settings,
+            "max-comment-line-length",
+            "max_comment_line_length",
+        )
+        if max_comment_length is None:
+            max_comment_length = line_length
+        if max_comment_length is not None:
+            ensure_flag("--max-comment-line-length", str(max_comment_length))
+
+        max_cyclomatic = _setting(
+            settings,
+            "max-cyclomatic-complexity",
+            "max_cyclomatic_complexity",
+        )
+        if max_cyclomatic is None:
+            max_cyclomatic = ctx.cfg.complexity.max_complexity
+        if max_cyclomatic is not None:
+            ensure_flag("--max-cyclomatic-complexity", str(max_cyclomatic))
+
         std = _setting(settings, "std")
         if std:
             cmd.extend(["--std", str(std)])
@@ -539,9 +586,7 @@ class _LuacheckCommand(CommandBuilder):
         if globals_list:
             cmd.extend(["--globals", ",".join(globals_list)])
 
-        read_globals = _settings_list(
-            _setting(settings, "read-globals", "read_globals")
-        )
+        read_globals = _settings_list(_setting(settings, "read-globals", "read_globals"))
         if read_globals:
             cmd.extend(["--read-globals", ",".join(read_globals)])
 
@@ -623,7 +668,7 @@ class _RemarkCommand(CommandBuilder):
         settings = ctx.settings
 
         if not self.is_fix and "--report" not in cmd:
-            cmd.extend(["--report", "vfile-reporter-json"])
+            cmd.extend(["--report", "json"])
         if not self.is_fix and "--frail" not in cmd:
             cmd.append("--frail")
         if not self.is_fix and "--quiet" not in cmd:
@@ -656,8 +701,8 @@ class _RemarkCommand(CommandBuilder):
             cmd.extend(files)
         elif self.is_fix:
             cmd.append(str(root))
-        if self.is_fix and "-o" not in cmd and "--output" not in cmd:
-            cmd.append("-o")
+        if self.is_fix and "--output" not in cmd and "-o" not in cmd:
+            cmd.append("--output")
 
         return tuple(cmd)
 
@@ -715,9 +760,7 @@ class _ShfmtCommand(CommandBuilder):
             cmd.append("-s")
 
         write_cmd = _as_bool(_setting(settings, "write"))
-        if self.is_fix:
-            cmd.append("-w")
-        elif write_cmd:
+        if self.is_fix or write_cmd:
             cmd.append("-w")
         else:
             cmd.append("-d")
@@ -906,26 +949,26 @@ class _GtsCommand(CommandBuilder):
 
 
 __all__ = [
-    "_PerltidyCommand",
-    "_PerlCriticCommand",
-    "_EslintCommand",
-    "_PrettierCommand",
     "_ActionlintCommand",
-    "_KubeLinterCommand",
-    "_StylelintCommand",
-    "_YamllintCommand",
-    "_DockerfilelintCommand",
-    "_HadolintCommand",
-    "_DotenvLinterCommand",
-    "_LualintCommand",
-    "_LuacheckCommand",
-    "_SeleneCommand",
-    "_RemarkCommand",
-    "_SpeccyCommand",
-    "_ShfmtCommand",
     "_CheckmakeCommand",
-    "_TscCommand",
-    "_PhplintCommand",
+    "_DockerfilelintCommand",
+    "_DotenvLinterCommand",
+    "_EslintCommand",
     "_GolangciLintCommand",
     "_GtsCommand",
+    "_HadolintCommand",
+    "_KubeLinterCommand",
+    "_LuacheckCommand",
+    "_LualintCommand",
+    "_PerlCriticCommand",
+    "_PerltidyCommand",
+    "_PhplintCommand",
+    "_PrettierCommand",
+    "_RemarkCommand",
+    "_SeleneCommand",
+    "_ShfmtCommand",
+    "_SpeccyCommand",
+    "_StylelintCommand",
+    "_TscCommand",
+    "_YamllintCommand",
 ]

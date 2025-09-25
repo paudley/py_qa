@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import re
-from typing import Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
 from packaging.version import InvalidVersion, Version
 
@@ -23,7 +23,6 @@ class VersionResolver:
         env: Mapping[str, str] | None = None,
     ) -> str | None:
         """Return the normalized version string from ``command`` if available."""
-
         try:
             completed = run_command(
                 list(command),
