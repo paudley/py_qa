@@ -4,17 +4,13 @@
 
 from __future__ import annotations
 
-import json
 import shutil
+from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
-from typing import List, Sequence
 
-from ..process_utils import SubprocessExecutionError, run_command
+from ..process_utils import run_command
 from ..tool_env import VersionResolver
 from ..tools.base import Tool
-
-PYQA_ROOT = Path(__file__).resolve().parent.parent
 
 
 @dataclass(slots=True)
@@ -32,38 +28,8 @@ class ToolStatus:
     raw_output: str | None
 
 
-def installed_packages() -> set[str]:
-    """Return the set of installed packages within the project environment."""
-
-    try:
-        completed = run_command(
-            ["uv", "pip", "list", "--format=json"],
-            check=True,
-            capture_output=True,
-            cwd=PYQA_ROOT,
-        )
-    except (OSError, SubprocessExecutionError):
-        return set()
-    try:
-        data = json.loads(completed.stdout)
-    except json.JSONDecodeError:
-        return set()
-    return {
-        str(item.get("name", "")).lower()
-        for item in data
-        if isinstance(item, dict) and item.get("name")
-    }
-
-
-def run_uv(args: List[str], *, check: bool = True) -> None:
-    """Invoke ``uv`` with *args* relative to the project root."""
-
-    run_command(args, check=check, cwd=PYQA_ROOT)
-
-
 def check_tool_status(tool: Tool) -> ToolStatus:
     """Return ``ToolStatus`` describing availability and version information for *tool*."""
-
     version_cmd: Sequence[str] | None = tool.version_command
     executable = version_cmd[0] if version_cmd else None
     path = shutil.which(executable) if executable else None
@@ -100,9 +66,7 @@ def check_tool_status(tool: Tool) -> ToolStatus:
             if tool.runtime != "binary"
             else ""
         )
-        notes = (
-            f"Executable '{version_cmd[0]}' not found on PATH. {runtime_note}".strip()
-        )
+        notes = f"Executable '{version_cmd[0]}' not found on PATH. {runtime_note}".strip()
         return ToolStatus(
             name=tool.name,
             status=status,
@@ -115,9 +79,7 @@ def check_tool_status(tool: Tool) -> ToolStatus:
             raw_output=None,
         )
 
-    output = (completed.stdout or "") + (
-        "\n" + completed.stderr if completed.stderr else ""
-    )
+    output = (completed.stdout or "") + ("\n" + completed.stderr if completed.stderr else "")
     output = output.strip()
     version = resolver.normalize(output.splitlines()[0] if output else None)
 
@@ -127,11 +89,7 @@ def check_tool_status(tool: Tool) -> ToolStatus:
     else:
         status = "ok"
         notes = output.splitlines()[0] if output else ""
-        if (
-            tool.min_version
-            and version
-            and not resolver.is_compatible(version, tool.min_version)
-        ):
+        if tool.min_version and version and not resolver.is_compatible(version, tool.min_version):
             status = "outdated"
             notes = f"Detected {version}; requires ≥ {tool.min_version}."
 

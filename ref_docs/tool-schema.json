@@ -274,6 +274,60 @@
       "type": "path"
     }
   },
+  "luacheck": {
+    "args": {
+      "description": "Additional arguments appended to luacheck.",
+      "type": "list[str]"
+    },
+    "config": {
+      "description": "luacheck configuration file.",
+      "type": "path"
+    },
+    "exclude-files": {
+      "description": "Paths or globs excluded from linting.",
+      "type": "list[str]"
+    },
+    "globals": {
+      "description": "Global identifiers treated as defined.",
+      "type": "list[str]"
+    },
+    "ignore": {
+      "description": "Diagnostic codes or patterns to ignore.",
+      "type": "list[str]"
+    },
+    "max-code-line-length": {
+      "description": "Maximum length for code lines (excluding comments/strings).",
+      "type": "int"
+    },
+    "max-comment-line-length": {
+      "description": "Maximum length for comment lines.",
+      "type": "int"
+    },
+    "max-cyclomatic-complexity": {
+      "description": "Upper limit for function cyclomatic complexity.",
+      "type": "int"
+    },
+    "max-line-length": {
+      "description": "Maximum permitted line length.",
+      "type": "int"
+    },
+    "max-string-line-length": {
+      "description": "Maximum length for lines inside multi-line strings.",
+      "type": "int"
+    },
+    "quiet": {
+      "description": "Suppress non-critical luacheck output.",
+      "type": "bool"
+    },
+    "read-globals": {
+      "description": "Globals allowed for read-only access.",
+      "type": "list[str]"
+    },
+    "std": {
+      "description": "Standard globals set to load (e.g. luajit, love, ngx).",
+      "type": "str"
+    }
+  },
   "mypy": {
     "args": {
       "description": "Additional arguments passed to mypy.",
@@ -283,9 +337,25 @@
       "description": "Location for mypy cache data.",
       "type": "path"
     },
+    "check-untyped-defs": {
+      "description": "Type check function bodies with no type hints.",
+      "type": "bool"
+    },
     "config": {
       "description": "Custom mypy configuration file to load.",
       "type": "path"
+    },
+    "disallow-any-generics": {
+      "description": "Error when using generic types with implicit Any.",
+      "type": "bool"
+    },
+    "disallow-untyped-decorators": {
+      "description": "Error on decorators without type annotations.",
+      "type": "bool"
+    },
+    "exclude-gitignore": {
+      "description": "Respect .gitignore entries when discovering modules.",
+      "type": "bool"
     },
     "ignore-missing-imports": {
       "description": "Suppress errors about missing type information",
@@ -293,6 +363,10 @@
     },
     "namespace-packages": {
       "description": "Treat packages without __init__.py as namespaces.",
+      "type": "bool"
+    },
+    "no-implicit-reexport": {
+      "description": "Disable implicit re-exporting of imported names.",
       "type": "bool"
     },
     "plugins": {
@@ -307,16 +381,40 @@
       "description": "Python version string for type checking.",
       "type": "str"
     },
+    "show-column-numbers": {
+      "description": "Include column numbers in diagnostic output.",
+      "type": "bool"
+    },
+    "show-error-codes": {
+      "description": "Display error codes alongside messages.",
+      "type": "bool"
+    },
+    "sqlite-cache": {
+      "description": "Enable SQLite cache backend for mypy.",
+      "type": "bool"
+    },
     "strict": {
       "description": "Enable mypy strict mode.",
+      "type": "bool"
+    },
+    "warn-redundant-casts": {
+      "description": "Warn when casting yields the same type.",
       "type": "bool"
     },
     "warn-return-any": {
       "description": "Warn when returning Any typed values.",
       "type": "bool"
     },
+    "warn-unreachable": {
+      "description": "Warn when statements are statically unreachable.",
+      "type": "bool"
+    },
     "warn-unused-configs": {
       "description": "Warn when config options are unused.",
+      "type": "bool"
+    },
+    "warn-unused-ignores": {
+      "description": "Warn about unused # type: ignore directives.",
       "type": "bool"
     }
   },
@@ -418,8 +516,20 @@
       "description": "Number of parallel workers.",
       "type": "int"
     },
+    "max-args": {
+      "description": "Maximum number of arguments permitted on functions/methods.",
+      "type": "int"
+    },
+    "max-complexity": {
+      "description": "Upper bound for cyclomatic complexity.",
+      "type": "int"
+    },
     "max-line-length": {
       "description": "Maximum allowed source line length.",
+      "type": "int"
+    },
+    "max-positional-arguments": {
+      "description": "Maximum positional arguments allowed before flagging.",
       "type": "int"
     },
     "rcfile": {

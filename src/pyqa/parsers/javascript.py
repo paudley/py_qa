@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Parsers for JavaScript and TypeScript tooling."""
 
 from __future__ import annotations
 
 import re
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from ..models import RawDiagnostic
 from ..severity import Severity
@@ -12,7 +14,7 @@ from ..tools.base import ToolContext
 
 _TSC_PATTERN = re.compile(
     r"^(?P<file>[^:(\n]+)\((?P<line>\d+),(?P<col>\d+)\):\s*"
-    r"(?P<severity>error|warning)\s*(?P<code>[A-Z]+\d+)?\s*:?\s*(?P<message>.+)$"
+    r"(?P<severity>error|warning)\s*(?P<code>[A-Z]+\d+)?\s*:?\s*(?P<message>.+)$",
 )
 
 
@@ -44,14 +46,13 @@ def parse_eslint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]
                     message=str(message.get("message", "")).strip(),
                     code=code,
                     tool="eslint",
-                )
+                ),
             )
     return results
 
 
 def parse_stylelint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse stylelint JSON output."""
-
     items = payload if isinstance(payload, list) else []
     results: list[RawDiagnostic] = []
     for entry in items:
@@ -82,7 +83,7 @@ def parse_stylelint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnost
                     message=message,
                     code=str(rule) if rule else None,
                     tool="stylelint",
-                )
+                ),
             )
     return results
 
@@ -94,9 +95,7 @@ def parse_tsc(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
         match = _TSC_PATTERN.match(line.strip())
         if not match:
             continue
-        severity = (
-            Severity.ERROR if match.group("severity") == "error" else Severity.WARNING
-        )
+        severity = Severity.ERROR if match.group("severity") == "error" else Severity.WARNING
         code = match.group("code")
         results.append(
             RawDiagnostic(
@@ -107,7 +106,7 @@ def parse_tsc(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
                 message=match.group("message").strip(),
                 code=code,
                 tool="tsc",
-            )
+            ),
         )
     return results
 

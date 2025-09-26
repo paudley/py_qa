@@ -8,7 +8,7 @@ from .app import app
 from .config_builder import build_config
 from .options import LintOptions
 
-__all__ = ["app", "build_config", "LintOptions"]
+__all__ = ["LintOptions", "app", "build_config"]
 
 
 def _build_config(**kwargs):

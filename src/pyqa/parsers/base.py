@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Shared parser infrastructure and helper utilities."""
 
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from collections.abc import Mapping as MappingABC
-from collections.abc import Sequence as SequenceABC
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence
+from typing import Any
 
 from ..models import RawDiagnostic
 from ..tools.base import Parser, ToolContext
@@ -42,7 +44,7 @@ def _coerce_object_mapping(value: object) -> dict[str, object]:
 
 
 def _coerce_dict_sequence(value: object) -> list[dict[str, object]]:
-    if not isinstance(value, SequenceABC) or isinstance(value, (str, bytes, bytearray)):
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
         return []
     collected: list[dict[str, object]] = []
     for item in value:
@@ -96,11 +98,11 @@ class TextParser(Parser):
 
 __all__ = [
     "JsonParser",
-    "TextParser",
     "JsonTransform",
+    "TextParser",
     "TextTransform",
-    "_load_json_stream",
-    "_coerce_object_mapping",
     "_coerce_dict_sequence",
+    "_coerce_object_mapping",
     "_coerce_optional_str",
+    "_load_json_stream",
 ]

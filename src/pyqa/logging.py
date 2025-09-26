@@ -4,7 +4,10 @@
 
 from __future__ import annotations
 
-import sys
+from rich.rule import Rule
+from rich.text import Text
+
+from .console import console_manager, is_tty
 
 ANSI = {
     "reset": "\033[0m",
@@ -19,58 +22,68 @@ ANSI = {
 }
 
 
-def is_tty() -> bool:
-    """Return ``True`` when stdout appears to be a TTY."""
-
-    try:
-        return sys.stdout.isatty()
-    except (AttributeError, ValueError):
-        return False
-
-
 def colorize(text: str, code: str, enable: bool) -> str:
     """Wrap ``text`` in ANSI colour codes when *enable* is truthy."""
-
     if not enable or not is_tty():
         return text
+    if code.startswith("ansi256:"):
+        try:
+            value = int(code.split(":", 1)[1])
+        except ValueError:
+            return text
+        return f"\033[38;5;{value}m{text}{ANSI['reset']}"
     return f"{ANSI.get(code, '')}{text}{ANSI['reset']}"
 
 
 def emoji(symbol: str, enable: bool) -> str:
     """Return *symbol* when emoji output is enabled, otherwise blank."""
-
     return symbol if enable else ""
+
+
+def _print_line(
+    msg: str,
+    *,
+    style: str | None,
+    use_emoji: bool,
+    use_color: bool | None = None,
+) -> None:
+    color_enabled = is_tty() if use_color is None else use_color
+    console = console_manager.get(color=color_enabled, emoji=use_emoji)
+    text = Text(msg)
+    if style and color_enabled:
+        text.stylize(style)
+    console.print(text)
 
 
 def section(title: str, *, use_color: bool) -> None:
     """Print a section header."""
+    console = console_manager.get(color=use_color, emoji=True)
+    if use_color:
+        console.print()
+        console.print(Rule(title))
+    else:
+        console.print(f"\n--- {title} ---")
 
-    print(
-        f"\n{colorize('───', 'blue', use_color)} "
-        f"{colorize(title, 'cyan', use_color)} "
-        f"{colorize('───', 'blue', use_color)}"
-    )
 
-
-def info(msg: str, *, use_emoji: bool) -> None:
+def info(msg: str, *, use_emoji: bool, use_color: bool | None = None) -> None:
     """Emit an informational message."""
+    prefix = emoji("ℹ️ ", use_emoji)
+    _print_line(f"{prefix}{msg}", style="cyan", use_emoji=use_emoji, use_color=use_color)
 
-    print(f"{emoji('ℹ️ ', use_emoji)}{msg}")
 
-
-def ok(msg: str, *, use_emoji: bool) -> None:
+def ok(msg: str, *, use_emoji: bool, use_color: bool | None = None) -> None:
     """Emit a success message."""
+    prefix = emoji("✅ ", use_emoji)
+    _print_line(f"{prefix}{msg}", style="green", use_emoji=use_emoji, use_color=use_color)
 
-    print(f"{emoji('✅ ', use_emoji)}{msg}")
 
-
-def warn(msg: str, *, use_emoji: bool) -> None:
+def warn(msg: str, *, use_emoji: bool, use_color: bool | None = None) -> None:
     """Emit a warning message."""
+    prefix = emoji("⚠️ ", use_emoji)
+    _print_line(f"{prefix}{msg}", style="yellow", use_emoji=use_emoji, use_color=use_color)
 
-    print(f"{emoji('⚠️ ', use_emoji)}{msg}")
 
-
-def fail(msg: str, *, use_emoji: bool) -> None:
+def fail(msg: str, *, use_emoji: bool, use_color: bool | None = None) -> None:
     """Emit an error message."""
-
-    print(f"{emoji('❌ ', use_emoji)}{msg}")
+    prefix = emoji("❌ ", use_emoji)
+    _print_line(f"{prefix}{msg}", style="red", use_emoji=use_emoji, use_color=use_color)

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Safe wrappers around ``subprocess`` execution."""
 
 from __future__ import annotations
@@ -8,8 +9,9 @@ import shutil
 # Bandit: subprocess usage is intentional—we provide a controlled wrapper around
 # external tool execution, normalising arguments and disabling ``shell=True``.
 import subprocess  # nosec B404
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Mapping, Sequence
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     # Bandit: type-only import of subprocess metadata is part of the safe wrapper.
@@ -27,7 +29,7 @@ class SubprocessExecutionError(RuntimeError):
         stderr: str | None,
     ) -> None:
         super().__init__(
-            f"Command '{command[0]}' exited with status {returncode}. stderr: {stderr or '<none>'}"
+            f"Command '{command[0]}' exited with status {returncode}. stderr: {stderr or '<none>'}",
         )
         self.command = tuple(command)
         self.returncode = returncode
@@ -64,7 +66,6 @@ def run_command(
     discard_stdin: bool = False,
 ) -> _CompletedProcess[str]:
     """Execute *args* after normalising the executable path."""
-
     normalized = _normalize_args(args)
 
     def _ensure_text(value: str | bytes | None) -> str | None:
@@ -95,11 +96,7 @@ def run_command(
         )
         combined_stderr = f"{stderr}\n{timeout_msg}" if stderr else timeout_msg
         completed = subprocess.CompletedProcess(
-            args=(
-                list(exc.cmd)
-                if isinstance(exc.cmd, (list, tuple))
-                else list(normalized)
-            ),
+            args=(list(exc.cmd) if isinstance(exc.cmd, (list, tuple)) else list(normalized)),
             returncode=124,
             stdout=stdout,
             stderr=combined_stderr,
@@ -116,4 +113,4 @@ def run_command(
     return completed
 
 
-__all__ = ["run_command", "SubprocessExecutionError"]
+__all__ = ["SubprocessExecutionError", "run_command"]

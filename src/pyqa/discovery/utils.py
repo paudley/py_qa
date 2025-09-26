@@ -6,8 +6,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Iterable, Iterator
 
 from ..constants import ALWAYS_EXCLUDE_DIRS
 
@@ -18,7 +18,6 @@ def iter_paths(
     skip_patterns: Iterable[str] | None = None,
 ) -> Iterator[tuple[Path, list[str], list[str]]]:
     """Yield ``(directory, dirnames, filenames)`` honoring skip patterns and default exclusions."""
-
     root = root.resolve()
     for dirpath, dirnames, filenames in os.walk(root):
         directory = Path(dirpath)
@@ -28,9 +27,7 @@ def iter_paths(
         yield directory, dirnames, filenames
 
 
-def _should_skip(
-    directory: Path, root: Path, skip_patterns: Iterable[str] | None
-) -> bool:
+def _should_skip(directory: Path, root: Path, skip_patterns: Iterable[str] | None) -> bool:
     try:
         relative = directory.relative_to(root)
     except ValueError:

@@ -26,7 +26,7 @@ def make_outcome() -> ToolOutcome:
                 message="demo",
                 tool="demo",
                 code="X001",
-            )
+            ),
         ],
     )
 

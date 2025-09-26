@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
 
 import typer
 
@@ -18,8 +17,9 @@ from ..quality import (
     check_commit_message,
     ensure_branch_protection,
 )
+from .typer_ext import create_typer
 
-quality_app = typer.Typer(
+quality_app = create_typer(
     name="check-quality",
     help="Run repository quality checks (license headers, schema, hygiene).",
     invoke_without_command=True,
@@ -29,8 +29,10 @@ quality_app = typer.Typer(
 @quality_app.callback()
 def main(
     ctx: typer.Context,
-    paths: List[Path] | None = typer.Argument(
-        None, metavar="[PATHS...]", help="Optional file paths to scope the checks."
+    paths: list[Path] | None = typer.Argument(
+        None,
+        metavar="[PATHS...]",
+        help="Optional file paths to scope the checks.",
     ),
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
     staged: bool = typer.Option(
@@ -38,18 +40,14 @@ def main(
         "--staged/--no-staged",
         help="Use staged files instead of discovering all tracked files when no PATHS are provided.",
     ),
-    check: Optional[List[str]] = typer.Option(
+    check: list[str] | None = typer.Option(
         None,
         "--check",
         "-c",
         help="Limit execution to specific checks (e.g. license,file-size,schema,python).",
     ),
-    no_schema: bool = typer.Option(
-        False, "--no-schema", help="Skip schema validation."
-    ),
-    emoji: bool = typer.Option(
-        True, "--emoji/--no-emoji", help="Toggle emoji in output."
-    ),
+    no_schema: bool = typer.Option(False, "--no-schema", help="Skip schema validation."),
+    emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output."),
 ) -> None:
     if ctx.invoked_subcommand:
         return
@@ -86,13 +84,9 @@ def main(
 
 @quality_app.command("commit-msg")
 def commit_msg(
-    message_file: Path = typer.Argument(
-        ..., metavar="FILE", help="Commit message file."
-    ),
+    message_file: Path = typer.Argument(..., metavar="FILE", help="Commit message file."),
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    emoji: bool = typer.Option(
-        True, "--emoji/--no-emoji", help="Toggle emoji in output."
-    ),
+    emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output."),
 ) -> None:
     result = check_commit_message(root, message_file)
     _render_result(result, root, emoji)
@@ -102,9 +96,7 @@ def commit_msg(
 @quality_app.command("branch")
 def branch_guard(
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    emoji: bool = typer.Option(
-        True, "--emoji/--no-emoji", help="Toggle emoji in output."
-    ),
+    emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output."),
 ) -> None:
     loader = ConfigLoader.for_root(root)
     try:

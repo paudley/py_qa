@@ -5,16 +5,15 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from shutil import which as _which
-from typing import Mapping, Sequence
 
 from ..process_utils import run_command as _run_command
 
 
 def find_executable(cmd: str) -> str | None:
     """Locate an executable on ``PATH`` (virtualenv aware)."""
-
     return _which(cmd)
 
 
@@ -26,7 +25,6 @@ def run_command(
     timeout: float | None = None,
 ):
     """Run a command returning a completed process with text outputs."""
-
     merged_env: dict[str, str] | None = None
     if env:
         merged_env = os.environ.copy()

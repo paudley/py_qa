@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Mapping, MutableMapping
 from enum import Enum
-from typing import Final, Iterable, Mapping, MutableMapping, cast
+from typing import Final, cast
 
 
 class Severity(str, Enum):
@@ -40,11 +41,8 @@ def apply_severity_rules(
     rules: SeverityRuleView | None = None,
 ) -> Severity:
     """Apply tool-specific overrides to a diagnostic severity."""
-
-    active_rules: SeverityRuleView = (
-        rules if rules is not None else DEFAULT_SEVERITY_RULES
-    )
-    candidates = active_rules.get(tool, cast(Iterable[SeverityRule], ()))
+    active_rules: SeverityRuleView = rules if rules is not None else DEFAULT_SEVERITY_RULES
+    candidates = active_rules.get(tool, cast("Iterable[SeverityRule]", ()))
     for pattern, sev in candidates:
         if pattern.search(code_or_message or ""):
             return Severity(sev)
@@ -57,7 +55,6 @@ def add_custom_rule(
     rules: SeverityRuleMap | None = None,
 ) -> str | None:
     """Add a custom severity override defined as ``tool:regex=level``."""
-
     target: SeverityRuleMap = rules if rules is not None else DEFAULT_SEVERITY_RULES
     try:
         tool, rest = spec.split(":", 1)
@@ -70,11 +67,8 @@ def add_custom_rule(
     return None
 
 
-def severity_from_code(
-    code: str | None, default: Severity = Severity.ERROR
-) -> Severity:
+def severity_from_code(code: str | None, default: Severity = Severity.ERROR) -> Severity:
     """Infer severity from conventional code prefixes (e.g. E, W)."""
-
     if not code:
         return default
     head = code[0].upper()
@@ -95,5 +89,4 @@ _SEVERITY_TO_SARIF_LEVEL: Final[dict[Severity, str]] = {
 
 def severity_to_sarif(severity: Severity) -> str:
     """Map :class:`Severity` to a SARIF reporting level."""
-
     return _SEVERITY_TO_SARIF_LEVEL.get(severity, "warning")

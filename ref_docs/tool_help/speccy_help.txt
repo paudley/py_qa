@@ -1,0 +1,13 @@
+/home/paudley/Active/py_qa/src/.lint-cache/tools/node/speccy-0.11.0/node_modules/.bin/speccy --help
+
+Usage: speccy <command>
+
+Options:
+  -V, --version                    output the version number
+  -c, --config [configFile]        config file (containing JSON/YAML). See README for potential values.
+  -h, --help                       output usage information
+
+Commands:
+  lint [options] [file-or-url]     ensure specs are not just valid OpenAPI, but lint against specified rules. If no argument is passed, then standard input will be used (please note that in this case the provided spec must be fully resolved)
+  resolve [options] [file-or-url]  pull in external $ref files to create one mega-file
+  serve [options] [file-or-url]    view specifications in beautiful human readable documentation

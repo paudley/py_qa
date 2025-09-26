@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Miscellaneous built-in tool definitions."""
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from ..parsers import (
     JsonParser,
@@ -87,9 +88,7 @@ def misc_tools() -> Iterable[Tool]:
         actions=(
             ToolAction(
                 name="lint",
-                command=_KubeLinterCommand(
-                    base=("kube-linter", "lint", "--format", "json")
-                ),
+                command=_KubeLinterCommand(base=("kube-linter", "lint", "--format", "json")),
                 append_files=True,
                 description="Analyze Kubernetes manifests with kube-linter.",
                 parser=JsonParser(parse_kube_linter),
@@ -187,9 +186,7 @@ def misc_tools() -> Iterable[Tool]:
         actions=(
             ToolAction(
                 name="lint",
-                command=_RemarkCommand(
-                    base=("remark", "--use", "remark-preset-lint-recommended")
-                ),
+                command=_RemarkCommand(base=("remark", "--use", "remark-preset-lint-recommended")),
                 append_files=True,
                 description="Lint Markdown files using remark-lint recommended rules.",
                 parser=JsonParser(parse_remark),
@@ -346,7 +343,7 @@ def misc_tools() -> Iterable[Tool]:
         file_extensions=("Makefile", "makefile", ".mk"),
         description="Makefile linter powered by checkmake.",
         runtime="go",
-        package="github.com/mrtazz/checkmake/cmd/checkmake",
+        package="github.com/checkmake/checkmake/cmd/checkmake",
         min_version=None,
         version_command=("checkmake", "--version"),
     )
@@ -374,9 +371,7 @@ def misc_tools() -> Iterable[Tool]:
         actions=(
             ToolAction(
                 name="lint",
-                command=_DockerfilelintCommand(
-                    base=("dockerfilelint", "--output", "json")
-                ),
+                command=_DockerfilelintCommand(base=("dockerfilelint", "--output", "json")),
                 append_files=True,
                 description="Analyze Dockerfiles with dockerfilelint.",
                 parser=JsonParser(parse_dockerfilelint),
@@ -544,9 +539,7 @@ def misc_tools() -> Iterable[Tool]:
         actions=(
             ToolAction(
                 name="lint",
-                command=_GolangciLintCommand(
-                    base=("golangci-lint", "run", "--out-format", "json")
-                ),
+                command=_GolangciLintCommand(base=("golangci-lint", "run", "--out-format", "json")),
                 append_files=False,
                 description="Run golangci-lint across Go packages.",
                 parser=JsonParser(parse_golangci_lint),

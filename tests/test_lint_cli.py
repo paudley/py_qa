@@ -4,17 +4,24 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
+import click
+from typer.main import get_group
 from typer.testing import CliRunner
 
+import pyqa.cli.lint as lint_module
 from pyqa.cli.app import app
+from pyqa.cli.options import LintOptions
+from pyqa.cli.typer_ext import _primary_option_name
+from pyqa.config import Config
+from pyqa.models import RunResult
 from pyqa.tool_env.models import PreparedCommand
 
 
-def test_lint_warns_when_py_qa_path_outside_workspace(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_lint_warns_when_py_qa_path_outside_workspace(tmp_path: Path, monkeypatch) -> None:
     runner = CliRunner()
 
     project_root = tmp_path / "project"
@@ -23,7 +30,7 @@ def test_lint_warns_when_py_qa_path_outside_workspace(
 
     monkeypatch.chdir(project_root)
 
-    def fake_run_tool_info(tool_name, root):
+    def fake_run_tool_info(tool_name, root, *, cfg=None, console=None):
         assert tool_name == "ruff"
         return 0
 
@@ -49,16 +56,18 @@ def test_lint_warns_when_py_qa_path_outside_workspace(
 def test_lint_fetch_all_tools_flag(monkeypatch, tmp_path: Path) -> None:
     runner = CliRunner()
 
-    prepared = PreparedCommand.from_parts(
-        cmd=["demo"], env={}, version="1.2.3", source="local"
-    )
+    prepared = PreparedCommand.from_parts(cmd=["demo"], env={}, version="1.2.3", source="local")
     calls: list[tuple] = []
 
-    def fake_fetch(self, cfg, root):  # noqa: ANN001
+    def fake_fetch(self, cfg, root, callback=None):  # noqa: ANN001
+        if callback:
+            callback("start", "demo", "lint", 1, 1, None)
+            callback("completed", "demo", "lint", 1, 1, None)
         calls.append((cfg, root))
-        return [("demo", "lint", prepared)]
+        return [("demo", "lint", prepared, None)]
 
     monkeypatch.setattr("pyqa.cli.lint.Orchestrator.fetch_all_tools", fake_fetch)
+    monkeypatch.setattr("pyqa.cli.lint.is_tty", lambda: False)
 
     result = runner.invoke(
         app,
@@ -72,4 +81,92 @@ def test_lint_fetch_all_tools_flag(monkeypatch, tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert calls
-    assert "demo:lint ready" in result.stdout
+    assert "Tool Preparation" in result.stdout
+    assert "demo" in result.stdout
+    assert "lint" in result.stdout
+    assert "ready" in result.stdout
+
+
+def test_lint_no_stats_flag(monkeypatch, tmp_path: Path) -> None:
+    runner = CliRunner()
+    captured: dict[str, Any] = {}
+
+    original_build_config = lint_module.build_config
+
+    def fake_build_config(options):
+        captured["options"] = options
+        return original_build_config(options)
+
+    def fake_run(self, config, root):  # noqa: ANN001
+        captured["config"] = config
+        return RunResult(root=root, files=[], outcomes=[], tool_versions={})
+
+    monkeypatch.setattr(lint_module, "build_config", fake_build_config)
+    monkeypatch.setattr(lint_module.Orchestrator, "run", fake_run)
+
+    result = runner.invoke(
+        app,
+        [
+            "lint",
+            "--root",
+            str(tmp_path),
+            "--no-color",
+            "--no-emoji",
+            "--no-stats",
+        ],
+    )
+
+    assert result.exit_code == 0
+    options = captured["options"]
+    assert isinstance(options, LintOptions)
+    assert options.no_stats is True
+    config = captured["config"]
+    assert isinstance(config, Config)
+    assert config.output.show_stats is False
+    assert "stats" not in result.stdout.lower()
+    assert "Passed" in result.stdout
+
+
+def test_lint_help_options_sorted() -> None:
+    lint_cmd = get_group(app).commands["lint"]
+    ctx = click.Context(lint_cmd)
+    formatter = _RecordingFormatter()
+    lint_cmd.format_options(ctx, formatter)  # type: ignore[arg-type]
+
+    options_section = formatter.sections.get("Options")
+    assert options_section is not None
+
+    expected = _expected_sorted_options(lint_cmd, ctx)
+    assert options_section == expected
+
+
+class _RecordingFormatter:
+    def __init__(self) -> None:
+        self.sections: dict[str, list[tuple[str, str]]] = {}
+        self._current: str | None = None
+
+    @contextmanager
+    def section(self, title: str):
+        previous = self._current
+        self._current = title
+        try:
+            yield
+        finally:
+            self._current = previous
+
+    def write_dl(self, rows: list[tuple[str, str]]) -> None:
+        if self._current is None:
+            return
+        self.sections.setdefault(self._current, []).extend(rows)
+
+
+def _expected_sorted_options(command, ctx: click.Context) -> list[tuple[str, str]]:
+    option_records: list[tuple[tuple[str, int], tuple[str, str]]] = []
+    for index, param in enumerate(command.get_params(ctx)):
+        if getattr(param, "param_type_name", "") == "argument":
+            continue
+        record = param.get_help_record(ctx)
+        if record is None:
+            continue
+        option_records.append(((_primary_option_name(param), index), record))
+    return [record for _, record in sorted(option_records, key=lambda entry: entry[0])]

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Shared helpers for built-in tool registrations."""
 
 from __future__ import annotations
@@ -8,10 +9,10 @@ import shutil
 import stat
 import tarfile
 import tempfile
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from importlib import import_module
 from pathlib import Path
-from typing import Final, Mapping, Protocol, cast
+from typing import Final, Protocol, cast
 
 from ..models import RawDiagnostic
 from ..severity import Severity
@@ -19,26 +20,26 @@ from .base import ToolContext
 
 __all__ = [
     "ACTIONLINT_VERSION_DEFAULT",
+    "CARGO_AVAILABLE",
+    "CPANM_AVAILABLE",
     "HADOLINT_VERSION_DEFAULT",
     "LUAROCKS_AVAILABLE",
     "LUA_AVAILABLE",
-    "CARGO_AVAILABLE",
-    "CPANM_AVAILABLE",
-    "_LUAROCKS_AVAILABLE",
-    "_LUA_AVAILABLE",
     "_CARGO_AVAILABLE",
     "_CPANM_AVAILABLE",
-    "_setting",
-    "_settings_list",
-    "_resolve_path",
+    "_LUAROCKS_AVAILABLE",
+    "_LUA_AVAILABLE",
     "_as_bool",
     "_ensure_actionlint",
     "_ensure_hadolint",
     "_ensure_lualint",
+    "_parse_gofmt_check",
+    "_resolve_path",
+    "_setting",
+    "_settings_list",
     "ensure_actionlint",
     "ensure_hadolint",
     "ensure_lualint",
-    "_parse_gofmt_check",
 ]
 
 ACTIONLINT_VERSION_DEFAULT: Final[str] = "1.7.1"
@@ -69,7 +70,7 @@ def _load_requests() -> _RequestsClient:
     if not hasattr(module, "get"):
         msg = "requests.get not available"
         raise RuntimeError(msg)
-    return cast(_RequestsClient, module)
+    return cast("_RequestsClient", module)
 
 
 _REQUESTS: Final[_RequestsClient] = _load_requests()
@@ -77,7 +78,6 @@ _REQUESTS: Final[_RequestsClient] = _load_requests()
 
 def _setting(settings: Mapping[str, object], *names: str) -> object | None:
     """Return the first configured value from *names* within *settings*."""
-
     for name in names:
         if name in settings:
             return settings[name]
@@ -89,7 +89,6 @@ def _setting(settings: Mapping[str, object], *names: str) -> object | None:
 
 def _settings_list(value: object) -> list[str]:
     """Coerce a setting value into a list of strings."""
-
     if value is None:
         return []
     if isinstance(value, str):
@@ -103,7 +102,6 @@ def _settings_list(value: object) -> list[str]:
 
 def _resolve_path(root: Path, value: object) -> Path:
     """Return an absolute path for *value* anchored at *root* when needed."""
-
     candidate = Path(str(value)).expanduser()
     if candidate.is_absolute():
         return candidate.resolve()
@@ -112,7 +110,6 @@ def _resolve_path(root: Path, value: object) -> Path:
 
 def _as_bool(value: object | None) -> bool | None:
     """Interpret arbitrary values as optional booleans."""
-
     if value is None:
         return None
     if isinstance(value, bool):
@@ -128,7 +125,6 @@ def _as_bool(value: object | None) -> bool | None:
 
 def _ensure_actionlint(version: str, cache_root: Path) -> Path:
     """Download the requested actionlint release if needed and return its binary path."""
-
     base_dir = cache_root / "actionlint" / version
     binary = base_dir / "actionlint"
     if binary.exists():
@@ -173,10 +169,7 @@ def _ensure_actionlint(version: str, cache_root: Path) -> Path:
                     archive.extract(member, path=base_dir)
                     extracted = base_dir / member.name
                     extracted.chmod(
-                        extracted.stat().st_mode
-                        | stat.S_IXUSR
-                        | stat.S_IXGRP
-                        | stat.S_IXOTH
+                        extracted.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH,
                     )
                     if extracted != binary:
                         extracted.rename(binary)
@@ -189,7 +182,6 @@ def _ensure_actionlint(version: str, cache_root: Path) -> Path:
 
 def _ensure_hadolint(version: str, cache_root: Path) -> Path:
     """Download the requested hadolint release when missing."""
-
     base_dir = cache_root / "hadolint" / version
     binary = base_dir / "hadolint"
     if binary.exists():
@@ -229,7 +221,6 @@ def _ensure_hadolint(version: str, cache_root: Path) -> Path:
 
 def _ensure_lualint(cache_root: Path) -> Path:
     """Download the standalone lualint script if missing."""
-
     base_dir = cache_root / "lualint"
     script = base_dir / "lualint.lua"
     if script.exists():
@@ -247,25 +238,21 @@ def _ensure_lualint(cache_root: Path) -> Path:
 
 def ensure_actionlint(version: str, cache_root: Path) -> Path:
     """Public helper for installing actionlint."""
-
     return _ensure_actionlint(version, cache_root)
 
 
 def ensure_hadolint(version: str, cache_root: Path) -> Path:
     """Public helper for installing hadolint."""
-
     return _ensure_hadolint(version, cache_root)
 
 
 def ensure_lualint(cache_root: Path) -> Path:
     """Public helper for writing the lualint shim."""
-
     return _ensure_lualint(cache_root)
 
 
 def _parse_gofmt_check(stdout: str, _context: ToolContext) -> list[RawDiagnostic]:
     """Convert gofmt --list output into diagnostics describing unformatted files."""
-
     diagnostics: list[RawDiagnostic] = []
     for line in stdout.splitlines():
         path = line.strip()
@@ -280,6 +267,6 @@ def _parse_gofmt_check(stdout: str, _context: ToolContext) -> list[RawDiagnostic
                 message="File requires gofmt formatting",
                 code="gofmt",
                 tool="gofmt",
-            )
+            ),
         )
     return diagnostics

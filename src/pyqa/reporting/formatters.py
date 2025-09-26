@@ -4,10 +4,18 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable
 
+from rich import box
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+
+from ..annotations import AnnotationEngine, MessageSpan
 from ..config import OutputConfig
+from ..console import console_manager
 from ..logging import colorize, emoji
 from ..metrics import (
     SUPPRESSION_LABELS,
@@ -17,9 +25,13 @@ from ..metrics import (
 )
 from ..models import Diagnostic, RunResult
 from ..severity import Severity
+from .advice import AdviceEntry, generate_advice
+
+_ANNOTATION_ENGINE = AnnotationEngine()
 
 
 def render(result: RunResult, cfg: OutputConfig) -> None:
+    _ANNOTATION_ENGINE.annotate_run(result)
     if cfg.quiet:
         _render_quiet(result, cfg)
         return
@@ -41,16 +53,25 @@ def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
 
     total_actions = len(result.outcomes)
     failed_actions = sum(1 for outcome in result.outcomes if not outcome.ok)
-    entries: set[tuple[str, int, str, str, str, str]] = set()
+    entries: list[tuple[str, int, str, str, str, str]] = []
+    seen_exact: set[tuple[str, int, str, str, str, str]] = set()
     for outcome in result.outcomes:
         for diag in outcome.diagnostics:
             tool_name = diag.tool or outcome.tool
             file_path = _normalize_concise_path(diag.file, root_path)
             line_no = diag.line if diag.line is not None else -1
-            code = diag.code or "-"
-            message = diag.message.splitlines()[0].strip() or "<no message provided>"
-            function = diag.function or ""
-            entries.add((file_path, line_no, function, tool_name, code, message))
+            raw_code = diag.code or "-"
+            code = raw_code.strip() or "-"
+            raw_message = diag.message.splitlines()[0]
+            message = _clean_message(code, raw_message) or "<no message provided>"
+            function = _normalise_symbol(diag.function)
+            record = (file_path, line_no, function, tool_name, code, message)
+            if record in seen_exact:
+                continue
+            seen_exact.add(record)
+            entries.append(record)
+
+    entries = _group_similar_messages(entries)
 
     def sort_key(item: tuple[str, int, str, str, str, str]) -> tuple:
         file_path, line_no, function, tool_name, code, message = item
@@ -63,23 +84,38 @@ def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
             message,
         )
 
+    formatted: list[tuple[str, str, str, str, str]] = []
     if entries:
-        for file_path, line_no, function, tool_name, code, message in sorted(
-            entries, key=sort_key
-        ):
-            location = file_path
+        for file_path, line_no, function, tool_name, code, message in sorted(entries, key=sort_key):
+            file_part = file_path
+            suffix_parts: list[str] = []
             if line_no >= 0:
-                location = f"{file_path}:{line_no}"
+                suffix_parts.append(str(line_no))
             if function:
-                location = (
-                    f"{location}:{function}"
-                    if line_no >= 0
-                    else f"{location}:{function}"
-                )
-            print(f"{tool_name}, {location}, {code}, {message}")
+                suffix_parts.append(function)
+            suffix = f":{':'.join(suffix_parts)}" if suffix_parts else ""
+            formatted.append((tool_name, file_part, suffix, code, message))
+
+    tool_padding_limit = 10
+    raw_tool_width = max((len(item[0]) for item in formatted), default=0)
+    tool_width = min(raw_tool_width, tool_padding_limit) if raw_tool_width else 0
+    tint_tool = _tool_tinter(result, cfg)
+    for tool_name, file_part, suffix, code, message in formatted:
+        spacer = " " * max(tool_width - len(tool_name), 0) if tool_width else ""
+        location = (file_part or "") + suffix
+        location_display = _highlight_for_output(
+            location,
+            color=cfg.color,
+            extra_spans=_location_function_spans(location),
+        )
+        message_display = _highlight_for_output(message, color=cfg.color)
+        print(f"{tint_tool(tool_name)}, {spacer}{location_display}, {code}, {message_display}")
 
     diagnostics_count = len(entries)
     files_count = len(result.files)
+    if getattr(cfg, "advice", False):
+        _render_advice(entries, cfg)
+        _render_refactor_navigator(result, cfg)
     _emit_stats_line(result, cfg, diagnostics_count)
 
     symbol = "❌" if failed_actions else "✅"
@@ -97,6 +133,178 @@ def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
     status_text = colorize(summary_label, summary_color, cfg.color)
     stats_text = colorize(stats_raw, "white", cfg.color)
     print(f"{status_text} {stats_text}".strip())
+
+
+def _tool_tinter(result: RunResult, cfg: OutputConfig) -> callable[[str], str]:
+    if not cfg.color:
+        return lambda tool: tool
+
+    tools = sorted(
+        {diag.tool or outcome.tool for outcome in result.outcomes for diag in outcome.diagnostics},
+    )
+    tint_map: dict[str, str] = {}
+    palette = [255, 254, 253, 252, 251, 250, 249, 248]
+    for index, tool_name in enumerate(tools):
+        tint_map[tool_name or ""] = f"ansi256:{palette[index % len(palette)]}"
+
+    def tint(tool: str) -> str:
+        color = tint_map.get(tool)
+        return colorize(tool, color, cfg.color) if color else tool
+
+    return tint
+
+
+def _normalise_symbol(value: str | None) -> str:
+    if not value:
+        return ""
+    candidate = value.strip()
+    if not candidate:
+        return ""
+    if "\n" in candidate:
+        candidate = candidate.splitlines()[0].strip()
+    if not candidate:
+        return ""
+    if candidate.startswith(("#", '"""', "'''")):
+        return ""
+    if any(char.isspace() for char in candidate):
+        return ""
+    allowed_symbols = {"_", ".", "-", ":", "<", ">", "[", "]", "(", ")"}
+    if any(not ch.isalnum() and ch not in allowed_symbols for ch in candidate):
+        return ""
+    if len(candidate) > 80:
+        candidate = f"{candidate[:77]}…"
+    return candidate
+
+
+def _collect_highlight_spans(text: str) -> list[MessageSpan]:
+    return list(_ANNOTATION_ENGINE.message_spans(text))
+
+
+def _location_function_spans(location: str) -> list[MessageSpan]:
+    if ":" not in location:
+        return []
+    candidate = location.split(":")[-1].strip()
+    if not candidate or not candidate.isidentifier():
+        return []
+    start = location.rfind(candidate)
+    if start == -1:
+        return []
+    return [MessageSpan(start=start, end=start + len(candidate), style="ansi256:208")]
+
+
+def _apply_highlighting_text(message: str, base_style: str | None = None) -> Text:
+    clean = message.replace("`", "")
+    text = Text(clean)
+    if base_style:
+        text.stylize(base_style, 0, len(text))
+    for span in _collect_highlight_spans(clean):
+        text.stylize(span.style, span.start, span.end)
+    return text
+
+
+def _highlight_for_output(message: str, *, color: bool, extra_spans: Sequence[MessageSpan] | None = None) -> str:
+    clean = message.replace("`", "")
+    if not color:
+        return clean
+    spans = list(_collect_highlight_spans(clean))
+    if extra_spans:
+        spans.extend(extra_spans)
+    if not spans:
+        return clean
+    spans.sort(key=lambda span: (span.start, span.end - span.start))
+    merged: list[MessageSpan] = []
+    for span in spans:
+        if merged and span.start < merged[-1].end:
+            continue
+        merged.append(span)
+    result: list[str] = []
+    cursor = 0
+    for span in merged:
+        start, end, style = span.start, span.end, span.style
+        if start < cursor:
+            continue
+        result.append(clean[cursor:start])
+        token = clean[start:end]
+        result.append(colorize(token, style, color))
+        cursor = end
+    result.append(clean[cursor:])
+    return "".join(result)
+
+
+def _infer_annotation_targets(message: str) -> int:
+    spans = _ANNOTATION_ENGINE.message_spans(message)
+    return sum(1 for span in spans if span.style == "ansi256:213")
+
+
+_MERGEABLE_MESSAGE = re.compile(r"^(?P<prefix>.*?)(`(?P<detail>[^`]+)`)(?P<suffix>.*)$")
+
+
+def _group_similar_messages(
+    entries: list[tuple[str, int, str, str, str, str]],
+) -> list[tuple[str, int, str, str, str, str]]:
+    grouped: dict[
+        tuple[str, int, str, str, str, str, str],
+        dict[str, object],
+    ] = {}
+    ordered_keys: list[tuple[str, int, str, str, str, str, str]] = []
+
+    for file_path, line_no, function, tool_name, code, message in entries:
+        match = _MERGEABLE_MESSAGE.match(message)
+        if not match:
+            sanitized_message = message.replace("`", "")
+            grouped_key = (file_path, line_no, function, tool_name, code, sanitized_message, "")
+            if grouped_key not in grouped:
+                grouped[grouped_key] = {
+                    "prefix": sanitized_message,
+                    "suffix": "",
+                    "details": [],
+                    "message": sanitized_message,
+                }
+                ordered_keys.append(grouped_key)
+            continue
+
+        prefix = match.group("prefix").replace("`", "")
+        detail = match.group("detail").replace("`", "")
+        suffix = match.group("suffix").replace("`", "")
+        if not detail:
+            grouped_key = (file_path, line_no, function, tool_name, code, prefix + suffix, "")
+            if grouped_key not in grouped:
+                grouped[grouped_key] = {
+                    "prefix": prefix,
+                    "suffix": "",
+                    "details": [],
+                    "message": (prefix + suffix).strip(),
+                }
+                ordered_keys.append(grouped_key)
+            continue
+
+        grouped_key = (file_path, line_no, function, tool_name, code, prefix, suffix)
+        bucket = grouped.get(grouped_key)
+        if bucket is None:
+            bucket = {
+                "prefix": prefix,
+                "suffix": suffix,
+                "details": [],
+                "message": (prefix + detail + suffix).strip(),
+            }
+            grouped[grouped_key] = bucket
+            ordered_keys.append(grouped_key)
+        details: list[str] = bucket["details"]  # type: ignore[assignment]
+        if detail not in details:
+            details.append(detail)
+
+    merged: list[tuple[str, int, str, str, str, str]] = []
+    for grouped_key in ordered_keys:
+        file_path, line_no, function, tool_name, code, prefix, suffix = grouped_key
+        bucket = grouped[grouped_key]
+        details: list[str] = bucket["details"]  # type: ignore[assignment]
+        if not details or len(details) == 1:
+            message = bucket["message"]  # type: ignore[assignment]
+        else:
+            joined = ", ".join(details)
+            message = f"{prefix}{joined}{suffix}".strip()
+        merged.append((file_path, line_no, function, tool_name, code, message.replace("`", "")))
+    return merged
 
 
 def _render_quiet(result: RunResult, cfg: OutputConfig) -> None:
@@ -134,9 +342,7 @@ def _render_pretty(result: RunResult, cfg: OutputConfig) -> None:
 
     if result.outcomes:
         print()
-    _emit_stats_line(
-        result, cfg, sum(len(outcome.diagnostics) for outcome in result.outcomes)
-    )
+    _emit_stats_line(result, cfg, sum(len(outcome.diagnostics) for outcome in result.outcomes))
 
 
 def _render_raw(result: RunResult) -> None:
@@ -170,7 +376,12 @@ def _normalize_concise_path(path_str: str | None, root: Path) -> str:
 
 
 def _dump_diagnostics(diags: Iterable[Diagnostic], cfg: OutputConfig) -> None:
-    for diag in diags:
+    collected = list(diags)
+    if not collected:
+        return
+
+    locations: list[str] = []
+    for diag in collected:
         location = ""
         if diag.file:
             suffix = ""
@@ -179,10 +390,25 @@ def _dump_diagnostics(diags: Iterable[Diagnostic], cfg: OutputConfig) -> None:
                 if diag.column is not None:
                     suffix += f":{diag.column}"
             location = f"{diag.file}{suffix}"
+        locations.append(location)
+
+    location_width = max((len(loc) for loc in locations), default=0)
+
+    for diag, location in zip(collected, locations, strict=False):
         sev_color = _severity_color(diag.severity)
         sev_display = colorize(diag.severity.value, sev_color, cfg.color)
-        code_display = f" [{diag.code}]" if diag.code else ""
-        print(f"  {sev_display} {location} {diag.message}{code_display}")
+        code_value = (diag.code or "").strip()
+        code_display = f" [{code_value}]" if code_value else ""
+        padded_location = location.ljust(location_width) if location_width else location
+        padding = " " if padded_location else ""
+        message = _clean_message(code_value, diag.message)
+        location_display = _highlight_for_output(
+            padded_location,
+            color=cfg.color,
+            extra_spans=_location_function_spans(location),
+        )
+        message_display = _highlight_for_output(message, color=cfg.color)
+        print(f"  {sev_display} {location_display}{padding}{message_display}{code_display}")
 
 
 def _severity_color(sev: Severity) -> str:
@@ -194,9 +420,40 @@ def _severity_color(sev: Severity) -> str:
     }.get(sev, "yellow")
 
 
-def _emit_stats_line(
-    result: RunResult, cfg: OutputConfig, diagnostics_count: int
-) -> None:
+def _clean_message(code: str | None, message: str) -> str:
+    if not message:
+        return message
+
+    first_line, newline, remainder = message.partition("\n")
+    working = first_line.lstrip()
+    normalized_code = (code or "").strip()
+
+    if normalized_code and normalized_code != "-":
+        patterns = [
+            f"{normalized_code}: ",
+            f"{normalized_code}:",
+            f"{normalized_code} - ",
+            f"{normalized_code} -",
+            f"{normalized_code} ",
+            f"[{normalized_code}] ",
+            f"[{normalized_code}]",
+        ]
+        for pattern in patterns:
+            if working.startswith(pattern):
+                working = working[len(pattern) :]
+                break
+        else:
+            working = working.removeprefix(normalized_code)
+
+    cleaned_first = working.lstrip()
+    if newline:
+        return cleaned_first + "\n" + remainder
+    return cleaned_first
+
+
+def _emit_stats_line(result: RunResult, cfg: OutputConfig, diagnostics_count: int) -> None:
+    if not cfg.show_stats:
+        return
     metrics = _gather_metrics(result)
     loc_count = sum(metric.line_count for metric in metrics.values())
     suppression_counts = {
@@ -205,34 +462,58 @@ def _emit_stats_line(
     }
     files_count = len(result.files)
     total_suppressions = sum(suppression_counts.values())
-    detail_parts = [
-        f"{count} {label}" for label, count in suppression_counts.items() if count
-    ]
-    suppression_text = (
-        f"{total_suppressions} lint suppression{'s' if total_suppressions != 1 else ''}"
-    )
-    if detail_parts:
-        suppression_text = f"{suppression_text} ({', '.join(detail_parts)})"
     warnings_per_loc = diagnostics_count / loc_count if loc_count else 0.0
-    warnings_text = f"{warnings_per_loc:.3f} lint warnings per LoC"
-    stats_components = [
-        f"{files_count} file{'s' if files_count != 1 else ''}",
-        f"{loc_count:,} LoC",
-        suppression_text,
-    ]
-    stats_symbol = emoji("📊", cfg.emoji)
-    prefix = f"{stats_symbol} " if stats_symbol else ""
-    stats_label = colorize("stats:", "yellow", cfg.color)
-    comma = colorize(", ", "white", cfg.color)
-    body_parts: list[str] = []
-    for index, component in enumerate(stats_components):
-        body_parts.append(colorize(component, "orange", cfg.color))
-        if index != len(stats_components) - 1:
-            body_parts.append(comma)
-    body = "".join(body_parts)
-    warnings_colored = colorize(warnings_text, "orange", cfg.color)
-    stats_line = f"{prefix}{stats_label} {body}   {warnings_colored}"
-    print(stats_line)
+    console = console_manager.get(color=cfg.color, emoji=cfg.emoji)
+
+    table = Table(
+        show_header=False,
+        box=box.SIMPLE,
+        pad_edge=False,
+        expand=False,
+    )
+    label_style = "yellow" if cfg.color else None
+    value_style = "orange1" if cfg.color else None
+
+    def styled(value: str, style: str | None) -> Text:
+        return Text(value, style=style) if style else Text(value)
+
+    table.add_column(style=label_style, justify="left", no_wrap=True)
+    table.add_column(style=value_style, justify="right", no_wrap=True)
+
+    table.add_row(
+        styled("Files", label_style),
+        styled(f"{files_count}", value_style),
+    )
+    table.add_row(
+        styled("Lines of code", label_style),
+        styled(f"{loc_count:,}", value_style),
+    )
+    table.add_row(
+        styled("Lint suppressions", label_style),
+        styled(str(total_suppressions), value_style),
+    )
+    for label in SUPPRESSION_LABELS:
+        table.add_row(
+            styled(f"- {label} suppressions", label_style),
+            styled(str(suppression_counts[label]), value_style),
+        )
+    table.add_row(
+        styled("Warnings / LoC", label_style),
+        styled(f"{warnings_per_loc:.3f}", value_style),
+    )
+
+    title_text = "stats"
+    if cfg.emoji:
+        title_text = f"📊 {title_text}"
+    title = title_text if not cfg.color else f"[yellow]{title_text}[/yellow]"
+    panel = Panel.fit(
+        table,
+        title=title,
+        padding=(0, 1),
+    )
+    if cfg.color:
+        panel.border_style = "yellow"
+    console.print(panel)
 
 
 def _gather_metrics(result: RunResult) -> dict[str, FileMetrics]:
@@ -249,3 +530,68 @@ def _gather_metrics(result: RunResult) -> dict[str, FileMetrics]:
         metric.ensure_labels()
         metrics[key] = metric
     return metrics
+
+
+def _render_advice(
+    entries: Iterable[tuple[str, int, str, str, str, str]],
+    cfg: OutputConfig,
+) -> None:
+    if not entries:
+        return
+
+    advice_entries = generate_advice(list(entries), _ANNOTATION_ENGINE)
+    if not advice_entries:
+        return
+
+    console = console_manager.get(color=cfg.color, emoji=cfg.emoji)
+
+    def stylise(entry: AdviceEntry) -> Text:
+        if not cfg.color:
+            return Text(f"{entry.category}: {entry.body}")
+        prefix = Text(f"{entry.category}: ", style="bold yellow")
+        rest_text = _apply_highlighting_text(entry.body)
+        return prefix + rest_text
+
+    panel = Panel(
+        Text("\n").join(stylise(entry) for entry in advice_entries),
+        title="SOLID Advice",
+        border_style="cyan" if cfg.color else "none",
+    )
+    console.print(panel)
+
+
+def _render_refactor_navigator(result: RunResult, cfg: OutputConfig) -> None:
+    navigator = result.analysis.get("refactor_navigator")
+    if not navigator:
+        return
+
+    console = console_manager.get(color=cfg.color, emoji=cfg.emoji)
+    table = Table(box=box.SIMPLE_HEAVY if cfg.color else box.SIMPLE)
+    table.add_column("Function", overflow="fold")
+    table.add_column("Issues", justify="right")
+    table.add_column("Tags", overflow="fold")
+    table.add_column("Size", justify="right")
+    table.add_column("Complexity", justify="right")
+
+    for entry in navigator[:5]:
+        function = entry.get("function") or "<module>"
+        file_path = entry.get("file") or ""
+        location = f"{file_path}:{function}" if file_path else function
+        issues = sum(int(value) for value in entry.get("issue_tags", {}).values())
+        tags = ", ".join(sorted(entry.get("issue_tags", {}).keys()))
+        size = entry.get("size")
+        complexity = entry.get("complexity")
+        table.add_row(
+            location,
+            str(issues),
+            tags or "-",
+            "-" if size is None else str(size),
+            "-" if complexity is None else str(complexity),
+        )
+
+    panel = Panel(
+        table,
+        title="Refactor Navigator",
+        border_style="magenta" if cfg.color else "none",
+    )
+    console.print(panel)

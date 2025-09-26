@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Iterable, Iterator
 
 from ..config import FileDiscoveryConfig
 from ..constants import ALWAYS_EXCLUDE_DIRS, PY_QA_DIR_NAME

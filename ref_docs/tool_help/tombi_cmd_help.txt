@@ -1,0 +1,42 @@
+uv --project /home/paudley/Active/py_qa/src run --with tombi==0.6.12 tombi lint --help
+
+Lint TOML files
+
+Usage: tombi lint [OPTIONS] [FILES]...
+
+Arguments:
+  [FILES]...
+          List of files or directories to lint
+          
+          If the only argument is "-", the standard input will be used
+          
+          [default: if "tombi.toml" exists, lint project directory, otherwise lint current directory]
+
+Options:
+      --stdin-filename <STDIN_FILENAME>
+          Filename to use when reading from stdin
+          
+          This is useful for determining which JSON Schema should be applied, for more rich linting.
+
+      --offline
+          Disable network access
+          
+          Don't fetch from remote and use local schemas cache.
+          
+          [env: TOMBI_OFFLINE=]
+
+      --no-cache
+          Do not use cache
+          
+          Fetch the latest data from remote and save it to the cache
+          
+          [env: TOMBI_NO_CACHE=]
+
+  -v, --verbose...
+          Increase logging verbosity
+
+  -q, --quiet...
+          Decrease logging verbosity
+
+  -h, --help
+          Print help (see a summary with '-h')

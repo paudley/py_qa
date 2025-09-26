@@ -146,9 +146,7 @@ report_out = "reports/output.json"
     assert cfg.output.report_out == (project_root / "reports/output.json").resolve()
 
 
-def test_config_loader_expands_environment(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_config_loader_expands_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project_root = tmp_path / "workspace"
     project_root.mkdir()
 
@@ -165,9 +163,7 @@ pr_summary_out = "${REPORT_DIR}/summary.md"
 
     cfg = ConfigLoader.for_root(project_root).load()
 
-    assert (
-        cfg.output.pr_summary_out == (project_root / "artifacts/summary.md").resolve()
-    )
+    assert cfg.output.pr_summary_out == (project_root / "artifacts/summary.md").resolve()
 
 
 def test_pyproject_tool_section_is_loaded(tmp_path: Path) -> None:
@@ -205,9 +201,7 @@ jobs = 11
         encoding="utf-8",
     )
 
-    result = ConfigLoader.for_root(
-        project_root, project_config=project_config
-    ).load_with_trace()
+    result = ConfigLoader.for_root(project_root, project_config=project_config).load_with_trace()
 
     assert result.config.execution.jobs == 11
     assert result.config.execution.line_length == 120
@@ -222,8 +216,22 @@ def test_generate_config_schema_exposes_defaults() -> None:
     assert "file_discovery" in schema
     assert schema["file_discovery"]["roots"]["default"] == ["."]
     assert schema["output"]["emoji"]["default"] is True
-    assert schema["tool_settings"]["default"] == {}
+    defaults = schema["tool_settings"]["default"]
+    assert defaults["black"]["line-length"] == 120
+    assert defaults["isort"]["line-length"] == 120
+    assert defaults["luacheck"]["max-cyclomatic-complexity"] == 10
+    assert defaults["mypy"]["strict"] is True
+    assert defaults["mypy"]["show-error-codes"] is True
+    assert defaults["tsc"]["strict"] is True
+    tools_schema = schema["tool_settings"]["tools"]
+    assert "max-complexity" in tools_schema["pylint"]
+    assert "max-args" in tools_schema["pylint"]
+    assert "max-cyclomatic-complexity" in tools_schema["luacheck"]
+    assert schema["complexity"]["max_complexity"]["default"] == 10
+    assert schema["strictness"]["type_checking"]["default"] == "strict"
     assert schema["execution"]["line_length"]["default"] == 120
+    assert schema["severity"]["bandit_level"]["default"] == "medium"
+    assert schema["severity"]["pylint_fail_under"]["default"] == 9.5
     assert "tools" in schema["tool_settings"]
     assert "ruff" in schema["tool_settings"]["tools"]
 

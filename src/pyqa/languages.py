@@ -4,15 +4,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from .constants import LANGUAGE_EXTENSIONS, LANGUAGE_FILENAMES, LANGUAGE_MARKERS
 
 
 def detect_languages(root: Path, files: Iterable[Path]) -> set[str]:
     """Infer languages present in *files* or by marker files under *root*."""
-
     root = root.resolve()
     languages: set[str] = set()
     for language, markers in LANGUAGE_MARKERS.items():

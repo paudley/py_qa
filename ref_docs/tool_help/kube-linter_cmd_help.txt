@@ -1,0 +1,22 @@
+/home/paudley/Active/py_qa/src/.lint-cache/tools/go/bin/kube-linter lint --format json --help
+
+Lint Kubernetes YAML files and Helm charts
+
+Usage:
+  kube-linter lint [flags]
+
+Flags:
+      --add-all-built-in           AddAllBuiltIn, if set, adds all built-in checks. This allows users to explicitly opt-out of checks that are not relevant using Exclude.
+      --config string              Path to config file
+      --do-not-auto-add-defaults   DoNotAutoAddDefaults, if set, prevents the automatic addition of default checks.
+      --exclude strings            Exclude is a list of check names to exclude.
+      --fail-if-no-objects-found   Return non-zero exit code if no valid objects are found or failed to parse
+      --fail-on-invalid-resource   Error out when we have an invalid resource
+      --format string              Output format. Allowed values: json, plain, sarif. (default "plain")
+  -h, --help                       help for lint
+      --ignore-paths strings       IgnorePaths is a list of path to ignore from applying checks
+      --include strings            Include is a list of check names to include. If a check is in both Include and Exclude, Exclude wins.
+  -v, --verbose                    Enable verbose logging
+
+Global Flags:
+      --with-color   Force color output (default true)

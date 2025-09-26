@@ -38,9 +38,7 @@ def test_perltidy_format_command(tmp_path: Path) -> None:
 
 def test_perltidy_check_command(tmp_path: Path) -> None:
     cfg = Config()
-    ctx = ToolContext(
-        cfg=cfg, root=tmp_path, files=[tmp_path / "script.pl"], settings={}
-    )
+    ctx = ToolContext(cfg=cfg, root=tmp_path, files=[tmp_path / "script.pl"], settings={})
 
     action = ToolAction(
         name="check",

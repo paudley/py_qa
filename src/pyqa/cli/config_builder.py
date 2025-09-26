@@ -4,8 +4,12 @@
 
 from __future__ import annotations
 
+import re
+import sys
+import tomllib
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Final, Iterable, Literal, Sequence, TypeVar, cast
+from typing import Final, Literal, TypeVar, cast
 
 from pydantic import BaseModel
 
@@ -89,20 +93,25 @@ DEFAULT_EXCLUDES: Final[tuple[Path, ...]] = (
 )
 
 
+_PYTHON_VERSION_PATTERN = re.compile(r"(?P<major>\d{1,2})(?:[._-]?(?P<minor>\d{1,2}))?")
+
+
 def build_config(options: LintOptions) -> Config:
     """Translate CLI option data into an executable :class:`Config`."""
-
     project_root = options.root.resolve()
     loader = ConfigLoader.for_root(project_root)
     load_result = loader.load_with_trace(strict=options.strict_config)
     base_config = load_result.config
 
+    baseline = base_config.snapshot_shared_knobs()
+
     file_cfg = _build_file_discovery(base_config.file_discovery, options, project_root)
     output_cfg = _build_output(base_config.output, options, project_root)
     execution_cfg = _build_execution(base_config.execution, options, project_root)
+    execution_cfg = _apply_python_version_detection(project_root, execution_cfg, options.provided)
 
     dedupe_cfg = base_config.dedupe.model_copy(deep=True)
-    return Config(
+    config = Config(
         file_discovery=file_cfg,
         output=output_cfg,
         execution=execution_cfg,
@@ -112,23 +121,157 @@ def build_config(options: LintOptions) -> Config:
             tool: dict(settings) for tool, settings in base_config.tool_settings.items()
         },
     )
+    if "sensitivity" in options.provided and options.sensitivity:
+        config.severity.sensitivity = options.sensitivity
+
+    config.apply_sensitivity_profile(cli_overrides=options.provided)
+    if "max_complexity" in options.provided and options.max_complexity is not None:
+        config.complexity.max_complexity = options.max_complexity
+    if "max_arguments" in options.provided and options.max_arguments is not None:
+        config.complexity.max_arguments = options.max_arguments
+    if "type_checking" in options.provided and options.type_checking:
+        level = options.type_checking.lower()
+        if level not in {"lenient", "standard", "strict"}:
+            raise ValueError("--type-checking must be one of: lenient, standard, strict")
+        config.strictness.type_checking = cast("Literal['lenient', 'standard', 'strict']", level)
+    if "bandit_severity" in options.provided and options.bandit_severity:
+        config.severity.bandit_level = options.bandit_severity
+    if "bandit_confidence" in options.provided and options.bandit_confidence:
+        config.severity.bandit_confidence = options.bandit_confidence
+    if "pylint_fail_under" in options.provided and options.pylint_fail_under is not None:
+        config.severity.pylint_fail_under = options.pylint_fail_under
+
+    config.apply_shared_defaults(override=True, baseline=baseline)
+    return config
+
+
+def _apply_python_version_detection(
+    project_root: Path,
+    current: ExecutionConfig,
+    provided: set[str],
+) -> ExecutionConfig:
+    cli_specified = "python_version" in provided
+    if cli_specified:
+        normalized = _normalize_python_version(current.python_version)
+        return _model_clone(current, python_version=normalized)
+
+    forced = (
+        _python_version_from_pyproject(project_root)
+        or _python_version_from_python_version_file(project_root)
+        or _normalize_python_version(current.python_version)
+        or _default_interpreter_python_version()
+    )
+    return _model_clone(current, python_version=forced)
+
+
+def _default_interpreter_python_version() -> str:
+    info = sys.version_info
+    return f"{info.major}.{info.minor}"
+
+
+def _normalize_python_version(value: object | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    lowered = text.lower()
+    lowered = lowered.removeprefix("python")
+    lowered = lowered.removeprefix("py")
+    match = _PYTHON_VERSION_PATTERN.search(lowered)
+    if not match:
+        return None
+    major = int(match.group("major"))
+    minor_group = match.group("minor")
+    minor = int(minor_group) if minor_group is not None and minor_group != "" else 0
+    return f"{major}.{minor}"
+
+
+def _python_version_from_python_version_file(root: Path) -> str | None:
+    candidate = root / ".python-version"
+    if not candidate.is_file():
+        return None
+    try:
+        for line in candidate.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            normalized = _normalize_python_version(line)
+            if normalized:
+                return normalized
+    except OSError:
+        return None
+    return None
+
+
+def _python_version_from_pyproject(root: Path) -> str | None:
+    candidate = root / "pyproject.toml"
+    if not candidate.is_file():
+        return None
+    try:
+        raw = candidate.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        data = tomllib.loads(raw)
+    except tomllib.TOMLDecodeError:
+        return None
+
+    candidates: list[str] = []
+    project_section = data.get("project")
+    if isinstance(project_section, dict):
+        requires = project_section.get("requires-python")
+        if isinstance(requires, str):
+            candidates.append(requires)
+
+    tool_section = data.get("tool")
+    if isinstance(tool_section, dict):
+        poetry_section = tool_section.get("poetry")
+        if isinstance(poetry_section, dict):
+            dependencies = poetry_section.get("dependencies")
+            if isinstance(dependencies, dict):
+                poetry_python = dependencies.get("python")
+                if isinstance(poetry_python, str):
+                    candidates.append(poetry_python)
+
+        hatch_section = tool_section.get("hatch")
+        if isinstance(hatch_section, dict):
+            envs = hatch_section.get("envs")
+            if isinstance(envs, dict):
+                default_env = envs.get("default")
+                if isinstance(default_env, dict):
+                    version = default_env.get("python")
+                    if isinstance(version, str):
+                        candidates.append(version)
+
+    for candidate_value in candidates:
+        normalized = _normalize_python_version(candidate_value)
+        if normalized:
+            return normalized
+    return None
 
 
 def _build_file_discovery(
-    current: FileDiscoveryConfig, options: LintOptions, project_root: Path
+    current: FileDiscoveryConfig,
+    options: LintOptions,
+    project_root: Path,
 ) -> FileDiscoveryConfig:
     provided = options.provided
     roots = _resolved_roots(current, project_root, options)
-    explicit_files, boundaries = _resolved_explicit_files(
-        current, options, project_root, roots
-    )
+    explicit_files, boundaries = _resolved_explicit_files(current, options, project_root, roots)
     excludes = _resolved_excludes(current, options, project_root)
 
     paths_from_stdin = _select_flag(
-        options.paths_from_stdin, current.paths_from_stdin, "paths_from_stdin", provided
+        options.paths_from_stdin,
+        current.paths_from_stdin,
+        "paths_from_stdin",
+        provided,
     )
     changed_only = _select_flag(
-        options.changed_only, current.changed_only, "changed_only", provided
+        options.changed_only,
+        current.changed_only,
+        "changed_only",
+        provided,
     )
     diff_ref = _select_value(options.diff_ref, current.diff_ref, "diff_ref", provided)
     include_untracked = _select_flag(
@@ -137,9 +280,7 @@ def _build_file_discovery(
         "include_untracked",
         provided,
     )
-    base_branch = _select_value(
-        options.base_branch, current.base_branch, "base_branch", provided
-    )
+    base_branch = _select_value(options.base_branch, current.base_branch, "base_branch", provided)
 
     return _model_clone(
         current,
@@ -186,9 +327,7 @@ def _resolved_explicit_files(
 
     if "paths" in options.provided:
         for path in options.paths:
-            resolved_path = (
-                path if path.is_absolute() else project_root / path
-            ).resolve()
+            resolved_path = (path if path.is_absolute() else project_root / path).resolve()
             if resolved_path.is_dir():
                 roots.append(resolved_path)
                 user_dirs.append(resolved_path)
@@ -204,31 +343,26 @@ def _resolved_explicit_files(
         return explicit_files, []
 
     filtered_roots = _filter_roots_within_boundaries(roots, boundaries)
-    filtered_files = [
-        path for path in explicit_files if _is_within_any(path, boundaries)
-    ]
+    filtered_files = [path for path in explicit_files if _is_within_any(path, boundaries)]
     roots.clear()
     roots.extend(filtered_roots)
     return filtered_files, boundaries
 
 
 def _filter_roots_within_boundaries(
-    roots: Sequence[Path], boundaries: Sequence[Path]
+    roots: Sequence[Path],
+    boundaries: Sequence[Path],
 ) -> list[Path]:
     matching = [path for path in roots if _is_within_any(path, boundaries)]
     if matching:
         merged = list(matching)
-        merged.extend(
-            path for path in boundaries if path not in matching and path.is_dir()
-        )
+        merged.extend(path for path in boundaries if path not in matching and path.is_dir())
         return _unique_paths(merged)
     boundary_dirs = [path for path in boundaries if path.is_dir()]
     return _unique_paths(boundary_dirs)
 
 
-def _derive_boundaries(
-    user_dirs: Sequence[Path], user_files: Sequence[Path]
-) -> Iterable[Path]:
+def _derive_boundaries(user_dirs: Sequence[Path], user_files: Sequence[Path]) -> Iterable[Path]:
     parents = [file_path.parent for file_path in user_files]
     for candidate in (*user_dirs, *parents):
         if candidate:
@@ -258,14 +392,15 @@ def _select_flag(candidate: bool, fallback: bool, key: str, provided: set[str]) 
 
 
 def _select_value(
-    value: str | None, fallback: str | None, key: str, provided: set[str]
+    value: str | None,
+    fallback: str | None,
+    key: str,
+    provided: set[str],
 ) -> str | None:
     return value if key in provided else fallback
 
 
-def _build_output(
-    current: OutputConfig, options: LintOptions, project_root: Path
-) -> OutputConfig:
+def _build_output(current: OutputConfig, options: LintOptions, project_root: Path) -> OutputConfig:
     provided = options.provided
 
     tool_filters: ToolFilters = {
@@ -286,15 +421,14 @@ def _build_output(
     color = (not options.no_color) if "no_color" in provided else current.color
     emoji = (not options.no_emoji) if "no_emoji" in provided else current.emoji
     output_mode = (
-        _normalize_output_mode(options.output_mode)
-        if "output_mode" in provided
-        else current.output
+        _normalize_output_mode(options.output_mode) if "output_mode" in provided else current.output
     )
-    show_passing = (
-        options.show_passing if "show_passing" in provided else current.show_passing
-    )
+    show_passing = options.show_passing if "show_passing" in provided else current.show_passing
+    show_stats = (not options.no_stats) if "no_stats" in provided else current.show_stats
+    advice = options.advice if "advice" in provided else current.advice
     if quiet:
         show_passing = False
+        show_stats = False
 
     pr_summary_out = (
         _resolve_optional_path(project_root, options.pr_summary_out)
@@ -302,9 +436,7 @@ def _build_output(
         else current.pr_summary_out
     )
     pr_summary_limit = (
-        options.pr_summary_limit
-        if "pr_summary_limit" in provided
-        else current.pr_summary_limit
+        options.pr_summary_limit if "pr_summary_limit" in provided else current.pr_summary_limit
     )
     pr_summary_min = (
         _normalize_min_severity(options.pr_summary_min_severity)
@@ -324,6 +456,8 @@ def _build_output(
         color=color,
         emoji=emoji,
         show_passing=show_passing,
+        show_stats=show_stats,
+        advice=advice,
         output=output_mode,
         tool_filters=normalised_filters,
         pr_summary_out=pr_summary_out,
@@ -334,14 +468,14 @@ def _build_output(
 
 
 def _build_execution(
-    current: ExecutionConfig, options: LintOptions, project_root: Path
+    current: ExecutionConfig,
+    options: LintOptions,
+    project_root: Path,
 ) -> ExecutionConfig:
     provided = options.provided
 
     only = list(options.only) if "only" in provided else list(current.only)
-    language = (
-        list(options.language) if "language" in provided else list(current.languages)
-    )
+    language = list(options.language) if "language" in provided else list(current.languages)
     fix_only = options.fix_only if "fix_only" in provided else current.fix_only
     check_only = options.check_only if "check_only" in provided else current.check_only
     bail = options.bail if "bail" in provided else current.bail
@@ -353,24 +487,19 @@ def _build_execution(
     if bail:
         jobs = 1
 
-    cache_enabled = (
-        (not options.no_cache) if "no_cache" in provided else current.cache_enabled
-    )
+    cache_enabled = (not options.no_cache) if "no_cache" in provided else current.cache_enabled
     cache_dir = (
         _resolve_path(project_root, options.cache_dir).resolve()
         if "cache_dir" in provided
         else current.cache_dir
     )
     use_local_linters = (
-        options.use_local_linters
-        if "use_local_linters" in provided
-        else current.use_local_linters
+        options.use_local_linters if "use_local_linters" in provided else current.use_local_linters
     )
-    line_length = (
-        options.line_length if "line_length" in provided else current.line_length
-    )
-    sql_dialect = (
-        options.sql_dialect if "sql_dialect" in provided else current.sql_dialect
+    line_length = options.line_length if "line_length" in provided else current.line_length
+    sql_dialect = options.sql_dialect if "sql_dialect" in provided else current.sql_dialect
+    python_version = (
+        options.python_version if "python_version" in provided else current.python_version
     )
 
     return _model_clone(
@@ -386,6 +515,7 @@ def _build_execution(
         use_local_linters=use_local_linters,
         line_length=line_length,
         sql_dialect=sql_dialect,
+        python_version=python_version,
     )
 
 
@@ -439,9 +569,7 @@ def _is_within_any(path: Path, bounds: Iterable[Path]) -> bool:
 
 
 def _parse_filters(specs: Iterable[str]) -> ToolFilters:
-    filters: ToolFilters = {
-        tool: list(patterns) for tool, patterns in DEFAULT_TOOL_FILTERS.items()
-    }
+    filters: ToolFilters = {tool: list(patterns) for tool, patterns in DEFAULT_TOOL_FILTERS.items()}
     for spec in specs:
         if ":" not in spec:
             raise ValueError(f"Invalid filter '{spec}'. Expected TOOL:regex")
@@ -457,14 +585,14 @@ def _normalize_output_mode(value: str) -> OutputMode:
     normalized = value.lower()
     if normalized not in _ALLOWED_OUTPUT_MODES:
         raise ValueError(f"invalid output mode '{value}'")
-    return cast(OutputMode, normalized)
+    return cast("OutputMode", normalized)
 
 
 def _normalize_min_severity(value: str) -> SummarySeverity:
     normalized = value.lower()
     if normalized not in _ALLOWED_SUMMARY_SEVERITIES:
         raise ValueError(f"invalid summary severity '{value}'")
-    return cast(SummarySeverity, normalized)
+    return cast("SummarySeverity", normalized)
 
 
 OutputMode = Literal["concise", "pretty", "raw"]
@@ -480,4 +608,4 @@ _ALLOWED_SUMMARY_SEVERITIES: tuple[SummarySeverity, ...] = (
 
 
 def _model_clone(instance: ModelT, **updates: object) -> ModelT:
-    return cast(ModelT, instance.model_copy(update=updates, deep=True))
+    return cast("ModelT", instance.model_copy(update=updates, deep=True))

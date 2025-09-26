@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Runtime handler for Lua-based tooling via LuaRocks."""
 
 from __future__ import annotations
@@ -7,8 +8,8 @@ import json
 import os
 import shutil
 import stat
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from ...process_utils import run_command
 from ...tools.base import Tool
@@ -37,9 +38,7 @@ class LuaRuntime(RuntimeHandler):
             version = self._versions.capture(tool.version_command)
         if not self._versions.is_compatible(version, target_version):
             return None
-        return PreparedCommand.from_parts(
-            cmd=base_cmd, env=None, version=version, source="system"
-        )
+        return PreparedCommand.from_parts(cmd=base_cmd, env=None, version=version, source="system")
 
     def _try_project(
         self,
@@ -78,12 +77,8 @@ class LuaRuntime(RuntimeHandler):
         env = self._lua_env(root)
         version = None
         if tool.version_command:
-            version = self._versions.capture(
-                tool.version_command, env=self._merge_env(env)
-            )
-        return PreparedCommand.from_parts(
-            cmd=cmd, env=env, version=version, source="local"
-        )
+            version = self._versions.capture(tool.version_command, env=self._merge_env(env))
+        return PreparedCommand.from_parts(cmd=cmd, env=env, version=version, source="local")
 
     def _ensure_local_tool(self, tool: Tool, binary_name: str) -> Path:
         package, version = self._package_spec(tool)

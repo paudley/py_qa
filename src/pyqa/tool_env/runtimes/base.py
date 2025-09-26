@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Runtime abstraction for preparing tool commands."""
 
 from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Mapping, Sequence
 
 from ...tools.base import Tool
 from ..models import PreparedCommand
@@ -37,22 +38,16 @@ class RuntimeHandler(ABC):
             return self._prepare_local(tool, base_cmd, root, cache_dir, target_version)
 
         if project_mode:
-            project_cmd = self._try_project(
-                tool, base_cmd, root, cache_dir, target_version
-            )
+            project_cmd = self._try_project(tool, base_cmd, root, cache_dir, target_version)
             if project_cmd is not None:
                 return project_cmd
 
         if system_preferred:
-            system_cmd = self._try_system(
-                tool, base_cmd, root, cache_dir, target_version
-            )
+            system_cmd = self._try_system(tool, base_cmd, root, cache_dir, target_version)
             if system_cmd is not None:
                 return system_cmd
 
-        fallback_project = self._try_project(
-            tool, base_cmd, root, cache_dir, target_version
-        )
+        fallback_project = self._try_project(tool, base_cmd, root, cache_dir, target_version)
         if fallback_project is not None:
             return fallback_project
 

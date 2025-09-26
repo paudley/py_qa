@@ -6,9 +6,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -45,7 +46,7 @@ def _collect_file_states(files: Sequence[Path]) -> tuple[FileState, ...]:
                 path=path.resolve(),
                 mtime_ns=stat.st_mtime_ns,
                 size=stat.st_size,
-            )
+            ),
         )
     return tuple(states)
 

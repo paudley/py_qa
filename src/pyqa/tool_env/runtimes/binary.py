@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Runtime handler for tools executed as plain binaries."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from ...tools.base import Tool
 from ..models import PreparedCommand
@@ -23,9 +24,7 @@ class BinaryRuntime(RuntimeHandler):
         target_version: str | None,
     ) -> PreparedCommand | None:
         del tool, root, cache_dir, target_version
-        return PreparedCommand.from_parts(
-            cmd=base_cmd, env=None, version=None, source="system"
-        )
+        return PreparedCommand.from_parts(cmd=base_cmd, env=None, version=None, source="system")
 
     def _try_project(
         self,
@@ -58,9 +57,7 @@ class BinaryRuntime(RuntimeHandler):
         target_version: str | None,
     ) -> PreparedCommand:
         del tool, root, cache_dir, target_version
-        return PreparedCommand.from_parts(
-            cmd=base_cmd, env=None, version=None, source="system"
-        )
+        return PreparedCommand.from_parts(cmd=base_cmd, env=None, version=None, source="system")
 
 
 __all__ = ["BinaryRuntime"]

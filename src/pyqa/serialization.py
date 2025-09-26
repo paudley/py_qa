@@ -21,7 +21,6 @@ JsonValue: TypeAlias = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"
 
 def serialize_diagnostic(diag: Diagnostic) -> dict[str, object | None]:
     """Convert a diagnostic into a JSON-friendly mapping."""
-
     return {
         "file": diag.file,
         "line": diag.line,
@@ -36,7 +35,6 @@ def serialize_diagnostic(diag: Diagnostic) -> dict[str, object | None]:
 
 def serialize_outcome(outcome: ToolOutcome) -> dict[str, object]:
     """Serialize a tool outcome including its diagnostics."""
-
     return {
         "tool": outcome.tool,
         "action": outcome.action,
@@ -49,7 +47,6 @@ def serialize_outcome(outcome: ToolOutcome) -> dict[str, object]:
 
 def deserialize_outcome(data: Mapping[str, Any]) -> ToolOutcome:
     """Rehydrate a :class:`ToolOutcome` from the serialized representation."""
-
     diagnostics: list[Diagnostic] = []
     for entry in _coerce_diagnostic_payload(data.get("diagnostics")):
         severity = entry.get("severity", "warning")
@@ -67,7 +64,7 @@ def deserialize_outcome(data: Mapping[str, Any]) -> ToolOutcome:
                 tool=str(entry.get("tool", "")),
                 code=coerce_optional_str(entry.get("code")),
                 group=coerce_optional_str(entry.get("group")),
-            )
+            ),
         )
 
     return ToolOutcome(
@@ -82,7 +79,6 @@ def deserialize_outcome(data: Mapping[str, Any]) -> ToolOutcome:
 
 def safe_int(value: object, default: int = 0) -> int:
     """Return ``value`` as ``int`` when possible, otherwise ``default``."""
-
     if isinstance(value, bool):
         return int(value)
     if isinstance(value, int):
@@ -126,7 +122,6 @@ def _coerce_diagnostic_payload(value: object) -> list[dict[str, Any]]:
 
 def jsonify(value: Any) -> JsonValue:
     """Convert ``value`` into a JSON-serializable payload."""
-
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, BaseModel):
@@ -150,11 +145,11 @@ def jsonify(value: Any) -> JsonValue:
 
 
 __all__ = [
-    "deserialize_outcome",
-    "safe_int",
     "coerce_optional_int",
     "coerce_optional_str",
+    "deserialize_outcome",
+    "jsonify",
+    "safe_int",
     "serialize_diagnostic",
     "serialize_outcome",
-    "jsonify",
 ]

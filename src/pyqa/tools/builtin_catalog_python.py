@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Python-centric built-in tool definitions."""
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from ..parsers import (
     JsonParser,
@@ -26,6 +27,7 @@ from .builtin_commands import (
     _MypyCommand,
     _PylintCommand,
     _PyrightCommand,
+    _PyupgradeCommand,
     _RuffCommand,
     _RuffFormatCommand,
     _SqlfluffCommand,
@@ -250,6 +252,25 @@ def python_tools() -> Iterable[Tool]:
         version_command=("mdformat", "--version"),
     )
     yield Tool(
+        name="pyupgrade",
+        actions=(
+            ToolAction(
+                name="fix",
+                command=_PyupgradeCommand(base=("pyupgrade",)),
+                append_files=True,
+                description="Modernize Python syntax using pyupgrade.",
+                is_fix=True,
+            ),
+        ),
+        languages=("python",),
+        file_extensions=(".py", ".pyi"),
+        description="Automated Python syntax upgrades via pyupgrade.",
+        runtime="python",
+        package="pyupgrade",
+        min_version="3.19.1",
+        version_command=("pyupgrade", "--version"),
+    )
+    yield Tool(
         name="sqlfluff",
         actions=(
             ToolAction(
@@ -261,9 +282,7 @@ def python_tools() -> Iterable[Tool]:
             ),
             ToolAction(
                 name="fix",
-                command=_SqlfluffCommand(
-                    base=("sqlfluff", "fix", "--force"), is_fix=True
-                ),
+                command=_SqlfluffCommand(base=("sqlfluff", "fix", "--force"), is_fix=True),
                 append_files=True,
                 is_fix=True,
                 description="Autofix SQL files via sqlfluff fix.",

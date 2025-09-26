@@ -5,8 +5,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import MutableMapping
 from pathlib import Path
-from typing import MutableMapping
 
 NODE_ENV_DEFAULTS: dict[str, str] = {
     "CI": "1",
@@ -24,7 +24,6 @@ def find_venv_bin(root: Path | None = None) -> Path | None:
     The search walks up from ``root`` until the filesystem root, looking for
     either ``.venv`` or ``venv`` directories.
     """
-
     root = (root or Path.cwd()).resolve()
     search_paths = [root, *root.parents]
     for candidate in search_paths:
@@ -39,13 +38,13 @@ def find_venv_bin(root: Path | None = None) -> Path | None:
 
 
 def prepend_venv_to_path(
-    root: Path | None = None, env: MutableMapping[str, str] | None = None
+    root: Path | None = None,
+    env: MutableMapping[str, str] | None = None,
 ) -> Path | None:
     """Ensure the virtualenv ``bin`` directory is first on PATH.
 
     Returns the resolved bin path if one was added, otherwise ``None``.
     """
-
     env = env if env is not None else os.environ
     venv_bin = find_venv_bin(root)
     if not venv_bin:
@@ -57,7 +56,6 @@ def prepend_venv_to_path(
 
 def inject_node_defaults(env: MutableMapping[str, str] | None = None) -> None:
     """Apply default environment variables for Node-based tooling."""
-
     env = env if env is not None else os.environ
     for key, value in NODE_ENV_DEFAULTS.items():
         env.setdefault(key, value)

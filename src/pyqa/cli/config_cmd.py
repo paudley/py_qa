@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import typer
 from pydantic import BaseModel, ConfigDict
@@ -20,8 +21,9 @@ from ..config_loader import (
 )
 from ..serialization import jsonify
 from ..tools.settings import TOOL_SETTING_SCHEMA
+from .typer_ext import create_typer
 
-config_app = typer.Typer(help="Inspect, validate, and document configuration layers.")
+config_app = create_typer(help="Inspect, validate, and document configuration layers.")
 
 
 @config_app.command("show")
@@ -42,7 +44,6 @@ def config_show(
     ),
 ) -> None:
     """Print the effective configuration for the project."""
-
     loader = ConfigLoader.for_root(root)
     try:
         result = loader.load_with_trace(strict=strict)
@@ -67,12 +68,9 @@ def config_show(
 @config_app.command("validate")
 def config_validate(
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    strict: bool = typer.Option(
-        False, "--strict", help="Treat configuration warnings as errors."
-    ),
+    strict: bool = typer.Option(False, "--strict", help="Treat configuration warnings as errors."),
 ) -> None:
     """Ensure the configuration loads successfully."""
-
     loader = ConfigLoader.for_root(root)
     try:
         loader.load(strict=strict)
@@ -98,7 +96,6 @@ def config_schema(
     ),
 ) -> None:
     """Emit a machine-readable description of configuration fields."""
-
     schema = generate_config_schema()
     fmt = output_format.lower()
     if fmt == "json":
@@ -108,9 +105,7 @@ def config_schema(
     elif fmt in {"md", "markdown"}:
         content = _schema_to_markdown(schema)
     else:
-        raise typer.BadParameter(
-            "Unknown schema format. Use 'json', 'json-tools', or 'markdown'."
-        )
+        raise typer.BadParameter("Unknown schema format. Use 'json', 'json-tools', or 'markdown'.")
 
     if out:
         out_path = out.resolve()
@@ -127,12 +122,9 @@ def config_diff(
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
     from_layer: str = typer.Option("defaults", "--from", help="Baseline layer."),
     to_layer: str = typer.Option("final", "--to", help="Comparison layer."),
-    out: Path | None = typer.Option(
-        None, "--out", help="Write diff output to the provided path."
-    ),
+    out: Path | None = typer.Option(None, "--out", help="Write diff output to the provided path."),
 ) -> None:
     """Show the difference between two configuration layers."""
-
     loader = ConfigLoader.for_root(root)
     result = loader.load_with_trace()
     snapshots: dict[str, Mapping[str, Any]] = dict(result.snapshots)
@@ -142,11 +134,11 @@ def config_diff(
     available["final"] = "final"
     if from_key not in available:
         raise typer.BadParameter(
-            f"Unknown layer '{from_layer}'. Available: {', '.join(sorted(available))}"
+            f"Unknown layer '{from_layer}'. Available: {', '.join(sorted(available))}",
         )
     if to_key not in available:
         raise typer.BadParameter(
-            f"Unknown layer '{to_layer}'. Available: {', '.join(sorted(available))}"
+            f"Unknown layer '{to_layer}'. Available: {', '.join(sorted(available))}",
         )
     if from_key == "final":
         from_snapshot: Mapping[str, Any] | None = _config_to_mapping(result)
@@ -178,7 +170,6 @@ def config_export_tools(
     ),
 ) -> None:
     """Write the tool settings schema to disk."""
-
     out_path = out.resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     payload: dict[str, Any] = {
@@ -207,9 +198,7 @@ def _summarise_updates(updates: list[FieldUpdate]) -> list[str]:
     rendered: list[str] = []
     for update in updates:
         field_path = (
-            update.field
-            if update.section == "root"
-            else f"{update.section}.{update.field}"
+            update.field if update.section == "root" else f"{update.section}.{update.field}"
         )
         info = _summarise_value(field_path, update.value)
         rendered.append(f"- {field_path} <- {update.source} -> {info}")
@@ -240,9 +229,7 @@ def _schema_to_markdown(schema: Mapping[str, Any]) -> str:
         if isinstance(fields, Mapping) and "type" in fields:
             lines.append("| Field | Type | Default |")
             lines.append("| --- | --- | --- |")
-            lines.append(
-                f"| {section} | {fields['type']} | {json.dumps(fields['default'])} |"
-            )
+            lines.append(f"| {section} | {fields['type']} | {json.dumps(fields['default'])} |")
             if section == "tool_settings":
                 tools_section = fields.get("tools")
                 if isinstance(tools_section, Mapping):
@@ -291,9 +278,7 @@ class SnapshotDiff(BaseModel):
     changed: dict[str, dict[str, Any]]
 
 
-def _diff_snapshots(
-    base: Mapping[str, Any], updated: Mapping[str, Any]
-) -> Mapping[str, Any]:
+def _diff_snapshots(base: Mapping[str, Any], updated: Mapping[str, Any]) -> Mapping[str, Any]:
     base_flat = _flatten_snapshot(base)
     updated_flat = _flatten_snapshot(updated)
 

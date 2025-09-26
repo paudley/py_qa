@@ -14,9 +14,7 @@ def _context(tmp_path: Path) -> ToolContext:
     cfg = Config()
     cfg.execution = ExecutionConfig()
     cfg.output = OutputConfig()
-    return ToolContext(
-        cfg=cfg, root=tmp_path, files=[tmp_path / "src" / "index.ts"], settings={}
-    )
+    return ToolContext(cfg=cfg, root=tmp_path, files=[tmp_path / "src" / "index.ts"], settings={})
 
 
 def test_gts_command_adds_files_and_json_format(tmp_path: Path) -> None:

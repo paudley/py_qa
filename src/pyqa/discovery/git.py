@@ -4,8 +4,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
-from typing import Callable, Iterable, Iterator, Sequence
 
 from ..config import FileDiscoveryConfig
 from ..execution.worker import run_command
@@ -17,9 +17,7 @@ GitRunner = Callable[[Sequence[str], Path], list[str]]
 class GitDiscovery(DiscoveryStrategy):
     """Collect files reported as changed by Git."""
 
-    def __init__(
-        self, *, runner: Callable[[Sequence[str], Path], list[str]] | None = None
-    ) -> None:
+    def __init__(self, *, runner: Callable[[Sequence[str], Path], list[str]] | None = None) -> None:
         self._runner = runner or self._default_runner
 
     def discover(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
@@ -112,7 +110,6 @@ class GitDiscovery(DiscoveryStrategy):
 
 def list_tracked_files(root: Path) -> list[Path]:
     """Return all tracked files for the repository rooted at *root*."""
-
     cp = run_command(["git", "ls-files"], cwd=root)
     if cp.returncode != 0:
         return []

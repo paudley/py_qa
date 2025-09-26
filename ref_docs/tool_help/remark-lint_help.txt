@@ -1,0 +1,45 @@
+/home/paudley/Active/py_qa/src/.lint-cache/tools/node/remark-cli-12.0.1-remark-lint-9.1.2-remark-preset-lint-recommended-6.1.3-vfile-reporter-json-4.0.0/node_modules/.bin/remark --help
+
+Usage: remark [options] [path | glob ...]
+
+  CLI to process markdown with remark
+
+Options:
+
+      --[no-]color                        specify color in report (on by default)
+      --[no-]config                       search for configuration files (on by default)
+  -e  --ext <extensions>                  specify extensions
+      --file-path <path>                  specify path to process as
+  -f  --frail                             exit with 1 on warnings
+  -h  --help                              output usage information
+      --[no-]ignore                       search for ignore files (on by default)
+  -i  --ignore-path <path>                specify ignore file
+      --ignore-path-resolve-from cwd|dir  resolve patterns in `ignore-path` from its directory or cwd
+      --ignore-pattern <globs>            specify ignore patterns
+      --inspect                           output formatted syntax tree
+  -o  --output [path]                     specify output location
+  -q  --quiet                             output only warnings and errors
+  -r  --rc-path <path>                    specify configuration file
+      --report <reporter>                 specify reporter
+  -s  --setting <settings>                specify settings
+  -S  --silent                            output only errors
+      --silently-ignore                   do not fail when given ignored files
+      --[no-]stdout                       specify writing to stdout (on by default)
+  -t  --tree                              specify input and output as syntax tree
+      --tree-in                           specify input as syntax tree
+      --tree-out                          output syntax tree
+  -u  --use <plugins>                     use plugins
+      --verbose                           report extra info for messages
+  -v  --version                           output version number
+  -w  --watch                             watch for changes and reprocess
+
+Examples:
+
+  # Process `input.md`
+  $ remark input.md -o output.md
+
+  # Pipe
+  $ remark < input.md > output.md
+
+  # Rewrite all applicable files
+  $ remark . -o

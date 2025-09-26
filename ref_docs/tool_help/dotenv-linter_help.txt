@@ -1,0 +1,26 @@
+/home/paudley/Active/py_qa/src/.lint-cache/tools/rust/dotenv-linter-3.3.0/bin/dotenv-linter --help
+
+dotenv-linter 3.3.0
+Mikhail Grachev <work@mgrachev.com>
+Lightning-fast linter for .env files
+
+USAGE:
+    dotenv-linter [OPTIONS] [input]... [SUBCOMMAND]
+
+ARGS:
+    <input>...    files or paths [default: /home/paudley/Active/py_qa]
+
+OPTIONS:
+    -e, --exclude <FILE_NAME>...    Excludes files from check
+    -h, --help                      Print help information
+        --no-color                  Turns off the colored output
+        --not-check-updates         Doesn't check for updates
+    -q, --quiet                     Doesn't display additional information
+    -r, --recursive                 Recursively searches and checks .env files
+    -s, --skip <CHECK_NAME>...      Skips checks
+    -v, --version                   Print version information
+
+SUBCOMMANDS:
+    compare    Compares if files have the same keys [aliases: c]
+    fix        Automatically fixes warnings [aliases: f]
+    list       Shows list of available checks [aliases: l]

@@ -6,9 +6,9 @@
 from __future__ import annotations
 
 import shutil
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Sequence
 
 from .config import CleanConfig
 from .discovery.utils import iter_paths
@@ -89,7 +89,6 @@ def sparkly_clean(
     dry_run: bool = False,
 ) -> CleanResult:
     """Remove temporary artefacts under *root* based on *config* and overrides."""
-
     planner = CleanPlanner(
         extra_patterns=extra_patterns,
         extra_trees=extra_trees,
@@ -163,4 +162,4 @@ def _remove_path(path: Path) -> None:
             warn(f"Permission denied removing {path}", use_emoji=True)
 
 
-__all__ = ["sparkly_clean", "CleanPlanner", "CleanResult", "CleanPlan", "CleanPlanItem"]
+__all__ = ["CleanPlan", "CleanPlanItem", "CleanPlanner", "CleanResult", "sparkly_clean"]

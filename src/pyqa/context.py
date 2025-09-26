@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Context extraction using Tree-sitter grammars."""
 
 from __future__ import annotations
 
 import ast
 import importlib
+from collections.abc import Callable, Iterable
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Final, Iterable, Optional
+from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict
 
@@ -25,10 +27,7 @@ def _build_parser_loader() -> Callable[[str], Any] | None:
         return None
 
     try:
-        bundled_get_parser = getattr(
-            importlib.import_module("tree_sitter_languages"),
-            "get_parser",
-        )
+        bundled_get_parser = importlib.import_module("tree_sitter_languages").get_parser
     except ModuleNotFoundError:
         try:
             language_module = importlib.import_module("tree_sitter")
@@ -45,9 +44,7 @@ def _build_parser_loader() -> Callable[[str], Any] | None:
             language_factory = getattr(module, "language", None)
             if language_factory is None:
                 return None
-            language = (
-                language_cls(language_factory()) if callable(language_cls) else None
-            )
+            language = language_cls(language_factory()) if callable(language_cls) else None
             parser = parser_cls() if callable(parser_cls) else None
             if language is None or parser is None:
                 return None
@@ -120,7 +117,6 @@ class TreeSitterContextResolver:
 
     def grammar_modules(self) -> dict[str, str]:
         """Expose supported grammar modules for diagnostic tooling."""
-
         return dict(self._GRAMMAR_NAMES)
 
     def annotate(self, diagnostics: Iterable[Diagnostic], *, root: Path) -> None:
@@ -138,7 +134,30 @@ class TreeSitterContextResolver:
             if context:
                 diag.function = context
 
-    def _detect_language(self, file_str: str) -> Optional[str]:
+    def resolve_context_for_lines(
+        self,
+        file_path: str,
+        *,
+        root: Path,
+        lines: Iterable[int],
+    ) -> dict[int, str]:
+        language = self._detect_language(file_path)
+        if language is None:
+            return {}
+        location = self._resolve_path(file_path, root)
+        if location is None or not location.is_file():
+            return {}
+
+        contexts: dict[int, str] = {}
+        for line in lines:
+            if line in contexts:
+                continue
+            context = self._find_context(language, location, line)
+            if context:
+                contexts[line] = context
+        return contexts
+
+    def _detect_language(self, file_str: str) -> str | None:
         path = Path(file_str)
         suffix = path.suffix.lower()
         for language, suffixes in self._LANGUAGE_ALIASES.items():
@@ -152,7 +171,7 @@ class TreeSitterContextResolver:
         return None
 
     @staticmethod
-    def _resolve_path(file_str: str, root: Path) -> Optional[Path]:
+    def _resolve_path(file_str: str, root: Path) -> Path | None:
         candidate = Path(file_str)
         if not candidate.is_absolute():
             candidate = (root / candidate).resolve()
@@ -199,9 +218,7 @@ class TreeSitterContextResolver:
         self._parsers[language] = None
 
     @lru_cache(maxsize=256)
-    def _parse(
-        self, language: str, path: Path, _mtime_ns: int
-    ) -> Optional[_ParseResult]:
+    def _parse(self, language: str, path: Path, _mtime_ns: int) -> _ParseResult | None:
         parser = self._get_parser(language)
         if parser is None:
             return None
@@ -215,7 +232,7 @@ class TreeSitterContextResolver:
             return None
         return _ParseResult(tree=tree, source=source)
 
-    def _find_context(self, language: str, path: Path, line: int) -> Optional[str]:
+    def _find_context(self, language: str, path: Path, line: int) -> str | None:
         try:
             mtime_ns = path.stat().st_mtime_ns
         except OSError:
@@ -227,9 +244,7 @@ class TreeSitterContextResolver:
                 return tree_context
         return self._fallback_context(language, path, line)
 
-    def _context_from_parse(
-        self, language: str, parsed: _ParseResult, line: int
-    ) -> Optional[str]:
+    def _context_from_parse(self, language: str, parsed: _ParseResult, line: int) -> str | None:
         tree = getattr(parsed.tree, "root_node", None)
         if tree is None:
             return None
@@ -243,7 +258,7 @@ class TreeSitterContextResolver:
                 return self._json_context(node)
         return None
 
-    def _fallback_context(self, language: str, path: Path, line: int) -> Optional[str]:
+    def _fallback_context(self, language: str, path: Path, line: int) -> str | None:
         if language == "python":
             context = self._python_ast_context(path, line)
             return context or self._python_fallback(path, line)
@@ -254,7 +269,7 @@ class TreeSitterContextResolver:
             return self._json_fallback(path, line)
         return None
 
-    def _python_context(self, node: Any, line: int) -> Optional[str]:
+    def _python_context(self, node: Any, line: int) -> str | None:
         best_named_line = -1
         best_named_value: str | None = None
         best_generic_line = -1
@@ -300,13 +315,13 @@ class TreeSitterContextResolver:
         node_type = getattr(best_generic_node, "type", None)
         return str(node_type) if node_type else None
 
-    def _markdown_context(self, node: Any, line: int, source: bytes) -> Optional[str]:
+    def _markdown_context(self, node: Any, line: int, source: bytes) -> str | None:
         heading = self._select_markdown_heading(node, line)
         if heading is None:
             return None
         return self._extract_markdown_heading(heading, source)
 
-    def _select_markdown_heading(self, node: Any, line: int) -> Optional[Any]:
+    def _select_markdown_heading(self, node: Any, line: int) -> Any | None:
         stack = [node]
         best_node: Any | None = None
         best_start = -1
@@ -315,18 +330,14 @@ class TreeSitterContextResolver:
             node_type = getattr(current, "type", "")
             if node_type.startswith("heading"):
                 start_point = getattr(current, "start_point", None)
-                if (
-                    start_point
-                    and start_point[0] + 1 <= line
-                    and start_point[0] >= best_start
-                ):
+                if start_point and start_point[0] + 1 <= line and start_point[0] >= best_start:
                     best_node = current
                     best_start = start_point[0]
             children = getattr(current, "children", [])
             stack.extend(children)
         return best_node
 
-    def _extract_markdown_heading(self, node: Any, source: bytes) -> Optional[str]:
+    def _extract_markdown_heading(self, node: Any, source: bytes) -> str | None:
         text_node = getattr(node, "child_by_field_name", lambda _: None)("text")
         if text_node is None:
             return None
@@ -337,7 +348,7 @@ class TreeSitterContextResolver:
         return source[start_byte:end_byte].decode("utf-8").strip()
 
     @staticmethod
-    def _node_name(node: Any) -> Optional[str]:
+    def _node_name(node: Any) -> str | None:
         extractor = getattr(node, "child_by_field_name", None)
         if callable(extractor):
             name_node = extractor("name")
@@ -353,13 +364,13 @@ class TreeSitterContextResolver:
             return text.strip()
         return None
 
-    def _markdown_heading_context(self, path: Path, line: int) -> Optional[str]:
+    def _markdown_heading_context(self, path: Path, line: int) -> str | None:
         try:
             content = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             return None
         best_line = -1
-        best_heading: Optional[str] = None
+        best_heading: str | None = None
         for index, raw_line in enumerate(content.splitlines(), start=1):
             stripped = raw_line.strip()
             if stripped.startswith("#") and index <= line:
@@ -368,7 +379,7 @@ class TreeSitterContextResolver:
                     best_heading = stripped.lstrip("# ")
         return best_heading
 
-    def _markdown_fallback(self, path: Path, line: int) -> Optional[str]:
+    def _markdown_fallback(self, path: Path, line: int) -> str | None:
         try:
             content = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -378,7 +389,7 @@ class TreeSitterContextResolver:
             return None
         return lines[line - 1].strip() or None
 
-    def _node_at(self, node: Any, line: int) -> Optional[Any]:
+    def _node_at(self, node: Any, line: int) -> Any | None:
         stack = [node]
         while stack:
             current = stack.pop()
@@ -395,7 +406,7 @@ class TreeSitterContextResolver:
         return None
 
     @staticmethod
-    def _json_context(node: Any) -> Optional[str]:
+    def _json_context(node: Any) -> str | None:
         node_type = getattr(node, "type", None)
         if node_type in {"pair", "object", "array"}:
             key_node = getattr(node, "child_by_field_name", lambda _: None)("key")
@@ -403,7 +414,7 @@ class TreeSitterContextResolver:
                 return key_node.text.decode("utf-8")
         return node_type if isinstance(node_type, str) else None
 
-    def _json_fallback(self, path: Path, line: int) -> Optional[str]:
+    def _json_fallback(self, path: Path, line: int) -> str | None:
         try:
             content = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -413,7 +424,7 @@ class TreeSitterContextResolver:
                 return raw_line.strip() or None
         return None
 
-    def _python_ast_context(self, path: Path, line: int) -> Optional[str]:
+    def _python_ast_context(self, path: Path, line: int) -> str | None:
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
         except (OSError, SyntaxError, UnicodeDecodeError):
@@ -434,7 +445,7 @@ class TreeSitterContextResolver:
         return None
 
     @staticmethod
-    def _python_fallback(path: Path, line: int) -> Optional[str]:
+    def _python_fallback(path: Path, line: int) -> str | None:
         try:
             content = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -448,4 +459,4 @@ class TreeSitterContextResolver:
 
 CONTEXT_RESOLVER = TreeSitterContextResolver()
 
-__all__ = ["TreeSitterContextResolver", "CONTEXT_RESOLVER"]
+__all__ = ["CONTEXT_RESOLVER", "TreeSitterContextResolver"]

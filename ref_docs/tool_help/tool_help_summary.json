@@ -1,0 +1,230 @@
+{
+  "ruff": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "black": {
+    "line_length": true,
+    "complexity": false,
+    "arguments": true,
+    "strict": false
+  },
+  "mypy": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": true,
+    "strict": true
+  },
+  "ruff-format": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "isort": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "pylint": {
+    "line_length": true,
+    "complexity": true,
+    "arguments": true,
+    "strict": false
+  },
+  "pyright": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "bandit": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": true,
+    "strict": false
+  },
+  "mdformat": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": true,
+    "strict": false
+  },
+  "pyupgrade": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "sqlfluff": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "tombi": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "cpplint": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "actionlint": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": true,
+    "strict": false
+  },
+  "kube-linter": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "eslint": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "gts": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "stylelint": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "remark-lint": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "speccy": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "perltidy": {
+    "line_length": true,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "perlcritic": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": true
+  },
+  "shfmt": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": true,
+    "strict": false
+  },
+  "phplint": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "checkmake": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "yamllint": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "dockerfilelint": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "hadolint": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": true
+  },
+  "dotenv-linter": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "lualint": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "prettier": {
+    "line_length": true,
+    "complexity": false,
+    "arguments": false,
+    "strict": true
+  },
+  "tsc": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": true
+  },
+  "luacheck": {
+    "line_length": true,
+    "complexity": true,
+    "arguments": true,
+    "strict": false
+  },
+  "selene": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "golangci-lint": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "gofmt": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "cargo-clippy": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  },
+  "cargo-fmt": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": false,
+    "strict": false
+  }
+}

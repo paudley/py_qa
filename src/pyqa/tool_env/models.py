@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Data models used by tool environment preparation."""
 
 from __future__ import annotations
 
-from typing import Literal, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -26,7 +28,7 @@ class PreparedCommand(BaseModel):
         env: Mapping[str, str] | None,
         version: str | None,
         source: Literal["system", "local", "project"],
-    ) -> "PreparedCommand":
+    ) -> PreparedCommand:
         return cls(
             cmd=list(cmd),
             env={str(k): str(v) for k, v in (env or {}).items()},

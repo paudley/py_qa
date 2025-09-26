@@ -43,7 +43,7 @@ from pyqa.tools.base import ToolContext
 
 
 def _ctx() -> ToolContext:
-    return ToolContext(cfg=Config(), root=Path("."), files=(), settings={})
+    return ToolContext(cfg=Config(), root=Path(), files=(), settings={})
 
 
 def test_parse_ruff() -> None:
@@ -232,17 +232,8 @@ def test_parse_stylelint() -> None:
 
 
 def test_parse_yamllint() -> None:
-    parser = JsonParser(parse_yamllint)
-    stdout = """
-    [
-      {
-        "file": "configs/app.yaml",
-        "problems": [
-          {"line": 5, "column": 3, "message": "too many spaces after colon", "level": "warning", "rule": "colons"}
-        ]
-      }
-    ]
-    """
+    parser = TextParser(parse_yamllint)
+    stdout = "configs/app.yaml:5:3: [warning] too many spaces after colon (colons)"
     diags = parser.parse(stdout, "", context=_ctx())
     assert len(diags) == 1
     diag = diags[0]
@@ -426,7 +417,9 @@ def test_parse_tombi() -> None:
 
 def test_parse_perlcritic() -> None:
     parser = TextParser(parse_perlcritic)
-    stdout = "lib/Foo.pm:12:8:ProhibitUnusedVariables: MyVar is never used (ProhibitUnusedVariables)\n"
+    stdout = (
+        "lib/Foo.pm:12:8:ProhibitUnusedVariables: MyVar is never used (ProhibitUnusedVariables)\n"
+    )
     diags = parser.parse(stdout, "", context=_ctx())
     assert len(diags) == 1
     diag = diags[0]
