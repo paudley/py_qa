@@ -5,11 +5,33 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class SettingField:
+    """Structured representation of a tool configuration option."""
+
+    type: str
+    description: str
+    enum: tuple[str, ...] | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "type": self.type,
+            "description": self.description,
+        }
+        if self.enum is not None:
+            payload["enum"] = list(self.enum)
+        return payload
+
 
 ToolSettingField = Mapping[str, str | list[str]]
-ToolSettingSchema = dict[str, dict[str, ToolSettingField]]
+RawToolSettingSchema = dict[str, dict[str, ToolSettingField]]
+ToolSettingSchema = dict[str, dict[str, SettingField]]
 
-TOOL_SETTING_SCHEMA: ToolSettingSchema = {
+
+RAW_TOOL_SETTING_SCHEMA: RawToolSettingSchema = {
     "ruff": {
         "config": {
             "type": "path",
@@ -699,4 +721,33 @@ TOOL_SETTING_SCHEMA: ToolSettingSchema = {
     },
 }
 
-__all__ = ["TOOL_SETTING_SCHEMA"]
+
+def _build_field(spec: ToolSettingField) -> SettingField:
+    enum = spec.get("enum")
+    if isinstance(enum, list):
+        enum_tuple = tuple(enum)
+    elif isinstance(enum, tuple):
+        enum_tuple = enum
+    else:
+        enum_tuple = None
+    return SettingField(
+        type=str(spec["type"]),
+        description=str(spec["description"]),
+        enum=enum_tuple,
+    )
+
+
+TOOL_SETTING_SCHEMA: ToolSettingSchema = {
+    tool: {name: _build_field(spec) for name, spec in fields.items()}
+    for tool, fields in RAW_TOOL_SETTING_SCHEMA.items()
+}
+
+
+def tool_setting_schema_as_dict() -> RawToolSettingSchema:
+    """Return the original JSON-serialisable schema used for exports."""
+    from copy import deepcopy
+
+    return deepcopy(RAW_TOOL_SETTING_SCHEMA)
+
+
+__all__ = ["TOOL_SETTING_SCHEMA", "tool_setting_schema_as_dict", "SettingField"]

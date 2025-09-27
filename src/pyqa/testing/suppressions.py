@@ -15,6 +15,9 @@ _TEST_SUPPRESSIONS: Final[TestSuppressionsMap] = {
             r"^pylint, (?:.+/)?tests?/.*:.*W0212.*Access to a protected member .*$",
             r"^pylint, (?:.+/)?tests?/.*:.*W0613.*Unused argument .*$",
             r"^pylint, (?:.+/)?tests?/.*:.*R2004.*$",
+            r"^pylint, (?:.+/)?tests?/.*:.*magic-value-comparison.*$",
+            r"^pylint, (?:.+/)?tests?/.*:.*protected-access.*$",
+            r"^pylint, (?:.+/)?tests?/.*:.*unused-argument.*$",
         ),
         "mypy": (
             r"^mypy, (?:.+/)?tests?/.*:.*no-untyped-def.*$",

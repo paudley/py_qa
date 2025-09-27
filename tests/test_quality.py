@@ -10,9 +10,10 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from pyqa.cli.app import app
+from pyqa.cli.utils import filter_py_qa_paths
 from pyqa.config_loader import ConfigLoader
 from pyqa.quality import QualityChecker, check_commit_message
-from pyqa.tools.settings import TOOL_SETTING_SCHEMA
+from pyqa.tools.settings import tool_setting_schema_as_dict
 
 
 def _write_repo_layout(root: Path) -> None:
@@ -44,7 +45,7 @@ in the Software without restriction, including without limitation the rights
 """,
         encoding="utf-8",
     )
-    expected_schema = json.dumps(TOOL_SETTING_SCHEMA, indent=2, sort_keys=True) + "\n"
+    expected_schema = json.dumps(tool_setting_schema_as_dict(), indent=2, sort_keys=True) + "\n"
     (root / "ref_docs" / "tool-schema.json").write_text(
         expected_schema,
         encoding="utf-8",
@@ -156,3 +157,32 @@ def test_cli_reports_license_error(tmp_path: Path) -> None:
 
     assert result.exit_code == 1
     assert "Missing SPDX" in result.stdout
+
+
+def test_check_quality_ignores_py_qa_directory(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    py_qa_dir = tmp_path / "py_qa"
+    py_qa_dir.mkdir()
+    (py_qa_dir / "sample.py").write_text("print('hi')\n", encoding="utf-8")
+
+    runner = CliRunner()
+    kept, ignored = filter_py_qa_paths([py_qa_dir / "sample.py"], tmp_path)
+    assert not kept
+    assert ignored
+    result = runner.invoke(
+        app,
+        [
+            "check-quality",
+            "--root",
+            str(tmp_path),
+            "--no-schema",
+            "--no-emoji",
+            str(py_qa_dir / "sample.py"),
+        ],
+    )
+
+    output = result.stdout + result.stderr
+    assert result.exit_code == 0
+    assert "'py_qa' directories are skipped" in output
+    assert "No files to check." in output
+    assert "Missing SPDX" not in output

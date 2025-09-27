@@ -9,8 +9,10 @@ from pathlib import Path
 
 import typer
 
-from ..logging import emoji
+from ..constants import PY_QA_DIR_NAME
+from ..logging import emoji, warn
 from ..security import SecurityScanner, SecurityScanResult, get_staged_files
+from .utils import filter_py_qa_paths
 
 
 def security_scan_command(
@@ -34,12 +36,22 @@ def security_scan_command(
 ) -> None:
     """Run security scans across the project."""
     root_path = root.resolve()
-    target_files = _resolve_security_targets(files, root_path, staged)
+    target_candidates = list(_resolve_security_targets(files, root_path, staged))
+    target_files, ignored_py_qa = filter_py_qa_paths(target_candidates, root_path)
+    use_emoji = not no_emoji
+    if ignored_py_qa:
+        unique = ", ".join(dict.fromkeys(ignored_py_qa))
+        warn(
+            (
+                f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
+                "unless security-scan runs inside the py_qa workspace."
+            ),
+            use_emoji=use_emoji,
+        )
     if not target_files:
         typer.echo("No files to scan.")
         raise typer.Exit(code=0)
 
-    use_emoji = not no_emoji
     scanner = SecurityScanner(root=root_path, use_emoji=use_emoji, use_bandit=not no_bandit)
     result = scanner.run(list(target_files))
     exit_code = _report_security_findings(result, use_emoji=use_emoji)

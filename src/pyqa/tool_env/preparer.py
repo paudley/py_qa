@@ -25,7 +25,7 @@ class CommandPreparer:
     """Decide whether to use system, project, or vendored tooling."""
 
     def __init__(self) -> None:
-        self._versions = VersionResolver()
+        self._versions: VersionResolver = VersionResolver()
         self._handlers: dict[str, RuntimeHandler] = {
             "python": PythonRuntime(self._versions),
             "npm": NpmRuntime(self._versions),

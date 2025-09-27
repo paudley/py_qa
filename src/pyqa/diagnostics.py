@@ -8,8 +8,8 @@ from collections.abc import Iterable, MutableMapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 
-from .config import DedupeConfig
 from .annotations import AnnotationEngine
+from .config import DedupeConfig
 from .models import Diagnostic, RawDiagnostic, RunResult
 from .severity import (
     DEFAULT_SEVERITY_RULES,
@@ -254,10 +254,14 @@ def _issue_tag(diag: Diagnostic) -> str | None:
     message = diag.message.lower()
     signature = set(_ANNOTATION_ENGINE.message_signature(diag.message))
 
-    if code in {"C901", "R0915", "PLR0915", "R1260"} or {
-        "complex",
-        "complexity",
-    } & signature:
+    if (
+        code in {"C901", "R0915", "PLR0915", "R1260"}
+        or {
+            "complex",
+            "complexity",
+        }
+        & signature
+    ):
         return "complexity"
     if code in {"PLR2004", "R2004"} or "magic" in signature:
         return "magic-number"
