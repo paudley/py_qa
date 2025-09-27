@@ -18,15 +18,12 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Literal
 
+import spacy  # type: ignore[import]
+from spacy.cli import download as spacy_download
+from spacy.language import Language
+
 from .context import TreeSitterContextResolver
 from .models import RunResult
-
-try:
-    import spacy  # type: ignore[import]
-    from spacy.language import Language
-except Exception:  # pragma: no cover - optional dependency may be missing
-    spacy = None
-    Language = None  # type: ignore
 
 
 HighlightKind = Literal[
@@ -70,7 +67,7 @@ class AnnotationEngine:
     """Annotate diagnostics using Tree-sitter context and spaCy NLP."""
 
     def __init__(self, model: str | None = None) -> None:
-        self._model_name = model or os.getenv("PYQA_NLP_MODEL", "en_core_web_sm")
+        self._model_name = model or os.getenv("PYQA_NLP_MODEL", "blank:en")
         self._nlp: Language | None = None
         self._nlp_lock = threading.Lock()
         self._resolver = TreeSitterContextResolver()
@@ -100,6 +97,10 @@ class AnnotationEngine:
         """Return a semantic signature extracted from ``message``."""
         return self._analyse_message(message).signature
 
+    def language_model(self) -> Language:
+        """Return the underlying spaCy language model, loading it if required."""
+        return self._get_nlp()
+
     @lru_cache(maxsize=2048)
     def _analyse_message(self, message: str) -> MessageAnalysis:
         base = message
@@ -109,19 +110,14 @@ class AnnotationEngine:
         spans.extend(heuristic_spans)
         signature_tokens.extend(heuristic_tokens)
         nlp = self._get_nlp()
-        if nlp is not None:
-            doc = nlp(base)
-            spans.extend(_spacy_spans(doc))
-            signature_tokens.extend(_signature_from_doc(doc))
-        else:
-            signature_tokens.extend(_fallback_signature_tokens(base))
+        doc = nlp(base)
+        spans.extend(_spacy_spans(doc))
+        signature_tokens.extend(_signature_from_doc(doc))
         spans = _dedupe_spans(spans)
         signature = tuple(dict.fromkeys(token for token in signature_tokens if token))
         return MessageAnalysis(spans=tuple(spans), signature=signature)
 
-    def _get_nlp(self) -> Language | None:
-        if spacy is None:
-            return None
+    def _get_nlp(self) -> Language:
         if self._nlp is not None:
             return self._nlp
         with self._nlp_lock:
@@ -129,8 +125,25 @@ class AnnotationEngine:
                 return self._nlp
             try:
                 self._nlp = spacy.load(self._model_name)
-            except Exception:  # pragma: no cover - spaCy optional
-                self._nlp = None
+            except OSError:
+                try:
+                    spacy_download(self._model_name)
+                except SystemExit as download_exc:  # pragma: no cover - convert to informative error
+                    raise RuntimeError(
+                        (
+                            f"spaCy model '{self._model_name}' is not installed and automatic download "
+                            "failed. Install the model manually with 'python -m spacy download "
+                            f"{self._model_name}' or set PYQA_NLP_MODEL to an available package."
+                        ),
+                    ) from download_exc
+                self._nlp = spacy.load(self._model_name)
+            except Exception as exc:  # pragma: no cover - fatal configuration issue
+                raise RuntimeError(
+                    (
+                        f"spaCy model '{self._model_name}' could not be loaded; install the model "
+                        "or set PYQA_NLP_MODEL to an available package."
+                    ),
+                ) from exc
             return self._nlp
 
 
@@ -272,12 +285,6 @@ def _signature_from_doc(doc) -> list[str]:  # type: ignore[no-untyped-def]
             if lemma:
                 tokens.append(lemma)
     return tokens
-
-
-def _fallback_signature_tokens(message: str) -> list[str]:
-    import re
-
-    return re.findall(r"[a-zA-Z_]{3,}", message.lower())
 
 
 def _looks_camel_case(token: str) -> bool:

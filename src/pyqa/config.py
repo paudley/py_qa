@@ -160,6 +160,10 @@ class DuplicateDetectionConfig(BaseModel):
     cross_diagnostics: bool = True
     cross_message_threshold: int = 3
     navigator_tags: bool = True
+    doc_similarity_enabled: bool = True
+    doc_similarity_threshold: float = 0.85
+    doc_min_chars: int = 60
+    doc_include_tests: bool = False
 
 
 DEFAULT_QUALITY_CHECKS: Final[list[str]] = ["license", "file-size", "schema", "python"]
@@ -632,6 +636,8 @@ class Config(BaseModel):
         ensure("pylint", "init-import", init_import_value)
         ensure("stylelint", "max-warnings", severity.max_warnings)
         ensure("eslint", "max-warnings", severity.max_warnings)
+        for spurious in ("duplicates", "complexity", "strictness", "severity"):
+            self.tool_settings.pop(spurious, None)
 
 
 __all__ = [

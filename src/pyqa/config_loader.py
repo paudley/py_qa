@@ -37,6 +37,7 @@ from .config import (
 )
 from .config_utils import (
     _coerce_iterable,
+    _coerce_optional_float,
     _coerce_optional_int,
     _coerce_string_sequence,
     _deep_merge,
@@ -857,6 +858,16 @@ class _DuplicateSection(_SectionMerger):
             current.navigator_tags,
             "duplicates.navigator_tags",
         )
+        doc_similarity_enabled = _coerce_optional_bool(
+            data.get("doc_similarity_enabled"),
+            current.doc_similarity_enabled,
+            "duplicates.doc_similarity_enabled",
+        )
+        doc_include_tests = _coerce_optional_bool(
+            data.get("doc_include_tests"),
+            current.doc_include_tests,
+            "duplicates.doc_include_tests",
+        )
 
         ast_min_lines = _coerce_optional_int(
             data.get("ast_min_lines"),
@@ -882,6 +893,22 @@ class _DuplicateSection(_SectionMerger):
         if cross_threshold < 2:
             raise ConfigError("duplicates.cross_message_threshold must be >= 2")
 
+        doc_min_chars = _coerce_optional_int(
+            data.get("doc_min_chars"),
+            current.doc_min_chars,
+            "duplicates.doc_min_chars",
+        )
+        if doc_min_chars < 1:
+            raise ConfigError("duplicates.doc_min_chars must be >= 1")
+
+        doc_threshold = _coerce_optional_float(
+            data.get("doc_similarity_threshold"),
+            current.doc_similarity_threshold,
+            "duplicates.doc_similarity_threshold",
+        )
+        if not 0 <= doc_threshold <= 1:
+            raise ConfigError("duplicates.doc_similarity_threshold must be between 0 and 1")
+
         updated = _model_replace(
             current,
             enabled=enabled,
@@ -892,6 +919,10 @@ class _DuplicateSection(_SectionMerger):
             cross_diagnostics=cross_diagnostics,
             cross_message_threshold=cross_threshold,
             navigator_tags=navigator_tags,
+            doc_similarity_enabled=doc_similarity_enabled,
+            doc_similarity_threshold=doc_threshold,
+            doc_min_chars=doc_min_chars,
+            doc_include_tests=doc_include_tests,
         )
         return updated, self._diff_model(current, updated)
 
@@ -924,6 +955,9 @@ def _merge_tool_settings(
     for tool, value in raw.items():
         if not isinstance(value, Mapping):
             raise ConfigError(f"tools.{tool} section must be a table")
+        if tool in {"duplicates", "complexity", "strictness", "severity"}:
+            # Legacy sections moved out of tool_settings; ignore without warning.
+            continue
         schema = TOOL_SETTING_SCHEMA.get(tool)
         if schema is None:
             warnings.append(f"[{source}] Unknown tool '{tool}' in tool settings")

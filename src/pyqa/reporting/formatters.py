@@ -511,6 +511,8 @@ def _duplicate_entries_for_advice(result: RunResult) -> list[ConciseEntry]:
             code = "DRY-HASH"
         elif kind == "diagnostic":
             code = "DRY-MESSAGE"
+        elif kind == "docstring":
+            code = "DRY-DOC"
         else:
             code = "DRY-CLUSTER"
         extras.append(

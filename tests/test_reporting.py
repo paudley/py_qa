@@ -1355,3 +1355,45 @@ def test_render_advice_includes_duplicate_clusters(tmp_path: Path, capsys) -> No
     assert "SOLID: DRY up duplicate code" in output
     assert "src/pkg/a.py" in output
     assert "src/pkg/b.py" in output
+
+
+def test_render_advice_includes_docstring_clusters(tmp_path: Path, capsys) -> None:
+    diagnostics = [
+        _advice_diag(
+            file="src/pkg/a.py",
+            tool="ruff",
+            code="E002",
+            message="Another warning",
+        ),
+    ]
+    outcome = ToolOutcome(
+        tool="ruff",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=diagnostics,
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[tmp_path / "src" / "pkg" / "a.py"],
+        outcomes=[outcome],
+        tool_versions={},
+    )
+    result.analysis["duplicate_clusters"] = [
+        {
+            "kind": "docstring",
+            "fingerprint": "feedbeef",
+            "summary": "Similar docstrings detected across 2 code objects",
+            "occurrences": [
+                {"file": "src/pkg/a.py", "line": 5, "function": "alpha", "size": 3, "snippet": None},
+                {"file": "src/pkg/b.py", "line": 6, "function": "beta", "size": 3, "snippet": None},
+            ],
+        },
+    ]
+    config = OutputConfig(color=False, emoji=False, advice=True)
+    render(result, config)
+    output = capsys.readouterr().out
+    assert "SOLID: DRY up duplicate code" in output
+    assert "src/pkg/a.py" in output
+    assert "src/pkg/b.py" in output
