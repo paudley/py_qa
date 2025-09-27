@@ -17,7 +17,7 @@ This repository provides a comprehensive suite of quality assurance, linting, te
 * **🔒 Security Scanning**: Built-in secret and vulnerability scanning to keep your codebase secure.
 * **🛡️ Git Hooks**: Includes `pre-commit`, `pre-push`, and `commit-msg` hooks to automate quality checks.
 * **📄 Reporting Outputs**: Export machine-readable JSON, SARIF 2.1.0, and Markdown summaries for CI/CD and PR annotations.
-* **🧠 SOLID Advice & Highlighting**: Tree-sitter and spaCy powered annotations feed a reusable advice engine (``pyqa.reporting.advice``) and rich colour hints in the CLI so duplicate warnings collapse cleanly and contributors see actionable guidance.
+* **🧠 SOLID Advice & Highlighting**: Tree-sitter and spaCy powered annotations feed a reusable advice engine (`pyqa.reporting.advice`) and rich colour hints in the CLI so duplicate warnings collapse cleanly and contributors see actionable guidance.
 * **🧰 Turnkey Install**: `pyqa install` mirrors the legacy shell workflow, installing dev dependencies, optional type stubs, and generated typing shims.
 * **🛡️ Security Scan**: `pyqa security-scan` finds high-risk secrets/PII in your files (or staged changes) and runs Bandit for Python vulnerability checks.
 
@@ -83,9 +83,9 @@ Now, the Git hooks will automatically run on your commits and pushes, ensuring a
 ## 🧠 Annotated Advice & Highlights
 
 PyQA’s CLI can render a SOLID-flavoured advice panel (`./lint --advice`) and
-apply subtle colouring to tool names, files, functions, and symbols.  Both
+apply subtle colouring to tool names, files, functions, and symbols. Both
 features are powered by a new annotation layer that combines Tree-sitter context
-with spaCy message parsing.  The shared implementation lives in
+with spaCy message parsing. The shared implementation lives in
 `pyqa.annotations` and `pyqa.reporting.advice`, so other integrations (for
 example PR summaries) can reuse the same data via
 `pyqa.reporting.advice.AdviceBuilder`.
@@ -93,20 +93,20 @@ example PR summaries) can reuse the same data via
 Markdown exporters can opt in as well: pass `include_advice=True` to
 `pyqa.reporting.emitters.write_pr_summary` to embed the SOLID panel in pull
 request summaries generated in CI, and tweak the bullet style with
-`advice_template` if your PR bot prefers a different markdown format.  The
+`advice_template` if your PR bot prefers a different markdown format. The
 per-diagnostic template can interpolate shared advice context via
 `{advice_summary}`, `{advice_primary}`, `{advice_primary_category}`, and
 `{advice_count}` so bots can call out the top guidance inline, while
-`{highlighted_message}` provides Tree-sitter/spaCy symbol highlighting.  For
+`{highlighted_message}` provides Tree-sitter/spaCy symbol highlighting. For
 bespoke layouts, pass `advice_section_builder` to supply a callable that renders
-the entire advice section from the shared entry list.  `write_json_report`
+the entire advice section from the shared entry list. `write_json_report`
 now persists `analysis.refactor_navigator`, `meta.impact`, and `diagnostic.hints`
 so CI dashboards can surface call-to-action pipelines without parsing console
-output.  Locally, enabling `--advice` also prints a "Refactor Navigator"
+output. Locally, enabling `--advice` also prints a "Refactor Navigator"
 panel summarising the top structural hotspots.
 
 The spaCy model is optional—if `en_core_web_sm` is unavailable the advice still
-works, falling back to heuristics.  To install the recommended model:
+works, falling back to heuristics. To install the recommended model:
 
 ```bash
 uv run python -m spacy download en_core_web_sm

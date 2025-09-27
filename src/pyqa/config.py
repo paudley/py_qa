@@ -529,9 +529,7 @@ class Config(BaseModel):
 
         strict_level = self.strictness.type_checking
         mypy_settings = settings.setdefault("mypy", {})
-        baseline_mypy = (
-            _expected_mypy_profile(baseline.type_checking) if baseline is not None else {}
-        )
+        baseline_mypy = _expected_mypy_profile(baseline.type_checking) if baseline is not None else {}
 
         def set_mypy(key: str, value: object | None) -> None:
             existing = mypy_settings.get(key, UNSET)
@@ -544,11 +542,7 @@ class Config(BaseModel):
                         return
                     mypy_settings.pop(key, None)
                 else:
-                    if (
-                        existing is not UNSET
-                        and baseline_value is not NO_BASELINE
-                        and existing != baseline_value
-                    ):
+                    if existing is not UNSET and baseline_value is not NO_BASELINE and existing != baseline_value:
                         return
                     mypy_settings[key] = value
             elif value is not None:
@@ -593,9 +587,7 @@ class Config(BaseModel):
         ensure("pylint", "fail-under", severity.pylint_fail_under)
         pylint_settings_snapshot = self.tool_settings.get("pylint", {})
         init_import_value = (
-            pylint_settings_snapshot.get("init-import")
-            if isinstance(pylint_settings_snapshot, dict)
-            else None
+            pylint_settings_snapshot.get("init-import") if isinstance(pylint_settings_snapshot, dict) else None
         )
         ensure("pylint", "init-import", init_import_value)
         ensure("stylelint", "max-warnings", severity.max_warnings)

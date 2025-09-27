@@ -91,10 +91,7 @@ class ResultCache:
             )
             if not matched:
                 return None
-            if (
-                safe_int(matched.get("mtime_ns")) != state.mtime_ns
-                or safe_int(matched.get("size")) != state.size
-            ):
+            if safe_int(matched.get("mtime_ns")) != state.mtime_ns or safe_int(matched.get("size")) != state.size:
                 return None
 
         outcome = deserialize_outcome(data)

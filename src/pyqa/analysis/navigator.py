@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from pathlib import Path
-import re
 
 from ..annotations import AnnotationEngine
 from ..models import Diagnostic, RunResult
@@ -72,11 +72,15 @@ def _issue_tag(diag: Diagnostic, engine: AnnotationEngine) -> str | None:
     code = (diag.code or "").upper()
     signature = set(engine.message_signature(diag.message))
 
-    if code in {"C901", "R0915", "PLR0915", "R1260"} or {
-        "complex",
-        "complexity",
-        "statement",
-    } & signature:
+    if (
+        code in {"C901", "R0915", "PLR0915", "R1260"}
+        or {
+            "complex",
+            "complexity",
+            "statement",
+        }
+        & signature
+    ):
         return "complexity"
     if code.startswith("ANN") or "annotation" in signature or "typed" in signature:
         return "typing"

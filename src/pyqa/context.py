@@ -17,14 +17,10 @@ from .models import Diagnostic
 
 
 def _build_parser_loader() -> Callable[[str], Any] | None:
-    try:
-        tree_sitter_module = importlib.import_module("tree_sitter")
-    except ModuleNotFoundError:
-        return None
-
+    tree_sitter_module = importlib.import_module("tree_sitter")
     parser_cls = getattr(tree_sitter_module, "Parser", None)
     if parser_cls is None:
-        return None
+        raise RuntimeError("tree_sitter.Parser is unavailable; upgrade the tree-sitter package")
 
     try:
         bundled_get_parser = importlib.import_module("tree_sitter_languages").get_parser

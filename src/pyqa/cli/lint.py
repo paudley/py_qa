@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from threading import Lock
 
 import typer
 from rich import box
@@ -17,12 +18,13 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 from rich.table import Table
+from rich.text import Text
 
 from ..config import Config, ConfigError, default_parallel_jobs
 from ..console import console_manager, is_tty
 from ..constants import PY_QA_DIR_NAME
 from ..discovery import build_default_discovery
-from ..execution.orchestrator import FetchEvent, Orchestrator
+from ..execution.orchestrator import FetchEvent, Orchestrator, OrchestratorHooks
 from ..logging import info, warn
 from ..models import RunResult
 from ..reporting.emitters import write_json_report, write_pr_summary, write_sarif_report
@@ -34,6 +36,7 @@ from .config_builder import build_config
 from .doctor import run_doctor
 from .options import LintOptions
 from .tool_info import run_tool_info
+from .utils import filter_py_qa_paths
 
 
 def lint_command(
@@ -220,20 +223,18 @@ def lint_command(
             root = derived_root
 
     is_py_qa_root = is_py_qa_workspace(root)
-    ignored_py_qa = []
-    if not is_py_qa_root:
-        for candidate in normalized_paths:
-            if PY_QA_DIR_NAME in candidate.parts:
-                ignored_py_qa.append(_display_path(candidate, root))
-    if ignored_py_qa:
-        unique = ", ".join(dict.fromkeys(ignored_py_qa))
-        warn(
-            (
-                f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
-                "unless lint runs inside the py_qa workspace."
-            ),
-            use_emoji=not no_emoji,
-        )
+    ignored_py_qa: list[str] = []
+    if not is_py_qa_root and normalized_paths:
+        normalized_paths, ignored_py_qa = filter_py_qa_paths(normalized_paths, root)
+        if ignored_py_qa:
+            unique = ", ".join(dict.fromkeys(ignored_py_qa))
+            warn(
+                (
+                    f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
+                    "unless lint runs inside the py_qa workspace."
+                ),
+                use_emoji=not no_emoji,
+            )
 
     if doctor:
         exit_code = run_doctor(root)
@@ -326,9 +327,12 @@ def lint_command(
         config = build_config(options)
     except (ValueError, ConfigError) as exc:  # invalid option combinations
         raise typer.BadParameter(str(exc)) from exc
+
+    hooks = OrchestratorHooks()
     orchestrator = Orchestrator(
         registry=DEFAULT_REGISTRY,
         discovery=build_default_discovery(),
+        hooks=hooks,
     )
 
     if tool_info:
@@ -425,7 +429,167 @@ def lint_command(
                     use_color=config.output.color,
                 )
         raise typer.Exit(code=0)
-    result = orchestrator.run(config, root=root)
+    progress_enabled = (
+        config.output.output == "concise" and not quiet and not config.output.quiet and config.output.color and is_tty()
+    )
+
+    extra_phases = 2  # post-processing + rendering
+    progress: Progress | None = None
+    progress_task_id: int | None = None
+    progress_lock = Lock()
+    progress_console = None
+    progress_total = extra_phases
+    progress_completed = 0
+    progress_started = False
+
+    if progress_enabled:
+        console = console_manager.get(color=config.output.color, emoji=config.output.emoji)
+        progress_console = console
+        console_width = getattr(console.size, "width", 100)
+        reserved_columns = 40
+        bar_available = max(10, console_width - reserved_columns)
+        bar_width = max(20, int(bar_available * 0.8))
+
+        progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(bar_width=bar_width),
+            TextColumn("{task.completed}/{task.total}"),
+            TimeElapsedColumn(),
+            TextColumn("{task.fields[current_status]}", justify="right"),
+            console=console,
+            transient=True,
+        )
+        progress_task_id = progress.add_task(
+            "Linting",
+            total=progress_total,
+            current_status="[cyan]waiting[/]" if config.output.color else "waiting",
+        )
+
+        def ensure_started() -> None:
+            nonlocal progress_started
+            if progress is None or progress_started:
+                return
+            progress.start()
+            progress_started = True
+
+        def before_tool(tool_name: str) -> None:
+            if progress is None or progress_task_id is None:
+                return
+            with progress_lock:
+                ensure_started()
+                progress.update(
+                    progress_task_id,
+                    description=f"Linting {tool_name}",
+                    current_status="[cyan]running[/]" if config.output.color else "running",
+                )
+
+        def after_tool(outcome) -> None:  # noqa: ANN001
+            if progress is None or progress_task_id is None:
+                return
+            nonlocal progress_completed
+            status = "[green]ok[/]" if outcome.ok and config.output.color else ("ok" if outcome.ok else "issues")
+            if not outcome.ok and config.output.color:
+                status = "[red]issues[/]"
+            label = f"{outcome.tool}:{outcome.action}"
+            with progress_lock:
+                ensure_started()
+                progress.advance(progress_task_id, advance=1)
+                progress_completed += 1
+                progress.update(
+                    progress_task_id,
+                    current_status=f"{label} {status}",
+                )
+
+        def after_discovery(file_count: int) -> None:
+            if progress is None or progress_task_id is None:
+                return
+            with progress_lock:
+                ensure_started()
+                status = "[cyan]queued[/]" if config.output.color else "queued"
+                progress.update(
+                    progress_task_id,
+                    description=f"Linting ({file_count} files)",
+                    current_status=status,
+                )
+
+        def after_execution_hook(_result: RunResult) -> None:
+            if progress is None or progress_task_id is None:
+                return
+            nonlocal progress_completed
+            with progress_lock:
+                ensure_started()
+                progress.advance(progress_task_id, advance=1)
+                progress_completed += 1
+                status = "[cyan]post-processing[/]" if config.output.color else "post-processing"
+                progress.update(
+                    progress_task_id,
+                    current_status=status,
+                )
+
+        def advance_rendering_phase() -> None:
+            if progress is None or progress_task_id is None:
+                return
+            nonlocal progress_completed
+            with progress_lock:
+                ensure_started()
+                progress.advance(progress_task_id, advance=1)
+                progress_completed += 1
+                status = "[cyan]rendering output[/]" if config.output.color else "rendering output"
+                progress.update(
+                    progress_task_id,
+                    current_status=status,
+                )
+
+        hooks.before_tool = before_tool
+        hooks.after_tool = after_tool
+        hooks.after_discovery = after_discovery
+        hooks.after_execution = after_execution_hook
+
+        def after_plan_hook(total_actions: int) -> None:
+            if progress is None or progress_task_id is None:
+                return
+            nonlocal progress_total
+            with progress_lock:
+                ensure_started()
+                progress_total = total_actions + extra_phases
+                progress.update(progress_task_id, total=progress_total)
+
+        hooks.after_plan = after_plan_hook
+
+    def _finalise_progress(success: bool) -> Text | None:
+        if progress is None or progress_task_id is None:
+            return None
+        summary = "Linting complete" if success else "Linting halted"
+        status_text = (
+            "[green]done[/]"
+            if success and config.output.color
+            else ("[red]issues detected[/]" if config.output.color else ("done" if success else "issues detected"))
+        )
+        with progress_lock:
+            total = max(progress_total, progress_completed)
+            progress.update(
+                progress_task_id,
+                total=total,
+                description=summary,
+                current_status=status_text,
+            )
+        if config.output.color:
+            return Text(summary, style="green" if success else "red")
+        return Text(summary)
+
+    final_summary: Text | None = None
+    if progress is not None:
+        result = orchestrator.run(config, root=root)
+        advance_rendering_phase()
+        final_summary = _finalise_progress(not result.failed)
+        if progress_started:
+            progress.stop()
+    else:
+        result = orchestrator.run(config, root=root)
+
+    if final_summary and progress_console is not None:
+        progress_console.print(final_summary)
     _handle_reporting(
         result,
         config,

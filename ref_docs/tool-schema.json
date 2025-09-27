@@ -719,6 +719,24 @@
       "type": "str"
     }
   },
+  "stylelint": {
+    "args": {
+      "description": "Additional arguments appended to the stylelint command.",
+      "type": "list[str]"
+    },
+    "config": {
+      "description": "Custom stylelint configuration file path.",
+      "type": "path"
+    },
+    "ignore-path": {
+      "description": "Path to stylelint ignore file.",
+      "type": "path"
+    },
+    "max-warnings": {
+      "description": "Maximum warnings allowed before stylelint exits non-zero.",
+      "type": "int"
+    }
+  },
   "tsc": {
     "args": {
       "description": "Additional compiler arguments appended to tsc.",

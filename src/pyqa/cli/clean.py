@@ -11,8 +11,10 @@ import typer
 
 from ..clean import sparkly_clean
 from ..config_loader import ConfigError, ConfigLoader
+from ..constants import PY_QA_DIR_NAME
 from ..logging import fail, warn
 from .typer_ext import create_typer
+from .utils import display_relative_path
 
 clean_app = create_typer(name="sparkly-clean", help="Remove temporary build/cache artefacts.")
 
@@ -38,6 +40,8 @@ def main(
     if ctx.invoked_subcommand:
         return
 
+    root = root.resolve()
+
     loader = ConfigLoader.for_root(root)
     try:
         load_result = loader.load_with_trace()
@@ -56,6 +60,17 @@ def main(
         extra_trees=extra_trees,
         dry_run=dry_run,
     )
+
+    if result.ignored_py_qa:
+        ignored = [display_relative_path(path, root) for path in result.ignored_py_qa]
+        unique = ", ".join(dict.fromkeys(ignored))
+        warn(
+            (
+                f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
+                "unless sparkly-clean runs inside the py_qa workspace."
+            ),
+            use_emoji=emoji,
+        )
 
     if dry_run:
         for path in sorted(result.skipped):

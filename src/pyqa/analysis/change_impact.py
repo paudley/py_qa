@@ -8,7 +8,6 @@ import re
 import subprocess
 from collections import defaultdict
 from pathlib import Path
-from typing import Iterable
 
 from ..context import TreeSitterContextResolver
 from ..models import Diagnostic, RunResult

@@ -9,6 +9,7 @@ from pathlib import Path
 import typer
 
 from ..config_loader import ConfigError, ConfigLoader
+from ..constants import PY_QA_DIR_NAME
 from ..logging import fail, ok, warn
 from ..quality import (
     QualityChecker,
@@ -17,7 +18,9 @@ from ..quality import (
     check_commit_message,
     ensure_branch_protection,
 )
+from ..workspace import is_py_qa_workspace
 from .typer_ext import create_typer
+from .utils import filter_py_qa_paths
 
 quality_app = create_typer(
     name="check-quality",
@@ -52,6 +55,7 @@ def main(
     if ctx.invoked_subcommand:
         return
 
+    root = root.resolve()
     loader = ConfigLoader.for_root(root)
     try:
         load_result = loader.load_with_trace()
@@ -60,6 +64,14 @@ def main(
         raise typer.Exit(code=1) from exc
 
     config = load_result.config
+    quality_config = config.quality
+    license_config = config.license
+    if not is_py_qa_workspace(root):
+        extra_skip = f"{PY_QA_DIR_NAME}/**"
+        if extra_skip not in quality_config.skip_globs:
+            quality_config.skip_globs.append(extra_skip)
+        if extra_skip not in license_config.exceptions:
+            license_config.exceptions.append(extra_skip)
     for warning in load_result.warnings:
         warn(warning, use_emoji=emoji)
 
@@ -67,7 +79,22 @@ def main(
     if no_schema and "schema" in selected_checks:
         selected_checks.remove("schema")
 
-    files = list(paths or []) or None
+    provided_paths = list(paths or [])
+    resolved_explicit = [path if path.is_absolute() else (root / path) for path in provided_paths]
+    kept_paths, ignored_py_qa = filter_py_qa_paths(resolved_explicit, root)
+    if ignored_py_qa:
+        unique = ", ".join(dict.fromkeys(ignored_py_qa))
+        warn(
+            (
+                f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
+                "unless check-quality runs inside the py_qa workspace."
+            ),
+            use_emoji=emoji,
+        )
+    if provided_paths and not kept_paths:
+        ok("No files to check.", use_emoji=emoji)
+        raise typer.Exit(code=0)
+    files = kept_paths or None
 
     checker = QualityChecker(
         root=root,

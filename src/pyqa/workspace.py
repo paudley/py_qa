@@ -11,7 +11,7 @@ from typing import Any
 from .constants import PY_QA_DIR_NAME
 
 try:  # Python 3.11+ includes tomllib in the stdlib; fallback unsupported.
-    import tomllib  # type: ignore[attr-defined]
+    import tomllib
 except ModuleNotFoundError as exc:  # pragma: no cover - environment invariant
     raise RuntimeError("tomllib is required to inspect project metadata") from exc
 

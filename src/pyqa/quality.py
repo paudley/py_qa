@@ -27,7 +27,7 @@ from .constants import ALWAYS_EXCLUDE_DIRS
 from .discovery.filesystem import FilesystemDiscovery
 from .discovery.git import GitDiscovery, list_tracked_files
 from .process_utils import run_command
-from .tools.settings import TOOL_SETTING_SCHEMA
+from .tools.settings import tool_setting_schema_as_dict
 
 
 class QualityIssueLevel(str, Enum):
@@ -175,7 +175,7 @@ class SchemaCheck:
     def run(self, ctx: QualityContext, result: QualityCheckResult) -> None:
         if not ctx.quality.schema_targets:
             return
-        expected = json.dumps(TOOL_SETTING_SCHEMA, indent=2, sort_keys=True) + "\n"
+        expected = json.dumps(tool_setting_schema_as_dict(), indent=2, sort_keys=True) + "\n"
         for target in ctx.quality.schema_targets:
             target_path = target if target.is_absolute() else (ctx.root / target).resolve()
             if not target_path.exists():
@@ -220,11 +220,7 @@ class QualityFileCollector:
         if staged:
             git_discovery = GitDiscovery()
             config = FileDiscoveryConfig(pre_commit=True, include_untracked=True, changed_only=True)
-            return [
-                path.resolve()
-                for path in git_discovery.discover(config, self.root)
-                if path.exists()
-            ]
+            return [path.resolve() for path in git_discovery.discover(config, self.root) if path.exists()]
 
         tracked = list_tracked_files(self.root)
         if tracked:
@@ -232,11 +228,7 @@ class QualityFileCollector:
 
         filesystem_discovery = FilesystemDiscovery()
         config = FileDiscoveryConfig()
-        return [
-            path.resolve()
-            for path in filesystem_discovery.discover(config, self.root)
-            if path.exists()
-        ]
+        return [path.resolve() for path in filesystem_discovery.discover(config, self.root) if path.exists()]
 
     def _resolve(self, path: Path) -> Path:
         return path if path.is_absolute() else (self.root / path).resolve()

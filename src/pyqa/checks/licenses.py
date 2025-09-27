@@ -205,8 +205,7 @@ def verify_file_license(
         tag = f"SPDX-License-Identifier: {policy.spdx_id}"
         if tag not in content:
             if not any(
-                alt and f"SPDX-License-Identifier: {alt}" in content
-                for alt in (policy.allow_alternate_spdx or ())
+                alt and f"SPDX-License-Identifier: {alt}" in content for alt in (policy.allow_alternate_spdx or ())
             ) and not _matches_snippet(lower_content, policy.license_snippet):
                 issues.append(f"Missing SPDX license tag '{tag}'")
 

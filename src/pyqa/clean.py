@@ -11,8 +11,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import CleanConfig
+from .constants import PY_QA_DIR_NAME
 from .discovery.utils import iter_paths
 from .logging import info, ok, warn
+from .workspace import is_py_qa_workspace
 
 
 @dataclass(slots=True)
@@ -23,6 +25,7 @@ class CleanPlanItem:
 @dataclass(slots=True)
 class CleanPlan:
     items: list[CleanPlanItem] = field(default_factory=list)
+    ignored_py_qa: list[Path] = field(default_factory=list)
 
     @property
     def paths(self) -> list[Path]:
@@ -33,6 +36,7 @@ class CleanPlan:
 class CleanResult:
     removed: list[Path] = field(default_factory=list)
     skipped: list[Path] = field(default_factory=list)
+    ignored_py_qa: list[Path] = field(default_factory=list)
 
     def register_removed(self, path: Path) -> None:
         self.removed.append(path)
@@ -59,11 +63,17 @@ class CleanPlanner:
         trees = _merge_unique(config.trees, self._extra_trees)
 
         collected: dict[Path, CleanPlanItem] = {}
+        ignored_py_qa: list[Path] = []
+
+        skip_py_qa = not is_py_qa_workspace(root)
 
         info("✨ Cleaning repository temporary files...", use_emoji=True)
         for directory, _subdirs, _files in iter_paths(root):
             matches = _match_patterns(directory, patterns)
             for path in matches:
+                if _should_skip_py_qa(path, root, skip_py_qa):
+                    ignored_py_qa.append(path)
+                    continue
                 collected[path] = CleanPlanItem(path=path)
 
         for tree in trees:
@@ -74,10 +84,16 @@ class CleanPlanner:
             for subdir, _subdirs, _files in iter_paths(directory):
                 matches = _match_patterns(subdir, patterns)
                 for path in matches:
+                    if _should_skip_py_qa(path, root, skip_py_qa):
+                        ignored_py_qa.append(path)
+                        continue
                     collected[path] = CleanPlanItem(path=path)
 
+        if skip_py_qa:
+            ignored_py_qa.extend(_discover_py_qa_directories(root))
+
         items = sorted(collected.values(), key=lambda item: item.path)
-        return CleanPlan(items=items)
+        return CleanPlan(items=items, ignored_py_qa=_dedupe_paths(ignored_py_qa))
 
 
 def sparkly_clean(
@@ -95,7 +111,7 @@ def sparkly_clean(
     )
     plan = planner.plan(root, config)
 
-    result = CleanResult()
+    result = CleanResult(ignored_py_qa=list(plan.ignored_py_qa))
     for item in plan.items:
         path = item.path
         if dry_run:
@@ -150,6 +166,50 @@ def _match_patterns(base: Path, patterns: Iterable[str]) -> set[Path]:
                 continue
             matches.add(candidate)
     return matches
+
+
+def _should_skip_py_qa(path: Path, root: Path, skip_py_qa: bool) -> bool:
+    if not skip_py_qa:
+        return False
+    try:
+        relative = path.resolve().relative_to(root)
+    except (OSError, ValueError):
+        try:
+            relative = path.resolve()
+        except OSError:
+            relative = path
+    return PY_QA_DIR_NAME in relative.parts
+
+
+def _dedupe_paths(paths: Iterable[Path]) -> list[Path]:
+    seen: set[Path] = set()
+    ordered: list[Path] = []
+    for path in paths:
+        try:
+            key = path.resolve()
+        except OSError:
+            key = path
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(path)
+    return ordered
+
+
+def _discover_py_qa_directories(root: Path) -> list[Path]:
+    candidates: list[Path] = []
+    try:
+        for path in root.rglob(PY_QA_DIR_NAME):
+            if not path.is_dir():
+                continue
+            try:
+                path.relative_to(root)
+            except ValueError:
+                continue
+            candidates.append(path)
+    except OSError:
+        return []
+    return candidates
 
 
 def _remove_path(path: Path) -> None:
