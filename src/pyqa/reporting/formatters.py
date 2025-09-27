@@ -558,14 +558,16 @@ def _render_advice(
         return prefix + rest_text
 
     body = Text()
+    body.no_wrap = False
     for idx, entry in enumerate(advice_entries):
         line = stylise(entry)
-        if cfg.color:
-            line = Text.from_markup(line.plain if isinstance(line, Text) else str(line))
         if idx:
             body.append("\n")
-        line.no_wrap = False
-        body.append(line)
+        if isinstance(line, Text):
+            line.no_wrap = False
+            body.append(line)
+        else:
+            body.append(line)
 
     panel = Panel(
         body,
