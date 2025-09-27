@@ -147,6 +147,21 @@ class DedupeConfig(BaseModel):
     dedupe_same_file_only: bool = True
 
 
+class DuplicateDetectionConfig(BaseModel):
+    """Configure structural duplicate detection and DRY heuristics."""
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    enabled: bool = True
+    ast_enabled: bool = True
+    ast_min_lines: int = 6
+    ast_min_nodes: int = 25
+    ast_include_tests: bool = False
+    cross_diagnostics: bool = True
+    cross_message_threshold: int = 3
+    navigator_tags: bool = True
+
+
 DEFAULT_QUALITY_CHECKS: Final[list[str]] = ["license", "file-size", "schema", "python"]
 DEFAULT_SCHEMA_TARGETS: Final[list[Path]] = [Path("ref_docs/tool-schema.json")]
 DEFAULT_PROTECTED_BRANCHES: Final[list[str]] = ["main", "master"]
@@ -372,6 +387,7 @@ class Config(BaseModel):
     output: OutputConfig = Field(default_factory=OutputConfig)
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
     dedupe: DedupeConfig = Field(default_factory=DedupeConfig)
+    duplicates: DuplicateDetectionConfig = Field(default_factory=DuplicateDetectionConfig)
     severity_rules: list[str] = Field(default_factory=list)
     tool_settings: dict[str, dict[str, object]] = Field(default_factory=_default_tool_settings)
     license: LicenseConfig = Field(default_factory=LicenseConfig)
@@ -622,6 +638,7 @@ __all__ = [
     "Config",
     "ConfigError",
     "DedupeConfig",
+    "DuplicateDetectionConfig",
     "ExecutionConfig",
     "FileDiscoveryConfig",
     "OutputConfig",

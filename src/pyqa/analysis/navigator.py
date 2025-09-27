@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from collections.abc import Mapping
 from pathlib import Path
 
 from ..annotations import AnnotationEngine
@@ -45,6 +46,35 @@ def build_refactor_navigator(result: RunResult, engine: AnnotationEngine) -> Non
                     "severity": diag.severity.value,
                 },
             )
+
+    duplicate_clusters = result.analysis.get("duplicate_clusters", [])
+    for cluster in duplicate_clusters or ():
+        occurrences = cluster.get("occurrences") if isinstance(cluster, dict) else None
+        if not isinstance(occurrences, list):
+            continue
+        for occurrence in occurrences:
+            if not isinstance(occurrence, Mapping):
+                continue
+            file_path = str(occurrence.get("file") or "")
+            function = str(occurrence.get("function") or "")
+            key = (file_path, function)
+            bucket = hotspots.get(key)
+            if bucket is None:
+                bucket = hotspots.get((file_path, ""))
+            if bucket is None:
+                bucket = {
+                    "file": file_path,
+                    "function": function,
+                    "issue_tags": defaultdict(int),
+                    "size": None,
+                    "complexity": None,
+                    "diagnostics": [],
+                }
+                hotspots[key] = bucket
+            if bucket is None:
+                continue
+            issues = bucket["issue_tags"]  # type: ignore[assignment]
+            issues["duplicate"] += 1  # type: ignore[index]
 
     summary: list[dict[str, object]] = []
     for (file_path, function), data in hotspots.items():

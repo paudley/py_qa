@@ -1313,3 +1313,45 @@ def test_duplicate_code_advice_highlights_paths() -> None:
     assert "DRY" in body
     assert "src/pkg/a.py" in body
     assert "src/pkg/b.py" in body
+
+
+def test_render_advice_includes_duplicate_clusters(tmp_path: Path, capsys) -> None:
+    diagnostics = [
+        _advice_diag(
+            file="src/pkg/a.py",
+            tool="ruff",
+            code="E001",
+            message="Example warning",
+        ),
+    ]
+    outcome = ToolOutcome(
+        tool="ruff",
+        action="lint",
+        returncode=1,
+        stdout="",
+        stderr="",
+        diagnostics=diagnostics,
+    )
+    result = RunResult(
+        root=tmp_path,
+        files=[tmp_path / "src" / "pkg" / "a.py"],
+        outcomes=[outcome],
+        tool_versions={},
+    )
+    result.analysis["duplicate_clusters"] = [
+        {
+            "kind": "ast",
+            "fingerprint": "deadbeef",
+            "summary": "Duplicate block (~5 lines) detected across 2 locations",
+            "occurrences": [
+                {"file": "src/pkg/a.py", "line": 10, "function": "alpha", "size": 5, "snippet": None},
+                {"file": "src/pkg/b.py", "line": 12, "function": "beta", "size": 5, "snippet": None},
+            ],
+        },
+    ]
+    config = OutputConfig(color=False, emoji=False, advice=True)
+    render(result, config)
+    output = capsys.readouterr().out
+    assert "SOLID: DRY up duplicate code" in output
+    assert "src/pkg/a.py" in output
+    assert "src/pkg/b.py" in output

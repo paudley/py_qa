@@ -16,7 +16,12 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from ..analysis import apply_change_impact, apply_suppression_hints, build_refactor_navigator
+from ..analysis import (
+    apply_change_impact,
+    apply_suppression_hints,
+    build_refactor_navigator,
+    detect_duplicate_code,
+)
 from ..annotations import AnnotationEngine
 from ..config import Config
 from ..context import CONTEXT_RESOLVER
@@ -258,6 +263,11 @@ class Orchestrator:
         _ANALYSIS_ENGINE.annotate_run(result)
         apply_suppression_hints(result, _ANALYSIS_ENGINE)
         apply_change_impact(result)
+        duplicate_clusters = detect_duplicate_code(result, cfg.duplicates)
+        if duplicate_clusters:
+            result.analysis["duplicate_clusters"] = duplicate_clusters
+        else:
+            result.analysis.pop("duplicate_clusters", None)
         build_refactor_navigator(result, _ANALYSIS_ENGINE)
         if cache_ctx.cache and cache_ctx.versions_dirty:
             save_versions(cache_ctx.cache_dir, cache_ctx.versions)

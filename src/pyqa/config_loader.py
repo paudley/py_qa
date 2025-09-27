@@ -27,6 +27,7 @@ from .config import (
     Config,
     ConfigError,
     DedupeConfig,
+    DuplicateDetectionConfig,
     ExecutionConfig,
     FileDiscoveryConfig,
     LicenseConfig,
@@ -293,6 +294,7 @@ class _ConfigMerger:
         self._output_section = _OutputSection(resolver)
         self._execution_section = _ExecutionSection(resolver)
         self._dedupe_section = _DedupeSection()
+        self._duplicates_section = _DuplicateSection()
         self._license_section = _LicenseSection()
         self._quality_section = _QualitySection(resolver)
         self._clean_section = _CleanSection()
@@ -341,6 +343,15 @@ class _ConfigMerger:
         updates.extend(
             FieldUpdate(section="dedupe", field=field, source=source, value=value)
             for field, value in dedupe_updates.items()
+        )
+
+        duplicates_config, duplicates_updates = self._duplicates_section.merge(
+            config.duplicates,
+            data.get("duplicates"),
+        )
+        updates.extend(
+            FieldUpdate(section="duplicates", field=field, source=source, value=value)
+            for field, value in duplicates_updates.items()
         )
 
         license_config, license_updates = self._license_section.merge(
@@ -404,6 +415,7 @@ class _ConfigMerger:
             output=output_config,
             execution=execution_config,
             dedupe=dedupe_config,
+            duplicates=duplicates_config,
             severity_rules=severity_rules,
             tool_settings=tool_settings,
             license=license_config,
@@ -810,6 +822,76 @@ class _DedupeSection(_SectionMerger):
             dedupe_prefer=list(data.get("dedupe_prefer", current.dedupe_prefer)),
             dedupe_line_fuzz=data.get("dedupe_line_fuzz", current.dedupe_line_fuzz),
             dedupe_same_file_only=data.get("dedupe_same_file_only", current.dedupe_same_file_only),
+        )
+        return updated, self._diff_model(current, updated)
+
+
+class _DuplicateSection(_SectionMerger):
+    section = "duplicates"
+
+    def merge(
+        self,
+        current: DuplicateDetectionConfig,
+        raw: Any,
+    ) -> tuple[DuplicateDetectionConfig, dict[str, Any]]:
+        data = self._ensure_mapping(raw, self.section)
+
+        enabled = _coerce_optional_bool(data.get("enabled"), current.enabled, "duplicates.enabled")
+        ast_enabled = _coerce_optional_bool(
+            data.get("ast_enabled"),
+            current.ast_enabled,
+            "duplicates.ast_enabled",
+        )
+        ast_include_tests = _coerce_optional_bool(
+            data.get("ast_include_tests"),
+            current.ast_include_tests,
+            "duplicates.ast_include_tests",
+        )
+        cross_diagnostics = _coerce_optional_bool(
+            data.get("cross_diagnostics"),
+            current.cross_diagnostics,
+            "duplicates.cross_diagnostics",
+        )
+        navigator_tags = _coerce_optional_bool(
+            data.get("navigator_tags"),
+            current.navigator_tags,
+            "duplicates.navigator_tags",
+        )
+
+        ast_min_lines = _coerce_optional_int(
+            data.get("ast_min_lines"),
+            current.ast_min_lines,
+            "duplicates.ast_min_lines",
+        )
+        if ast_min_lines < 1:
+            raise ConfigError("duplicates.ast_min_lines must be >= 1")
+
+        ast_min_nodes = _coerce_optional_int(
+            data.get("ast_min_nodes"),
+            current.ast_min_nodes,
+            "duplicates.ast_min_nodes",
+        )
+        if ast_min_nodes < 1:
+            raise ConfigError("duplicates.ast_min_nodes must be >= 1")
+
+        cross_threshold = _coerce_optional_int(
+            data.get("cross_message_threshold"),
+            current.cross_message_threshold,
+            "duplicates.cross_message_threshold",
+        )
+        if cross_threshold < 2:
+            raise ConfigError("duplicates.cross_message_threshold must be >= 2")
+
+        updated = _model_replace(
+            current,
+            enabled=enabled,
+            ast_enabled=ast_enabled,
+            ast_min_lines=ast_min_lines,
+            ast_min_nodes=ast_min_nodes,
+            ast_include_tests=ast_include_tests,
+            cross_diagnostics=cross_diagnostics,
+            cross_message_threshold=cross_threshold,
+            navigator_tags=navigator_tags,
         )
         return updated, self._diff_model(current, updated)
 

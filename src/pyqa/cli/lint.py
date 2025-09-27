@@ -213,6 +213,11 @@ def lint_command(
         "--no-test-suppressions",
         help="Disable automatic test warning suppressions.",
     ),
+    no_dupes: bool = typer.Option(
+        False,
+        "--no-dupes",
+        help="Disable duplicate code detection and DRY advice synthesis.",
+    ),
 ) -> None:
     """Entry point for the ``pyqa lint`` CLI command."""
     _validate_mode_conflicts(doctor=doctor, tool_info=tool_info, fetch_all_tools=fetch_all_tools)
@@ -292,6 +297,7 @@ def lint_command(
         sensitivity=thresholds.sensitivity,
         advice=advice,
         disable_test_suppressions=no_test_suppressions,
+        disable_duplicates=no_dupes,
         provided=provided,
     )
 
@@ -532,6 +538,7 @@ def _create_lint_options(
     sensitivity: str | None,
     advice: bool,
     disable_test_suppressions: bool,
+    disable_duplicates: bool,
     provided: set[str],
 ) -> LintOptions:
     return LintOptions(
@@ -577,6 +584,7 @@ def _create_lint_options(
         sensitivity=sensitivity,
         advice=advice,
         disable_test_suppressions=disable_test_suppressions,
+        disable_duplicates=disable_duplicates,
         provided=set(provided),
     )
 
@@ -936,6 +944,7 @@ def _collect_provided_flags(
         "sensitivity",
         "sql_dialect",
         "advice",
+        "no_dupes",
     }
     provided: set[str] = set()
     for name in tracked:

@@ -141,6 +141,7 @@ _DUPLICATE_HINT_CODES: Final[dict[str, frozenset[str]]] = {
             "PLR0804",
         },
     ),
+    "pyqa": frozenset({"DRY-HASH", "DRY-MESSAGE", "DRY-CLUSTER"}),
 }
 
 

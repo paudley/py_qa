@@ -56,6 +56,7 @@ class LintOptions:
     sensitivity: str | None = None
     advice: bool = False
     disable_test_suppressions: bool = False
+    disable_duplicates: bool = False
 
 
 @dataclass(slots=True)

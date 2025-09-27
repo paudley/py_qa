@@ -113,11 +113,15 @@ def build_config(options: LintOptions) -> Config:
     execution_cfg = _apply_python_version_detection(project_root, execution_cfg, options.provided)
 
     dedupe_cfg = base_config.dedupe.model_copy(deep=True)
+    duplicate_cfg = base_config.duplicates.model_copy(deep=True)
+    if options.disable_duplicates:
+        duplicate_cfg.enabled = False
     config = Config(
         file_discovery=file_cfg,
         output=output_cfg,
         execution=execution_cfg,
         dedupe=dedupe_cfg,
+        duplicates=duplicate_cfg,
         severity_rules=list(base_config.severity_rules),
         tool_settings={
             tool: dict(settings) for tool, settings in base_config.tool_settings.items()

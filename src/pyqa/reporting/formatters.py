@@ -4,7 +4,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any
 
 from rich import box
 from rich.panel import Panel
@@ -53,13 +54,16 @@ def render(result: RunResult, cfg: OutputConfig) -> None:
 
 
 def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
-    entries = group_similar_entries(collect_concise_entries(result))
+    base_entries = collect_concise_entries(result)
+    entries = group_similar_entries(base_entries)
     formatted_rows = _format_concise_rows(entries)
     _print_concise_rows(formatted_rows, result, cfg)
 
     diagnostics_count = len(entries)
     if getattr(cfg, "advice", False):
-        _render_advice(entries, cfg)
+        advice_entries = list(entries)
+        advice_entries.extend(_duplicate_entries_for_advice(result))
+        _render_advice(advice_entries, cfg)
         _render_refactor_navigator(result, cfg)
     _emit_stats_line(result, cfg, diagnostics_count)
 
@@ -477,6 +481,72 @@ def _render_advice(
         padding=(0, 1),
     )
     console.print(panel)
+
+
+def _duplicate_entries_for_advice(result: RunResult) -> list[ConciseEntry]:
+    clusters = result.analysis.get("duplicate_clusters")
+    if not isinstance(clusters, list):
+        return []
+    extras: list[ConciseEntry] = []
+    for cluster in clusters:
+        if not isinstance(cluster, Mapping):
+            continue
+        occurrences = cluster.get("occurrences")
+        if not isinstance(occurrences, list) or len(occurrences) < 2:
+            continue
+        message = _format_duplicate_message(cluster, occurrences)
+        if message is None:
+            continue
+        origin = occurrences[0]
+        if not isinstance(origin, Mapping):
+            continue
+        file_path = str(origin.get("file") or "")
+        if not file_path:
+            continue
+        raw_line = origin.get("line")
+        line_no = raw_line if isinstance(raw_line, int) else -1
+        function = str(origin.get("function") or "")
+        kind = str(cluster.get("kind") or "")
+        if kind == "ast":
+            code = "DRY-HASH"
+        elif kind == "diagnostic":
+            code = "DRY-MESSAGE"
+        else:
+            code = "DRY-CLUSTER"
+        extras.append(
+            ConciseEntry(
+                file_path=file_path,
+                line_no=line_no,
+                function=function,
+                tool_name="pyqa",
+                code=code,
+                message=message,
+            ),
+        )
+    return extras
+
+
+def _format_duplicate_message(
+    cluster: Mapping[str, Any],
+    occurrences: Sequence[Mapping[str, Any]],
+) -> str | None:
+    summary = str(cluster.get("summary") or "").strip()
+    paths: list[str] = []
+    for occurrence in occurrences:
+        file_path = occurrence.get("file")
+        if not isinstance(file_path, str) or not file_path:
+            continue
+        line = occurrence.get("line")
+        if isinstance(line, int) and line >= 0:
+            paths.append(f"{file_path}:{line}")
+        else:
+            paths.append(file_path)
+    unique_paths = list(dict.fromkeys(paths))
+    if len(unique_paths) < 2:
+        return None
+    joined = "; ".join(unique_paths)
+    base = summary if summary else "Duplicate code detected"
+    return f"{base} ({joined})"
 
 
 def _render_refactor_navigator(result: RunResult, cfg: OutputConfig) -> None:
