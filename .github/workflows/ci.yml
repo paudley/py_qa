@@ -4,6 +4,8 @@
 
 ---
 name: CI
+permissions:
+  contents: read
 
 on:
   push:
