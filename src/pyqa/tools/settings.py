@@ -743,11 +743,11 @@ TOOL_SETTING_SCHEMA: ToolSettingSchema = {
 }
 
 
-def tool_setting_schema_as_dict() -> dict[str, dict[str, dict[str, object]]]:
-    """Return a JSON-serialisable view of the tool schema."""
-    return {
-        tool: {name: field.to_dict() for name, field in fields.items()} for tool, fields in TOOL_SETTING_SCHEMA.items()
-    }
+def tool_setting_schema_as_dict() -> RawToolSettingSchema:
+    """Return the original JSON-serialisable schema used for exports."""
+    from copy import deepcopy
+
+    return deepcopy(RAW_TOOL_SETTING_SCHEMA)
 
 
 __all__ = ["TOOL_SETTING_SCHEMA", "tool_setting_schema_as_dict", "SettingField"]
