@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
+
+import pytest
 
 from pyqa.analysis import duplication
 from pyqa.analysis.duplication import detect_duplicate_code
@@ -100,7 +101,10 @@ def test_detect_duplicate_code_cross_diagnostics(tmp_path: Path) -> None:
     assert len(diag_clusters[0]["occurrences"]) == 2
 
 
-def test_detect_duplicate_code_docstrings(tmp_path: Path) -> None:
+def test_detect_duplicate_code_docstrings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     file_a = tmp_path / "a.py"
     file_b = tmp_path / "b.py"
     file_a.write_text(
@@ -135,18 +139,10 @@ def test_detect_duplicate_code_docstrings(tmp_path: Path) -> None:
         doc_similarity_threshold=0.5,
     )
 
-    previous_env = os.environ.get("PYQA_NLP_MODEL")
-    previous_engine = duplication._DOC_ENGINE
-    os.environ["PYQA_NLP_MODEL"] = "blank:en"
-    duplication._DOC_ENGINE = None
-    try:
-        clusters = detect_duplicate_code(result, config)
-    finally:
-        if previous_env is None:
-            os.environ.pop("PYQA_NLP_MODEL", None)
-        else:
-            os.environ["PYQA_NLP_MODEL"] = previous_env
-        duplication._DOC_ENGINE = previous_engine
+    monkeypatch.setenv("PYQA_NLP_MODEL", "blank:en")
+    monkeypatch.setattr(duplication, "_DOC_ENGINE", None, raising=False)
+
+    clusters = detect_duplicate_code(result, config)
 
     doc_clusters = [cluster for cluster in clusters if cluster.get("kind") == "docstring"]
     assert doc_clusters
