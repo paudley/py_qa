@@ -28,6 +28,8 @@ from ..severity import Severity
 from .advice import AdviceEntry, generate_advice
 
 _ANNOTATION_ENGINE = AnnotationEngine()
+_CODE_TINT = "ansi256:105"
+_LITERAL_TINT = "ansi256:208"
 
 
 def render(result: RunResult, cfg: OutputConfig) -> None:
@@ -109,7 +111,8 @@ def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
             extra_spans=_location_function_spans(location),
         )
         message_display = _highlight_for_output(message, color=cfg.color)
-        print(f"{tint_tool(tool_name)}, {spacer}{location_display}, {code}, {message_display}")
+        code_display = _format_code_value(code, cfg.color)
+        print(f"{tint_tool(tool_name)}, {spacer}{location_display}, {code_display}, {message_display}")
 
     diagnostics_count = len(entries)
     files_count = len(result.files)
@@ -194,10 +197,14 @@ def _location_function_spans(location: str) -> list[MessageSpan]:
 
 def _apply_highlighting_text(message: str, base_style: str | None = None) -> Text:
     clean = message.replace("`", "")
+    clean, literal_spans = _strip_literal_quotes(clean)
     text = Text(clean)
     if base_style:
         text.stylize(base_style, 0, len(text))
-    for span in _collect_highlight_spans(clean):
+    spans = list(_collect_highlight_spans(clean))
+    spans.extend(literal_spans)
+    spans.sort(key=lambda span: (span.start, span.end))
+    for span in spans:
         text.stylize(span.style, span.start, span.end)
     return text
 
@@ -205,8 +212,11 @@ def _apply_highlighting_text(message: str, base_style: str | None = None) -> Tex
 def _highlight_for_output(message: str, *, color: bool, extra_spans: Sequence[MessageSpan] | None = None) -> str:
     clean = message.replace("`", "")
     if not color:
+        clean, _ = _strip_literal_quotes(clean)
         return clean
+    clean, literal_spans = _strip_literal_quotes(clean)
     spans = list(_collect_highlight_spans(clean))
+    spans.extend(literal_spans)
     if extra_spans:
         spans.extend(extra_spans)
     if not spans:
@@ -324,11 +334,7 @@ def _render_pretty(result: RunResult, cfg: OutputConfig) -> None:
     root_display = colorize(str(Path(result.root).resolve()), "blue", cfg.color)
     print(f"Root: {root_display}")
     for outcome in result.outcomes:
-        status = (
-            colorize("PASS", "green", cfg.color)
-            if outcome.ok
-            else colorize("FAIL", "red", cfg.color)
-        )
+        status = colorize("PASS", "green", cfg.color) if outcome.ok else colorize("FAIL", "red", cfg.color)
         print(f"\n{outcome.tool}:{outcome.action} — {status}")
         if outcome.stdout:
             print(colorize("stdout:", "cyan", cfg.color))
@@ -398,7 +404,7 @@ def _dump_diagnostics(diags: Iterable[Diagnostic], cfg: OutputConfig) -> None:
         sev_color = _severity_color(diag.severity)
         sev_display = colorize(diag.severity.value, sev_color, cfg.color)
         code_value = (diag.code or "").strip()
-        code_display = f" [{code_value}]" if code_value else ""
+        code_display = f" [{_format_code_value(code_value, cfg.color)}]" if code_value else ""
         padded_location = location.ljust(location_width) if location_width else location
         padding = " " if padded_location else ""
         message = _clean_message(code_value, diag.message)
@@ -457,8 +463,7 @@ def _emit_stats_line(result: RunResult, cfg: OutputConfig, diagnostics_count: in
     metrics = _gather_metrics(result)
     loc_count = sum(metric.line_count for metric in metrics.values())
     suppression_counts = {
-        label: sum(metric.suppressions.get(label, 0) for metric in metrics.values())
-        for label in SUPPRESSION_LABELS
+        label: sum(metric.suppressions.get(label, 0) for metric in metrics.values()) for label in SUPPRESSION_LABELS
     }
     files_count = len(result.files)
     total_suppressions = sum(suppression_counts.values())
@@ -552,10 +557,21 @@ def _render_advice(
         rest_text = _apply_highlighting_text(entry.body)
         return prefix + rest_text
 
+    body = Text()
+    for idx, entry in enumerate(advice_entries):
+        line = stylise(entry)
+        if cfg.color:
+            line = Text.from_markup(line.plain if isinstance(line, Text) else str(line))
+        if idx:
+            body.append("\n")
+        line.no_wrap = False
+        body.append(line)
+
     panel = Panel(
-        Text("\n").join(stylise(entry) for entry in advice_entries),
+        body,
         title="SOLID Advice",
         border_style="cyan" if cfg.color else "none",
+        padding=(0, 1),
     )
     console.print(panel)
 
@@ -595,3 +611,47 @@ def _render_refactor_navigator(result: RunResult, cfg: OutputConfig) -> None:
         border_style="magenta" if cfg.color else "none",
     )
     console.print(panel)
+
+
+_CODE_TINT = "ansi256:105"
+
+
+def _format_code_value(code: str, color_enabled: bool) -> str:
+    clean = code.strip() or "-"
+    if clean == "-":
+        return clean
+    return colorize(clean, _CODE_TINT, color_enabled)
+
+
+def _strip_literal_quotes(text: str) -> tuple[str, list[MessageSpan]]:
+    segments: list[str] = []
+    spans: list[MessageSpan] = []
+    cursor = 0
+    out_len = 0
+    length = len(text)
+    while cursor < length:
+        start = text.find("''", cursor)
+        if start == -1:
+            segments.append(text[cursor:])
+            break
+        segments.append(text[cursor:start])
+        out_len += start - cursor
+        end = text.find("''", start + 2)
+        if end == -1:
+            segments.append(text[start:])
+            break
+        literal = text[start + 2 : end]
+        segments.append(literal)
+        literal_length = len(literal)
+        if literal_length:
+            spans.append(
+                MessageSpan(
+                    start=out_len,
+                    end=out_len + literal_length,
+                    style=_LITERAL_TINT,
+                ),
+            )
+        out_len += literal_length
+        cursor = end + 2
+    new_text = "".join(segments)
+    return new_text, spans

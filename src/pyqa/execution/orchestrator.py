@@ -126,6 +126,9 @@ class OrchestratorHooks:
 
     before_tool: Callable[[str], None] | None = None
     after_tool: Callable[[ToolOutcome], None] | None = None
+    after_discovery: Callable[[int], None] | None = None
+    after_execution: Callable[[RunResult], None] | None = None
+    after_plan: Callable[[int], None] | None = None
 
 
 class CommandPreparationService(Protocol):
@@ -169,6 +172,18 @@ class Orchestrator:
         state = _ExecutionState()
 
         tool_names = self._select_tools(cfg, matched_files, root_path)
+        if self._hooks.after_discovery:
+            self._hooks.after_discovery(len(matched_files))
+        if self._hooks.after_plan:
+            total_actions = 0
+            for name in tool_names:
+                tool = self._registry.try_get(name)
+                if tool is None:
+                    continue
+                for action in tool.actions:
+                    if self._should_run_action(cfg, action):
+                        total_actions += 1
+            self._hooks.after_plan(total_actions)
         for name in tool_names:
             if self._process_tool(
                 cfg=cfg,
@@ -198,6 +213,8 @@ class Orchestrator:
         build_refactor_navigator(result, _ANALYSIS_ENGINE)
         if cache_ctx.cache and cache_ctx.versions_dirty:
             save_versions(cache_ctx.cache_dir, cache_ctx.versions)
+        if self._hooks.after_execution:
+            self._hooks.after_execution(result)
         return result
 
     def fetch_all_tools(
@@ -210,9 +227,7 @@ class Orchestrator:
         """Prepare every tool action to warm caches without executing them."""
         root_path = self._prepare_runtime(root)
         cache_dir = (
-            cfg.execution.cache_dir
-            if cfg.execution.cache_dir.is_absolute()
-            else root_path / cfg.execution.cache_dir
+            cfg.execution.cache_dir if cfg.execution.cache_dir.is_absolute() else root_path / cfg.execution.cache_dir
         )
         system_preferred = not cfg.execution.use_local_linters
         use_local_override = cfg.execution.use_local_linters
@@ -272,10 +287,7 @@ class Orchestrator:
 
     def _discover_files(self, cfg: Config, root: Path) -> list[Path]:
         matched_files = self._discovery.run(cfg.file_discovery, root)
-        limits = [
-            entry if entry.is_absolute() else (root / entry)
-            for entry in cfg.file_discovery.limit_to
-        ]
+        limits = [entry if entry.is_absolute() else (root / entry) for entry in cfg.file_discovery.limit_to]
         limits = [limit.resolve() for limit in limits]
         if limits:
             matched_files = [path for path in matched_files if self._is_within_limits(path, limits)]
@@ -286,11 +298,7 @@ class Orchestrator:
         return matched_files
 
     def _initialize_cache(self, cfg: Config, root: Path) -> _CacheContext:
-        cache_dir = (
-            cfg.execution.cache_dir
-            if cfg.execution.cache_dir.is_absolute()
-            else root / cfg.execution.cache_dir
-        )
+        cache_dir = cfg.execution.cache_dir if cfg.execution.cache_dir.is_absolute() else root / cfg.execution.cache_dir
         if not cfg.execution.cache_enabled:
             return _CacheContext(cache=None, token=None, cache_dir=cache_dir, versions={})
         cache = ResultCache(cache_dir)
@@ -593,9 +601,7 @@ class Orchestrator:
         from_cache: bool,
     ) -> None:
         metrics_map = (
-            dict(file_metrics)
-            if file_metrics is not None
-            else self._collect_metrics_for_files(state, context.files)
+            dict(file_metrics) if file_metrics is not None else self._collect_metrics_for_files(state, context.files)
         )
         self._update_state_metrics(state, metrics_map)
         state.outcomes[order] = outcome

@@ -8,11 +8,11 @@ import json
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 
-from ..models import Diagnostic, RunResult
 from ..annotations import HighlightKind
-from .advice import AdviceBuilder, AdviceEntry
+from ..models import Diagnostic, RunResult
 from ..serialization import serialize_outcome
 from ..severity import Severity, severity_to_sarif
+from .advice import AdviceBuilder, AdviceEntry
 
 SARIF_VERSION = "2.1.0"
 SARIF_SCHEMA = "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json"
@@ -124,11 +124,7 @@ def write_pr_summary(
 
     min_rank = _severity_rank(min_severity, severity_order)
 
-    filtered = [
-        (diag, tool)
-        for diag, tool in diagnostics
-        if severity_order.get(diag.severity, 99) <= min_rank
-    ]
+    filtered = [(diag, tool) for diag, tool in diagnostics if severity_order.get(diag.severity, 99) <= min_rank]
 
     filtered.sort(
         key=lambda item: (
@@ -138,11 +134,7 @@ def write_pr_summary(
         ),
     )
 
-    needs_advice = (
-        include_advice
-        or "{advice" in template
-        or "{advice" in advice_template
-    )
+    needs_advice = include_advice or "{advice" in template or "{advice" in advice_template
     needs_highlight = "{highlighted_message" in template
 
     advice_entries: list[AdviceEntry] = []
@@ -157,9 +149,7 @@ def write_pr_summary(
         advice_count = len(advice_entries)
         if advice_entries:
             limited = advice_entries[:advice_limit]
-            advice_summary = "; ".join(
-                f"{entry.category}: {entry.body}" for entry in limited
-            )
+            advice_summary = "; ".join(f"{entry.category}: {entry.body}" for entry in limited)
             advice_primary_category = advice_entries[0].category
             advice_primary = advice_entries[0].body
 
@@ -173,11 +163,7 @@ def write_pr_summary(
             location += f":{diag.line}"
             if diag.column is not None:
                 location += f":{diag.column}"
-        highlighted_message = (
-            _highlight_markdown(diag.message)
-            if needs_highlight
-            else diag.message
-        )
+        highlighted_message = _highlight_markdown(diag.message) if needs_highlight else diag.message
         entry = template.format(
             severity=diag.severity.value.upper(),
             tool=tool,

@@ -20,7 +20,7 @@ from ..config_loader import (
     generate_config_schema,
 )
 from ..serialization import jsonify
-from ..tools.settings import TOOL_SETTING_SCHEMA
+from ..tools.settings import TOOL_SETTING_SCHEMA, SettingField, tool_setting_schema_as_dict
 from .typer_ext import create_typer
 
 config_app = create_typer(help="Inspect, validate, and document configuration layers.")
@@ -101,7 +101,7 @@ def config_schema(
     if fmt == "json":
         content = json.dumps(schema, indent=2, sort_keys=True)
     elif fmt == "json-tools":
-        content = json.dumps(TOOL_SETTING_SCHEMA, indent=2, sort_keys=True)
+        content = json.dumps(tool_setting_schema_as_dict(), indent=2, sort_keys=True)
     elif fmt in {"md", "markdown"}:
         content = _schema_to_markdown(schema)
     else:
@@ -176,7 +176,7 @@ def config_export_tools(
         "_license": "SPDX-License-Identifier: MIT",
         "_copyright": "Copyright (c) 2025 Blackcat Informatics® Inc.",
     }
-    payload.update(TOOL_SETTING_SCHEMA)
+    payload.update(tool_setting_schema_as_dict())
     text = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     out_path.write_text(text, encoding="utf-8")
     typer.echo(str(out_path))
@@ -197,9 +197,7 @@ def _config_to_mapping(result: ConfigLoadResult) -> Mapping[str, Any]:
 def _summarise_updates(updates: list[FieldUpdate]) -> list[str]:
     rendered: list[str] = []
     for update in updates:
-        field_path = (
-            update.field if update.section == "root" else f"{update.section}.{update.field}"
-        )
+        field_path = update.field if update.section == "root" else f"{update.section}.{update.field}"
         info = _summarise_value(field_path, update.value)
         rendered.append(f"- {field_path} <- {update.source} -> {info}")
     return rendered
@@ -212,7 +210,8 @@ def _summarise_value(field_path: str, value: Any) -> str:
         schema = TOOL_SETTING_SCHEMA.get(tool, {})
         sections = []
         for key, entry in value.items():
-            description = schema.get(key, {}).get("description")
+            field = schema.get(key)
+            description = field.description if isinstance(field, SettingField) else None
             rendered = json.dumps(jsonify(entry), sort_keys=True)
             if description:
                 sections.append(f"{key}={rendered} ({description})")

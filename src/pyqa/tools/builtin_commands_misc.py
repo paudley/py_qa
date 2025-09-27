@@ -272,9 +272,7 @@ class _ActionlintCommand(CommandBuilder):
         cmd = [str(binary), "-format", "{{json .}}", "-no-color"]
 
         workflow_files = [
-            path
-            for path in ctx.files
-            if str(path).endswith(".yml") and "/.github/workflows/" in str(path)
+            path for path in ctx.files if str(path).endswith(".yml") and "/.github/workflows/" in str(path)
         ]
         if workflow_files:
             cmd.extend(str(path) for path in workflow_files)

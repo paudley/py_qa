@@ -7,7 +7,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from re import Pattern
-
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
@@ -35,9 +34,7 @@ class OutputFilter(BaseModel):
         if not text or not self._compiled:
             return text
         return "\n".join(
-            line
-            for line in text.splitlines()
-            if not any(pattern.search(line) for pattern in self._compiled)
+            line for line in text.splitlines() if not any(pattern.search(line) for pattern in self._compiled)
         )
 
 

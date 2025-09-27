@@ -10,12 +10,14 @@ other presentation layers such as PR summaries or SARIF emitters.
 
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
 from ..annotations import AnnotationEngine
+
 
 @dataclass(frozen=True)
 class AdviceEntry:
@@ -149,7 +151,9 @@ def generate_advice(
                     pieces.append(descriptor)
                 add(
                     "Refactor priority",
-                    "focus on " + "; ".join(pieces) + " to restore single-responsibility boundaries before tuning the rest.",
+                    "focus on "
+                    + "; ".join(pieces)
+                    + " to restore single-responsibility boundaries before tuning the rest.",
                 )
 
         if file_only_targets:
@@ -166,9 +170,10 @@ def generate_advice(
         code = record["code"]
         if not code:
             continue
-        if (
-            record["tool"] == "ruff" and (code.startswith("D1") or code in {"D401", "D402"})
-        ) or code in {"TC002", "TC003"}:
+        if (record["tool"] == "ruff" and (code.startswith("D1") or code in {"D401", "D402"})) or code in {
+            "TC002",
+            "TC003",
+        }:
             doc_counts[record["file"]] += 1
     doc_targets = [
         file_path
@@ -220,9 +225,7 @@ def generate_advice(
     stub_flags = {
         record["file"]
         for record in diagnostics
-        if (record["file"] or "").endswith(".pyi")
-        and record["tool"] == "ruff"
-        and record["code"].startswith("ANN")
+        if (record["file"] or "").endswith(".pyi") and record["tool"] == "ruff" and record["code"].startswith("ANN")
     }
     override_flags = {
         record["file"]
@@ -265,8 +268,7 @@ def generate_advice(
             )
             break
         if record["tool"] == "pyright" and (
-            code == "REPORTPRIVATEIMPORTUSAGE"
-            or any(keyword in message_lower for keyword in private_keywords)
+            code == "REPORTPRIVATEIMPORTUSAGE" or any(keyword in message_lower for keyword in private_keywords)
         ):
             add(
                 "Encapsulation",

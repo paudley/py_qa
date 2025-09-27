@@ -5,12 +5,15 @@
 from __future__ import annotations
 
 import shutil
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
+from ..constants import PY_QA_DIR_NAME
 from ..process_utils import run_command
 from ..tool_env import VersionResolver
 from ..tools.base import Tool
+from ..workspace import is_py_qa_workspace
 
 
 @dataclass(slots=True)
@@ -61,11 +64,7 @@ def check_tool_status(tool: Tool) -> ToolStatus:
         )
     except FileNotFoundError:
         status = "vendored" if tool.runtime != "binary" else "uninstalled"
-        runtime_note = (
-            f"Runtime '{tool.runtime}' can vend this tool on demand."
-            if tool.runtime != "binary"
-            else ""
-        )
+        runtime_note = f"Runtime '{tool.runtime}' can vend this tool on demand." if tool.runtime != "binary" else ""
         notes = f"Executable '{version_cmd[0]}' not found on PATH. {runtime_note}".strip()
         return ToolStatus(
             name=tool.name,
@@ -104,3 +103,51 @@ def check_tool_status(tool: Tool) -> ToolStatus:
         returncode=completed.returncode,
         raw_output=output or None,
     )
+
+
+def display_relative_path(path: Path, root: Path) -> str:
+    """Return a stable display string for ``path`` relative to ``root`` when possible."""
+
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except (ValueError, OSError):
+        try:
+            return str(path.resolve())
+        except OSError:
+            return str(path)
+
+
+def filter_py_qa_paths(paths: Iterable[Path], root: Path) -> tuple[list[Path], list[str]]:
+    """Drop py_qa paths when operating outside the py_qa workspace.
+
+    Returns a tuple of ``(kept_paths, ignored_display_strings)``. Paths are
+    resolved relative to ``root`` when necessary so callers can forward them to
+    downstream logic without additional normalization.
+    """
+
+    root_resolved = root.resolve()
+    if is_py_qa_workspace(root_resolved):
+        return [(_maybe_resolve(path)) for path in paths], []
+
+    kept: list[Path] = []
+    ignored_display: list[str] = []
+    for original in paths:
+        resolved = _maybe_resolve(original, root_resolved)
+        if resolved is None:
+            continue
+        if PY_QA_DIR_NAME in resolved.parts:
+            ignored_display.append(display_relative_path(resolved, root_resolved))
+            continue
+        kept.append(resolved)
+    return kept, ignored_display
+
+
+def _maybe_resolve(path: Path, root: Path | None = None) -> Path | None:
+    try:
+        if path.is_absolute():
+            return path.resolve()
+        base = root if root is not None else Path.cwd()
+        return (base / path).resolve()
+    except OSError:
+        base = root if root is not None else Path.cwd()
+        return path if path.is_absolute() else base / path

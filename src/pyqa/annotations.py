@@ -12,12 +12,13 @@ from __future__ import annotations
 
 import os
 import threading
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Literal, Sequence
+from typing import Literal
 
 from .context import TreeSitterContextResolver
-from .models import Diagnostic, RunResult
+from .models import RunResult
 
 try:
     import spacy  # type: ignore[import]

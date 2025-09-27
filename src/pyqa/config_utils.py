@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from .config import Config, ConfigError
 from .serialization import jsonify
-from .tools.settings import TOOL_SETTING_SCHEMA
+from .tools.settings import tool_setting_schema_as_dict
 
 _KNOWN_SECTIONS: set[str] = {
     "file_discovery",
@@ -230,7 +230,7 @@ def generate_config_schema() -> dict[str, Any]:
         "tool_settings": {
             "type": "dict[str, dict[str, object]]",
             "default": {tool: dict(settings) for tool, settings in tool_defaults.items()},
-            "tools": TOOL_SETTING_SCHEMA,
+            "tools": tool_setting_schema_as_dict(),
         },
     }
 

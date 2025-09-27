@@ -4,12 +4,10 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
-from typing import Iterable
+from collections.abc import Iterable
 
-from ..annotations import AnnotationEngine, HighlightKind
+from ..annotations import AnnotationEngine
 from ..models import Diagnostic, RunResult
-
 
 _TEST_PREFIXES = ("tests/", "test/")
 
@@ -74,9 +72,7 @@ def _hints_for_diagnostic(diag: Diagnostic, engine: AnnotationEngine) -> Iterabl
 
 def _format_hint(diag: Diagnostic, suppression_key: str, guidance: str) -> str:
     function = diag.function or "this scope"
-    return (
-        f"Suppression candidate ({suppression_key}) in {function}: {guidance}"
-    )
+    return f"Suppression candidate ({suppression_key}) in {function}: {guidance}"
 
 
 def _extract_arguments(diag: Diagnostic, engine: AnnotationEngine) -> list[str]:

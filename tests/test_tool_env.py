@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import pytest
 
@@ -15,12 +15,7 @@ from pyqa.tool_env import (
     GO_BIN_DIR,
     RUST_BIN_DIR,
     CommandPreparer,
-    GoRuntime,
-    LuaRuntime,
-    NpmRuntime,
-    PerlRuntime,
     PreparedCommand,
-    RustRuntime,
 )
 from pyqa.tool_env import constants as tool_constants
 from pyqa.tool_env import (
@@ -32,6 +27,9 @@ from pyqa.tool_env.runtimes import npm as npm_runtime
 from pyqa.tool_env.runtimes import perl as perl_runtime
 from pyqa.tool_env.runtimes import rust as rust_runtime
 from pyqa.tools.base import Tool
+
+if TYPE_CHECKING:
+    from pyqa.tool_env import GoRuntime, LuaRuntime, NpmRuntime, PerlRuntime, RustRuntime
 
 ToolRuntime = Literal["python", "npm", "binary", "go", "lua", "perl", "rust"]
 
@@ -97,7 +95,7 @@ def test_npm_runtime_falls_back_to_local_when_system_version_too_low(
     def fake_capture(command: Sequence[str], *, env=None) -> str | None:
         return "9.12.0"
 
-    monkeypatch.setattr(preparer._versions, "capture", fake_capture)  # type: ignore[attr-defined]
+    monkeypatch.setattr(preparer._versions, "capture", fake_capture)
 
     prefix = tmp_path / "cache"
     bin_dir = prefix / "node_modules" / ".bin"
@@ -146,7 +144,7 @@ def test_npm_runtime_prefers_system_when_version_sufficient(
     def fake_capture(command: Sequence[str], *, env=None) -> str | None:
         return "9.13.1"
 
-    monkeypatch.setattr(preparer._versions, "capture", fake_capture)  # type: ignore[attr-defined]
+    monkeypatch.setattr(preparer._versions, "capture", fake_capture)
 
     def fail_install(self, tool_obj: Tool):
         raise AssertionError("Local install should not be attempted")
@@ -221,7 +219,7 @@ def test_go_runtime_installs_when_system_too_old(
             return "0.7.5"
         return None
 
-    monkeypatch.setattr(preparer._versions, "capture", fake_capture)  # type: ignore[attr-defined]
+    monkeypatch.setattr(preparer._versions, "capture", fake_capture)
 
     fake_binary = tmp_path / "go" / "bin" / "kube-linter"
     fake_binary.parent.mkdir(parents=True, exist_ok=True)
@@ -273,7 +271,7 @@ def test_go_runtime_prefers_system_when_version_ok(
             return "0.7.6"
         return None
 
-    monkeypatch.setattr(preparer._versions, "capture", fake_capture)  # type: ignore[attr-defined]
+    monkeypatch.setattr(preparer._versions, "capture", fake_capture)
 
     def fail_install(self, tool_obj: Tool, binary_name: str) -> Path:
         raise AssertionError("Local go install should not occur")
@@ -442,7 +440,7 @@ def test_rust_runtime_installs_when_system_too_old(
             return "2.9.0"
         return None
 
-    monkeypatch.setattr(preparer._versions, "capture", fake_capture)  # type: ignore[attr-defined]
+    monkeypatch.setattr(preparer._versions, "capture", fake_capture)
 
     fake_binary = tmp_path / "rust" / "bin" / "dotenv-linter"
     fake_binary.parent.mkdir(parents=True, exist_ok=True)
@@ -500,7 +498,7 @@ def test_rust_runtime_prefers_system_when_version_ok(
             return "3.3.1"
         return None
 
-    monkeypatch.setattr(preparer._versions, "capture", fake_capture)  # type: ignore[attr-defined]
+    monkeypatch.setattr(preparer._versions, "capture", fake_capture)
 
     def fail_install(self, tool_obj: Tool, binary_name: str) -> Path:
         raise AssertionError("Local rust install should not occur")
@@ -583,7 +581,7 @@ def test_rust_runtime_install_rustup_component(
             return "cargo 1.81.0"
         return None
 
-    monkeypatch.setattr(preparer._versions, "capture", fake_capture)  # type: ignore[attr-defined]
+    monkeypatch.setattr(preparer._versions, "capture", fake_capture)
 
     result = preparer.prepare(
         tool=tool,

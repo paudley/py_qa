@@ -46,3 +46,49 @@ def test_cli_dry_run_lists_paths(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0
     assert "DRY RUN" in result.stdout
+
+
+def test_sparkly_clean_skips_py_qa_outside_workspace(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    vendor_py_qa = project_root / "vendor" / "py_qa"
+    vendor_py_qa.mkdir(parents=True)
+    candidate = vendor_py_qa / ".coverage"
+    candidate.write_text("coverage", encoding="utf-8")
+
+    result = sparkly_clean(project_root, config=CleanConfig(), dry_run=False)
+
+    assert candidate.exists()
+    assert candidate not in result.removed
+    ignored = {str(path.resolve()) for path in result.ignored_py_qa}
+    candidate_options = {
+        str(candidate.resolve()),
+        str(candidate.parent.resolve()),
+        str(vendor_py_qa.resolve()),
+    }
+    assert ignored & candidate_options
+
+
+def test_cli_warns_about_py_qa_skip(tmp_path: Path) -> None:
+    project_root = tmp_path / "repo"
+    project_root.mkdir()
+    vendor_py_qa = project_root / "vendor" / "py_qa"
+    vendor_py_qa.mkdir(parents=True)
+    candidate = vendor_py_qa / "build" / "artefact.log"
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    candidate.write_text("data", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "sparkly-clean",
+            "--root",
+            str(project_root),
+            "--no-emoji",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "'py_qa' directories are skipped" in result.stdout
+    assert candidate.exists()

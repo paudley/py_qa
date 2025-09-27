@@ -10,21 +10,25 @@ import shutil
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from enum import Enum
 from pathlib import Path
-from typing import (
-    Any,
-    Final,
-    Literal,
-    Protocol,
-    cast,
-)
+from typing import Any, Final, Literal, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .constants import ALWAYS_EXCLUDE_DIRS
+from .constants import ALWAYS_EXCLUDE_DIRS, PY_QA_DIR_NAME
 from .logging import fail, info, ok, warn
 from .process_utils import run_command
+from .workspace import is_py_qa_workspace
 
 CommandRunner = Callable[[Sequence[str], Path | None], Any]
+
+
+PYPROJECT_MANIFEST: Final[str] = "pyproject.toml"
+PNPM_LOCKFILE: Final[str] = "pnpm-lock.yaml"
+YARN_LOCKFILE: Final[str] = "yarn.lock"
+NPM_MANIFEST: Final[str] = "package.json"
+GO_MANIFEST: Final[str] = "go.mod"
+CARGO_MANIFEST: Final[str] = "Cargo.toml"
+SKIPPED_STATUS: Final[Literal["skipped"]] = "skipped"
 
 
 class WorkspaceKind(Enum):
@@ -153,7 +157,7 @@ class PythonStrategy:
     kind = WorkspaceKind.PYTHON
 
     def detect(self, _directory: Path, filenames: set[str]) -> bool:
-        return "pyproject.toml" in filenames
+        return PYPROJECT_MANIFEST in filenames
 
     def plan(self, workspace: Workspace) -> list[CommandSpec]:
         commands: list[CommandSpec] = []
@@ -188,7 +192,7 @@ class PnpmStrategy:
     kind = WorkspaceKind.PNPM
 
     def detect(self, _directory: Path, filenames: set[str]) -> bool:
-        return "pnpm-lock.yaml" in filenames
+        return PNPM_LOCKFILE in filenames
 
     def plan(self, _workspace: Workspace) -> list[CommandSpec]:
         return [
@@ -204,7 +208,7 @@ class YarnStrategy:
     kind = WorkspaceKind.YARN
 
     def detect(self, _directory: Path, filenames: set[str]) -> bool:
-        return "yarn.lock" in filenames
+        return YARN_LOCKFILE in filenames
 
     def plan(self, _workspace: Workspace) -> list[CommandSpec]:
         return [
@@ -220,7 +224,7 @@ class NpmStrategy:
     kind = WorkspaceKind.NPM
 
     def detect(self, _directory: Path, filenames: set[str]) -> bool:
-        return "package.json" in filenames
+        return NPM_MANIFEST in filenames
 
     def plan(self, _workspace: Workspace) -> list[CommandSpec]:
         return [
@@ -236,7 +240,7 @@ class GoStrategy:
     kind = WorkspaceKind.GO
 
     def detect(self, _directory: Path, filenames: set[str]) -> bool:
-        return "go.mod" in filenames
+        return GO_MANIFEST in filenames
 
     def plan(self, _workspace: Workspace) -> list[CommandSpec]:
         return [
@@ -253,7 +257,7 @@ class RustStrategy:
     kind = WorkspaceKind.RUST
 
     def detect(self, _directory: Path, filenames: set[str]) -> bool:
-        return "Cargo.toml" in filenames
+        return CARGO_MANIFEST in filenames
 
     def plan(self, _workspace: Workspace) -> list[CommandSpec]:
         return [
@@ -286,9 +290,11 @@ class WorkspaceDiscovery:
     ) -> None:
         self._strategies = list(strategies)
         self._skip_patterns = set(skip_patterns or [])
+        self._skip_py_qa_dirs = False
 
     def discover(self, root: Path) -> list[Workspace]:
         root = root.resolve()
+        self._skip_py_qa_dirs = not is_py_qa_workspace(root)
         workspaces: list[Workspace] = []
         for dirpath, dirnames, filenames in os.walk(root):
             directory = Path(dirpath)
@@ -313,6 +319,8 @@ class WorkspaceDiscovery:
             return True
         if any(part in ALWAYS_EXCLUDE_DIRS for part in relative.parts):
             return True
+        if self._skip_py_qa_dirs and PY_QA_DIR_NAME in relative.parts:
+            return True
         rel_str = str(relative)
         return any(pattern in rel_str for pattern in self._skip_patterns)
 
@@ -331,18 +339,14 @@ class WorkspacePlanner:
         *,
         enabled_managers: Iterable[str] | None = None,
     ) -> UpdatePlan:
-        allowed = (
-            {WorkspaceKind.from_str(kind) for kind in enabled_managers}
-            if enabled_managers
-            else None
+        allowed: set[WorkspaceKind] | None = (
+            {WorkspaceKind.from_str(kind) for kind in enabled_managers} if enabled_managers else None
         )
         items: list[UpdatePlanItem] = []
         for workspace in workspaces:
-            if allowed is not None:
-                if workspace.kind not in allowed:
-                    continue
-            strategy = self._strategies.get(workspace.kind)
-            if strategy is None:
+            if allowed is not None and workspace.kind not in allowed:
+                continue
+            if (strategy := self._strategies.get(workspace.kind)) is None:
                 continue
             commands = strategy.plan(workspace)
             items.append(
@@ -398,15 +402,15 @@ class WorkspaceUpdater:
                 result.register_failure(workspace, failure, executions)
                 return
 
-        if self._dry_run:
-            result.register_skip(workspace, executions)
-            return
-
-        if all(detail.status == "skipped" for detail in executions):
+        if all(detail.status == SKIPPED_STATUS for detail in executions):
             warn(
                 f"No commands executed for {workspace.kind.value} workspace at {rel_path}",
                 use_emoji=self._use_emoji,
             )
+            result.register_skip(workspace, executions)
+            return
+
+        if self._dry_run:
             result.register_skip(workspace, executions)
             return
 
@@ -420,14 +424,13 @@ class WorkspaceUpdater:
         spec: CommandSpec,
         rel_path: str,
     ) -> tuple[ExecutionDetail, str | None]:
-        missing = [tool for tool in spec.requires if shutil.which(tool) is None]
-        if missing:
+        if missing := [tool for tool in spec.requires if shutil.which(tool) is None]:
             message = f"missing {', '.join(missing)}"
             warn(
                 f"Skipping command {' '.join(spec.args)} ({message})",
                 use_emoji=self._use_emoji,
             )
-            detail = ExecutionDetail(command=spec, status="skipped", message=message)
+            detail = ExecutionDetail(command=spec, status=SKIPPED_STATUS, message=message)
             return detail, None
 
         if self._dry_run:
@@ -435,14 +438,12 @@ class WorkspaceUpdater:
                 f"DRY RUN: {' '.join(spec.args)}",
                 use_emoji=self._use_emoji,
             )
-            detail = ExecutionDetail(command=spec, status="skipped", message="dry-run")
+            detail = ExecutionDetail(command=spec, status=SKIPPED_STATUS, message="dry-run")
             return detail, None
 
         completed = self._runner(spec.args, workspace.directory)
         if completed.returncode != 0:
-            message = (
-                f"Command '{' '.join(spec.args)}' failed with exit code {completed.returncode}"
-            )
+            message = f"Command '{' '.join(spec.args)}' failed with exit code {completed.returncode}"
             fail(message, use_emoji=self._use_emoji)
             detail = ExecutionDetail(command=spec, status="failed", message=message)
             summary = f"{rel_path}: {message}"
