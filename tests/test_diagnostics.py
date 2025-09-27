@@ -35,6 +35,29 @@ def test_normalize_diagnostics_applies_rules() -> None:
     assert diag.tool == "pylint"
 
 
+def test_normalize_diagnostics_converts_existing_absolute_paths() -> None:
+    rules = build_severity_rules([])
+    project_root = Path.cwd()
+    absolute = project_root / "src" / "pkg" / "module.py"
+    diag = Diagnostic(
+        file=str(absolute),
+        line=3,
+        column=None,
+        severity=Severity.WARNING,
+        message="issue",
+        tool="ruff",
+    )
+
+    normalized = normalize_diagnostics(
+        [diag],
+        tool_name="ruff",
+        severity_rules=rules,
+        root=project_root,
+    )
+
+    assert normalized[0].file == "src/pkg/module.py"
+
+
 def test_dedupe_prefers_higher_severity(tmp_path: Path) -> None:
     cfg = DedupeConfig(dedupe=True, dedupe_by="severity", dedupe_line_fuzz=0)
     diag_warn = Diagnostic(

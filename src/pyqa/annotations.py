@@ -11,8 +11,9 @@ highlighting consistent without re-tokenising every message.
 from __future__ import annotations
 
 import os
+import re
 import threading
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Literal
@@ -97,7 +98,6 @@ class AnnotationEngine:
 
     def message_signature(self, message: str) -> tuple[str, ...]:
         """Return a semantic signature extracted from ``message``."""
-
         return self._analyse_message(message).signature
 
     @lru_cache(maxsize=2048)
@@ -134,67 +134,106 @@ class AnnotationEngine:
             return self._nlp
 
 
+SpanAdder = Callable[[int, int, str, HighlightKind | None], None]
+
+_PATH_PATTERN = re.compile(r"((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+(?:\.[A-Za-z0-9_]+)?)")
+_CAMEL_CASE_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9]+")
+_ARGUMENT_PATTERN = re.compile(r"function argument(?:s)?\s+([A-Za-z0-9_,\s]+)", re.IGNORECASE)
+_VARIABLE_PATTERN = re.compile(r"variable(?:\s+name)?\s+([A-Za-z_][\w\.]*)", re.IGNORECASE)
+_ATTRIBUTE_PATTERN = re.compile(r"attribute\s+[\"']([A-Za-z_][\w\.]*)[\"']", re.IGNORECASE)
+_FUNCTION_INLINE_PATTERN = re.compile(r"function\s+([A-Za-z_][\w\.]*)", re.IGNORECASE)
+
+
 def _heuristic_spans(message: str) -> tuple[list[MessageSpan], list[str]]:
     spans: list[MessageSpan] = []
     tokens: list[str] = []
-    import re
 
     def add_span(start: int, end: int, style: str, kind: HighlightKind | None = None) -> None:
         if 0 <= start < end <= len(message):
             spans.append(MessageSpan(start=start, end=end, style=style, kind=kind))
 
-    path_pattern = re.compile(
-        r"((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+(?:\.[A-Za-z0-9_]+)?)",
-    )
-    for match in path_pattern.finditer(message):
-        value = message[match.start(1) : match.end(1)]
+    tokens.extend(_highlight_paths(message, add_span))
+    tokens.extend(_highlight_camel_case(message, add_span))
+    tokens.extend(_highlight_named_patterns(message, add_span))
+
+    return spans, tokens
+
+
+def _highlight_paths(message: str, add_span: SpanAdder) -> list[str]:
+    tokens: list[str] = []
+    for match in _PATH_PATTERN.finditer(message):
+        start, end = match.start(1), match.end(1)
+        value = message[start:end]
         tokens.append(value.lower())
-        add_span(match.start(1), match.end(1), "ansi256:81", "file")
+        add_span(start, end, "ansi256:81", "file")
+    return tokens
 
-    for match in re.finditer(r"[A-Za-z][A-Za-z0-9]+", message):
+
+def _highlight_camel_case(message: str, add_span: SpanAdder) -> list[str]:
+    tokens: list[str] = []
+    for match in _CAMEL_CASE_PATTERN.finditer(message):
         value = match.group(0)
-        if _looks_camel_case(value):
-            tokens.append(value.lower())
-            add_span(match.start(0), match.end(0), "ansi256:154", "class")
+        if not _looks_camel_case(value):
+            continue
+        tokens.append(value.lower())
+        add_span(match.start(0), match.end(0), "ansi256:154", "class")
+    return tokens
 
-    argument_pattern = re.compile(r"function argument(?:s)?\s+([A-Za-z0-9_,\s]+)", re.IGNORECASE)
-    variable_pattern = re.compile(r"variable(?:\s+name)?\s+([A-Za-z_][\w\.]*)", re.IGNORECASE)
-    attribute_pattern = re.compile(r"attribute\s+[\"']([A-Za-z_][\w\.]*)[\"']", re.IGNORECASE)
-    function_inline_pattern = re.compile(r"function\s+([A-Za-z_][\w\.]*)", re.IGNORECASE)
 
-    for match in argument_pattern.finditer(message):
-        raw = match.group(1)
+def _highlight_named_patterns(message: str, add_span: SpanAdder) -> list[str]:
+    tokens: list[str] = []
+    tokens.extend(_highlight_function_arguments(message, add_span))
+    tokens.extend(
+        _highlight_simple_pattern(message, add_span, _VARIABLE_PATTERN, "ansi256:156", "variable")
+    )
+    tokens.extend(
+        _highlight_simple_pattern(message, add_span, _ATTRIBUTE_PATTERN, "ansi256:208", "attribute")
+    )
+    tokens.extend(
+        _highlight_simple_pattern(
+            message, add_span, _FUNCTION_INLINE_PATTERN, "ansi256:208", "function"
+        )
+    )
+    return tokens
+
+
+def _highlight_function_arguments(message: str, add_span: SpanAdder) -> list[str]:
+    tokens: list[str] = []
+    for match in _ARGUMENT_PATTERN.finditer(message):
+        raw_arguments = match.group(1)
         offset = match.start(1)
-        for part in raw.split(","):
+        for part in raw_arguments.split(","):
             name = part.strip(" \t.:;'\"")
             if not name:
                 continue
-            start = message.find(name, offset)
-            if start == -1:
+            start = _find_token(message, name, offset)
+            if start is None:
                 continue
             tokens.append(name.lower())
             add_span(start, start + len(name), "ansi256:213", "argument")
             offset = start + len(name)
+    return tokens
 
-    for match in variable_pattern.finditer(message):
+
+def _highlight_simple_pattern(
+    message: str,
+    add_span: SpanAdder,
+    pattern: re.Pattern[str],
+    style: str,
+    kind_label: HighlightKind,
+) -> list[str]:
+    tokens: list[str] = []
+    for match in pattern.finditer(message):
         name = match.group(1)
         start = match.start(1)
         tokens.append(name.lower())
-        add_span(start, start + len(name), "ansi256:156", "variable")
+        add_span(start, start + len(name), style, kind_label)
+    return tokens
 
-    for match in attribute_pattern.finditer(message):
-        name = match.group(1)
-        start = match.start(1)
-        tokens.append(name.lower())
-        add_span(start, start + len(name), "ansi256:208", "attribute")
 
-    for match in function_inline_pattern.finditer(message):
-        name = match.group(1)
-        start = match.start(1)
-        tokens.append(name.lower())
-        add_span(start, start + len(name), "ansi256:208", "function")
-
-    return spans, tokens
+def _find_token(message: str, token: str, offset: int) -> int | None:
+    index = message.find(token, offset)
+    return None if index == -1 else index
 
 
 def _spacy_spans(doc) -> list[MessageSpan]:  # type: ignore[no-untyped-def]

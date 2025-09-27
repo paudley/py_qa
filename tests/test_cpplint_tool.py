@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _CpplintCommand
+from pyqa.tools.builtins import CpplintCommand
 
 
 def test_cpplint_command_build(tmp_path: Path) -> None:
@@ -34,7 +34,7 @@ def test_cpplint_command_build(tmp_path: Path) -> None:
 
     action = ToolAction(
         name="lint",
-        command=_CpplintCommand(base=("cpplint", "--output=emacs")),
+        command=CpplintCommand(base=("cpplint", "--output=emacs")),
         append_files=True,
     )
 

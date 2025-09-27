@@ -27,6 +27,7 @@ from .config import (
     Config,
     ConfigError,
     DedupeConfig,
+    DuplicateDetectionConfig,
     ExecutionConfig,
     FileDiscoveryConfig,
     LicenseConfig,
@@ -98,7 +99,8 @@ class TomlConfigSource:
             return {}
         if path in stack:
             raise ConfigError(
-                "Circular include detected: " + " -> ".join(str(entry) for entry in stack + (path,)),
+                "Circular include detected: "
+                + " -> ".join(str(entry) for entry in stack + (path,)),
             )
         resolved = path.resolve()
         stat = resolved.stat()
@@ -108,7 +110,7 @@ class TomlConfigSource:
             data = copy.deepcopy(cached)
         else:
             with resolved.open("rb") as handle:
-                data = tomllib.load(handle)
+                data = cast("MutableMapping[str, Any]", tomllib.load(handle))
             _TOML_CACHE[cache_key] = copy.deepcopy(data)
         if not isinstance(data, MutableMapping):
             raise ConfigError(f"Configuration at {path} must be a table")
@@ -121,7 +123,7 @@ class TomlConfigSource:
         merged = _deep_merge(merged, document)
         return _expand_env(merged, self._env)
 
-    def _coerce_includes(self, raw: Any, base_dir: Path) -> Iterable[Path]:
+    def _coerce_includes(self, raw: Any, base_dir: Path) -> tuple[Path, ...]:
         if raw is None:
             return []
         if isinstance(raw, (str, Path)):
@@ -136,7 +138,7 @@ class TomlConfigSource:
             if not candidate.is_absolute():
                 candidate = (base_dir / candidate).resolve()
             paths.append(candidate)
-        return paths
+        return tuple(paths)
 
 
 class PyProjectConfigSource(TomlConfigSource):
@@ -292,6 +294,7 @@ class _ConfigMerger:
         self._output_section = _OutputSection(resolver)
         self._execution_section = _ExecutionSection(resolver)
         self._dedupe_section = _DedupeSection()
+        self._duplicates_section = _DuplicateSection()
         self._license_section = _LicenseSection()
         self._quality_section = _QualitySection(resolver)
         self._clean_section = _CleanSection()
@@ -340,6 +343,15 @@ class _ConfigMerger:
         updates.extend(
             FieldUpdate(section="dedupe", field=field, source=source, value=value)
             for field, value in dedupe_updates.items()
+        )
+
+        duplicates_config, duplicates_updates = self._duplicates_section.merge(
+            config.duplicates,
+            data.get("duplicates"),
+        )
+        updates.extend(
+            FieldUpdate(section="duplicates", field=field, source=source, value=value)
+            for field, value in duplicates_updates.items()
         )
 
         license_config, license_updates = self._license_section.merge(
@@ -403,6 +415,7 @@ class _ConfigMerger:
             output=output_config,
             execution=execution_config,
             dedupe=dedupe_config,
+            duplicates=duplicates_config,
             severity_rules=severity_rules,
             tool_settings=tool_settings,
             license=license_config,
@@ -500,51 +513,88 @@ class _OutputSection(_SectionMerger):
 
     def merge(self, current: OutputConfig, raw: Any) -> tuple[OutputConfig, dict[str, Any]]:
         data = self._ensure_mapping(raw, self.section)
-        tool_filters = {tool: patterns.copy() for tool, patterns in current.tool_filters.items()}
-        if "tool_filters" in data:
-            tool_filters = _normalize_tool_filters(data["tool_filters"], current.tool_filters)
 
+        tool_filters = self._merge_tool_filters(current.tool_filters, data)
+        report_out, sarif_out, pr_summary_out = self._resolve_output_paths(current, data)
+        normalized_output = self._normalize_output_mode_value(data.get("output", current.output))
+        normalized_min = self._normalize_pr_summary_min(data, current)
+        flag_updates = self._collect_flag_updates(current, data)
+
+        updates: dict[str, Any] = {
+            **flag_updates,
+            "output": normalized_output,
+            "report_out": report_out,
+            "sarif_out": sarif_out,
+            "pr_summary_out": pr_summary_out,
+            "pr_summary_min_severity": normalized_min,
+        }
+        if tool_filters:
+            updates["tool_filters"] = tool_filters
+
+        updated = _model_replace(current, **updates)
+        if updated.quiet:
+            updated = _model_replace(updated, show_passing=False)
+        return updated, self._diff_model(current, updated)
+
+    def _merge_tool_filters(
+        self,
+        existing: Mapping[str, list[str]],
+        data: Mapping[str, Any],
+    ) -> dict[str, list[str]]:
+        merged = {tool: patterns.copy() for tool, patterns in existing.items()}
+        if "tool_filters" in data:
+            return _normalize_tool_filters(data["tool_filters"], existing)
+        return merged
+
+    def _resolve_output_paths(
+        self,
+        current: OutputConfig,
+        data: Mapping[str, Any],
+    ) -> tuple[Path | None, Path | None, Path | None]:
         pr_summary_out = self._resolver.resolve_optional(
             data.get("pr_summary_out", current.pr_summary_out),
         )
         report_out = self._resolver.resolve_optional(data.get("report_out", current.report_out))
         sarif_out = self._resolver.resolve_optional(data.get("sarif_out", current.sarif_out))
+        return report_out, sarif_out, pr_summary_out
 
-        output_mode = data.get("output", current.output)
-        if not isinstance(output_mode, str):
+    @staticmethod
+    def _normalize_output_mode_value(value: Any) -> str:
+        if not isinstance(value, str):
             raise ConfigError("output.mode must be a string")
-        normalized_output = _normalize_output_mode(output_mode)
+        return _normalize_output_mode(value)
 
-        pr_summary_min = data.get("pr_summary_min_severity", current.pr_summary_min_severity)
-        if not isinstance(pr_summary_min, str):
+    @staticmethod
+    def _normalize_pr_summary_min(
+        data: Mapping[str, Any],
+        current: OutputConfig,
+    ) -> str:
+        candidate = data.get("pr_summary_min_severity", current.pr_summary_min_severity)
+        if not isinstance(candidate, str):
             raise ConfigError("output.pr_summary_min_severity must be a string")
-        normalized_min = _normalize_min_severity(pr_summary_min)
+        return _normalize_min_severity(candidate)
 
-        updated = _model_replace(
-            current,
-            verbose=data.get("verbose", current.verbose),
-            emoji=data.get("emoji", current.emoji),
-            color=data.get("color", current.color),
-            show_passing=data.get("show_passing", current.show_passing),
-            output=normalized_output,
-            pretty_format=data.get("pretty_format", current.pretty_format),
-            group_by_code=data.get("group_by_code", current.group_by_code),
-            report=data.get("report", current.report),
-            report_out=report_out,
-            report_include_raw=data.get("report_include_raw", current.report_include_raw),
-            sarif_out=sarif_out,
-            pr_summary_out=pr_summary_out,
-            pr_summary_limit=data.get("pr_summary_limit", current.pr_summary_limit),
-            pr_summary_min_severity=normalized_min,
-            pr_summary_template=data.get("pr_summary_template", current.pr_summary_template),
-            gha_annotations=data.get("gha_annotations", current.gha_annotations),
-            annotations_use_json=data.get("annotations_use_json", current.annotations_use_json),
-            quiet=data.get("quiet", current.quiet),
-            tool_filters=tool_filters if tool_filters else current.tool_filters,
+    @staticmethod
+    def _collect_flag_updates(
+        current: OutputConfig,
+        data: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        keys = (
+            "verbose",
+            "emoji",
+            "color",
+            "show_passing",
+            "pretty_format",
+            "group_by_code",
+            "report",
+            "report_include_raw",
+            "pr_summary_limit",
+            "pr_summary_template",
+            "gha_annotations",
+            "annotations_use_json",
+            "quiet",
         )
-        if updated.quiet:
-            updated = _model_replace(updated, show_passing=False)
-        return updated, self._diff_model(current, updated)
+        return {key: data.get(key, getattr(current, key)) for key in keys}
 
 
 class _ExecutionSection(_SectionMerger):
@@ -556,21 +606,31 @@ class _ExecutionSection(_SectionMerger):
     def merge(self, current: ExecutionConfig, raw: Any) -> tuple[ExecutionConfig, dict[str, Any]]:
         data = self._ensure_mapping(raw, self.section)
         cache_dir_value = data.get("cache_dir", current.cache_dir)
-        cache_dir = self._resolver.resolve(cache_dir_value) if cache_dir_value is not None else current.cache_dir
+        cache_dir = (
+            self._resolver.resolve(cache_dir_value)
+            if cache_dir_value is not None
+            else current.cache_dir
+        )
 
         jobs = data.get("jobs", current.jobs)
         bail = data.get("bail", current.bail)
         if bail:
             jobs = 1
 
-        only = list(_coerce_iterable(data["only"], "execution.only")) if "only" in data else list(current.only)
+        only = (
+            list(_coerce_iterable(data["only"], "execution.only"))
+            if "only" in data
+            else list(current.only)
+        )
         languages = (
             list(_coerce_iterable(data["languages"], "execution.languages"))
             if "languages" in data
             else list(current.languages)
         )
         enable = (
-            list(_coerce_iterable(data["enable"], "execution.enable")) if "enable" in data else list(current.enable)
+            list(_coerce_iterable(data["enable"], "execution.enable"))
+            if "enable" in data
+            else list(current.enable)
         )
 
         updated = _model_replace(
@@ -762,6 +822,76 @@ class _DedupeSection(_SectionMerger):
             dedupe_prefer=list(data.get("dedupe_prefer", current.dedupe_prefer)),
             dedupe_line_fuzz=data.get("dedupe_line_fuzz", current.dedupe_line_fuzz),
             dedupe_same_file_only=data.get("dedupe_same_file_only", current.dedupe_same_file_only),
+        )
+        return updated, self._diff_model(current, updated)
+
+
+class _DuplicateSection(_SectionMerger):
+    section = "duplicates"
+
+    def merge(
+        self,
+        current: DuplicateDetectionConfig,
+        raw: Any,
+    ) -> tuple[DuplicateDetectionConfig, dict[str, Any]]:
+        data = self._ensure_mapping(raw, self.section)
+
+        enabled = _coerce_optional_bool(data.get("enabled"), current.enabled, "duplicates.enabled")
+        ast_enabled = _coerce_optional_bool(
+            data.get("ast_enabled"),
+            current.ast_enabled,
+            "duplicates.ast_enabled",
+        )
+        ast_include_tests = _coerce_optional_bool(
+            data.get("ast_include_tests"),
+            current.ast_include_tests,
+            "duplicates.ast_include_tests",
+        )
+        cross_diagnostics = _coerce_optional_bool(
+            data.get("cross_diagnostics"),
+            current.cross_diagnostics,
+            "duplicates.cross_diagnostics",
+        )
+        navigator_tags = _coerce_optional_bool(
+            data.get("navigator_tags"),
+            current.navigator_tags,
+            "duplicates.navigator_tags",
+        )
+
+        ast_min_lines = _coerce_optional_int(
+            data.get("ast_min_lines"),
+            current.ast_min_lines,
+            "duplicates.ast_min_lines",
+        )
+        if ast_min_lines < 1:
+            raise ConfigError("duplicates.ast_min_lines must be >= 1")
+
+        ast_min_nodes = _coerce_optional_int(
+            data.get("ast_min_nodes"),
+            current.ast_min_nodes,
+            "duplicates.ast_min_nodes",
+        )
+        if ast_min_nodes < 1:
+            raise ConfigError("duplicates.ast_min_nodes must be >= 1")
+
+        cross_threshold = _coerce_optional_int(
+            data.get("cross_message_threshold"),
+            current.cross_message_threshold,
+            "duplicates.cross_message_threshold",
+        )
+        if cross_threshold < 2:
+            raise ConfigError("duplicates.cross_message_threshold must be >= 2")
+
+        updated = _model_replace(
+            current,
+            enabled=enabled,
+            ast_enabled=ast_enabled,
+            ast_min_lines=ast_min_lines,
+            ast_min_nodes=ast_min_nodes,
+            ast_include_tests=ast_include_tests,
+            cross_diagnostics=cross_diagnostics,
+            cross_message_threshold=cross_threshold,
+            navigator_tags=navigator_tags,
         )
         return updated, self._diff_model(current, updated)
 

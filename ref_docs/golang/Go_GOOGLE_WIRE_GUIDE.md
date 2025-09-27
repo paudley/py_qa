@@ -18,10 +18,10 @@ wire command-line tool analyzes a set of declarative instructions and generates 
 
 This design choice yields several critical advantages:
 
-* **Compile-Time Safety:** Any errors in the dependency graph, such as a missing provider or a type mismatch, are caught by the wire tool or the Go compiler itself. This transforms a category of potential runtime panics into predictable compile-time errors.1
-* **Performance:** By eschewing reflection, Wire introduces zero runtime performance overhead. The generated code is as efficient as manually written initialization code, making it suitable for the most performance-sensitive applications.4
-* **Clarity and Debuggability:** The generated wire\_gen.go file provides an explicit, readable, and debuggable trace of how the application's components are constructed. There is no "magic" happening behind the scenes, which simplifies reasoning about the application's startup behavior.2
-* **Static Analysis:** Because the entire dependency graph is resolved at compile time, it is statically knowable, opening opportunities for advanced tooling, visualization, and architectural validation.2
+- **Compile-Time Safety:** Any errors in the dependency graph, such as a missing provider or a type mismatch, are caught by the wire tool or the Go compiler itself. This transforms a category of potential runtime panics into predictable compile-time errors.1
+- **Performance:** By eschewing reflection, Wire introduces zero runtime performance overhead. The generated code is as efficient as manually written initialization code, making it suitable for the most performance-sensitive applications.4
+- **Clarity and Debuggability:** The generated wire_gen.go file provides an explicit, readable, and debuggable trace of how the application's components are constructed. There is no "magic" happening behind the scenes, which simplifies reasoning about the application's startup behavior.2
+- **Static Analysis:** Because the entire dependency graph is resolved at compile time, it is statically knowable, opening opportunities for advanced tooling, visualization, and architectural validation.2
 
 Accepting a build-time code generation step is a deliberate trade-off for achieving complete runtime safety, performance, and transparency. In large-scale, mission-critical systems where predictability and robustness are paramount, this trade-off is highly favorable. This design aligns perfectly with Go's broader ethos of favoring explicitness and clarity over implicit behavior.
 
@@ -29,7 +29,7 @@ Accepting a build-time code generation step is a deliberate trade-off for achiev
 
 Wire's architecture is built upon two simple yet powerful concepts: Providers and Injectors. Understanding their roles is key to mastering the framework.
 
-* **Providers:** A provider is an ordinary Go function that knows how to create a value of a specific type. The function's parameters are its dependencies, which Wire will satisfy by calling other providers.1 A crucial aspect of Wire's design is that these are just normal functions. Code written to be used with Wire remains perfectly useful for manual initialization, preventing lock-in to the framework.3\
+- **Providers:** A provider is an ordinary Go function that knows how to create a value of a specific type. The function's parameters are its dependencies, which Wire will satisfy by calling other providers.1 A crucial aspect of Wire's design is that these are just normal functions. Code written to be used with Wire remains perfectly useful for manual initialization, preventing lock-in to the framework.3\
   Go\
   // NewConfig is a provider for the Config struct. It has no dependencies.\
   func NewConfig() (\*Config, error) {\
@@ -41,7 +41,7 @@ Wire's architecture is built upon two simple yet powerful concepts: Providers an
   //... create database connection using cfg\
   }
 
-* **Injectors:** An injector is a function declaration that serves as the entry point for code generation. It is a template that defines the desired output of a dependency graph. An injector function is identified by two characteristics: it must be in a file with the //go:build wireinject build tag, and its body must contain only a call to wire.Build(...).6 The arguments to\
+- **Injectors:** An injector is a function declaration that serves as the entry point for code generation. It is a template that defines the desired output of a dependency graph. An injector function is identified by two characteristics: it must be in a file with the //go:build wireinject build tag, and its body must contain only a call to wire.Build(...).6 The arguments to\
   wire.Build are the set of providers Wire can use to construct the graph. The injector's signature specifies the inputs (parameters) and the final, desired component (return value).7\
   Go\
   //go:build wireinject
@@ -59,13 +59,13 @@ Wire's architecture is built upon two simple yet powerful concepts: Providers an
   return nil, nil // These return values are placeholders.\
   }
 
-When the wire command is executed, it analyzes the InitializeDatabase injector. It sees that the goal is to produce a \*sql.DB. To do this, it needs to call the NewDatabase provider. It then sees that NewDatabase requires a \*Config, which can be produced by the NewConfig provider. Wire then generates a wire\_gen.go file containing the concrete implementation, resolving the directed acyclic graph (DAG) of dependencies.8
+When the wire command is executed, it analyzes the InitializeDatabase injector. It sees that the goal is to produce a \*sql.DB. To do this, it needs to call the NewDatabase provider. It then sees that NewDatabase requires a \*Config, which can be produced by the NewConfig provider. Wire then generates a wire_gen.go file containing the concrete implementation, resolving the directed acyclic graph (DAG) of dependencies.8
 
 ### **A Note on Go 1.25+ and Future Compatibility**
 
 The forthcoming Go 1.25 release is expected to bring further improvements to the toolchain, runtime, and libraries, such as the generation of debug information using DWARF version 5, which can reduce binary size and link times.16
 
-Wire's code generation philosophy ensures its resilience and forward compatibility with such changes. Because the output of Wire is standard, idiomatic Go code, it automatically benefits from any and all improvements made to the Go compiler, linker, and debugging tools. The wire\_gen.go file is not a special artifact; it is simply Go code that is processed by the standard toolchain. Therefore, all principles, patterns, and techniques described in this guide remain fully applicable and are expected to function without issue in Go 1.25 and beyond.
+Wire's code generation philosophy ensures its resilience and forward compatibility with such changes. Because the output of Wire is standard, idiomatic Go code, it automatically benefits from any and all improvements made to the Go compiler, linker, and debugging tools. The wire_gen.go file is not a special artifact; it is simply Go code that is processed by the standard toolchain. Therefore, all principles, patterns, and techniques described in this guide remain fully applicable and are expected to function without issue in Go 1.25 and beyond.
 
 ## **Architecting for Modularity with Provider Sets**
 
@@ -199,7 +199,7 @@ notifier Notifier\
 }
 
 func NewMessageService(n Notifier) \*MessageService {\
-return \&MessageService{notifier: n}\
+return &MessageService{notifier: n}\
 }
 
 The MessageService is closed for modification. Its behavior can be extended by creating new Notifier implementations. Two different provider sets can be defined to configure the service for different environments without touching MessageService.
@@ -277,7 +277,7 @@ new(...) is a compile-time mechanism to pass type information to Wire without ne
 
 Often, the dependency graph requires not just constructed objects but also simple, static values like configuration parameters or pre-existing variables.
 
-* **wire.Value**: This provider is used to inject a literal value into the graph. The value can be any non-interface type, such as a struct, a string, or an integer. This is the standard way to introduce application configuration, loaded from a file or environment, into the dependency graph.13\
+- **wire.Value**: This provider is used to inject a literal value into the graph. The value can be any non-interface type, such as a struct, a string, or an integer. This is the standard way to introduce application configuration, loaded from a file or environment, into the dependency graph.13\
   Go\
   type AppConfig struct {\
   Port int\
@@ -291,7 +291,7 @@ Often, the dependency graph requires not just constructed objects but also simpl
   //... other providers that depend on AppConfig\
   )
 
-* **wire.InterfaceValue**: This is a specialized version of wire.Value for cases where the value being provided is of a concrete type but needs to satisfy an interface dependency. A canonical example is providing os.Stdin (which is of type \*os.File) to a component that requires an io.Reader.13\
+- **wire.InterfaceValue**: This is a specialized version of wire.Value for cases where the value being provided is of a concrete type but needs to satisfy an interface dependency. A canonical example is providing os.Stdin (which is of type \*os.File) to a component that requires an io.Reader.13\
   Go\
   var ReaderSet = wire.NewSet(\
   wire.InterfaceValue(new(io.Reader), os.Stdin),\
@@ -301,7 +301,7 @@ Often, the dependency graph requires not just constructed objects but also simpl
 
 To reduce boilerplate for simple struct creation, Wire offers two utility providers:
 
-* **wire.Struct**: This provider instructs Wire to construct an instance of a struct by filling its exported fields with values from other providers in the graph. This eliminates the need to write a simple constructor function that just assigns fields.11 The special string\
+- **wire.Struct**: This provider instructs Wire to construct an instance of a struct by filling its exported fields with values from other providers in the graph. This eliminates the need to write a simple constructor function that just assigns fields.11 The special string\
   "\*" can be used to instruct Wire to fill all exported fields.\
   Go\
   type Foo struct { /\*... \*/ }\
@@ -317,7 +317,7 @@ To reduce boilerplate for simple struct creation, Wire offers two utility provid
   wire.Struct(new(FooBar), "\*"),\
   )
 
-* **wire.FieldsOf**: This provider performs the inverse operation. It takes a struct that already exists in the graph and makes its individual fields available as provided types.13 This is exceptionally useful for unpacking a master configuration struct into smaller, domain-specific configuration objects, which can then be injected into the relevant services. This pattern adheres to the Interface Segregation Principle by ensuring services only depend on the configuration they need.\
+- **wire.FieldsOf**: This provider performs the inverse operation. It takes a struct that already exists in the graph and makes its individual fields available as provided types.13 This is exceptionally useful for unpacking a master configuration struct into smaller, domain-specific configuration objects, which can then be injected into the relevant services. This pattern adheres to the Interface Segregation Principle by ensuring services only depend on the configuration they need.\
   Go\
   type DBConfig struct { /\*... \*/ }\
   type APIConfig struct { /\*... \*/ }\
@@ -336,11 +336,11 @@ To reduce boilerplate for simple struct creation, Wire offers two utility provid
 
 Robust applications must gracefully handle initialization failures and ensure that acquired resources (like database connections, file handles, or network listeners) are properly released. Wire has first-class support for this entire lifecycle through an extended provider signature: func(...) (T, func(), error).13
 
-* **Error Handling:** If any provider in the dependency graph returns a non-nil error, Wire immediately halts the initialization process. The generated code will not proceed to call subsequent providers.7
-* **Cleanup Functions:** A provider can return a func() as its second return value. This function contains the logic to clean up the resource created by the provider (e.g., db.Close()).9
-* **Lifecycle Orchestration:** Wire's generated code orchestrates this lifecycle perfectly.
+- **Error Handling:** If any provider in the dependency graph returns a non-nil error, Wire immediately halts the initialization process. The generated code will not proceed to call subsequent providers.7
+- **Cleanup Functions:** A provider can return a func() as its second return value. This function contains the logic to clean up the resource created by the provider (e.g., db.Close()).9
+- **Lifecycle Orchestration:** Wire's generated code orchestrates this lifecycle perfectly.
   1. If an error occurs during initialization, Wire calls the cleanup functions for all resources that were *successfully* initialized up to that point, in the reverse order of their creation, before returning the error.34
-  2. If initialization succeeds, the injector returns a single, aggregate cleanup function. The caller is responsible for deferring the execution of this function. When called, this aggregate function will execute all the individual cleanup functions in the correct reverse dependency order.7
+  1. If initialization succeeds, the injector returns a single, aggregate cleanup function. The caller is responsible for deferring the execution of this function. When called, this aggregate function will execute all the individual cleanup functions in the correct reverse dependency order.7
 
 Go\
 func NewDatabase(cfg \*DBConfig) (\*sql.DB, func(), error) {\
@@ -402,10 +402,10 @@ Applying Wire's features effectively requires adhering to a set of best practice
 The structure of injectors serves as the composition root of the application and should be designed thoughtfully. Two primary patterns emerge:
 
 1. **Single Top-Level Injector:** For many monolithic applications, such as a standard web service or a single-purpose worker, a single top-level injector (e.g., InitializeApp or InitializeServer) is often sufficient. This injector composes all the necessary ProviderSets from different layers to build the final application object.31 This approach is simple and provides a clear, single entry point for understanding the entire application's construction.
-2. **Multiple, Per-Feature Injectors:** In more complex systems, it can be advantageous to have multiple, smaller injectors. This pattern is useful in several scenarios:
-   * **Multi-Binary Projects:** An application that produces multiple binaries (e.g., a gRPC server and a separate CLI tool) would have one injector for each binary's main function.
-   * **Independent Feature Testing:** Creating an injector for a specific feature or service (e.g., InitializeUserService) allows that feature to be instantiated and tested in isolation, without needing to build the entire application graph.39
-   * **Command-Line Tools:** A CLI with multiple subcommands is a prime use case. Each subcommand can have its own injector, which composes a set of common providers (for logging, configuration) with command-specific providers.10
+1. **Multiple, Per-Feature Injectors:** In more complex systems, it can be advantageous to have multiple, smaller injectors. This pattern is useful in several scenarios:
+   - **Multi-Binary Projects:** An application that produces multiple binaries (e.g., a gRPC server and a separate CLI tool) would have one injector for each binary's main function.
+   - **Independent Feature Testing:** Creating an injector for a specific feature or service (e.g., InitializeUserService) allows that feature to be instantiated and tested in isolation, without needing to build the entire application graph.39
+   - **Command-Line Tools:** A CLI with multiple subcommands is a prime use case. Each subcommand can have its own injector, which composes a set of common providers (for logging, configuration) with command-specific providers.10
 
 The choice depends on the application's architecture, but the goal is to keep injectors focused on a single, coherent purpose.
 
@@ -414,9 +414,9 @@ The choice depends on the application's architecture, but the goal is to keep in
 Configuration is a critical dependency that should be managed explicitly within the dependency graph. The most robust pattern for this is as follows:
 
 1. **Load Configuration Early:** Create a single provider function (e.g., NewConfig) that is responsible for loading all application configuration from its source (e.g., files, environment variables) into a master configuration struct.1
-2. **Provide the Master Config:** Use wire.Value or the provider function to inject this master Config struct into the graph.2
-3. **Unpack with wire.FieldsOf:** Use wire.FieldsOf to "unpack" the master Config struct, making its sub-structs (e.g., DBConfig, CacheConfig) available as individual types in the graph.
-4. **Inject Granular Configs:** Services and repositories should depend on the smallest, most specific configuration struct they need, not the entire master Config struct. This adheres to the Interface Segregation and Single Responsibility principles, preventing components from being coupled to configuration values they do not use.
+1. **Provide the Master Config:** Use wire.Value or the provider function to inject this master Config struct into the graph.2
+1. **Unpack with wire.FieldsOf:** Use wire.FieldsOf to "unpack" the master Config struct, making its sub-structs (e.g., DBConfig, CacheConfig) available as individual types in the graph.
+1. **Inject Granular Configs:** Services and repositories should depend on the smallest, most specific configuration struct they need, not the entire master Config struct. This adheres to the Interface Segregation and Single Responsibility principles, preventing components from being coupled to configuration values they do not use.
 
 ### **Effective Strategies for Testing with Wire**
 
@@ -425,19 +425,19 @@ Wire's structure is highly conducive to unit and integration testing. The key is
 The recommended strategy is to create test-specific injectors in files named \*\_test.go. These injectors build the service being tested but use a different set of providers.1
 
 1. **Define Production and Mock Provider Sets:** In a feature package, define the standard ProviderSet. Alongside it, define a MockProviderSet or TestProviderSet.
-2. **Use wire.Bind for Swapping:** The test provider set should include providers for mock implementations and use wire.Bind to tell Wire to use these mocks to satisfy the interface dependencies of the service under test.
-3. **Create a Test Injector:** In the \*\_test.go file, create an injector that uses the TestProviderSet to build the service and its mocks. The injector can return the service under test as well as the mocks, so the test function can control their behavior and make assertions.
+1. **Use wire.Bind for Swapping:** The test provider set should include providers for mock implementations and use wire.Bind to tell Wire to use these mocks to satisfy the interface dependencies of the service under test.
+1. **Create a Test Injector:** In the \*\_test.go file, create an injector that uses the TestProviderSet to build the service and its mocks. The injector can return the service under test as well as the mocks, so the test function can control their behavior and make assertions.
 
 Go
 
-// in user/providers\_test.go\
+// in user/providers_test.go\
 var TestProviderSet = wire.NewSet(\
 NewUserService,\
 NewMockUserRepository, // Returns a mock that satisfies UserRepository interface\
 wire.Bind(new(UserRepository), new(\*MockUserRepository)),\
 )
 
-// in user/user\_test.go\
+// in user/user_test.go\
 //go:build wireinject
 
 func initializeTestUserService() (\*UserService, \*MockUserRepository) {\
@@ -464,7 +464,7 @@ Go
 package main\
 //...
 
-This allows a developer to run go generate./... from the project root to update all wire\_gen.go files automatically. This practice ensures that the generated code is always in sync with the provider and injector definitions, simplifying the development workflow and making it easy to integrate into CI/CD pipelines.
+This allows a developer to run go generate./... from the project root to update all wire_gen.go files automatically. This practice ensures that the generated code is always in sync with the provider and injector definitions, simplifying the development workflow and making it easy to integrate into CI/CD pipelines.
 
 ## **Identifying and Refactoring Wire Anti-Patterns**
 
@@ -488,33 +488,33 @@ The principles and patterns discussed can be synthesized into architectural blue
 
 CLI tools often consist of a set of commands, each with its own logic and dependencies, but also sharing common components like configuration loaders and loggers.6
 
-* **Structure:**
+- **Structure:**
   1. **Common Providers:** Create a common package that contains a CommonSet = wire.NewSet(...). This set should include providers for application-wide singletons like the logger, configuration loader, and any API clients shared across commands.
-  2. **Injector-per-Command:** For each subcommand (e.g., create, delete, list), create a dedicated package (e.g., cmd/create). Inside this package, define an injector (e.g., InitializeCreateCommand).
-  3. **Composition:** Each command's injector will call wire.Build with the common.CommonSet as well as its own command-specific providers.
-  4. **Main Function:** The main function of the CLI parses the command-line arguments and calls the appropriate injector to build and execute the selected command. This structure keeps command logic isolated and makes it easy to test each command independently.
+  1. **Injector-per-Command:** For each subcommand (e.g., create, delete, list), create a dedicated package (e.g., cmd/create). Inside this package, define an injector (e.g., InitializeCreateCommand).
+  1. **Composition:** Each command's injector will call wire.Build with the common.CommonSet as well as its own command-specific providers.
+  1. **Main Function:** The main function of the CLI parses the command-line arguments and calls the appropriate injector to build and execute the selected command. This structure keeps command logic isolated and makes it easy to test each command independently.
 
 ### **Blueprint 2: A Scalable Web Service (e.g., REST/gRPC)**
 
 Web services typically follow a layered architecture (e.g., handlers, services, repositories). Wire is exceptionally well-suited to enforcing the boundaries between these layers.31
 
-* **Structure:**
+- **Structure:**
   1. **Layered Provider Sets:** Each architectural layer should be in its own package and export a single ProviderSet.
-     * data/provider.go: Exports DataSet, containing database connections, repository implementations, and wire.Bind statements for repository interfaces.
-     * biz/provider.go: Exports BizSet, containing business logic use cases/services, which depend on interfaces from the data layer.
-     * service/provider.go: Exports ServiceSet, containing gRPC or HTTP handlers, which depend on interfaces from the business logic layer.
-  2. **Top-Level Injector:** A single top-level injector, InitializeApp or InitializeServer, located in cmd/server/wire.go, composes these layered sets: wire.Build(data.DataSet, biz.BizSet, service.ServiceSet,...).
-  3. **Dependency Inversion:** This structure rigorously enforces the Dependency Inversion Principle. The biz layer knows nothing about the concrete database in data, and the service layer knows nothing about the concrete business logic implementation in biz. All connections are made through interfaces, with wire.Bind tying them together at the composition root.
+     - data/provider.go: Exports DataSet, containing database connections, repository implementations, and wire.Bind statements for repository interfaces.
+     - biz/provider.go: Exports BizSet, containing business logic use cases/services, which depend on interfaces from the data layer.
+     - service/provider.go: Exports ServiceSet, containing gRPC or HTTP handlers, which depend on interfaces from the business logic layer.
+  1. **Top-Level Injector:** A single top-level injector, InitializeApp or InitializeServer, located in cmd/server/wire.go, composes these layered sets: wire.Build(data.DataSet, biz.BizSet, service.ServiceSet,...).
+  1. **Dependency Inversion:** This structure rigorously enforces the Dependency Inversion Principle. The biz layer knows nothing about the concrete database in data, and the service layer knows nothing about the concrete business logic implementation in biz. All connections are made through interfaces, with wire.Bind tying them together at the composition root.
 
 ### **Blueprint 3: A Reusable Go Library/Module**
 
 When building a library intended for consumption by other applications, the goal is to make it "DI-friendly" without forcing the consumer to use Wire.11
 
-* **Structure:**
+- **Structure:**
   1. **No Injectors:** The library itself should contain **no injector files** (i.e., no files with //go:build wireinject). The library's role is to provide components, not to build a final application.
-  2. **Export a Public ProviderSet:** The library's primary entry point for DI is a single, exported ProviderSet. This set should include providers for all of the library's public, constructible types.
-  3. **Include Interface Bindings:** If the library's components depend on interfaces that are also implemented within the library, the public ProviderSet must include the necessary wire.Bind statements. This ensures that a consumer can use the set without needing to know the library's internal implementation details.
-  4. **Consumer Responsibility:** The application that consumes the library is then responsible for including the library's ProviderSet in its own injector. This allows the consumer's DI tool (whether it's Wire or manual injection) to construct the library's components and integrate them into the broader application graph.
+  1. **Export a Public ProviderSet:** The library's primary entry point for DI is a single, exported ProviderSet. This set should include providers for all of the library's public, constructible types.
+  1. **Include Interface Bindings:** If the library's components depend on interfaces that are also implemented within the library, the public ProviderSet must include the necessary wire.Bind statements. This ensures that a consumer can use the set without needing to know the library's internal implementation details.
+  1. **Consumer Responsibility:** The application that consumes the library is then responsible for including the library's ProviderSet in its own injector. This allows the consumer's DI tool (whether it's Wire or manual injection) to construct the library's components and integrate them into the broader application graph.
 
 ## **Conclusion**
 
@@ -527,48 +527,48 @@ By adopting the best practices and avoiding the common anti-patterns outlined in
 #### **Works cited**
 
 1. Introduction to Wire: Dependency Injection in Go | by piresc - Medium, accessed September 17, 2025, <https://medium.com/@piresc.dev/introduction-to-wire-dependency-injection-in-go-757e0e53189e>
-2. Compile-time Dependency Injection With Go Cloud's Wire - The Go Programming Language, accessed September 17, 2025, <https://go.dev/blog/wire>
-3. google/wire: Compile-time Dependency Injection for Go - GitHub, accessed September 17, 2025, <https://github.com/google/wire>
-4. Dependency Injection in Go: Comparing Wire, Dig, Fx & More - DEV ..., accessed September 17, 2025, <https://dev.to/rezende79/dependency-injection-in-go-comparing-wire-dig-fx-more-3nkj>
-5. Google's Wire: Automated Dependency Injection in Go : r/golang - Reddit, accessed September 17, 2025, <https://www.reddit.com/r/golang/comments/115jxp4/googles_wire_automated_dependency_injection_in_go/>
-6. Go dependency injection with Wire - LogRocket Blog, accessed September 17, 2025, <https://blog.logrocket.com/go-dependency-injection-wire/>
-7. Dependency Injection in GO with Wire | by Santosh Shrestha - wesionaryTEAM, accessed September 17, 2025, <https://articles.wesionary.team/dependency-injection-in-go-with-wire-74f81cd222f6>
-8. Go with Wire - JetBrains Guide, accessed September 17, 2025, <https://www.jetbrains.com/guide/go/tutorials/dependency_injection_part_two/inject_wire/>
-9. Golang with google wire - DEV Community, accessed September 17, 2025, <https://dev.to/kittichanr/golang-with-google-wire-516l>
-10. Go Dependency Injection with Wire | software is fun - Drew Olson, accessed September 17, 2025, <https://blog.drewolson.org/go-dependency-injection-with-wire/>
-11. 12 Creating Dependecy Injection Library Google Wire - Santekno.com | Tech Tutorials and Trends, accessed September 17, 2025, <https://www.santekno.com/en/12-creating-dependecy-injection-library-google-wire/>
-12. Dependency Injection | Kratos, accessed September 17, 2025, <https://go-kratos.dev/en/docs/guide/wire/>
-13. wire package - github.com/google/wire - Go Packages, accessed September 17, 2025, <https://pkg.go.dev/github.com/google/wire>
-14. Golang with google wire. Introduction | by kittichanr - Medium, accessed September 17, 2025, <https://medium.com/@kittichanr/golang-with-google-wire-cbd77ad4536a>
-15. Go: Dependency injection with Wire - Tit Petric, accessed September 17, 2025, <https://scene-si.org/2019/12/11/dependency-injection-with-wire/>
-16. Go 1.25 Release Notes - The Go Programming Language, accessed September 17, 2025, <https://tip.golang.org/doc/go1.25>
-17. How to handle DI in golang? - Reddit, accessed September 17, 2025, <https://www.reddit.com/r/golang/comments/17wdlar/how_to_handle_di_in_golang/>
-18. Common modularization patterns | App architecture - Android Developers, accessed September 17, 2025, <https://developer.android.com/topic/modularization/patterns>
-19. Single-Responsibility Principle done right - DEV Community, accessed September 17, 2025, <https://dev.to/riccardo_cardin/single-responsibility-principle-done-right-15eo>
-20. SOLID Principles in Go (Golang): A Comprehensive Guide | by Hiten ..., accessed September 17, 2025, <https://medium.com/hprog99/solid-principles-in-go-golang-a-comprehensive-guide-7b9f866e5433>
-21. Mastering SOLID Principles in Go. A Detailed and Easy-to-Understand Guide - Stackademic, accessed September 17, 2025, <https://blog.stackademic.com/mastering-solid-principles-in-go-3d7aac921fec>
-22. Single-responsibility principle - Wikipedia, accessed September 17, 2025, <https://en.wikipedia.org/wiki/Single-responsibility_principle>
-23. What Is the Single Responsibility Principle (SRP) | LambdaTest, accessed September 17, 2025, <https://www.lambdatest.com/blog/single-responsibility-principle/>
-24. SOLID Principles-The Single Responsibility Principle - JavaTechOnline, accessed September 17, 2025, <https://javatechonline.com/solid-principles-the-single-responsibility-principle/>
-25. Open–closed principle - Wikipedia, accessed September 17, 2025, <https://en.wikipedia.org/wiki/Open%E2%80%93closed_principle>
-26. The Open-Closed Principle (OCP) — SOLID Principles Deep Dive in ..., accessed September 17, 2025, <https://itnext.io/the-open-closed-principle-ocp-in-kotlin-deep-dive-86529ff24a74>
-27. SOLID - Wikipedia, accessed September 17, 2025, <https://en.wikipedia.org/wiki/SOLID>
-28. Interface segregation principle - Wikipedia, accessed September 17, 2025, <https://en.wikipedia.org/wiki/Interface_segregation_principle>
-29. Interface Segregation Principle in Go — Explained Using Dragon ..., accessed September 17, 2025, <https://betterprogramming.pub/interface-segregation-principle-in-golang-using-dragon-ball-example-43a26f367225>
-30. Interface Segregation Principle- Program to an interface - Stack Overflow, accessed September 17, 2025, <https://stackoverflow.com/questions/9249832/interface-segregation-principle-program-to-an-interface>
-31. June Personal Web - Golang Dependency Injection Using Wire, accessed September 17, 2025, <https://clavinjune.dev/en/blogs/golang-dependency-injection-using-wire/>
-32. wire: wire.FieldsOf() to inject the values from fields of a struct · Issue ..., accessed September 17, 2025, <https://github.com/google/wire/issues/32>
-33. wire: support Close methods · Issue #193 · google/wire - GitHub, accessed September 17, 2025, <https://github.com/google/wire/issues/193>
-34. consider using defer for cleanup functions · Issue #41 · google/wire - GitHub, accessed September 17, 2025, <https://github.com/google/wire/issues/41>
-35. Binding one implementation to multiple interfaces · Issue #257 · google/wire - GitHub, accessed September 17, 2025, <https://github.com/google/wire/issues/257>
-36. Idea: Provide array with multiple provider · Issue #207 · google/wire, accessed September 17, 2025, <https://github.com/google/wire/issues/207>
-37. document why wire doesn't allow duplicate identical providers in a provider set · Issue #77 · google/wire - GitHub, accessed September 17, 2025, <https://github.com/google/wire/issues/77>
-38. Creating Per-Provider Loggers in Wire Dependency Injection - Stack Overflow, accessed September 17, 2025, <https://stackoverflow.com/questions/69398824/creating-per-provider-loggers-in-wire-dependency-injection>
-39. wire: share dependency graph across injectors in the same package? · Issue #21 - GitHub, accessed September 17, 2025, <https://github.com/google/wire/issues/21>
-40. Dependency injection in Go with Google Wire | by Bagus Brahmantya | Towards Dev, accessed September 17, 2025, <https://medium.com/towardsdev/dependency-injection-in-go-with-google-wire-f3f2b07af28c>
-41. Boosting Code Modularity in Go Using Wire for Dependency Injection, accessed September 17, 2025, <https://www.codingexplorations.com/blog/boosting-code-modularity-in-go-using-wire-for-dependency-injection>
-42. Introduction to antipatterns | Apigee - Google Cloud, accessed September 17, 2025, <https://cloud.google.com/apigee/docs/api-platform/antipatterns/intro>
-43. Software Anti-Patterns: How to destroy a codebase for developers : r/programming - Reddit, accessed September 17, 2025, <https://www.reddit.com/r/programming/comments/aml3xz/software_antipatterns_how_to_destroy_a_codebase/>
-44. Common Anti-Patterns in Go Web Applications | Three Dots Labs blog, accessed September 17, 2025, <https://threedots.tech/post/common-anti-patterns-in-go-web-applications/>
-45. Introduction to wire package - Medium, accessed September 17, 2025, <https://medium.com/@joao.bertoncini/introduction-to-wire-package-7c5a39220d1a>
-46. Google's Wire: Automated Dependency Injection in Go | Hacker News, accessed September 17, 2025, <https://news.ycombinator.com/item?id=34848778>
+1. Compile-time Dependency Injection With Go Cloud's Wire - The Go Programming Language, accessed September 17, 2025, <https://go.dev/blog/wire>
+1. google/wire: Compile-time Dependency Injection for Go - GitHub, accessed September 17, 2025, <https://github.com/google/wire>
+1. Dependency Injection in Go: Comparing Wire, Dig, Fx & More - DEV ..., accessed September 17, 2025, <https://dev.to/rezende79/dependency-injection-in-go-comparing-wire-dig-fx-more-3nkj>
+1. Google's Wire: Automated Dependency Injection in Go : r/golang - Reddit, accessed September 17, 2025, <https://www.reddit.com/r/golang/comments/115jxp4/googles_wire_automated_dependency_injection_in_go/>
+1. Go dependency injection with Wire - LogRocket Blog, accessed September 17, 2025, <https://blog.logrocket.com/go-dependency-injection-wire/>
+1. Dependency Injection in GO with Wire | by Santosh Shrestha - wesionaryTEAM, accessed September 17, 2025, <https://articles.wesionary.team/dependency-injection-in-go-with-wire-74f81cd222f6>
+1. Go with Wire - JetBrains Guide, accessed September 17, 2025, <https://www.jetbrains.com/guide/go/tutorials/dependency_injection_part_two/inject_wire/>
+1. Golang with google wire - DEV Community, accessed September 17, 2025, <https://dev.to/kittichanr/golang-with-google-wire-516l>
+1. Go Dependency Injection with Wire | software is fun - Drew Olson, accessed September 17, 2025, <https://blog.drewolson.org/go-dependency-injection-with-wire/>
+1. 12 Creating Dependecy Injection Library Google Wire - Santekno.com | Tech Tutorials and Trends, accessed September 17, 2025, <https://www.santekno.com/en/12-creating-dependecy-injection-library-google-wire/>
+1. Dependency Injection | Kratos, accessed September 17, 2025, <https://go-kratos.dev/en/docs/guide/wire/>
+1. wire package - github.com/google/wire - Go Packages, accessed September 17, 2025, <https://pkg.go.dev/github.com/google/wire>
+1. Golang with google wire. Introduction | by kittichanr - Medium, accessed September 17, 2025, <https://medium.com/@kittichanr/golang-with-google-wire-cbd77ad4536a>
+1. Go: Dependency injection with Wire - Tit Petric, accessed September 17, 2025, <https://scene-si.org/2019/12/11/dependency-injection-with-wire/>
+1. Go 1.25 Release Notes - The Go Programming Language, accessed September 17, 2025, <https://tip.golang.org/doc/go1.25>
+1. How to handle DI in golang? - Reddit, accessed September 17, 2025, <https://www.reddit.com/r/golang/comments/17wdlar/how_to_handle_di_in_golang/>
+1. Common modularization patterns | App architecture - Android Developers, accessed September 17, 2025, <https://developer.android.com/topic/modularization/patterns>
+1. Single-Responsibility Principle done right - DEV Community, accessed September 17, 2025, <https://dev.to/riccardo_cardin/single-responsibility-principle-done-right-15eo>
+1. SOLID Principles in Go (Golang): A Comprehensive Guide | by Hiten ..., accessed September 17, 2025, <https://medium.com/hprog99/solid-principles-in-go-golang-a-comprehensive-guide-7b9f866e5433>
+1. Mastering SOLID Principles in Go. A Detailed and Easy-to-Understand Guide - Stackademic, accessed September 17, 2025, <https://blog.stackademic.com/mastering-solid-principles-in-go-3d7aac921fec>
+1. Single-responsibility principle - Wikipedia, accessed September 17, 2025, <https://en.wikipedia.org/wiki/Single-responsibility_principle>
+1. What Is the Single Responsibility Principle (SRP) | LambdaTest, accessed September 17, 2025, <https://www.lambdatest.com/blog/single-responsibility-principle/>
+1. SOLID Principles-The Single Responsibility Principle - JavaTechOnline, accessed September 17, 2025, <https://javatechonline.com/solid-principles-the-single-responsibility-principle/>
+1. Open–closed principle - Wikipedia, accessed September 17, 2025, <https://en.wikipedia.org/wiki/Open%E2%80%93closed_principle>
+1. The Open-Closed Principle (OCP) — SOLID Principles Deep Dive in ..., accessed September 17, 2025, <https://itnext.io/the-open-closed-principle-ocp-in-kotlin-deep-dive-86529ff24a74>
+1. SOLID - Wikipedia, accessed September 17, 2025, <https://en.wikipedia.org/wiki/SOLID>
+1. Interface segregation principle - Wikipedia, accessed September 17, 2025, <https://en.wikipedia.org/wiki/Interface_segregation_principle>
+1. Interface Segregation Principle in Go — Explained Using Dragon ..., accessed September 17, 2025, <https://betterprogramming.pub/interface-segregation-principle-in-golang-using-dragon-ball-example-43a26f367225>
+1. Interface Segregation Principle- Program to an interface - Stack Overflow, accessed September 17, 2025, <https://stackoverflow.com/questions/9249832/interface-segregation-principle-program-to-an-interface>
+1. June Personal Web - Golang Dependency Injection Using Wire, accessed September 17, 2025, <https://clavinjune.dev/en/blogs/golang-dependency-injection-using-wire/>
+1. wire: wire.FieldsOf() to inject the values from fields of a struct · Issue ..., accessed September 17, 2025, <https://github.com/google/wire/issues/32>
+1. wire: support Close methods · Issue #193 · google/wire - GitHub, accessed September 17, 2025, <https://github.com/google/wire/issues/193>
+1. consider using defer for cleanup functions · Issue #41 · google/wire - GitHub, accessed September 17, 2025, <https://github.com/google/wire/issues/41>
+1. Binding one implementation to multiple interfaces · Issue #257 · google/wire - GitHub, accessed September 17, 2025, <https://github.com/google/wire/issues/257>
+1. Idea: Provide array with multiple provider · Issue #207 · google/wire, accessed September 17, 2025, <https://github.com/google/wire/issues/207>
+1. document why wire doesn't allow duplicate identical providers in a provider set · Issue #77 · google/wire - GitHub, accessed September 17, 2025, <https://github.com/google/wire/issues/77>
+1. Creating Per-Provider Loggers in Wire Dependency Injection - Stack Overflow, accessed September 17, 2025, <https://stackoverflow.com/questions/69398824/creating-per-provider-loggers-in-wire-dependency-injection>
+1. wire: share dependency graph across injectors in the same package? · Issue #21 - GitHub, accessed September 17, 2025, <https://github.com/google/wire/issues/21>
+1. Dependency injection in Go with Google Wire | by Bagus Brahmantya | Towards Dev, accessed September 17, 2025, <https://medium.com/towardsdev/dependency-injection-in-go-with-google-wire-f3f2b07af28c>
+1. Boosting Code Modularity in Go Using Wire for Dependency Injection, accessed September 17, 2025, <https://www.codingexplorations.com/blog/boosting-code-modularity-in-go-using-wire-for-dependency-injection>
+1. Introduction to antipatterns | Apigee - Google Cloud, accessed September 17, 2025, <https://cloud.google.com/apigee/docs/api-platform/antipatterns/intro>
+1. Software Anti-Patterns: How to destroy a codebase for developers : r/programming - Reddit, accessed September 17, 2025, <https://www.reddit.com/r/programming/comments/aml3xz/software_antipatterns_how_to_destroy_a_codebase/>
+1. Common Anti-Patterns in Go Web Applications | Three Dots Labs blog, accessed September 17, 2025, <https://threedots.tech/post/common-anti-patterns-in-go-web-applications/>
+1. Introduction to wire package - Medium, accessed September 17, 2025, <https://medium.com/@joao.bertoncini/introduction-to-wire-package-7c5a39220d1a>
+1. Google's Wire: Automated Dependency Injection in Go | Hacker News, accessed September 17, 2025, <https://news.ycombinator.com/item?id=34848778>

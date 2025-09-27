@@ -9,12 +9,19 @@ import importlib
 import importlib.util
 import re
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from .base import CommandBuilder, ToolContext
-from .builtin_helpers import _as_bool, _resolve_path, _setting, _settings_list
+from .builtin_helpers import (
+    _argument_list,
+    _as_bool,
+    _boolean_flags,
+    _resolve_path,
+    _setting,
+    _settings_list,
+)
 
 _BASE_PYLINT_PLUGINS: tuple[str, ...] = (
     "pylint.extensions.bad_builtin",
@@ -123,6 +130,201 @@ def _discover_pylint_plugins(root: Path) -> tuple[str, ...]:
     return tuple(sorted(discovered))
 
 
+def _bandit_excludes(
+    settings: dict[str, object],
+    ctx: ToolContext,
+    root: Path,
+) -> tuple[set[Path], set[str]]:
+    exclude_paths: set[Path] = set()
+    exclude_args: set[str] = set()
+    for entry in _settings_list(settings.pop("exclude", None)):
+        candidate = _resolve_path(root, entry)
+        exclude_paths.add(candidate)
+        _bandit_add_exclude_arg(candidate, exclude_args, root)
+    for path in ctx.cfg.file_discovery.excludes:
+        resolved = path if path.is_absolute() else root / path
+        exclude_paths.add(resolved)
+        _bandit_add_exclude_arg(resolved, exclude_args, root)
+    return exclude_paths, exclude_args
+
+
+def _bandit_add_exclude_arg(path: Path, arguments: set[str], root: Path) -> None:
+    try:
+        arguments.add(str(path.relative_to(root)))
+    except ValueError:
+        pass
+    arguments.add(str(path))
+
+
+def _bandit_apply_excludes(cmd: list[str], exclude_args: set[str]) -> None:
+    if exclude_args:
+        cmd.extend(["-x", ",".join(sorted(exclude_args))])
+
+
+def _bandit_target_directories(
+    settings: dict[str, object],
+    ctx: ToolContext,
+    root: Path,
+    exclude_paths: set[Path],
+) -> set[Path]:
+    target_dirs: set[Path] = set()
+    for extra_target in _settings_list(settings.pop("targets", None)):
+        target_dirs.add(_resolve_path(root, extra_target))
+
+    for directory in ctx.cfg.file_discovery.roots:
+        resolved = directory if directory.is_absolute() else root / directory
+        if resolved == root or _BanditCommand._is_under(resolved, exclude_paths):
+            continue
+        target_dirs.add(resolved)
+
+    for file_path in ctx.cfg.file_discovery.explicit_files:
+        resolved_file = file_path if file_path.is_absolute() else root / file_path
+        parent = resolved_file.parent
+        if not _BanditCommand._is_under(parent, exclude_paths):
+            target_dirs.add(parent)
+
+    if target_dirs:
+        return target_dirs
+
+    src_dir = root / "src"
+    if src_dir.exists() and not _BanditCommand._is_under(src_dir, exclude_paths):
+        return {src_dir}
+    return {root}
+
+
+def _bandit_apply_config(cmd: list[str], settings: Mapping[str, object], root: Path) -> None:
+    config_path = _setting(settings, "config", "configfile")
+    if config_path:
+        cmd.extend(["-c", str(_resolve_path(root, config_path))])
+
+    baseline = _setting(settings, "baseline")
+    if baseline:
+        cmd.extend(["--baseline", str(_resolve_path(root, baseline))])
+
+    report_fmt = _setting(settings, "format")
+    if report_fmt:
+        cmd.extend(["--format", str(report_fmt)])
+
+
+def _bandit_apply_thresholds(cmd: list[str], settings: Mapping[str, object]) -> None:
+    severity = _setting(settings, "severity", "severity_level")
+    if severity:
+        cmd.extend(["--severity-level", str(severity)])
+
+    confidence = _setting(settings, "confidence", "confidence_level")
+    if confidence:
+        cmd.extend(["--confidence-level", str(confidence)])
+
+    skip_tests = _settings_list(_setting(settings, "skip", "skips"))
+    if skip_tests:
+        cmd.extend(["--skip", ",".join(skip_tests)])
+
+
+def _extend_joined_option(
+    cmd: list[str],
+    *,
+    settings: Mapping[str, object],
+    option_names: tuple[str, ...],
+    flag: str,
+    separator: str = ",",
+) -> None:
+    values = _settings_list(_setting(settings, *option_names))
+    if values:
+        cmd.extend([flag, separator.join(str(value) for value in values)])
+
+
+def _apply_ruff_config_path(cmd: list[str], root: Path, settings: Mapping[str, object]) -> None:
+    config = _setting(settings, "config")
+    if config:
+        cmd.extend(["--config", str(_resolve_path(root, config))])
+
+
+def _apply_ruff_rule_sets(cmd: list[str], settings: Mapping[str, object]) -> None:
+    _extend_joined_option(cmd, settings=settings, option_names=("select",), flag="--select")
+    _extend_joined_option(cmd, settings=settings, option_names=("ignore",), flag="--ignore")
+    _extend_joined_option(
+        cmd,
+        settings=settings,
+        option_names=("extend-select",),
+        flag="--extend-select",
+    )
+    _extend_joined_option(
+        cmd,
+        settings=settings,
+        option_names=("extend-ignore",),
+        flag="--extend-ignore",
+    )
+    _extend_joined_option(
+        cmd,
+        settings=settings,
+        option_names=("per-file-ignores",),
+        flag="--per-file-ignores",
+        separator=";",
+    )
+
+
+def _apply_ruff_versions(
+    cmd: list[str],
+    settings: Mapping[str, object],
+    ctx: ToolContext,
+) -> None:
+    line_length = _setting(settings, "line-length")
+    if line_length is None:
+        line_length = ctx.cfg.execution.line_length
+    if line_length is not None:
+        cmd.extend(["--line-length", str(line_length)])
+
+    target_version = _setting(settings, "target-version")
+    if target_version:
+        cmd.extend(["--target-version", str(target_version)])
+    else:
+        cmd.extend(
+            [
+                "--target-version",
+                _python_version_tag(_python_target_version(ctx)),
+            ],
+        )
+
+
+def _apply_ruff_paths(cmd: list[str], settings: Mapping[str, object]) -> None:
+    _extend_joined_option(cmd, settings=settings, option_names=("exclude",), flag="--exclude")
+    _extend_joined_option(
+        cmd,
+        settings=settings,
+        option_names=("extend-exclude",),
+        flag="--extend-exclude",
+    )
+
+    respect_gitignore = _as_bool(_setting(settings, "respect-gitignore"))
+    if respect_gitignore is True:
+        cmd.append("--respect-gitignore")
+    elif respect_gitignore is False:
+        cmd.append("--no-respect-gitignore")
+
+
+def _apply_ruff_feature_flags(
+    cmd: list[str],
+    settings: Mapping[str, object],
+    *,
+    mode: str,
+) -> None:
+    preview = _as_bool(_setting(settings, "preview"))
+    if preview is True:
+        cmd.append("--preview")
+    elif preview is False:
+        cmd.append("--no-preview")
+
+    if _as_bool(_setting(settings, "unsafe-fixes")):
+        cmd.append("--unsafe-fixes")
+
+    should_fix = _as_bool(_setting(settings, "fix"))
+    if mode == "lint":
+        if should_fix:
+            cmd.append("--fix")
+    elif should_fix is False:
+        cmd[:] = [part for part in cmd if part != "--fix"]
+
+
 @dataclass(slots=True)
 class _BanditCommand(CommandBuilder):
     """Command builder that injects excludes and discovery roots for Bandit."""
@@ -134,82 +336,17 @@ class _BanditCommand(CommandBuilder):
         cmd = list(self.base_args)
         root = ctx.root
 
-        exclude_paths: set[Path] = set()
-        exclude_args: set[str] = set()
-        for entry in _settings_list(settings.pop("exclude", None)):
-            candidate = _resolve_path(root, entry)
-            exclude_paths.add(candidate)
-            try:
-                exclude_args.add(str(candidate.relative_to(root)))
-                exclude_args.add(str(candidate))
-            except ValueError:
-                exclude_args.add(str(candidate))
-        for path in ctx.cfg.file_discovery.excludes:
-            resolved = path if path.is_absolute() else root / path
-            exclude_paths.add(resolved)
-            try:
-                exclude_args.add(str(resolved.relative_to(root)))
-                exclude_args.add(str(resolved))
-            except ValueError:
-                exclude_args.add(str(resolved))
-        if exclude_args:
-            cmd.extend(["-x", ",".join(sorted(exclude_args))])
+        exclude_paths, exclude_args = _bandit_excludes(settings, ctx, root)
+        _bandit_apply_excludes(cmd, exclude_args)
 
-        target_dirs: set[Path] = set()
-        for extra_target in _settings_list(settings.pop("targets", None)):
-            target_dirs.add(_resolve_path(root, extra_target))
-        for directory in ctx.cfg.file_discovery.roots:
-            resolved = directory if directory.is_absolute() else root / directory
-            if resolved == root:
-                continue
-            if self._is_under(resolved, exclude_paths):
-                continue
-            target_dirs.add(resolved)
-
-        for file_path in ctx.cfg.file_discovery.explicit_files:
-            resolved_file = file_path if file_path.is_absolute() else root / file_path
-            parent = resolved_file.parent
-            if not self._is_under(parent, exclude_paths):
-                target_dirs.add(parent)
-
-        if not target_dirs:
-            src_dir = root / "src"
-            if src_dir.exists() and not self._is_under(src_dir, exclude_paths):
-                target_dirs.add(src_dir)
-            else:
-                target_dirs.add(root)
-
-        normalized_targets = sorted(str(path) for path in target_dirs)
+        target_dirs = _bandit_target_directories(settings, ctx, root, exclude_paths)
         cmd.append("-r")
-        cmd.extend(normalized_targets)
+        cmd.extend(sorted(str(path) for path in target_dirs))
 
-        config_path = _setting(settings, "config", "configfile")
-        if config_path:
-            cmd.extend(["-c", str(_resolve_path(root, config_path))])
+        _bandit_apply_config(cmd, settings, root)
+        _bandit_apply_thresholds(cmd, settings)
 
-        baseline = _setting(settings, "baseline")
-        if baseline:
-            cmd.extend(["--baseline", str(_resolve_path(root, baseline))])
-
-        report_fmt = _setting(settings, "format")
-        if report_fmt:
-            cmd.extend(["--format", str(report_fmt)])
-
-        severity = _setting(settings, "severity", "severity_level")
-        if severity:
-            cmd.extend(["--severity-level", str(severity)])
-
-        confidence = _setting(settings, "confidence", "confidence_level")
-        if confidence:
-            cmd.extend(["--confidence-level", str(confidence)])
-
-        skip_tests = _settings_list(_setting(settings, "skip", "skips"))
-        if skip_tests:
-            cmd.extend(["--skip", ",".join(skip_tests)])
-
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
+        cmd.extend(_argument_list(settings))
 
         return tuple(cmd)
 
@@ -234,79 +371,13 @@ class _RuffCommand(CommandBuilder):
         root = ctx.root
         settings = ctx.settings
 
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
+        _apply_ruff_config_path(cmd, root, settings)
+        _apply_ruff_rule_sets(cmd, settings)
+        _apply_ruff_versions(cmd, settings, ctx)
+        _apply_ruff_paths(cmd, settings)
+        _apply_ruff_feature_flags(cmd, settings, mode=self.mode)
 
-        select = _settings_list(_setting(settings, "select"))
-        if select:
-            cmd.extend(["--select", ",".join(select)])
-
-        ignore = _settings_list(_setting(settings, "ignore"))
-        if ignore:
-            cmd.extend(["--ignore", ",".join(ignore)])
-
-        extend_select = _settings_list(_setting(settings, "extend-select"))
-        if extend_select:
-            cmd.extend(["--extend-select", ",".join(extend_select)])
-
-        extend_ignore = _settings_list(_setting(settings, "extend-ignore"))
-        if extend_ignore:
-            cmd.extend(["--extend-ignore", ",".join(extend_ignore)])
-
-        line_length = _setting(settings, "line-length")
-        if line_length is None:
-            line_length = ctx.cfg.execution.line_length
-        if line_length is not None:
-            cmd.extend(["--line-length", str(line_length)])
-
-        target_version = _setting(settings, "target-version")
-        if target_version:
-            cmd.extend(["--target-version", str(target_version)])
-        else:
-            cmd.extend(
-                [
-                    "--target-version",
-                    _python_version_tag(_python_target_version(ctx)),
-                ],
-            )
-
-        per_file_ignores = _settings_list(_setting(settings, "per-file-ignores"))
-        if per_file_ignores:
-            cmd.extend(["--per-file-ignores", ";".join(per_file_ignores)])
-
-        exclude = _settings_list(_setting(settings, "exclude"))
-        if exclude:
-            cmd.extend(["--exclude", ",".join(exclude)])
-
-        extend_exclude = _settings_list(_setting(settings, "extend-exclude"))
-        if extend_exclude:
-            cmd.extend(["--extend-exclude", ",".join(extend_exclude)])
-
-        respect_gitignore = _as_bool(_setting(settings, "respect-gitignore"))
-        if respect_gitignore is True:
-            cmd.append("--respect-gitignore")
-        elif respect_gitignore is False:
-            cmd.append("--no-respect-gitignore")
-
-        preview = _as_bool(_setting(settings, "preview"))
-        if preview is True:
-            cmd.append("--preview")
-        elif preview is False:
-            cmd.append("--no-preview")
-
-        if _as_bool(_setting(settings, "unsafe-fixes")):
-            cmd.append("--unsafe-fixes")
-
-        if self.mode == "lint":
-            if _as_bool(_setting(settings, "fix")):
-                cmd.append("--fix")
-        elif _as_bool(_setting(settings, "fix")) is False:
-            cmd = [part for part in cmd if part != "--fix"]
-
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
+        cmd.extend(_argument_list(settings))
 
         return tuple(cmd)
 
@@ -365,9 +436,7 @@ class _RuffFormatCommand(CommandBuilder):
         if stdin_filename:
             cmd.extend(["--stdin-filename", str(stdin_filename)])
 
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
+        cmd.extend(_argument_list(settings))
 
         return tuple(cmd)
 
@@ -449,9 +518,7 @@ class _IsortCommand(CommandBuilder):
         elif color is False:
             cmd.append("--no-color")
 
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
+        cmd.extend(_argument_list(settings))
 
         return tuple(cmd)
 
@@ -498,9 +565,7 @@ class _BlackCommand(CommandBuilder):
         if workers is not None:
             cmd.extend(["-j", str(workers)])
 
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
+        cmd.extend(_argument_list(settings))
 
         return tuple(cmd)
 
@@ -584,9 +649,7 @@ class _MypyCommand(CommandBuilder):
         if cache_dir:
             cmd.extend(["--cache-dir", str(_resolve_path(root, cache_dir))])
 
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
+        cmd.extend(_argument_list(settings))
 
         return tuple(cmd)
 
@@ -642,9 +705,7 @@ class _CpplintCommand(CommandBuilder):
         if _as_bool(_setting(settings, "quiet")):
             cmd.append("--quiet")
 
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
+        cmd.extend(_argument_list(settings))
 
         return tuple(cmd)
 
@@ -737,9 +798,7 @@ class _PylintCommand(CommandBuilder):
         if py_version:
             cmd.extend(["--py-version", str(py_version)])
 
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
+        cmd.extend(_argument_list(settings))
 
         return tuple(cmd)
 
@@ -789,9 +848,7 @@ class _PyrightCommand(CommandBuilder):
         if _as_bool(_setting(settings, "ignoreexternal", "ignore-external")):
             cmd.append("--ignoreexternal")
 
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
+        cmd.extend(_argument_list(settings))
 
         return tuple(cmd)
 
@@ -826,9 +883,7 @@ class _SqlfluffCommand(CommandBuilder):
         if processes is not None:
             cmd.extend(["--processes", str(processes)])
 
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
+        cmd.extend(_argument_list(settings))
 
         return tuple(cmd)
 
@@ -868,9 +923,7 @@ class _TombiCommand(CommandBuilder):
         elif _as_bool(quiet):
             cmd.append("-q")
 
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
+        cmd.extend(_argument_list(settings))
 
         return tuple(cmd)
 
@@ -880,37 +933,35 @@ class _PyupgradeCommand(CommandBuilder):
     base: Sequence[str]
 
     def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
         settings = ctx.settings
-
-        pyplus_value = _setting(settings, "pyplus", "py_plus", "py_version")
-        if pyplus_value:
-            flag = str(pyplus_value).strip()
-            if not flag.startswith("--"):
-                flag = _pyupgrade_flag_from_version(flag)
-            cmd.append(flag)
-        else:
-            cmd.append(_pyupgrade_flag_from_version(_python_target_version(ctx)))
-
-        bool_flags = {
-            "keep-mock": "--keep-mock",
-            "keep-runtime-typing": "--keep-runtime-typing",
-            "keep-percent-format": "--keep-percent-format",
-            "keep-annotations": "--keep-annotations",
-            "keep-logging-format": "--keep-logging-format",
-            "exit-zero-even-if-changed": "--exit-zero-even-if-changed",
-            "no-verify": "--no-verify",
-        }
-
-        for key, flag in bool_flags.items():
-            if _as_bool(_setting(settings, key, key.replace("-", "_"))):
-                cmd.append(flag)
-
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
-
+        cmd = list(self.base)
+        cmd.append(_select_pyupgrade_flag(settings, ctx))
+        cmd.extend(_boolean_flags(settings, dict(_PYUPGRADE_BOOL_FLAG_MAP)))
+        cmd.extend(_argument_list(settings))
         return tuple(cmd)
+
+
+_PYUPGRADE_BOOL_FLAG_MAP: tuple[tuple[str, str], ...] = (
+    ("keep-mock", "--keep-mock"),
+    ("keep-runtime-typing", "--keep-runtime-typing"),
+    ("keep-percent-format", "--keep-percent-format"),
+    ("keep-annotations", "--keep-annotations"),
+    ("keep-logging-format", "--keep-logging-format"),
+    ("exit-zero-even-if-changed", "--exit-zero-even-if-changed"),
+    ("no-verify", "--no-verify"),
+)
+
+
+def _select_pyupgrade_flag(settings: Mapping[str, object], ctx: ToolContext) -> str:
+    explicit = _setting(settings, "pyplus", "py_plus", "py_version")
+    if explicit is None:
+        return _pyupgrade_flag_from_version(_python_target_version(ctx))
+    flag = str(explicit).strip()
+    if not flag:
+        return _pyupgrade_flag_from_version(_python_target_version(ctx))
+    if flag.startswith("--"):
+        return flag
+    return _pyupgrade_flag_from_version(flag)
 
 
 __all__ = [

@@ -14,7 +14,6 @@ _TEST_PREFIXES = ("tests/", "test/")
 
 def apply_suppression_hints(result: RunResult, engine: AnnotationEngine) -> None:
     """Populate ``diagnostic.hints`` with suppression guidance."""
-
     for outcome in result.outcomes:
         for diag in outcome.diagnostics:
             hints = list(diag.hints)
@@ -61,9 +60,7 @@ def _hints_for_diagnostic(diag: Diagnostic, engine: AnnotationEngine) -> Iterabl
             _format_hint(
                 diag,
                 f"{tool}.{code}",
-                "Use `# type: ignore[{code}]` on the specific assignment or add a stub entry if the upstream library is missing typings.".format(
-                    code=code.lower(),
-                ),
+                f"Use `# type: ignore[{code.lower()}]` on the specific assignment or add a stub entry if the upstream library is missing typings.",
             ),
         )
 

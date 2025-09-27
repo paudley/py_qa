@@ -7,10 +7,12 @@ from __future__ import annotations
 from collections.abc import Iterable, MutableMapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
+from pathlib import Path
 
 from .annotations import AnnotationEngine
 from .config import DedupeConfig
 from .models import Diagnostic, RawDiagnostic, RunResult
+from .path_utils import normalize_reported_path
 from .severity import (
     DEFAULT_SEVERITY_RULES,
     Severity,
@@ -51,14 +53,17 @@ def normalize_diagnostics(
     *,
     tool_name: str,
     severity_rules: SeverityRuleView,
+    root: Path | None = None,
 ) -> list[Diagnostic]:
     """Normalize diagnostics into the canonical :class:`Diagnostic` form."""
     normalized: list[Diagnostic] = []
     for candidate in candidates:
         if isinstance(candidate, Diagnostic):
-            normalized.append(candidate)
+            normalized.append(_normalize_existing(candidate, root=root))
             continue
-        normalized.append(_normalize_raw(candidate, tool_name, severity_rules))
+        normalized.append(
+            _normalize_raw(candidate, tool_name, severity_rules, root=root),
+        )
     return normalized
 
 
@@ -66,6 +71,8 @@ def _normalize_raw(
     raw: RawDiagnostic,
     tool_name: str,
     severity_rules: SeverityRuleView,
+    *,
+    root: Path | None,
 ) -> Diagnostic:
     message = raw.message.strip()
     code = raw.code
@@ -92,7 +99,7 @@ def _normalize_raw(
     severity = apply_severity_rules(tool, code or message, severity, rules=severity_rules)
 
     return Diagnostic(
-        file=raw.file,
+        file=_normalize_file_path(raw.file, root=root),
         line=raw.line,
         column=raw.column,
         severity=severity,
@@ -113,6 +120,17 @@ def _coerce_severity(value: Severity | str | None) -> Severity:
         except ValueError:
             return Severity.WARNING
     return Severity.WARNING
+
+
+def _normalize_existing(diagnostic: Diagnostic, *, root: Path | None) -> Diagnostic:
+    normalized_path = _normalize_file_path(diagnostic.file, root=root)
+    if normalized_path == diagnostic.file:
+        return diagnostic
+    return diagnostic.model_copy(update={"file": normalized_path})
+
+
+def _normalize_file_path(file_path: str | None, *, root: Path | None) -> str | None:
+    return normalize_reported_path(file_path, root=root)
 
 
 @dataclass

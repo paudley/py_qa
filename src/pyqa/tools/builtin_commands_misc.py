@@ -4,11 +4,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 from .base import CommandBuilder, ToolContext
 from .builtin_helpers import (
+    _argument_list,
     _as_bool,
     _resolve_path,
     _setting,
@@ -17,6 +19,229 @@ from .builtin_helpers import (
     ensure_hadolint,
     ensure_lualint,
 )
+
+
+def _extend_path_option(
+    cmd: list[str],
+    *,
+    root: Path,
+    settings: Mapping[str, object],
+    option_names: tuple[str, ...],
+    flag: str,
+) -> None:
+    value = _setting(settings, *option_names)
+    if value:
+        cmd.extend([flag, str(_resolve_path(root, value))])
+
+
+def _extend_literal_option(
+    cmd: list[str],
+    *,
+    settings: Mapping[str, object],
+    option_names: tuple[str, ...],
+    flag: str,
+    transform: Callable[[object], str] | None = None,
+) -> None:
+    value = _setting(settings, *option_names)
+    if value is None:
+        return
+    payload = transform(value) if transform else str(value)
+    cmd.extend([flag, payload])
+
+
+def _extend_sequence_option(
+    cmd: list[str],
+    *,
+    settings: Mapping[str, object],
+    option_names: tuple[str, ...],
+    flag: str,
+    root: Path | None = None,
+) -> None:
+    for entry in _settings_list(_setting(settings, *option_names)):
+        value = _resolve_path(root, entry) if root is not None else entry
+        cmd.extend([flag, str(value)])
+
+
+def _apply_eslint_path_options(cmd: list[str], root: Path, settings: Mapping[str, object]) -> None:
+    _extend_path_option(
+        cmd,
+        root=root,
+        settings=settings,
+        option_names=("config",),
+        flag="--config",
+    )
+    _extend_sequence_option(
+        cmd,
+        settings=settings,
+        option_names=("ext", "extensions"),
+        flag="--ext",
+    )
+    _extend_path_option(
+        cmd,
+        root=root,
+        settings=settings,
+        option_names=("ignore-path", "ignore_path"),
+        flag="--ignore-path",
+    )
+    _extend_path_option(
+        cmd,
+        root=root,
+        settings=settings,
+        option_names=("resolve-plugins-relative-to", "resolve_plugins_relative_to"),
+        flag="--resolve-plugins-relative-to",
+    )
+    _extend_sequence_option(
+        cmd,
+        settings=settings,
+        option_names=("rulesdir", "rules-dir"),
+        flag="--rulesdir",
+        root=root,
+    )
+
+
+def _apply_eslint_cache_options(cmd: list[str], root: Path, settings: Mapping[str, object]) -> None:
+    cache = _as_bool(_setting(settings, "cache"))
+    if cache is True:
+        cmd.append("--cache")
+    elif cache is False:
+        cmd.append("--no-cache")
+
+    _extend_path_option(
+        cmd,
+        root=root,
+        settings=settings,
+        option_names=("cache-location", "cache_location"),
+        flag="--cache-location",
+    )
+    fix_type = _settings_list(_setting(settings, "fix-type", "fix_type"))
+    if fix_type:
+        cmd.extend(["--fix-type", ",".join(fix_type)])
+
+
+def _apply_eslint_behaviour(
+    cmd: list[str],
+    settings: Mapping[str, object],
+    *,
+    is_fix: bool,
+) -> None:
+    if _as_bool(_setting(settings, "quiet")):
+        cmd.append("--quiet")
+
+    no_error_unmatched = _as_bool(
+        _setting(
+            settings,
+            "no-error-on-unmatched-pattern",
+            "no_error_on_unmatched_pattern",
+        ),
+    )
+    if no_error_unmatched is True:
+        cmd.append("--no-error-on-unmatched-pattern")
+    elif no_error_unmatched is False and not is_fix:
+        cmd.append("--error-on-unmatched-pattern")
+
+
+def _apply_eslint_reporting(cmd: list[str], settings: Mapping[str, object]) -> None:
+    _extend_literal_option(
+        cmd,
+        settings=settings,
+        option_names=("max-warnings", "max_warnings"),
+        flag="--max-warnings",
+    )
+    report_unused = _setting(
+        settings,
+        "report-unused-disable-directives",
+        "report_unused_disable_directives",
+    )
+    if report_unused:
+        cmd.extend(["--report-unused-disable-directives", str(report_unused)])
+
+
+def _apply_prettier_config(cmd: list[str], root: Path, settings: Mapping[str, object]) -> None:
+    _extend_path_option(
+        cmd,
+        root=root,
+        settings=settings,
+        option_names=("config",),
+        flag="--config",
+    )
+    _extend_literal_option(cmd, settings=settings, option_names=("parser",), flag="--parser")
+    _extend_path_option(
+        cmd,
+        root=root,
+        settings=settings,
+        option_names=("ignore-path", "ignore_path"),
+        flag="--ignore-path",
+    )
+    _extend_sequence_option(
+        cmd,
+        settings=settings,
+        option_names=("plugin-search-dir", "plugin_search_dir"),
+        flag="--plugin-search-dir",
+        root=root,
+    )
+    _extend_sequence_option(
+        cmd,
+        settings=settings,
+        option_names=("plugin", "plugins"),
+        flag="--plugin",
+    )
+    _extend_literal_option(
+        cmd,
+        settings=settings,
+        option_names=("loglevel",),
+        flag="--log-level",
+    )
+    _extend_literal_option(
+        cmd,
+        settings=settings,
+        option_names=("config-precedence", "config_precedence"),
+        flag="--config-precedence",
+    )
+
+
+def _apply_prettier_style(cmd: list[str], settings: Mapping[str, object]) -> None:
+    single_quote = _as_bool(_setting(settings, "single-quote", "single_quote"))
+    if single_quote is True:
+        cmd.append("--single-quote")
+    elif single_quote is False:
+        cmd.append("--no-single-quote")
+
+    use_tabs = _as_bool(_setting(settings, "use-tabs", "use_tabs"))
+    if use_tabs is True:
+        cmd.append("--use-tabs")
+    elif use_tabs is False:
+        cmd.append("--no-use-tabs")
+
+    trailing_comma = _setting(settings, "trailing-comma", "trailing_comma")
+    if trailing_comma:
+        cmd.extend(["--trailing-comma", str(trailing_comma)])
+
+    semi = _as_bool(_setting(settings, "semi"))
+    if semi is True:
+        cmd.append("--semi")
+    elif semi is False:
+        cmd.append("--no-semi")
+
+    end_of_line = _setting(settings, "end-of-line", "end_of_line")
+    if end_of_line:
+        cmd.extend(["--end-of-line", str(end_of_line)])
+
+
+def _apply_prettier_formatting(
+    cmd: list[str],
+    settings: Mapping[str, object],
+    *,
+    line_length: int | None,
+) -> None:
+    tab_width = _setting(settings, "tab-width", "tab_width")
+    if tab_width is not None:
+        cmd.extend(["--tab-width", str(tab_width)])
+
+    print_width = _setting(settings, "print-width", "print_width")
+    if print_width is None:
+        print_width = line_length
+    if print_width is not None:
+        cmd.extend(["--print-width", str(print_width)])
 
 
 @dataclass(slots=True)
@@ -102,82 +327,12 @@ class _EslintCommand(CommandBuilder):
         root = ctx.root
         settings = ctx.settings
 
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
+        _apply_eslint_path_options(cmd, root, settings)
+        _apply_eslint_cache_options(cmd, root, settings)
+        _apply_eslint_behaviour(cmd, settings, is_fix=self.is_fix)
+        _apply_eslint_reporting(cmd, settings)
 
-        for ext in _settings_list(_setting(settings, "ext", "extensions")):
-            cmd.extend(["--ext", str(ext)])
-
-        ignore_path = _setting(settings, "ignore-path", "ignore_path")
-        if ignore_path:
-            cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
-
-        resolve_plugins = _setting(
-            settings,
-            "resolve-plugins-relative-to",
-            "resolve_plugins_relative_to",
-        )
-        if resolve_plugins:
-            cmd.extend(
-                [
-                    "--resolve-plugins-relative-to",
-                    str(_resolve_path(root, resolve_plugins)),
-                ],
-            )
-
-        for directory in _settings_list(_setting(settings, "rulesdir", "rules-dir")):
-            cmd.extend(["--rulesdir", str(_resolve_path(root, directory))])
-
-        max_warnings = _setting(settings, "max-warnings", "max_warnings")
-        if max_warnings is not None:
-            cmd.extend(["--max-warnings", str(max_warnings)])
-
-        cache = _as_bool(_setting(settings, "cache"))
-        if cache is True:
-            cmd.append("--cache")
-        elif cache is False:
-            cmd.append("--no-cache")
-
-        cache_location = _setting(settings, "cache-location", "cache_location")
-        if cache_location:
-            cmd.extend(["--cache-location", str(_resolve_path(root, cache_location))])
-
-        fix_type = _settings_list(_setting(settings, "fix-type", "fix_type"))
-        if fix_type:
-            cmd.extend(["--fix-type", ",".join(fix_type)])
-
-        if _as_bool(_setting(settings, "quiet")):
-            cmd.append("--quiet")
-
-        no_error_unmatched = _as_bool(
-            _setting(
-                settings,
-                "no-error-on-unmatched-pattern",
-                "no_error_on_unmatched_pattern",
-            ),
-        )
-        if no_error_unmatched is True:
-            cmd.append("--no-error-on-unmatched-pattern")
-        elif no_error_unmatched is False and not self.is_fix:
-            cmd.append("--error-on-unmatched-pattern")
-
-        report_unused = _setting(
-            settings,
-            "report-unused-disable-directives",
-            "report_unused_disable_directives",
-        )
-        if report_unused:
-            cmd.extend(
-                [
-                    "--report-unused-disable-directives",
-                    str(report_unused),
-                ],
-            )
-
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
+        cmd.extend(_argument_list(settings))
 
         return tuple(cmd)
 
@@ -191,73 +346,11 @@ class _PrettierCommand(CommandBuilder):
         root = ctx.root
         settings = ctx.settings
 
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
+        _apply_prettier_config(cmd, root, settings)
+        _apply_prettier_style(cmd, settings)
+        _apply_prettier_formatting(cmd, settings, line_length=ctx.cfg.execution.line_length)
 
-        parser = _setting(settings, "parser")
-        if parser:
-            cmd.extend(["--parser", str(parser)])
-
-        ignore_path = _setting(settings, "ignore-path", "ignore_path")
-        if ignore_path:
-            cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
-
-        for directory in _settings_list(
-            _setting(settings, "plugin-search-dir", "plugin_search_dir"),
-        ):
-            cmd.extend(["--plugin-search-dir", str(_resolve_path(root, directory))])
-
-        for plugin in _settings_list(_setting(settings, "plugin", "plugins")):
-            cmd.extend(["--plugin", str(plugin)])
-
-        loglevel = _setting(settings, "loglevel")
-        if loglevel:
-            cmd.extend(["--log-level", str(loglevel)])
-
-        config_precedence = _setting(settings, "config-precedence", "config_precedence")
-        if config_precedence:
-            cmd.extend(["--config-precedence", str(config_precedence)])
-
-        single_quote = _as_bool(_setting(settings, "single-quote", "single_quote"))
-        if single_quote is True:
-            cmd.append("--single-quote")
-        elif single_quote is False:
-            cmd.append("--no-single-quote")
-
-        tab_width = _setting(settings, "tab-width", "tab_width")
-        if tab_width is not None:
-            cmd.extend(["--tab-width", str(tab_width)])
-
-        use_tabs = _as_bool(_setting(settings, "use-tabs", "use_tabs"))
-        if use_tabs is True:
-            cmd.append("--use-tabs")
-        elif use_tabs is False:
-            cmd.append("--no-use-tabs")
-
-        trailing_comma = _setting(settings, "trailing-comma", "trailing_comma")
-        if trailing_comma:
-            cmd.extend(["--trailing-comma", str(trailing_comma)])
-
-        print_width = _setting(settings, "print-width", "print_width")
-        if print_width is None:
-            print_width = ctx.cfg.execution.line_length
-        if print_width is not None:
-            cmd.extend(["--print-width", str(print_width)])
-
-        semi = _as_bool(_setting(settings, "semi"))
-        if semi is True:
-            cmd.append("--semi")
-        elif semi is False:
-            cmd.append("--no-semi")
-
-        end_of_line = _setting(settings, "end-of-line", "end_of_line")
-        if end_of_line:
-            cmd.extend(["--end-of-line", str(end_of_line)])
-
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
+        cmd.extend(_argument_list(settings))
 
         return tuple(cmd)
 
@@ -272,7 +365,9 @@ class _ActionlintCommand(CommandBuilder):
         cmd = [str(binary), "-format", "{{json .}}", "-no-color"]
 
         workflow_files = [
-            path for path in ctx.files if str(path).endswith(".yml") and "/.github/workflows/" in str(path)
+            path
+            for path in ctx.files
+            if str(path).endswith(".yml") and "/.github/workflows/" in str(path)
         ]
         if workflow_files:
             cmd.extend(str(path) for path in workflow_files)
@@ -419,13 +514,14 @@ class _DockerfilelintCommand(CommandBuilder):
         root = ctx.root
         settings = ctx.settings
 
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
+        _extend_path_option(
+            cmd,
+            root=root,
+            settings=settings,
+            option_names=("config",),
+            flag="--config",
+        )
+        cmd.extend(_argument_list(settings))
 
         return tuple(cmd)
 
@@ -447,9 +543,7 @@ class _HadolintCommand(CommandBuilder):
         if failure_threshold:
             cmd.extend(["--failure-threshold", str(failure_threshold)])
 
-        args = _settings_list(_setting(ctx.settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
+        cmd.extend(_argument_list(ctx.settings))
 
         return tuple(cmd)
 
@@ -468,22 +562,33 @@ class _DotenvLinterCommand(CommandBuilder):
         root = ctx.root
         settings = ctx.settings
 
-        for exclude in _settings_list(_setting(settings, "exclude")):
-            cmd.extend(["--exclude", str(_resolve_path(root, exclude))])
+        _extend_sequence_option(
+            cmd,
+            settings=settings,
+            option_names=("exclude",),
+            flag="--exclude",
+            root=root,
+        )
 
-        for skip in _settings_list(_setting(settings, "skip")):
-            cmd.extend(["--skip", str(skip)])
+        _extend_sequence_option(
+            cmd,
+            settings=settings,
+            option_names=("skip",),
+            flag="--skip",
+        )
 
-        schema = _setting(settings, "schema")
-        if schema:
-            cmd.extend(["--schema", str(_resolve_path(root, schema))])
+        _extend_path_option(
+            cmd,
+            root=root,
+            settings=settings,
+            option_names=("schema",),
+            flag="--schema",
+        )
 
         if _as_bool(_setting(settings, "recursive")):
             cmd.append("--recursive")
 
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
+        cmd.extend(_argument_list(settings))
 
         return tuple(cmd)
 

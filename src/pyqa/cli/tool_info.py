@@ -85,7 +85,9 @@ def run_tool_info(
 
     if load_result is not None:
         warnings = [
-            update for update in load_result.updates if update.section == "tool_settings" and update.field == tool.name
+            update
+            for update in load_result.updates
+            if update.section == "tool_settings" and update.field == tool.name
         ]
         if warnings:
             warning_table = Table(title="Configuration Provenance", box=box.SIMPLE)

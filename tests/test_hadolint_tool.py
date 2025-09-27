@@ -6,12 +6,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pytest
+if TYPE_CHECKING:
+    import pytest
 
 from pyqa.config import Config
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import HADOLINT_VERSION_DEFAULT, _HadolintCommand
+from pyqa.tools.builtins import HADOLINT_VERSION_DEFAULT, HadolintCommand
 
 
 def test_hadolint_command_download(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -35,12 +37,14 @@ def test_hadolint_command_download(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
 
     action = ToolAction(
         name="lint",
-        command=_HadolintCommand(version=HADOLINT_VERSION_DEFAULT),
+        command=HadolintCommand(version=HADOLINT_VERSION_DEFAULT),
         append_files=True,
     )
 
     command = action.build_command(ctx)
     assert command[0] == str(fake_binary)
-    assert "--format" in command and "json" in command
-    assert "--config" in command and str(tmp_path / ".hadolint") in command
+    assert "--format" in command
+    assert "json" in command
+    assert "--config" in command
+    assert str(tmp_path / ".hadolint") in command
     assert command[-1].endswith("Dockerfile")

@@ -15,43 +15,43 @@ PyQA is maintained by Blackcat Informatics® Inc. and we take security seriously
 
 ### Please DO NOT:
 
-* Open a public GitHub issue for security vulnerabilities
-* Post about the vulnerability on social media or forums
+- Open a public GitHub issue for security vulnerabilities
+- Post about the vulnerability on social media or forums
 
 ### Please DO:
 
-* Email **security@blackcat.ca** (PGP key below)
-* Include the word "SECURITY" in the subject line
-* Provide detailed steps to reproduce the vulnerability
-* Include the impact and potential exploit scenarios
+- Email **security@blackcat.ca** (PGP key below)
+- Include the word "SECURITY" in the subject line
+- Provide detailed steps to reproduce the vulnerability
+- Include the impact and potential exploit scenarios
 
 ### What to Expect
 
-* **Acknowledgment**: We will acknowledge receipt of your vulnerability report within 48 hours
-* **Assessment**: We will investigate and validate the reported vulnerability within 7 days
-* **Resolution**: We aim to release a patch within 30 days of validation
-* **Disclosure**: We will coordinate public disclosure with you after the patch is released
+- **Acknowledgment**: We will acknowledge receipt of your vulnerability report within 48 hours
+- **Assessment**: We will investigate and validate the reported vulnerability within 7 days
+- **Resolution**: We aim to release a patch within 30 days of validation
+- **Disclosure**: We will coordinate public disclosure with you after the patch is released
 
 ## Responsible Disclosure Process
 
 1. Security vulnerabilities are reported privately.
-2. The PyQA maintainers confirm and triage issues.
-3. Fixes are developed, reviewed, and tested.
-4. A coordinated release is prepared.
-5. Public disclosure occurs after users have reasonable time to update.
+1. The PyQA maintainers confirm and triage issues.
+1. Fixes are developed, reviewed, and tested.
+1. A coordinated release is prepared.
+1. Public disclosure occurs after users have reasonable time to update.
 
 ## Security Advisories & Updates
 
-* Watch the repository for releases and advisories.
-* Subscribe to security alerts on GitHub.
-* Run `uv sync --group dev` regularly to pick up patched dependencies.
+- Watch the repository for releases and advisories.
+- Subscribe to security alerts on GitHub.
+- Run `uv sync --group dev` regularly to pick up patched dependencies.
 
 ## Contact
 
-* Email: <security@blackcat.ca>
-* PGP Key (optional for encrypted reports):
+- Email: <security@blackcat.ca>
+- PGP Key (optional for encrypted reports):
 
-\-----BEGIN PGP PUBLIC KEY BLOCK-----
+-----BEGIN PGP PUBLIC KEY BLOCK-----
 Version: GnuPG v2
 
 mQINBFhhjUABEADg4mASErImePxCj0Ri8v08Axa1D1gnWPQBqtJW+P6OpQRuRXw0
@@ -105,7 +105,7 @@ qL+AeU7BXe9VtTdvKyOwsdS/ayX0NeriPSxReZlBPgoG9/SEX+hyki9n7lS8eJby
 jmyGBkMW5wHhJjlyy7SiZ/gg4Sb59vNLjbhQTJOB9DcCCWRHDZXR2avsJjP35YOQ
 XE4dvUx/JNzvuZ/nkLMnuVf+feQJsvc+kLNV1K2sFGffpC/ZdBkU0lz5oLfqTtAM
 1k2Eu+FYVJiyxA6fujgY65hx/hj/qZZJeuBTNgfWwiTn/A==
-\=fCTf
-\-----END PGP PUBLIC KEY BLOCK-----
+=fCTf
+-----END PGP PUBLIC KEY BLOCK-----
 
 For general questions about PyQA, please use GitHub discussions or open an issue with the "question" label.

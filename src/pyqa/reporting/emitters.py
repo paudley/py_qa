@@ -13,6 +13,7 @@ from ..models import Diagnostic, RunResult
 from ..serialization import serialize_outcome
 from ..severity import Severity, severity_to_sarif
 from .advice import AdviceBuilder, AdviceEntry
+from .concise_helpers import ConciseEntry, collect_entries_from_outcomes, resolve_root_path
 
 SARIF_VERSION = "2.1.0"
 SARIF_SCHEMA = "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json"
@@ -115,6 +116,13 @@ def write_pr_summary(
         for diag in outcome.diagnostics:
             diagnostics.append((diag, outcome.tool))
 
+    root_path = resolve_root_path(result.root)
+    sanitized_lookup: dict[int, ConciseEntry] = {}
+    for outcome in result.outcomes:
+        entries_for_outcome = collect_entries_from_outcomes([outcome], root_path, deduplicate=False)
+        for diag, entry in zip(outcome.diagnostics, entries_for_outcome, strict=False):
+            sanitized_lookup[id(diag)] = entry
+
     severity_order = {
         Severity.ERROR: 0,
         Severity.WARNING: 1,
@@ -124,7 +132,11 @@ def write_pr_summary(
 
     min_rank = _severity_rank(min_severity, severity_order)
 
-    filtered = [(diag, tool) for diag, tool in diagnostics if severity_order.get(diag.severity, 99) <= min_rank]
+    filtered = [
+        (diag, tool)
+        for diag, tool in diagnostics
+        if severity_order.get(diag.severity, 99) <= min_rank
+    ]
 
     filtered.sort(
         key=lambda item: (
@@ -144,7 +156,7 @@ def write_pr_summary(
     advice_count = 0
 
     if needs_advice:
-        advice_inputs = _diagnostics_to_advice_inputs(filtered)
+        advice_inputs = _diagnostics_to_advice_inputs(filtered, sanitized_lookup)
         advice_entries = _ADVICE_BUILDER.build(advice_inputs)
         advice_count = len(advice_entries)
         if advice_entries:
@@ -158,19 +170,23 @@ def write_pr_summary(
     for diag, tool in filtered:
         if shown >= limit:
             break
-        location = diag.file or "<workspace>"
-        if diag.line is not None:
+        entry = sanitized_lookup.get(id(diag))
+        location = entry.file_path if entry else (diag.file or "<workspace>")
+        if entry and entry.line_no >= 0:
+            location += f":{entry.line_no}"
+        elif diag.line is not None:
             location += f":{diag.line}"
             if diag.column is not None:
                 location += f":{diag.column}"
-        highlighted_message = _highlight_markdown(diag.message) if needs_highlight else diag.message
+        message_text = entry.message if entry else diag.message
+        highlighted_message = _highlight_markdown(message_text) if needs_highlight else message_text
         entry = template.format(
             severity=diag.severity.value.upper(),
-            tool=tool,
-            message=diag.message,
+            tool=entry.tool_name if entry else tool,
+            message=message_text,
             highlighted_message=highlighted_message,
             location=location,
-            code=diag.code or "",
+            code=(entry.code if entry else (diag.code or "")),
             advice_summary=advice_summary,
             advice_primary=advice_primary,
             advice_primary_category=advice_primary_category,
@@ -238,15 +254,17 @@ def _build_advice_section(
 
 def _diagnostics_to_advice_inputs(
     diagnostics: Sequence[tuple[Diagnostic, str]],
+    sanitized_lookup: dict[int, ConciseEntry] | None,
 ) -> list[tuple[str, int, str, str, str, str]]:
     entries: list[tuple[str, int, str, str, str, str]] = []
     for diag, tool in diagnostics:
-        file_path = diag.file or ""
-        line_no = diag.line if diag.line is not None else -1
-        function = diag.function or ""
-        tool_name = (diag.tool or tool or "").strip()
-        code = (diag.code or "-").strip() or "-"
-        message = diag.message.splitlines()[0]
+        entry = sanitized_lookup.get(id(diag)) if sanitized_lookup else None
+        file_path = entry.file_path if entry else (diag.file or "")
+        line_no = entry.line_no if entry else (diag.line if diag.line is not None else -1)
+        function = entry.function if entry else (diag.function or "")
+        tool_name = entry.tool_name if entry else (diag.tool or tool or "").strip()
+        code = entry.code if entry else ((diag.code or "-").strip() or "-")
+        message = entry.message if entry else diag.message.splitlines()[0]
         entries.append((file_path, line_no, function, tool_name, code, message))
     return entries
 

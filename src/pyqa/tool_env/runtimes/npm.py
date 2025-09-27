@@ -16,7 +16,7 @@ from ...process_utils import SubprocessExecutionError, run_command
 from ...tools.base import Tool
 from .. import constants as tool_constants
 from ..models import PreparedCommand
-from ..utils import _slugify, _split_package_spec, desired_version
+from ..utils import desired_version, slugify, split_package_spec
 from .base import RuntimeHandler
 
 
@@ -97,7 +97,7 @@ class NpmRuntime(RuntimeHandler):
         packages = shlex.split(requirement)
         if not packages:
             raise RuntimeError("No npm packages specified for tool")
-        slug = _slugify(" ".join(packages))
+        slug = slugify(" ".join(packages))
         prefix = tool_constants.NODE_CACHE_DIR / slug
         meta_path = prefix / self.META_FILE
         bin_dir = prefix / "node_modules" / ".bin"
@@ -138,7 +138,7 @@ class NpmRuntime(RuntimeHandler):
         packages = shlex.split(requirement)
         if not packages:
             return None
-        package_name, _ = _split_package_spec(packages[0])
+        package_name, _ = split_package_spec(packages[0])
         try:
             result = run_command(
                 [

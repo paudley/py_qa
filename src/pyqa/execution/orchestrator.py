@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,7 +16,12 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from ..analysis import apply_change_impact, apply_suppression_hints, build_refactor_navigator
+from ..analysis import (
+    apply_change_impact,
+    apply_suppression_hints,
+    build_refactor_navigator,
+    detect_duplicate_code,
+)
 from ..annotations import AnnotationEngine
 from ..config import Config
 from ..context import CONTEXT_RESOLVER
@@ -172,23 +177,58 @@ class Orchestrator:
         state = _ExecutionState()
 
         tool_names = self._select_tools(cfg, matched_files, root_path)
+        self._notify_after_discovery(len(matched_files))
+        self._notify_after_plan(cfg, tool_names)
+        self._schedule_tools(
+            cfg=cfg,
+            tool_names=tool_names,
+            root=root_path,
+            matched_files=matched_files,
+            severity_rules=severity_rules,
+            cache_ctx=cache_ctx,
+            state=state,
+        )
+
+        self._execute_scheduled(cfg, root_path, severity_rules, cache_ctx, state)
+        result = self._build_run_result(root_path, matched_files, cache_ctx, state)
+        self._post_process_result(result, cfg, cache_ctx)
+        return result
+
+    def _notify_after_discovery(self, file_count: int) -> None:
         if self._hooks.after_discovery:
-            self._hooks.after_discovery(len(matched_files))
-        if self._hooks.after_plan:
-            total_actions = 0
-            for name in tool_names:
-                tool = self._registry.try_get(name)
-                if tool is None:
-                    continue
-                for action in tool.actions:
-                    if self._should_run_action(cfg, action):
-                        total_actions += 1
-            self._hooks.after_plan(total_actions)
+            self._hooks.after_discovery(file_count)
+
+    def _notify_after_plan(self, cfg: Config, tool_names: Sequence[str]) -> None:
+        if not self._hooks.after_plan:
+            return
+        total_actions = sum(
+            1
+            for name in tool_names
+            for action in self._iter_tool_actions(name)
+            if self._should_run_action(cfg, action)
+        )
+        self._hooks.after_plan(total_actions)
+
+    def _iter_tool_actions(self, name: str) -> Iterable[ToolAction]:
+        tool = self._registry.try_get(name)
+        return tool.actions if tool else ()
+
+    def _schedule_tools(
+        self,
+        *,
+        cfg: Config,
+        tool_names: Sequence[str],
+        root: Path,
+        matched_files: Sequence[Path],
+        severity_rules: SeverityRuleView,
+        cache_ctx: _CacheContext,
+        state: _ExecutionState,
+    ) -> None:
         for name in tool_names:
             if self._process_tool(
                 cfg=cfg,
                 tool_name=name,
-                root=root_path,
+                root=root,
                 matched_files=matched_files,
                 severity_rules=severity_rules,
                 cache_ctx=cache_ctx,
@@ -196,26 +236,43 @@ class Orchestrator:
             ):
                 break
 
-        self._execute_scheduled(cfg, root_path, severity_rules, cache_ctx, state)
+    def _build_run_result(
+        self,
+        root: Path,
+        matched_files: Sequence[Path],
+        cache_ctx: _CacheContext,
+        state: _ExecutionState,
+    ) -> RunResult:
         outcomes = [state.outcomes[index] for index in sorted(state.outcomes)]
         self._populate_missing_metrics(state, matched_files)
-        result = RunResult(
-            root=root_path,
-            files=matched_files,
+        return RunResult(
+            root=root,
+            files=list(matched_files),
             outcomes=outcomes,
             tool_versions=cache_ctx.versions,
             file_metrics=dict(state.file_metrics),
         )
+
+    def _post_process_result(
+        self,
+        result: RunResult,
+        cfg: Config,
+        cache_ctx: _CacheContext,
+    ) -> None:
         dedupe_outcomes(result, cfg.dedupe)
         _ANALYSIS_ENGINE.annotate_run(result)
         apply_suppression_hints(result, _ANALYSIS_ENGINE)
         apply_change_impact(result)
+        duplicate_clusters = detect_duplicate_code(result, cfg.duplicates)
+        if duplicate_clusters:
+            result.analysis["duplicate_clusters"] = duplicate_clusters
+        else:
+            result.analysis.pop("duplicate_clusters", None)
         build_refactor_navigator(result, _ANALYSIS_ENGINE)
         if cache_ctx.cache and cache_ctx.versions_dirty:
             save_versions(cache_ctx.cache_dir, cache_ctx.versions)
         if self._hooks.after_execution:
             self._hooks.after_execution(result)
-        return result
 
     def fetch_all_tools(
         self,
@@ -227,7 +284,9 @@ class Orchestrator:
         """Prepare every tool action to warm caches without executing them."""
         root_path = self._prepare_runtime(root)
         cache_dir = (
-            cfg.execution.cache_dir if cfg.execution.cache_dir.is_absolute() else root_path / cfg.execution.cache_dir
+            cfg.execution.cache_dir
+            if cfg.execution.cache_dir.is_absolute()
+            else root_path / cfg.execution.cache_dir
         )
         system_preferred = not cfg.execution.use_local_linters
         use_local_override = cfg.execution.use_local_linters
@@ -287,7 +346,10 @@ class Orchestrator:
 
     def _discover_files(self, cfg: Config, root: Path) -> list[Path]:
         matched_files = self._discovery.run(cfg.file_discovery, root)
-        limits = [entry if entry.is_absolute() else (root / entry) for entry in cfg.file_discovery.limit_to]
+        limits = [
+            entry if entry.is_absolute() else (root / entry)
+            for entry in cfg.file_discovery.limit_to
+        ]
         limits = [limit.resolve() for limit in limits]
         if limits:
             matched_files = [path for path in matched_files if self._is_within_limits(path, limits)]
@@ -298,7 +360,11 @@ class Orchestrator:
         return matched_files
 
     def _initialize_cache(self, cfg: Config, root: Path) -> _CacheContext:
-        cache_dir = cfg.execution.cache_dir if cfg.execution.cache_dir.is_absolute() else root / cfg.execution.cache_dir
+        cache_dir = (
+            cfg.execution.cache_dir
+            if cfg.execution.cache_dir.is_absolute()
+            else root / cfg.execution.cache_dir
+        )
         if not cfg.execution.cache_enabled:
             return _CacheContext(cache=None, token=None, cache_dir=cache_dir, versions={})
         cache = ResultCache(cache_dir)
@@ -564,6 +630,7 @@ class Orchestrator:
             parsed,
             tool_name=tool_name,
             severity_rules=severity_rules,
+            root=root,
         )
         diagnostics = _filter_diagnostics(diagnostics, tool_name, extra_filters, root)
         adjusted_returncode = cp.returncode
@@ -601,7 +668,9 @@ class Orchestrator:
         from_cache: bool,
     ) -> None:
         metrics_map = (
-            dict(file_metrics) if file_metrics is not None else self._collect_metrics_for_files(state, context.files)
+            dict(file_metrics)
+            if file_metrics is not None
+            else self._collect_metrics_for_files(state, context.files)
         )
         self._update_state_metrics(state, metrics_map)
         state.outcomes[order] = outcome

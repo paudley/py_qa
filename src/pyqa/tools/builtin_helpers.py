@@ -29,7 +29,9 @@ __all__ = [
     "_CPANM_AVAILABLE",
     "_LUAROCKS_AVAILABLE",
     "_LUA_AVAILABLE",
+    "_argument_list",
     "_as_bool",
+    "_boolean_flags",
     "_ensure_actionlint",
     "_ensure_hadolint",
     "_ensure_lualint",
@@ -123,6 +125,21 @@ def _as_bool(value: object | None) -> bool | None:
     return bool(value)
 
 
+def _boolean_flags(settings: Mapping[str, object], flag_map: Mapping[str, str]) -> list[str]:
+    """Return CLI flags enabled by boolean settings."""
+    flags: list[str] = []
+    for key, flag in flag_map.items():
+        if _as_bool(_setting(settings, key)):
+            flags.append(flag)
+    return flags
+
+
+def _argument_list(settings: Mapping[str, object], *names: str) -> list[str]:
+    """Return a list of additional arguments from settings, defaulting to ``args``."""
+    target = _setting(settings, *(names or ("args",)))
+    return [str(arg) for arg in _settings_list(target)]
+
+
 def _ensure_actionlint(version: str, cache_root: Path) -> Path:
     """Download the requested actionlint release if needed and return its binary path."""
     base_dir = cache_root / "actionlint" / version
@@ -131,32 +148,36 @@ def _ensure_actionlint(version: str, cache_root: Path) -> Path:
         return binary
 
     base_dir.mkdir(parents=True, exist_ok=True)
+    platform_tag = _resolve_actionlint_platform()
+    filename = f"actionlint_{version}_{platform_tag}.tar.gz"
+    url = f"https://github.com/rhysd/actionlint/releases/download/v{version}/{filename}"
 
+    _download_actionlint_archive(url, base_dir, binary)
+    return binary
+
+
+def _resolve_actionlint_platform() -> str:
     system = platform.system().lower()
     machine = platform.machine().lower()
     if system == "linux":
         if machine in {"x86_64", "amd64"}:
-            platform_tag = "linux_amd64"
-        elif machine in {"aarch64", "arm64"}:
-            platform_tag = "linux_arm64"
-        else:
-            msg = f"Unsupported Linux architecture '{machine}' for actionlint"
-            raise RuntimeError(msg)
-    elif system == "darwin":
-        if machine in {"x86_64", "amd64"}:
-            platform_tag = "darwin_amd64"
-        elif machine in {"arm64", "aarch64"}:
-            platform_tag = "darwin_arm64"
-        else:
-            msg = f"Unsupported macOS architecture '{machine}' for actionlint"
-            raise RuntimeError(msg)
-    else:
-        msg = f"actionlint is not supported on platform '{system}'"
+            return "linux_amd64"
+        if machine in {"aarch64", "arm64"}:
+            return "linux_arm64"
+        msg = f"Unsupported Linux architecture '{machine}' for actionlint"
         raise RuntimeError(msg)
+    if system == "darwin":
+        if machine in {"x86_64", "amd64"}:
+            return "darwin_amd64"
+        if machine in {"arm64", "aarch64"}:
+            return "darwin_arm64"
+        msg = f"Unsupported macOS architecture '{machine}' for actionlint"
+        raise RuntimeError(msg)
+    msg = f"actionlint is not supported on platform '{system}'"
+    raise RuntimeError(msg)
 
-    filename = f"actionlint_{version}_{platform_tag}.tar.gz"
-    url = f"https://github.com/rhysd/actionlint/releases/download/v{version}/{filename}"
 
+def _download_actionlint_archive(url: str, base_dir: Path, binary: Path) -> None:
     response = _REQUESTS.get(url, timeout=30)
     response.raise_for_status()
 
@@ -165,19 +186,22 @@ def _ensure_actionlint(version: str, cache_root: Path) -> Path:
         tmp.flush()
         with tarfile.open(tmp.name, "r:gz") as archive:
             for member in archive.getmembers():
-                if member.isfile() and member.name.endswith("actionlint"):
-                    archive.extract(member, path=base_dir)
-                    extracted = base_dir / member.name
-                    extracted.chmod(
-                        extracted.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH,
-                    )
-                    if extracted != binary:
-                        extracted.rename(binary)
-                    break
+                if not member.isfile() or not member.name.endswith("actionlint"):
+                    continue
+                archive.extract(member, path=base_dir)
+                extracted = base_dir / member.name
+                extracted.chmod(
+                    extracted.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH,
+                )
+                if extracted != binary:
+                    extracted.rename(binary)
+                break
             else:
-                raise RuntimeError("Failed to locate actionlint binary in archive")
-
-    return binary
+                msg = "Failed to locate actionlint binary in archive"
+                raise RuntimeError(msg)
+    if not binary.exists():
+        msg = "Failed to extract actionlint binary"
+        raise RuntimeError(msg)
 
 
 def _ensure_hadolint(version: str, cache_root: Path) -> Path:

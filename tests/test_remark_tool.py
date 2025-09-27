@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _RemarkCommand
+from pyqa.tools.builtins import RemarkCommand
 
 
 def test_remark_lint_command_build(tmp_path: Path) -> None:
@@ -26,13 +26,14 @@ def test_remark_lint_command_build(tmp_path: Path) -> None:
 
     action = ToolAction(
         name="lint",
-        command=_RemarkCommand(base=("remark", "--use", "remark-preset-lint-recommended")),
+        command=RemarkCommand(base=("remark", "--use", "remark-preset-lint-recommended")),
         append_files=True,
     )
 
     cmd = action.build_command(ctx)
     assert cmd[0] == "remark"
-    assert "--report" in cmd and "json" in cmd
+    assert "--report" in cmd
+    assert "json" in cmd
     assert "--use" in cmd
     assert "--config" in cmd
     assert cmd[-1].endswith("README.md")
@@ -49,7 +50,7 @@ def test_remark_fix_command_build(tmp_path: Path) -> None:
 
     action = ToolAction(
         name="fix",
-        command=_RemarkCommand(
+        command=RemarkCommand(
             base=("remark", "--use", "remark-preset-lint-recommended"),
             is_fix=True,
         ),

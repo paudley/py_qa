@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _TombiCommand
+from pyqa.tools.builtins import TombiCommand
 
 
 def test_tombi_command_build(tmp_path: Path) -> None:
@@ -29,7 +29,7 @@ def test_tombi_command_build(tmp_path: Path) -> None:
 
     action = ToolAction(
         name="lint",
-        command=_TombiCommand(base=("tombi", "lint")),
+        command=TombiCommand(base=("tombi", "lint")),
         append_files=True,
     )
 

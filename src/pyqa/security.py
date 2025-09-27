@@ -331,12 +331,18 @@ class SecurityScanner:
             for level, count in metrics.items():
                 symbol = "❌" if "HIGH" in level else "⚠️"
                 suffix = level.rsplit(".", maxsplit=1)[-1].title()
-                print(f"  {symbol} {suffix} severity: {count}")
+                info(
+                    f"{symbol} {suffix} severity: {count}",
+                    use_emoji=self.use_emoji,
+                )
             if samples:
-                print("\n  Sample issues:")
+                info("Sample issues:", use_emoji=self.use_emoji)
                 for sample in samples:
-                    print(f"    {sample}")
-            print("\n  Run 'bandit -r src/ --format screen' for full details.")
+                    info(f"  {sample}", use_emoji=self.use_emoji)
+            info(
+                "Run 'bandit -r src/ --format screen' for full details.",
+                use_emoji=self.use_emoji,
+            )
         finally:
             report_path.unlink(missing_ok=True)
 
@@ -384,7 +390,9 @@ def _filter_entropy(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
 
 def _filter_comments(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
     return [
-        (idx, line) for idx, line in matches if not line.lstrip().startswith("#") and not line.lstrip().startswith("//")
+        (idx, line)
+        for idx, line in matches
+        if not line.lstrip().startswith("#") and not line.lstrip().startswith("//")
     ]
 
 

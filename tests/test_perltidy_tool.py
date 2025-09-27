@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _PerltidyCommand
+from pyqa.tools.builtins import PerltidyCommand
 
 
 def test_perltidy_format_command(tmp_path: Path) -> None:
@@ -23,7 +23,7 @@ def test_perltidy_format_command(tmp_path: Path) -> None:
 
     action = ToolAction(
         name="format",
-        command=_PerltidyCommand(base=("perltidy",), is_fix=True),
+        command=PerltidyCommand(base=("perltidy",), is_fix=True),
         append_files=True,
         is_fix=True,
     )
@@ -42,7 +42,7 @@ def test_perltidy_check_command(tmp_path: Path) -> None:
 
     action = ToolAction(
         name="check",
-        command=_PerltidyCommand(base=("perltidy",), is_fix=False),
+        command=PerltidyCommand(base=("perltidy",), is_fix=False),
         append_files=True,
     )
 

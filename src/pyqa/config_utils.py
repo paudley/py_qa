@@ -220,6 +220,7 @@ def generate_config_schema() -> dict[str, Any]:
         "output": _describe_model(defaults.output),
         "execution": _describe_model(defaults.execution),
         "dedupe": _describe_model(defaults.dedupe),
+        "duplicates": _describe_model(defaults.duplicates),
         "complexity": _describe_model(defaults.complexity),
         "strictness": _describe_model(defaults.strictness),
         "severity": _describe_model(defaults.severity),

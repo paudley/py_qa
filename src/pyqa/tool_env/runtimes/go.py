@@ -15,7 +15,7 @@ from ...process_utils import run_command
 from ...tools.base import Tool
 from .. import constants as tool_constants
 from ..models import PreparedCommand
-from ..utils import _slugify, _split_package_spec
+from ..utils import slugify, split_package_spec
 from .base import RuntimeHandler
 
 
@@ -90,7 +90,7 @@ class GoRuntime(RuntimeHandler):
         if not version_spec:
             version_spec = "latest"
         requirement = f"{module}@{version_spec}"
-        slug = _slugify(requirement)
+        slug = slugify(requirement)
         meta_file = tool_constants.GO_META_DIR / f"{slug}.json"
         binary = tool_constants.GO_BIN_DIR / binary_name
 
@@ -131,7 +131,7 @@ class GoRuntime(RuntimeHandler):
     @staticmethod
     def _module_spec(tool: Tool) -> tuple[str, str | None]:
         if tool.package:
-            module, version = _split_package_spec(tool.package)
+            module, version = split_package_spec(tool.package)
             return module, version
         return tool.name, tool.min_version
 

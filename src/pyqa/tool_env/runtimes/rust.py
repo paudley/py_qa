@@ -15,7 +15,7 @@ from ...process_utils import run_command
 from ...tools.base import Tool
 from .. import constants as tool_constants
 from ..models import PreparedCommand
-from ..utils import _slugify, _split_package_spec
+from ..utils import slugify, split_package_spec
 from .base import RuntimeHandler
 
 
@@ -92,7 +92,7 @@ class RustRuntime(RuntimeHandler):
         if crate.startswith("rustup:"):
             component = crate.split(":", 1)[1]
             requirement = f"rustup:{component}"
-            slug = _slugify(requirement)
+            slug = slugify(requirement)
             meta_file = tool_constants.RUST_META_DIR / f"{slug}.json"
             meta_file.parent.mkdir(parents=True, exist_ok=True)
             if not meta_file.exists():
@@ -104,7 +104,7 @@ class RustRuntime(RuntimeHandler):
             return Path(cargo_path)
 
         requirement = f"{crate}@{version_spec}" if version_spec else crate
-        slug = _slugify(requirement)
+        slug = slugify(requirement)
         prefix = tool_constants.RUST_CACHE_DIR / slug
         binary = prefix / "bin" / binary_name
         meta_file = tool_constants.RUST_META_DIR / f"{slug}.json"
@@ -149,7 +149,7 @@ class RustRuntime(RuntimeHandler):
     @staticmethod
     def _crate_spec(tool: Tool) -> tuple[str, str | None]:
         if tool.package:
-            crate, version = _split_package_spec(tool.package)
+            crate, version = split_package_spec(tool.package)
             if version is None:
                 version = tool.min_version
             return crate, version

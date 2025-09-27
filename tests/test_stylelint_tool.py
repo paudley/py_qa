@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _StylelintCommand
+from pyqa.tools.builtins import StylelintCommand
 
 
 def _ctx(tmp_path: Path, **settings) -> ToolContext:
@@ -34,14 +34,16 @@ def test_stylelint_lint_command_includes_formatter_and_paths(tmp_path: Path) -> 
 
     action = ToolAction(
         name="lint",
-        command=_StylelintCommand(base=("stylelint",)),
+        command=StylelintCommand(base=("stylelint",)),
         append_files=True,
     )
 
     command = action.build_command(ctx)
     assert command[0] == "stylelint"
-    assert "--formatter" in command and "json" in command
-    assert "--config" in command and str(ctx.settings["config"]) in command
+    assert "--formatter" in command
+    assert "json" in command
+    assert "--config" in command
+    assert str(ctx.settings["config"]) in command
     assert command[-1].endswith("main.css")
 
 
@@ -49,7 +51,7 @@ def test_stylelint_fix_command_respects_fix_flag(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     action = ToolAction(
         name="fix",
-        command=_StylelintCommand(base=("stylelint", "--fix"), is_fix=True),
+        command=StylelintCommand(base=("stylelint", "--fix"), is_fix=True),
         append_files=True,
         is_fix=True,
     )

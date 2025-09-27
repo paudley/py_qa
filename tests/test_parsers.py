@@ -2,6 +2,7 @@
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 """Tests covering parser adapters for supported tools."""
 
+import json
 from pathlib import Path
 
 from pyqa.config import Config
@@ -69,6 +70,29 @@ def test_parse_pylint() -> None:
     diags = parser.parse(stdout, "", context=_ctx())
     assert len(diags) == 1
     assert diags[0].code == "W0101"
+
+
+def test_parse_pylint_duplicate_code_formats_locations() -> None:
+    parser = JsonParser(parse_pylint)
+    stdout = json.dumps(
+        [
+            {
+                "type": "refactor",
+                "message": "Similar lines in 2 files\n==pkg/a.py:[1:6]\n==pkg/b.py:[1:6]",
+                "path": "pkg/b.py",
+                "line": 1,
+                "column": 0,
+                "symbol": "duplicate-code",
+                "message-id": "R0801",
+            },
+        ],
+    )
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    message = diags[0].message
+    assert "pkg/a.py" in message
+    assert "pkg/b.py" in message
+    assert "\n==" not in message
 
 
 def test_parse_pyright() -> None:
@@ -417,7 +441,9 @@ def test_parse_tombi() -> None:
 
 def test_parse_perlcritic() -> None:
     parser = TextParser(parse_perlcritic)
-    stdout = "lib/Foo.pm:12:8:ProhibitUnusedVariables: MyVar is never used (ProhibitUnusedVariables)\n"
+    stdout = (
+        "lib/Foo.pm:12:8:ProhibitUnusedVariables: MyVar is never used (ProhibitUnusedVariables)\n"
+    )
     diags = parser.parse(stdout, "", context=_ctx())
     assert len(diags) == 1
     diag = diags[0]

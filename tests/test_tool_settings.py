@@ -9,16 +9,15 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tools.base import Tool, ToolContext
-from pyqa.tools.builtins import _builtin_tools
+from pyqa.tools.builtins import builtin_tools
 from pyqa.tools.registry import ToolRegistry
 
 
 def _tool(name: str) -> Tool:
     registry = ToolRegistry()
-    for tool in _builtin_tools():
+    for tool in builtin_tools():
         registry.register(tool)
-    result = registry.try_get(name)
-    if result is None:
+    if (result := registry.try_get(name)) is None:
         raise AssertionError(f"Tool {name} missing")
     return result
 
@@ -45,8 +44,10 @@ def test_ruff_settings_inject_flags(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--select" in cmd and "E,F" in cmd
-    assert "--target-version" in cmd and "py311" in cmd
+    assert "--select" in cmd
+    assert "E,F" in cmd
+    assert "--target-version" in cmd
+    assert "py311" in cmd
     assert "--config" in cmd
     assert any("ruff.toml" in part for part in cmd)
     assert "--show-source" in cmd
@@ -89,8 +90,10 @@ def test_black_settings_inject_flags(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--line-length" in cmd and "100" in cmd
-    assert "--target-version" in cmd and "py311" in cmd
+    assert "--line-length" in cmd
+    assert "100" in cmd
+    assert "--target-version" in cmd
+    assert "py311" in cmd
     assert "--preview" in cmd
     assert "--diff" in cmd
 
@@ -137,9 +140,12 @@ def test_bandit_settings_extend_command(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--severity-level" in cmd and "medium" in cmd
-    assert "--confidence-level" in cmd and "high" in cmd
-    assert "--format" in cmd and "txt" in cmd
+    assert "--severity-level" in cmd
+    assert "medium" in cmd
+    assert "--confidence-level" in cmd
+    assert "high" in cmd
+    assert "--format" in cmd
+    assert "txt" in cmd
     assert "--baseline" in cmd
     assert "--skip" not in cmd
     assert "--quiet" in cmd
@@ -168,10 +174,15 @@ def test_isort_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--line-length" in cmd and "120" in cmd
-    assert "--profile" in cmd and "black" in cmd
-    assert "--skip" in cmd and "__init__.py" in cmd
-    assert "--src" in cmd and str((tmp_path / "src").resolve()) in cmd
+    assert "--line-length" in cmd
+    assert "120" in cmd
+    assert "--profile" in cmd
+    assert "black" in cmd
+    assert "--skip" in cmd
+    assert "__init__.py" in cmd
+    src_root = str((tmp_path / "src").resolve())
+    assert "--src" in cmd
+    assert src_root in cmd
     assert "--color" in cmd
 
 
@@ -229,13 +240,18 @@ def test_pylint_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--rcfile" in cmd and str(rc) in cmd
-    assert "--disable" in cmd and "C0114" in cmd
+    assert "--rcfile" in cmd
+    assert str(rc) in cmd
+    assert "--disable" in cmd
+    assert "C0114" in cmd
     assert "--exit-zero" in cmd
     expected_py = f"{sys.version_info.major}.{sys.version_info.minor}"
-    assert "--py-version" in cmd and expected_py in cmd
-    assert "--max-complexity" in cmd and "10" in cmd
-    assert "--max-args" in cmd and "5" in cmd
+    assert "--py-version" in cmd
+    assert expected_py in cmd
+    assert "--max-complexity" in cmd
+    assert "10" in cmd
+    assert "--max-args" in cmd
+    assert "5" in cmd
 
 
 def test_pylint_init_import_flag(tmp_path: Path) -> None:
@@ -367,8 +383,11 @@ def test_pyright_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--project" in cmd and str((tmp_path / "pyprojectconfig.json").resolve()) in cmd
-    assert "--pythonversion" in cmd and "3.11" in cmd
+    project_file = str((tmp_path / "pyprojectconfig.json").resolve())
+    assert "--project" in cmd
+    assert project_file in cmd
+    assert "--pythonversion" in cmd
+    assert "3.11" in cmd
     assert "--warnings" in cmd
 
 
@@ -456,9 +475,13 @@ def test_eslint_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--config" in cmd and str((tmp_path / "eslint.config.js").resolve()) in cmd
-    assert "--ext" in cmd and ".ts" in cmd
-    assert "--max-warnings" in cmd and "0" in cmd
+    eslint_config = str((tmp_path / "eslint.config.js").resolve())
+    assert "--config" in cmd
+    assert eslint_config in cmd
+    assert "--ext" in cmd
+    assert ".ts" in cmd
+    assert "--max-warnings" in cmd
+    assert "0" in cmd
     assert "--cache" in cmd
     assert "--no-inline-config" in cmd
 
@@ -485,10 +508,14 @@ def test_prettier_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--config" in cmd and str((tmp_path / "prettier.config.cjs").resolve()) in cmd
+    prettier_config = str((tmp_path / "prettier.config.cjs").resolve())
+    assert "--config" in cmd
+    assert prettier_config in cmd
     assert "--single-quote" in cmd
-    assert "--tab-width" in cmd and "2" in cmd
-    assert "--parser" in cmd and "typescript" in cmd
+    assert "--tab-width" in cmd
+    assert "2" in cmd
+    assert "--parser" in cmd
+    assert "typescript" in cmd
     assert "--no-error-on-unmatched-pattern" in cmd
 
 
@@ -511,7 +538,9 @@ def test_tsc_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--project" in cmd and str((tmp_path / "tsconfig.json").resolve()) in cmd
+    tsconfig = str((tmp_path / "tsconfig.json").resolve())
+    assert "--project" in cmd
+    assert tsconfig in cmd
     assert "--watch" in cmd
 
 
@@ -536,7 +565,12 @@ def test_golangci_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--config" in cmd and str((tmp_path / "golangci.yml").resolve()) in cmd
-    assert "--enable" in cmd and "gofmt" in cmd
-    assert "--disable" in cmd and "lll" in cmd
-    assert "--deadline" in cmd and "2m" in cmd
+    golangci = str((tmp_path / "golangci.yml").resolve())
+    assert "--config" in cmd
+    assert golangci in cmd
+    assert "--enable" in cmd
+    assert "gofmt" in cmd
+    assert "--disable" in cmd
+    assert "lll" in cmd
+    assert "--deadline" in cmd
+    assert "2m" in cmd

@@ -750,4 +750,4 @@ def tool_setting_schema_as_dict() -> RawToolSettingSchema:
     return deepcopy(RAW_TOOL_SETTING_SCHEMA)
 
 
-__all__ = ["TOOL_SETTING_SCHEMA", "tool_setting_schema_as_dict", "SettingField"]
+__all__ = ["TOOL_SETTING_SCHEMA", "SettingField", "tool_setting_schema_as_dict"]

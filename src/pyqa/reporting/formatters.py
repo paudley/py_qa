@@ -4,9 +4,8 @@
 
 from __future__ import annotations
 
-import re
-from collections.abc import Iterable, Sequence
-from pathlib import Path
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any
 
 from rich import box
 from rich.panel import Panel
@@ -26,6 +25,14 @@ from ..metrics import (
 from ..models import Diagnostic, RunResult
 from ..severity import Severity
 from .advice import AdviceEntry, generate_advice
+from .concise_helpers import (
+    ConciseEntry,
+    SummaryData,
+    collect_concise_entries,
+    compute_summary,
+    group_similar_entries,
+    resolve_root_path,
+)
 
 _ANNOTATION_ENGINE = AnnotationEngine()
 _CODE_TINT = "ansi256:105"
@@ -47,62 +54,61 @@ def render(result: RunResult, cfg: OutputConfig) -> None:
 
 
 def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
-    root_path = Path(result.root)
-    try:
-        root_path = root_path.resolve()
-    except OSError:
-        pass
+    base_entries = collect_concise_entries(result)
+    entries = group_similar_entries(base_entries)
+    formatted_rows = _format_concise_rows(entries)
+    _print_concise_rows(formatted_rows, result, cfg)
 
-    total_actions = len(result.outcomes)
-    failed_actions = sum(1 for outcome in result.outcomes if not outcome.ok)
-    entries: list[tuple[str, int, str, str, str, str]] = []
-    seen_exact: set[tuple[str, int, str, str, str, str]] = set()
-    for outcome in result.outcomes:
-        for diag in outcome.diagnostics:
-            tool_name = diag.tool or outcome.tool
-            file_path = _normalize_concise_path(diag.file, root_path)
-            line_no = diag.line if diag.line is not None else -1
-            raw_code = diag.code or "-"
-            code = raw_code.strip() or "-"
-            raw_message = diag.message.splitlines()[0]
-            message = _clean_message(code, raw_message) or "<no message provided>"
-            function = _normalise_symbol(diag.function)
-            record = (file_path, line_no, function, tool_name, code, message)
-            if record in seen_exact:
-                continue
-            seen_exact.add(record)
-            entries.append(record)
+    diagnostics_count = len(entries)
+    if getattr(cfg, "advice", False):
+        advice_entries = list(entries)
+        advice_entries.extend(_duplicate_entries_for_advice(result))
+        _render_advice(advice_entries, cfg)
+        _render_refactor_navigator(result, cfg)
+    _emit_stats_line(result, cfg, diagnostics_count)
 
-    entries = _group_similar_messages(entries)
+    summary = compute_summary(result, diagnostics_count)
+    print(_render_concise_summary(summary, cfg))
 
-    def sort_key(item: tuple[str, int, str, str, str, str]) -> tuple:
-        file_path, line_no, function, tool_name, code, message = item
+
+def _format_concise_rows(entries: list[ConciseEntry]) -> list[tuple[str, str, str, str, str]]:
+    if not entries:
+        return []
+
+    def sort_key(item: ConciseEntry) -> tuple:
         return (
-            file_path,
-            line_no if line_no >= 0 else float("inf"),
-            function,
-            tool_name,
-            code,
-            message,
+            item.file_path,
+            item.line_no if item.line_no >= 0 else float("inf"),
+            item.function,
+            item.tool_name,
+            item.code,
+            item.message,
         )
 
-    formatted: list[tuple[str, str, str, str, str]] = []
-    if entries:
-        for file_path, line_no, function, tool_name, code, message in sorted(entries, key=sort_key):
-            file_part = file_path
-            suffix_parts: list[str] = []
-            if line_no >= 0:
-                suffix_parts.append(str(line_no))
-            if function:
-                suffix_parts.append(function)
-            suffix = f":{':'.join(suffix_parts)}" if suffix_parts else ""
-            formatted.append((tool_name, file_part, suffix, code, message))
+    rows: list[tuple[str, str, str, str, str]] = []
+    for entry in sorted(entries, key=sort_key):
+        suffix_parts: list[str] = []
+        if entry.line_no >= 0:
+            suffix_parts.append(str(entry.line_no))
+        if entry.function:
+            suffix_parts.append(entry.function)
+        suffix = f":{':'.join(suffix_parts)}" if suffix_parts else ""
+        rows.append((entry.tool_name, entry.file_path, suffix, entry.code, entry.message))
+    return rows
 
+
+def _print_concise_rows(
+    rows: Sequence[tuple[str, str, str, str, str]],
+    result: RunResult,
+    cfg: OutputConfig,
+) -> None:
+    if not rows:
+        return
     tool_padding_limit = 10
-    raw_tool_width = max((len(item[0]) for item in formatted), default=0)
+    raw_tool_width = max((len(item[0]) for item in rows), default=0)
     tool_width = min(raw_tool_width, tool_padding_limit) if raw_tool_width else 0
     tint_tool = _tool_tinter(result, cfg)
-    for tool_name, file_part, suffix, code, message in formatted:
+    for tool_name, file_part, suffix, code, message in rows:
         spacer = " " * max(tool_width - len(tool_name), 0) if tool_width else ""
         location = (file_part or "") + suffix
         location_display = _highlight_for_output(
@@ -112,30 +118,27 @@ def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
         )
         message_display = _highlight_for_output(message, color=cfg.color)
         code_display = _format_code_value(code, cfg.color)
-        print(f"{tint_tool(tool_name)}, {spacer}{location_display}, {code_display}, {message_display}")
+        print(
+            f"{tint_tool(tool_name)}, {spacer}{location_display}, {code_display}, {message_display}",
+        )
 
-    diagnostics_count = len(entries)
-    files_count = len(result.files)
-    if getattr(cfg, "advice", False):
-        _render_advice(entries, cfg)
-        _render_refactor_navigator(result, cfg)
-    _emit_stats_line(result, cfg, diagnostics_count)
 
-    symbol = "❌" if failed_actions else "✅"
+def _render_concise_summary(summary: SummaryData, cfg: OutputConfig) -> str:
+    symbol = "❌" if summary.failed_actions else "✅"
     summary_symbol = emoji(symbol, cfg.emoji)
     summary_label = (
-        f"{summary_symbol} {'Failed' if failed_actions else 'Passed'}"
+        f"{summary_symbol} {'Failed' if summary.failed_actions else 'Passed'}"
         if summary_symbol
-        else ("Failed" if failed_actions else "Passed")
+        else ("Failed" if summary.failed_actions else "Passed")
     )
-    summary_color = "red" if failed_actions else "green"
+    summary_color = "red" if summary.failed_actions else "green"
     stats_raw = (
-        f"— {diagnostics_count} diagnostic(s) across {files_count} file(s); "
-        f"{failed_actions} failing action(s) out of {total_actions}"
+        f"— {summary.diagnostics_count} diagnostic(s) across {summary.files_count} file(s); "
+        f"{summary.failed_actions} failing action(s) out of {summary.total_actions}"
     )
     status_text = colorize(summary_label, summary_color, cfg.color)
     stats_text = colorize(stats_raw, "white", cfg.color)
-    print(f"{status_text} {stats_text}".strip())
+    return f"{status_text} {stats_text}".strip()
 
 
 def _tool_tinter(result: RunResult, cfg: OutputConfig) -> callable[[str], str]:
@@ -155,28 +158,6 @@ def _tool_tinter(result: RunResult, cfg: OutputConfig) -> callable[[str], str]:
         return colorize(tool, color, cfg.color) if color else tool
 
     return tint
-
-
-def _normalise_symbol(value: str | None) -> str:
-    if not value:
-        return ""
-    candidate = value.strip()
-    if not candidate:
-        return ""
-    if "\n" in candidate:
-        candidate = candidate.splitlines()[0].strip()
-    if not candidate:
-        return ""
-    if candidate.startswith(("#", '"""', "'''")):
-        return ""
-    if any(char.isspace() for char in candidate):
-        return ""
-    allowed_symbols = {"_", ".", "-", ":", "<", ">", "[", "]", "(", ")"}
-    if any(not ch.isalnum() and ch not in allowed_symbols for ch in candidate):
-        return ""
-    if len(candidate) > 80:
-        candidate = f"{candidate[:77]}…"
-    return candidate
 
 
 def _collect_highlight_spans(text: str) -> list[MessageSpan]:
@@ -209,7 +190,12 @@ def _apply_highlighting_text(message: str, base_style: str | None = None) -> Tex
     return text
 
 
-def _highlight_for_output(message: str, *, color: bool, extra_spans: Sequence[MessageSpan] | None = None) -> str:
+def _highlight_for_output(
+    message: str,
+    *,
+    color: bool,
+    extra_spans: Sequence[MessageSpan] | None = None,
+) -> str:
     clean = message.replace("`", "")
     if not color:
         clean, _ = _strip_literal_quotes(clean)
@@ -246,77 +232,6 @@ def _infer_annotation_targets(message: str) -> int:
     return sum(1 for span in spans if span.style == "ansi256:213")
 
 
-_MERGEABLE_MESSAGE = re.compile(r"^(?P<prefix>.*?)(`(?P<detail>[^`]+)`)(?P<suffix>.*)$")
-
-
-def _group_similar_messages(
-    entries: list[tuple[str, int, str, str, str, str]],
-) -> list[tuple[str, int, str, str, str, str]]:
-    grouped: dict[
-        tuple[str, int, str, str, str, str, str],
-        dict[str, object],
-    ] = {}
-    ordered_keys: list[tuple[str, int, str, str, str, str, str]] = []
-
-    for file_path, line_no, function, tool_name, code, message in entries:
-        match = _MERGEABLE_MESSAGE.match(message)
-        if not match:
-            sanitized_message = message.replace("`", "")
-            grouped_key = (file_path, line_no, function, tool_name, code, sanitized_message, "")
-            if grouped_key not in grouped:
-                grouped[grouped_key] = {
-                    "prefix": sanitized_message,
-                    "suffix": "",
-                    "details": [],
-                    "message": sanitized_message,
-                }
-                ordered_keys.append(grouped_key)
-            continue
-
-        prefix = match.group("prefix").replace("`", "")
-        detail = match.group("detail").replace("`", "")
-        suffix = match.group("suffix").replace("`", "")
-        if not detail:
-            grouped_key = (file_path, line_no, function, tool_name, code, prefix + suffix, "")
-            if grouped_key not in grouped:
-                grouped[grouped_key] = {
-                    "prefix": prefix,
-                    "suffix": "",
-                    "details": [],
-                    "message": (prefix + suffix).strip(),
-                }
-                ordered_keys.append(grouped_key)
-            continue
-
-        grouped_key = (file_path, line_no, function, tool_name, code, prefix, suffix)
-        bucket = grouped.get(grouped_key)
-        if bucket is None:
-            bucket = {
-                "prefix": prefix,
-                "suffix": suffix,
-                "details": [],
-                "message": (prefix + detail + suffix).strip(),
-            }
-            grouped[grouped_key] = bucket
-            ordered_keys.append(grouped_key)
-        details: list[str] = bucket["details"]  # type: ignore[assignment]
-        if detail not in details:
-            details.append(detail)
-
-    merged: list[tuple[str, int, str, str, str, str]] = []
-    for grouped_key in ordered_keys:
-        file_path, line_no, function, tool_name, code, prefix, suffix = grouped_key
-        bucket = grouped[grouped_key]
-        details: list[str] = bucket["details"]  # type: ignore[assignment]
-        if not details or len(details) == 1:
-            message = bucket["message"]  # type: ignore[assignment]
-        else:
-            joined = ", ".join(details)
-            message = f"{prefix}{joined}{suffix}".strip()
-        merged.append((file_path, line_no, function, tool_name, code, message.replace("`", "")))
-    return merged
-
-
 def _render_quiet(result: RunResult, cfg: OutputConfig) -> None:
     failed = [outcome for outcome in result.outcomes if not outcome.ok]
     if not failed:
@@ -331,10 +246,14 @@ def _render_quiet(result: RunResult, cfg: OutputConfig) -> None:
 
 
 def _render_pretty(result: RunResult, cfg: OutputConfig) -> None:
-    root_display = colorize(str(Path(result.root).resolve()), "blue", cfg.color)
+    root_display = colorize(str(resolve_root_path(result.root)), "blue", cfg.color)
     print(f"Root: {root_display}")
     for outcome in result.outcomes:
-        status = colorize("PASS", "green", cfg.color) if outcome.ok else colorize("FAIL", "red", cfg.color)
+        status = (
+            colorize("PASS", "green", cfg.color)
+            if outcome.ok
+            else colorize("FAIL", "red", cfg.color)
+        )
         print(f"\n{outcome.tool}:{outcome.action} — {status}")
         if outcome.stdout:
             print(colorize("stdout:", "cyan", cfg.color))
@@ -356,29 +275,6 @@ def _render_raw(result: RunResult) -> None:
         print(outcome.stdout.rstrip())
         if outcome.stderr:
             print(outcome.stderr.rstrip())
-
-
-def _normalize_concise_path(path_str: str | None, root: Path) -> str:
-    if not path_str:
-        return "<unknown>"
-    candidate = Path(path_str)
-    try:
-        if candidate.is_absolute():
-            try:
-                candidate_resolved = candidate.resolve()
-            except OSError:
-                candidate_resolved = candidate
-            try:
-                root_resolved = root.resolve()
-            except OSError:
-                root_resolved = root
-            try:
-                return candidate_resolved.relative_to(root_resolved).as_posix()
-            except ValueError:
-                return candidate_resolved.as_posix()
-        return candidate.as_posix()
-    except OSError:
-        return str(candidate)
 
 
 def _dump_diagnostics(diags: Iterable[Diagnostic], cfg: OutputConfig) -> None:
@@ -463,7 +359,8 @@ def _emit_stats_line(result: RunResult, cfg: OutputConfig, diagnostics_count: in
     metrics = _gather_metrics(result)
     loc_count = sum(metric.line_count for metric in metrics.values())
     suppression_counts = {
-        label: sum(metric.suppressions.get(label, 0) for metric in metrics.values()) for label in SUPPRESSION_LABELS
+        label: sum(metric.suppressions.get(label, 0) for metric in metrics.values())
+        for label in SUPPRESSION_LABELS
     }
     files_count = len(result.files)
     total_suppressions = sum(suppression_counts.values())
@@ -488,6 +385,10 @@ def _emit_stats_line(result: RunResult, cfg: OutputConfig, diagnostics_count: in
     table.add_row(
         styled("Files", label_style),
         styled(f"{files_count}", value_style),
+    )
+    table.add_row(
+        styled("Warnings", label_style),
+        styled(str(diagnostics_count), value_style),
     )
     table.add_row(
         styled("Lines of code", label_style),
@@ -538,13 +439,17 @@ def _gather_metrics(result: RunResult) -> dict[str, FileMetrics]:
 
 
 def _render_advice(
-    entries: Iterable[tuple[str, int, str, str, str, str]],
+    entries: Iterable[ConciseEntry],
     cfg: OutputConfig,
 ) -> None:
     if not entries:
         return
 
-    advice_entries = generate_advice(list(entries), _ANNOTATION_ENGINE)
+    normalized_entries = [
+        (entry.file_path, entry.line_no, entry.function, entry.tool_name, entry.code, entry.message)
+        for entry in entries
+    ]
+    advice_entries = generate_advice(normalized_entries, _ANNOTATION_ENGINE)
     if not advice_entries:
         return
 
@@ -576,6 +481,72 @@ def _render_advice(
         padding=(0, 1),
     )
     console.print(panel)
+
+
+def _duplicate_entries_for_advice(result: RunResult) -> list[ConciseEntry]:
+    clusters = result.analysis.get("duplicate_clusters")
+    if not isinstance(clusters, list):
+        return []
+    extras: list[ConciseEntry] = []
+    for cluster in clusters:
+        if not isinstance(cluster, Mapping):
+            continue
+        occurrences = cluster.get("occurrences")
+        if not isinstance(occurrences, list) or len(occurrences) < 2:
+            continue
+        message = _format_duplicate_message(cluster, occurrences)
+        if message is None:
+            continue
+        origin = occurrences[0]
+        if not isinstance(origin, Mapping):
+            continue
+        file_path = str(origin.get("file") or "")
+        if not file_path:
+            continue
+        raw_line = origin.get("line")
+        line_no = raw_line if isinstance(raw_line, int) else -1
+        function = str(origin.get("function") or "")
+        kind = str(cluster.get("kind") or "")
+        if kind == "ast":
+            code = "DRY-HASH"
+        elif kind == "diagnostic":
+            code = "DRY-MESSAGE"
+        else:
+            code = "DRY-CLUSTER"
+        extras.append(
+            ConciseEntry(
+                file_path=file_path,
+                line_no=line_no,
+                function=function,
+                tool_name="pyqa",
+                code=code,
+                message=message,
+            ),
+        )
+    return extras
+
+
+def _format_duplicate_message(
+    cluster: Mapping[str, Any],
+    occurrences: Sequence[Mapping[str, Any]],
+) -> str | None:
+    summary = str(cluster.get("summary") or "").strip()
+    paths: list[str] = []
+    for occurrence in occurrences:
+        file_path = occurrence.get("file")
+        if not isinstance(file_path, str) or not file_path:
+            continue
+        line = occurrence.get("line")
+        if isinstance(line, int) and line >= 0:
+            paths.append(f"{file_path}:{line}")
+        else:
+            paths.append(file_path)
+    unique_paths = list(dict.fromkeys(paths))
+    if len(unique_paths) < 2:
+        return None
+    joined = "; ".join(unique_paths)
+    base = summary if summary else "Duplicate code detected"
+    return f"{base} ({joined})"
 
 
 def _render_refactor_navigator(result: RunResult, cfg: OutputConfig) -> None:
