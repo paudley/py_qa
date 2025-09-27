@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import Enum
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Protocol
+from typing import Final, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -28,6 +28,14 @@ from .discovery.filesystem import FilesystemDiscovery
 from .discovery.git import GitDiscovery, list_tracked_files
 from .process_utils import run_command
 from .tools.settings import tool_setting_schema_as_dict
+
+ERROR_EXIT_CODE: Final[int] = 1
+SUCCESS_EXIT_CODE: Final[int] = 0
+MULTIPLE_NOTICE_WARNING_THRESHOLD: Final[int] = 2
+SCHEMA_JSON_INDENT: Final[int] = 2
+COMMIT_SUBJECT_MAX_LENGTH: Final[int] = 72
+COMMIT_BODY_MAX_LENGTH: Final[int] = 72
+COMMIT_BODY_START_LINE_NUMBER: Final[int] = 2
 
 
 class QualityIssueLevel(str, Enum):
@@ -69,7 +77,7 @@ class QualityCheckResult(BaseModel):
         return [issue for issue in self.issues if issue.level is QualityIssueLevel.WARNING]
 
     def exit_code(self) -> int:
-        return 1 if self.errors else 0
+        return ERROR_EXIT_CODE if self.errors else SUCCESS_EXIT_CODE
 
 
 @dataclass(slots=True)
@@ -141,7 +149,7 @@ class LicenseCheck:
             if observed:
                 observed_notices.add(normalise_notice(observed))
 
-        if policy.canonical_notice and len(observed_notices) > 1:
+        if policy.canonical_notice and len(observed_notices) >= MULTIPLE_NOTICE_WARNING_THRESHOLD:
             result.add_warning(
                 "Multiple copyright notices detected across files; ensure headers use a consistent notice.",
             )
@@ -175,7 +183,10 @@ class SchemaCheck:
     def run(self, ctx: QualityContext, result: QualityCheckResult) -> None:
         if not ctx.quality.schema_targets:
             return
-        expected = json.dumps(tool_setting_schema_as_dict(), indent=2, sort_keys=True) + "\n"
+        expected = (
+            json.dumps(tool_setting_schema_as_dict(), indent=SCHEMA_JSON_INDENT, sort_keys=True)
+            + "\n"
+        )
         for target in ctx.quality.schema_targets:
             target_path = target if target.is_absolute() else (ctx.root / target).resolve()
             if not target_path.exists():
@@ -220,7 +231,11 @@ class QualityFileCollector:
         if staged:
             git_discovery = GitDiscovery()
             config = FileDiscoveryConfig(pre_commit=True, include_untracked=True, changed_only=True)
-            return [path.resolve() for path in git_discovery.discover(config, self.root) if path.exists()]
+            return [
+                path.resolve()
+                for path in git_discovery.discover(config, self.root)
+                if path.exists()
+            ]
 
         tracked = list_tracked_files(self.root)
         if tracked:
@@ -228,7 +243,11 @@ class QualityFileCollector:
 
         filesystem_discovery = FilesystemDiscovery()
         config = FileDiscoveryConfig()
-        return [path.resolve() for path in filesystem_discovery.discover(config, self.root) if path.exists()]
+        return [
+            path.resolve()
+            for path in filesystem_discovery.discover(config, self.root)
+            if path.exists()
+        ]
 
     def _resolve(self, path: Path) -> Path:
         return path if path.is_absolute() else (self.root / path).resolve()
@@ -329,8 +348,11 @@ def check_commit_message(root: Path, message_file: Path) -> QualityCheckResult:
         return result
 
     subject = lines[0]
-    if len(subject) > 72:
-        result.add_error("Commit subject exceeds 72 characters", message_path)
+    if len(subject) > COMMIT_SUBJECT_MAX_LENGTH:
+        result.add_error(
+            f"Commit subject exceeds {COMMIT_SUBJECT_MAX_LENGTH} characters",
+            message_path,
+        )
     if not CONVENTIONAL_SUBJECT.match(subject):
         result.add_error(
             "Commit subject must follow Conventional Commits (type(scope): description)",
@@ -344,9 +366,12 @@ def check_commit_message(root: Path, message_file: Path) -> QualityCheckResult:
                 message_path,
             )
 
-    for idx, line in enumerate(lines[1:], start=2):
-        if len(line) > 72:
-            result.add_warning(f"Line {idx} exceeds 72 characters", message_path)
+    for idx, line in enumerate(lines[1:], start=COMMIT_BODY_START_LINE_NUMBER):
+        if len(line) > COMMIT_BODY_MAX_LENGTH:
+            result.add_warning(
+                f"Line {idx} exceeds {COMMIT_BODY_MAX_LENGTH} characters",
+                message_path,
+            )
 
     checker = BannedWordChecker(root=root)
     banned_matches = checker.scan(lines)

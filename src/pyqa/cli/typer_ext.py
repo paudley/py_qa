@@ -27,7 +27,7 @@ class SortedTyperCommand(TyperCommand):
             if kind == "argument":
                 args.append(record)
             else:
-                key = (_primary_option_name(param), index)
+                key = (primary_option_name(param), index)
                 option_entries.append((key, record))
 
         if args:
@@ -35,7 +35,9 @@ class SortedTyperCommand(TyperCommand):
                 formatter.write_dl(args)
 
         if option_entries:
-            sorted_records = [record for _, record in sorted(option_entries, key=lambda item: item[0])]
+            sorted_records = [
+                record for _, record in sorted(option_entries, key=lambda item: item[0])
+            ]
             with formatter.section(_("Options")):
                 formatter.write_dl(sorted_records)
 
@@ -70,7 +72,7 @@ def create_typer(*, cls: type[TyperGroup] | None = None, **kwargs: Any) -> Sorte
     return SortedTyper(cls=cls, **kwargs)
 
 
-def _primary_option_name(param: Parameter) -> str:
+def primary_option_name(param: Parameter) -> str:
     """Return the canonical name used for sorting a Click parameter."""
     option_names: Iterable[str] = tuple(getattr(param, "opts", ())) + tuple(
         getattr(param, "secondary_opts", ()),
@@ -78,3 +80,17 @@ def _primary_option_name(param: Parameter) -> str:
     long_names = [name for name in option_names if name.startswith("--")]
     candidate = long_names[0] if long_names else (next(iter(option_names), "") or param.name or "")
     return candidate.lstrip("-").lower()
+
+
+def _primary_option_name(param: Parameter) -> str:
+    """Backward-compatible alias for :func:`primary_option_name`."""
+    return primary_option_name(param)
+
+
+__all__ = [
+    "SortedTyper",
+    "SortedTyperCommand",
+    "SortedTyperGroup",
+    "create_typer",
+    "primary_option_name",
+]

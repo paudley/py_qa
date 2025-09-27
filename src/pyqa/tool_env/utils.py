@@ -9,19 +9,19 @@ import re
 from ..tools.base import Tool
 
 
-def _slugify(value: str) -> str:
+def slugify(value: str) -> str:
     """Return a filesystem-friendly slug for *value*."""
     return re.sub(r"[^A-Za-z0-9_.-]+", "-", value)
 
 
-def _extract_version(text: str | None) -> str | None:
+def extract_version(text: str | None) -> str | None:
     if not text:
         return None
     match = re.search(r"(\d+(?:\.\d+)+)", text)
     return match.group(1) if match else None
 
 
-def _split_package_spec(spec: str) -> tuple[str, str | None]:
+def split_package_spec(spec: str) -> tuple[str, str | None]:
     """Split a package specifier into name and version components."""
     if spec.startswith("git+") or spec.startswith("file:") or spec.startswith("http"):
         return spec, None
@@ -39,8 +39,8 @@ def _split_package_spec(spec: str) -> tuple[str, str | None]:
 def desired_version(tool: Tool) -> str | None:
     """Determine the target version expected for *tool*."""
     if tool.package:
-        _, specified = _split_package_spec(tool.package)
-        extracted = _extract_version(specified)
+        _, specified = split_package_spec(tool.package)
+        extracted = extract_version(specified)
         if extracted:
             return extracted
     if tool.min_version:
@@ -48,9 +48,14 @@ def desired_version(tool: Tool) -> str | None:
     return None
 
 
+_slugify = slugify
+_extract_version = extract_version
+_split_package_spec = split_package_spec
+
+
 __all__ = [
-    "_extract_version",
-    "_slugify",
-    "_split_package_spec",
     "desired_version",
+    "extract_version",
+    "slugify",
+    "split_package_spec",
 ]

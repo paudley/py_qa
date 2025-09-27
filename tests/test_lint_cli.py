@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -15,10 +16,15 @@ from typer.testing import CliRunner
 import pyqa.cli.lint as lint_module
 from pyqa.cli.app import app
 from pyqa.cli.options import LintOptions
-from pyqa.cli.typer_ext import _primary_option_name
+from pyqa.cli.typer_ext import primary_option_name
 from pyqa.config import Config
 from pyqa.models import RunResult, ToolOutcome
 from pyqa.tool_env.models import PreparedCommand
+from tests.helpers.progress import (
+    assert_progress_record_phases,
+    install_progress_recorder,
+    maybe_call,
+)
 
 
 def test_lint_warns_when_py_qa_path_outside_workspace(tmp_path: Path, monkeypatch) -> None:
@@ -129,135 +135,68 @@ def test_lint_no_stats_flag(monkeypatch, tmp_path: Path) -> None:
 
 def test_concise_mode_renders_progress_status(monkeypatch, tmp_path: Path) -> None:
     runner = CliRunner()
-
-    progress_instances: list[_FakeProgress] = []
-
-    class _FakeProgress:
-        def __init__(self, *args, **kwargs) -> None:  # noqa: D401 - test double
-            progress_instances.append(self)
-            self.records: list[tuple] = []
-            self._tasks: dict[int, dict[str, object]] = {}
-            self._next_id = 1
-            self._started = False
-
-        def start(self) -> None:
-            if not self._started:
-                self.records.append(("start",))
-                self._started = True
-
-        def stop(self) -> None:
-            if self._started:
-                self.records.append(("stop",))
-                self._started = False
-
-        def add_task(self, description: str, *, total: int = 0, **fields: object) -> int:
-            task_id = self._next_id
-            self._next_id += 1
-            self._tasks[task_id] = {
-                "description": description,
-                "total": total,
-                "completed": 0,
-                "fields": dict(fields),
-            }
-            self.records.append(("add", description, total, dict(fields)))
-            return task_id
-
-        def update(
-            self,
-            task_id: int,
-            *,
-            description: str | None = None,
-            total: int | None = None,
-            **fields: object,
-        ) -> None:
-            task = self._tasks[task_id]
-            if description is not None:
-                task["description"] = description
-            if total is not None:
-                task["total"] = total
-            if fields:
-                task_fields = task["fields"]
-                assert isinstance(task_fields, dict)
-                task_fields.update(fields)
-            snapshot_fields = dict(task["fields"])
-            self.records.append(("update", task["description"], task["total"], snapshot_fields))
-
-        def advance(self, task_id: int, advance: int = 1) -> None:
-            task = self._tasks[task_id]
-            task["completed"] = int(task["completed"]) + advance
-            self.records.append(("advance", task["completed"]))
-
-        def get_task(self, task_id: int):  # noqa: ANN001
-            task = self._tasks[task_id]
-            from types import SimpleNamespace
-
-            return SimpleNamespace(
-                total=task["total"],
-                completed=task["completed"],
-            )
-
-    def fake_run(self, config, root):  # noqa: ANN001
-        if self._hooks.after_discovery:
-            self._hooks.after_discovery(1)
-        if self._hooks.before_tool:
-            self._hooks.before_tool("ruff")
-        outcome_check = ToolOutcome(
-            tool="ruff",
-            action="lint",
-            returncode=0,
-            stdout="",
-            stderr="",
-            diagnostics=[],
-        )
-        outcome_fix = ToolOutcome(
-            tool="ruff",
-            action="fix",
-            returncode=0,
-            stdout="",
-            stderr="",
-            diagnostics=[],
-        )
-        if self._hooks.after_tool:
-            self._hooks.after_tool(outcome_check)
-            self._hooks.after_tool(outcome_fix)
-        result = RunResult(root=root, files=[], outcomes=[outcome_check, outcome_fix], tool_versions={})
-        if self._hooks.after_execution:
-            self._hooks.after_execution(result)
-        return result
-
-    monkeypatch.setattr(lint_module, "Progress", _FakeProgress)
+    recorder = install_progress_recorder(monkeypatch, module=lint_module)
     monkeypatch.setattr(lint_module, "is_tty", lambda: True)
-    monkeypatch.setattr(lint_module.Orchestrator, "run", fake_run)
+    monkeypatch.setattr(lint_module.Orchestrator, "run", _orchestrator_run_with_progress)
 
-    result = runner.invoke(
-        app,
-        [
-            "lint",
-            "--root",
-            str(tmp_path),
-            "--no-emoji",
-        ],
-    )
+    result = runner.invoke(app, _lint_args(tmp_path))
 
     assert result.exit_code == 0
-    assert progress_instances, "progress bar should initialise"
-    records = progress_instances[0].records
-    assert any(event[0] == "start" for event in records)
-    advances = [event for event in records if event[0] == "advance"]
-    assert len(advances) == 4, "two actions plus post-processing and rendering phases should advance"
-    assert any(event[0] == "update" and event[2] == 4 for event in records), (
-        "progress total should include tool actions and extra phases"
+    progress = recorder.require_single_instance()
+    records = progress.records
+    assert any(
+        record.kind == "update" and record.payload[0].startswith("Linting ruff")
+        for record in records
     )
-    assert any(event[0] == "update" and event[1].startswith("Linting ruff") for event in records)
-    status_updates = [event for event in records if event[0] == "update" and isinstance(event[3], dict)]
-    status_values = [event[3].get("current_status", "") for event in status_updates]
-    assert any("queued" in status for status in status_values)
-    assert any("post-processing" in status for status in status_values)
-    assert any("rendering output" in status for status in status_values)
-    assert any(event[0] == "update" and event[1] == "Linting complete" for event in records), (
-        "progress should report completion"
+    totals = [
+        record.payload[1]
+        for record in records
+        if record.kind == "update"
+        and len(record.payload) >= 2
+        and isinstance(record.payload[1], int)
+    ]
+    assert any(
+        total == 4 for total in totals
+    ), "progress total should include tool actions and phases"
+    assert_progress_record_phases(
+        records,
+        expected_advances=4,
+        required_status_fragments=("queued", "post-processing", "rendering output"),
     )
-    assert any(event[0] == "stop" for event in records), "progress should stop after completion"
+
+
+def _lint_args(tmp_path: Path, extra: Iterable[str] | None = None) -> list[str]:
+    args = [
+        "lint",
+        "--root",
+        str(tmp_path),
+        "--no-emoji",
+    ]
+    if extra:
+        args.extend(extra)
+    return args
+
+
+def _orchestrator_run_with_progress(self, config: Config, root: Path) -> RunResult:  # noqa: ANN001
+    maybe_call(self._hooks.after_discovery, 1)
+    maybe_call(self._hooks.before_tool, "ruff")
+    outcomes = [_tool_outcome("lint"), _tool_outcome("fix")]
+    for outcome in outcomes:
+        maybe_call(self._hooks.after_tool, outcome)
+    result = RunResult(root=root, files=[], outcomes=outcomes, tool_versions={})
+    maybe_call(self._hooks.after_execution, result)
+    return result
+
+
+def _tool_outcome(action: str) -> ToolOutcome:
+    return ToolOutcome(
+        tool="ruff",
+        action=action,
+        returncode=0,
+        stdout="",
+        stderr="",
+        diagnostics=[],
+    )
 
 
 def test_lint_help_options_sorted() -> None:
@@ -301,5 +240,5 @@ def _expected_sorted_options(command, ctx: click.Context) -> list[tuple[str, str
         record = param.get_help_record(ctx)
         if record is None:
             continue
-        option_records.append(((_primary_option_name(param), index), record))
+        option_records.append(((primary_option_name(param), index), record))
     return [record for _, record in sorted(option_records, key=lambda entry: entry[0])]

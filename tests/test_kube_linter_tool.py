@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _KubeLinterCommand
+from pyqa.tools.builtins import KubeLinterCommand
 
 
 def test_kube_linter_command_build(tmp_path: Path) -> None:
@@ -29,7 +29,7 @@ def test_kube_linter_command_build(tmp_path: Path) -> None:
 
     action = ToolAction(
         name="lint",
-        command=_KubeLinterCommand(base=("kube-linter", "lint", "--format", "json")),
+        command=KubeLinterCommand(base=("kube-linter", "lint", "--format", "json")),
         append_files=True,
     )
 

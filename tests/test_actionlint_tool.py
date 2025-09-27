@@ -6,12 +6,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
-import pytest
+if TYPE_CHECKING:
+    import pytest
 
 from pyqa.tools.base import ToolContext
-from pyqa.tools.builtins import _ActionlintCommand
+from pyqa.tools.builtins import ActionlintCommand
 
 
 def test_actionlint_command_download(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -36,6 +38,6 @@ def test_actionlint_command_download(monkeypatch: pytest.MonkeyPatch, tmp_path: 
 
     (tmp_path / ".github" / "workflows").mkdir(parents=True)
 
-    command = _ActionlintCommand(version="1.7.1").build(ctx)
+    command = ActionlintCommand(version="1.7.1").build(ctx)
     assert command[0] == str(binary_path)
     assert command[-1].endswith(".github/workflows")

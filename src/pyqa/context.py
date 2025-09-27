@@ -9,14 +9,24 @@ import importlib
 from collections.abc import Callable, Iterable
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
 from .models import Diagnostic
 
 
-def _build_parser_loader() -> Callable[[str], Any] | None:
+class ParserProtocol(Protocol):
+    def set_language(self, language: object) -> None: ...
+
+
+ParserType = ParserProtocol | Any
+ParserGetter = Callable[[str], ParserType | None]
+ParserFactory = Callable[[], ParserType | None]
+ParserCache = dict[str, ParserType | None]
+
+
+def _build_parser_loader() -> ParserGetter | None:
     try:
         tree_sitter_module = importlib.import_module("tree_sitter")
     except ModuleNotFoundError:
@@ -35,7 +45,7 @@ def _build_parser_loader() -> Callable[[str], Any] | None:
         except (ModuleNotFoundError, AttributeError):
             return None
 
-        def bundled_get_parser(name: str) -> Any:
+        def bundled_get_parser(name: str) -> ParserType | None:
             module_name = f"tree_sitter_{name.replace('-', '_')}"
             try:
                 module = importlib.import_module(module_name)
@@ -61,7 +71,7 @@ def _build_parser_loader() -> Callable[[str], Any] | None:
     return bundled_get_parser
 
 
-_GET_PARSER = _build_parser_loader()
+_GET_PARSER: ParserGetter | None = _build_parser_loader()
 
 
 class _ParseResult(BaseModel):
@@ -112,7 +122,7 @@ class TreeSitterContextResolver:
     _FALLBACK_LANGUAGES: Final[set[str]] = {"python", "markdown", "json"}
 
     def __init__(self) -> None:
-        self._parsers: dict[str, Any | None] = {}
+        self._parsers: ParserCache = {}
         self._disabled: set[str] = set()
 
     def grammar_modules(self) -> dict[str, str]:
@@ -177,7 +187,7 @@ class TreeSitterContextResolver:
             candidate = (root / candidate).resolve()
         return candidate
 
-    def _get_parser(self, language: str) -> Any | None:
+    def _get_parser(self, language: str) -> ParserType | None:
         if language in self._disabled:
             return None
         cached = self._parsers.get(language)
@@ -197,7 +207,7 @@ class TreeSitterContextResolver:
         self._parsers[language] = parser
         return parser
 
-    def _resolve_parser_loader(self, language: str) -> Callable[[], Any] | None:
+    def _resolve_parser_loader(self, language: str) -> ParserFactory | None:
         loader_fn = _GET_PARSER
         if loader_fn is None:
             self._disable_language(language)
@@ -207,7 +217,7 @@ class TreeSitterContextResolver:
             self._disable_language(language)
             return None
 
-        def _loader() -> Any:
+        def _loader() -> ParserType | None:
             return loader_fn(grammar_name) if loader_fn is not None else None
 
         return _loader

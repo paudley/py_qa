@@ -412,43 +412,10 @@ class Config(BaseModel):
 
         overrides = set(cli_overrides or ())
 
-        if preset.line_length is not UNSET and "line_length" not in overrides:
-            self.execution.line_length = cast("int", preset.line_length)
-        if preset.max_complexity is not UNSET and "max_complexity" not in overrides:
-            self.complexity.max_complexity = cast("int", preset.max_complexity)
-        if preset.max_arguments is not UNSET and "max_arguments" not in overrides:
-            self.complexity.max_arguments = cast("int", preset.max_arguments)
-        if preset.type_checking is not UNSET and "type_checking" not in overrides:
-            self.strictness.type_checking = cast(
-                "Literal['lenient', 'standard', 'strict']",
-                preset.type_checking,
-            )
-        if preset.bandit_level is not UNSET and "bandit_severity" not in overrides:
-            self.severity.bandit_level = cast("str", preset.bandit_level)
-        if preset.bandit_confidence is not UNSET and "bandit_confidence" not in overrides:
-            self.severity.bandit_confidence = cast("str", preset.bandit_confidence)
-        if preset.pylint_fail_under is not UNSET and "pylint_fail_under" not in overrides:
-            self.severity.pylint_fail_under = cast("float | None", preset.pylint_fail_under)
-        if preset.max_warnings is not UNSET:
-            self.severity.max_warnings = cast("int | None", preset.max_warnings)
-
-        if preset.ruff_select is not UNSET:
-            ruff_settings = self.tool_settings.setdefault("ruff", {})
-            if not ruff_settings.get("select"):
-                ruff_settings["select"] = list(cast("tuple[str, ...]", preset.ruff_select))
-        if preset.pylint_init_import is not UNSET:
-            pylint_settings = self.tool_settings.setdefault("pylint", {})
-            if "init-import" not in pylint_settings:
-                pylint_settings["init-import"] = cast("bool", preset.pylint_init_import)
-
+        self._apply_preset_scalars(preset, overrides)
+        self._apply_tool_setting_defaults(preset)
         if self.severity.sensitivity in {"high", "maximum"}:
-            self.dedupe.dedupe = True
-            self.dedupe.dedupe_by = "prefer"
-            prefer_list = list(self.dedupe.dedupe_prefer)
-            for tool_name in ("mypy", "pyright"):
-                if tool_name not in prefer_list:
-                    prefer_list.append(tool_name)
-            self.dedupe.dedupe_prefer = prefer_list
+            self._enforce_high_sensitivity_defaults()
 
     def snapshot_shared_knobs(self) -> SharedKnobSnapshot:
         """Capture the shared knob values to compare during recalculation."""
@@ -466,6 +433,55 @@ class Config(BaseModel):
                 self.tool_settings.get("pylint", {}).get("init-import"),
             ),
         )
+
+    def _apply_preset_scalars(
+        self,
+        preset: SensitivityPreset,
+        overrides: set[str],
+    ) -> None:
+        if preset.line_length is not UNSET and "line_length" not in overrides:
+            self.execution.line_length = cast("int", preset.line_length)
+        if preset.max_complexity is not UNSET and "max_complexity" not in overrides:
+            self.complexity.max_complexity = cast("int", preset.max_complexity)
+        if preset.max_arguments is not UNSET and "max_arguments" not in overrides:
+            self.complexity.max_arguments = cast("int", preset.max_arguments)
+        if preset.type_checking is not UNSET and "type_checking" not in overrides:
+            self.strictness.type_checking = cast(
+                "Literal['lenient', 'standard', 'strict']",
+                preset.type_checking,
+            )
+        if preset.bandit_level is not UNSET and "bandit_severity" not in overrides:
+            self.severity.bandit_level = cast(
+                "Literal['low', 'medium', 'high']", preset.bandit_level
+            )
+        if preset.bandit_confidence is not UNSET and "bandit_confidence" not in overrides:
+            self.severity.bandit_confidence = cast(
+                "Literal['low', 'medium', 'high']",
+                preset.bandit_confidence,
+            )
+        if preset.pylint_fail_under is not UNSET and "pylint_fail_under" not in overrides:
+            self.severity.pylint_fail_under = cast("float | None", preset.pylint_fail_under)
+        if preset.max_warnings is not UNSET:
+            self.severity.max_warnings = cast("int | None", preset.max_warnings)
+
+    def _apply_tool_setting_defaults(self, preset: SensitivityPreset) -> None:
+        if preset.ruff_select is not UNSET:
+            ruff_settings = self.tool_settings.setdefault("ruff", {})
+            if not ruff_settings.get("select"):
+                ruff_settings["select"] = list(cast("tuple[str, ...]", preset.ruff_select))
+        if preset.pylint_init_import is not UNSET:
+            pylint_settings = self.tool_settings.setdefault("pylint", {})
+            if "init-import" not in pylint_settings:
+                pylint_settings["init-import"] = cast("bool", preset.pylint_init_import)
+
+    def _enforce_high_sensitivity_defaults(self) -> None:
+        self.dedupe.dedupe = True
+        self.dedupe.dedupe_by = "prefer"
+        prefer_list = list(self.dedupe.dedupe_prefer)
+        for tool_name in ("mypy", "pyright"):
+            if tool_name not in prefer_list:
+                prefer_list.append(tool_name)
+        self.dedupe.dedupe_prefer = prefer_list
 
     def apply_shared_defaults(
         self,
@@ -529,7 +545,9 @@ class Config(BaseModel):
 
         strict_level = self.strictness.type_checking
         mypy_settings = settings.setdefault("mypy", {})
-        baseline_mypy = _expected_mypy_profile(baseline.type_checking) if baseline is not None else {}
+        baseline_mypy = (
+            _expected_mypy_profile(baseline.type_checking) if baseline is not None else {}
+        )
 
         def set_mypy(key: str, value: object | None) -> None:
             existing = mypy_settings.get(key, UNSET)
@@ -542,7 +560,11 @@ class Config(BaseModel):
                         return
                     mypy_settings.pop(key, None)
                 else:
-                    if existing is not UNSET and baseline_value is not NO_BASELINE and existing != baseline_value:
+                    if (
+                        existing is not UNSET
+                        and baseline_value is not NO_BASELINE
+                        and existing != baseline_value
+                    ):
                         return
                     mypy_settings[key] = value
             elif value is not None:
@@ -587,7 +609,9 @@ class Config(BaseModel):
         ensure("pylint", "fail-under", severity.pylint_fail_under)
         pylint_settings_snapshot = self.tool_settings.get("pylint", {})
         init_import_value = (
-            pylint_settings_snapshot.get("init-import") if isinstance(pylint_settings_snapshot, dict) else None
+            pylint_settings_snapshot.get("init-import")
+            if isinstance(pylint_settings_snapshot, dict)
+            else None
         )
         ensure("pylint", "init-import", init_import_value)
         ensure("stylelint", "max-warnings", severity.max_warnings)

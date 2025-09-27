@@ -8,6 +8,7 @@ from __future__ import annotations
 from io import StringIO
 from pathlib import Path
 
+import typer
 from rich.console import Console
 from typer.testing import CliRunner
 
@@ -18,8 +19,18 @@ from pyqa.cli.tool_info import run_tool_info
 def test_tool_info_option(monkeypatch) -> None:
     runner = CliRunner()
 
-    def fake_run_tool_info(tool_name, root, *, cfg=None, console=None):
-        print(f"tool info for {tool_name} at {root}")
+    def fake_run_tool_info(
+        tool_name: str,
+        root: Path,
+        *,
+        cfg: object | None = None,
+        console: Console | None = None,
+    ) -> int:
+        message = f"tool info for {tool_name} at {root}"
+        if console is not None:
+            console.print(message)
+        else:
+            typer.echo(message)
         return 0
 
     monkeypatch.setattr("pyqa.cli.lint.run_tool_info", fake_run_tool_info)

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _GolangciLintCommand
+from pyqa.tools.builtins import GolangciLintCommand
 
 
 def test_golangci_command_includes_enable_all(tmp_path: Path) -> None:
@@ -23,7 +23,7 @@ def test_golangci_command_includes_enable_all(tmp_path: Path) -> None:
 
     action = ToolAction(
         name="lint",
-        command=_GolangciLintCommand(base=("golangci-lint", "run", "--out-format", "json")),
+        command=GolangciLintCommand(base=("golangci-lint", "run", "--out-format", "json")),
         append_files=False,
     )
 
@@ -43,7 +43,7 @@ def test_golangci_respects_disable_enable_all_flag(tmp_path: Path) -> None:
 
     action = ToolAction(
         name="lint",
-        command=_GolangciLintCommand(base=("golangci-lint", "run", "--out-format", "json")),
+        command=GolangciLintCommand(base=("golangci-lint", "run", "--out-format", "json")),
         append_files=False,
     )
 

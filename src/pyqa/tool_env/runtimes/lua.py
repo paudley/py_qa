@@ -15,7 +15,7 @@ from ...process_utils import run_command
 from ...tools.base import Tool
 from .. import constants as tool_constants
 from ..models import PreparedCommand
-from ..utils import _slugify, _split_package_spec
+from ..utils import slugify, split_package_spec
 from .base import RuntimeHandler
 
 
@@ -85,7 +85,7 @@ class LuaRuntime(RuntimeHandler):
         if not shutil.which("luarocks"):
             raise RuntimeError("luarocks is required to install Lua-based linters")
 
-        slug = _slugify(f"{package}@{version or 'latest'}")
+        slug = slugify(f"{package}@{version or 'latest'}")
         prefix = tool_constants.LUA_CACHE_DIR / slug
         meta_file = tool_constants.LUA_META_DIR / f"{slug}.json"
         binary = tool_constants.LUA_BIN_DIR / binary_name
@@ -129,7 +129,7 @@ class LuaRuntime(RuntimeHandler):
     @staticmethod
     def _package_spec(tool: Tool) -> tuple[str, str | None]:
         if tool.package:
-            package, version = _split_package_spec(tool.package)
+            package, version = split_package_spec(tool.package)
             return package, version
         return tool.name, tool.min_version
 

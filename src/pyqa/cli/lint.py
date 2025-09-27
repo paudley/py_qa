@@ -5,8 +5,11 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
+from typing import Any
 
 import typer
 from rich import box
@@ -37,6 +40,14 @@ from .doctor import run_doctor
 from .options import LintOptions
 from .tool_info import run_tool_info
 from .utils import filter_py_qa_paths
+
+
+@dataclass(frozen=True)
+class _LintThresholds:
+    type_checking: str | None
+    bandit_severity: str | None
+    bandit_confidence: str | None
+    sensitivity: str | None
 
 
 def lint_command(
@@ -197,76 +208,36 @@ def lint_command(
         "--advice",
         help="Provide SOLID-aligned refactoring suggestions alongside diagnostics.",
     ),
+    no_test_suppressions: bool = typer.Option(
+        False,
+        "--no-test-suppressions",
+        help="Disable automatic test warning suppressions.",
+    ),
 ) -> None:
     """Entry point for the ``pyqa lint`` CLI command."""
-    if doctor and tool_info:
-        raise typer.BadParameter("--doctor and --tool-info cannot be combined")
-    if doctor and fetch_all_tools:
-        raise typer.BadParameter("--doctor and --fetch-all-tools cannot be combined")
-    if tool_info and fetch_all_tools:
-        raise typer.BadParameter("--tool-info and --fetch-all-tools cannot be combined")
-
-    if fix_only and check_only:
-        raise typer.BadParameter("--fix-only and --check-only are mutually exclusive")
-    if verbose and quiet:
-        raise typer.BadParameter("--verbose and --quiet cannot be combined")
+    _validate_mode_conflicts(doctor=doctor, tool_info=tool_info, fetch_all_tools=fetch_all_tools)
+    _validate_action_flags(fix_only=fix_only, check_only=check_only, verbose=verbose, quiet=quiet)
 
     invocation_cwd = Path.cwd()
-    provided_paths = list(paths or [])
-    normalized_paths = [_normalise_path(arg, invocation_cwd) for arg in provided_paths]
-
-    root_source = _parameter_source_name(ctx, "root")
-    root = _normalise_path(root, invocation_cwd)
-    if root_source in {"DEFAULT", "DEFAULT_MAP"} and normalized_paths:
-        derived_root = _derive_default_root(normalized_paths)
-        if derived_root is not None:
-            root = derived_root
-
-    is_py_qa_root = is_py_qa_workspace(root)
-    ignored_py_qa: list[str] = []
-    if not is_py_qa_root and normalized_paths:
-        normalized_paths, ignored_py_qa = filter_py_qa_paths(normalized_paths, root)
-        if ignored_py_qa:
-            unique = ", ".join(dict.fromkeys(ignored_py_qa))
-            warn(
-                (
-                    f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
-                    "unless lint runs inside the py_qa workspace."
-                ),
-                use_emoji=not no_emoji,
-            )
+    normalized_paths, root = _prepare_paths_and_root(
+        ctx=ctx,
+        requested_root=root,
+        raw_paths=paths,
+        invocation_cwd=invocation_cwd,
+        no_emoji=no_emoji,
+    )
 
     if doctor:
-        exit_code = run_doctor(root)
-        raise typer.Exit(code=exit_code)
+        raise typer.Exit(code=run_doctor(root))
 
-    effective_jobs = jobs if jobs is not None else default_parallel_jobs()
-
-    if type_checking is not None:
-        normalized_strictness = type_checking.lower()
-        if normalized_strictness not in {"lenient", "standard", "strict"}:
-            raise typer.BadParameter("--type-checking must be one of: lenient, standard, strict")
-        type_checking = normalized_strictness
-
-    def _normalise_bandit(value: str | None, option: str) -> str | None:
-        if value is None:
-            return None
-        normalized = value.lower()
-        if normalized not in {"low", "medium", "high"}:
-            raise typer.BadParameter(f"{option} must be one of: low, medium, high")
-        return normalized
-
-    bandit_severity = _normalise_bandit(bandit_severity, "--bandit-severity")
-    bandit_confidence = _normalise_bandit(bandit_confidence, "--bandit-confidence")
-
-    if pylint_fail_under is not None and not (0 <= pylint_fail_under <= 10):
-        raise typer.BadParameter("--pylint-fail-under must be between 0 and 10")
-
-    if sensitivity is not None:
-        sensitivity_normalized = sensitivity.lower()
-        if sensitivity_normalized not in {"low", "medium", "high", "maximum"}:
-            raise typer.BadParameter("--sensitivity must be one of: low, medium, high, maximum")
-        sensitivity = sensitivity_normalized
+    effective_jobs, thresholds = _prepare_lint_parameters(
+        jobs=jobs,
+        type_checking=type_checking,
+        bandit_severity=bandit_severity,
+        bandit_confidence=bandit_confidence,
+        pylint_fail_under=pylint_fail_under,
+        sensitivity=sensitivity,
+    )
 
     provided = _collect_provided_flags(
         ctx,
@@ -278,19 +249,19 @@ def lint_command(
         language=language,
     )
 
-    options = LintOptions(
-        paths=list(normalized_paths),
+    options = _create_lint_options(
+        paths=normalized_paths,
         root=root,
         changed_only=changed_only,
         diff_ref=diff_ref,
         include_untracked=include_untracked,
         base_branch=base_branch,
         paths_from_stdin=paths_from_stdin,
-        dirs=list(dirs),
-        exclude=list(exclude),
-        filters=list(filters),
-        only=list(only),
-        language=list(language),
+        dirs=dirs,
+        exclude=exclude,
+        filters=filters,
+        only=only,
+        language=language,
         fix_only=fix_only,
         check_only=check_only,
         verbose=verbose,
@@ -314,19 +285,17 @@ def lint_command(
         sql_dialect=sql_dialect,
         max_complexity=max_complexity,
         max_arguments=max_arguments,
-        type_checking=type_checking,
-        bandit_severity=bandit_severity,
-        bandit_confidence=bandit_confidence,
+        type_checking=thresholds.type_checking,
+        bandit_severity=thresholds.bandit_severity,
+        bandit_confidence=thresholds.bandit_confidence,
         pylint_fail_under=pylint_fail_under,
-        sensitivity=sensitivity,
+        sensitivity=thresholds.sensitivity,
         advice=advice,
+        disable_test_suppressions=no_test_suppressions,
         provided=provided,
     )
 
-    try:
-        config = build_config(options)
-    except (ValueError, ConfigError) as exc:  # invalid option combinations
-        raise typer.BadParameter(str(exc)) from exc
+    config = _build_lint_config(options)
 
     hooks = OrchestratorHooks()
     orchestrator = Orchestrator(
@@ -335,122 +304,423 @@ def lint_command(
         hooks=hooks,
     )
 
-    if tool_info:
-        exit_code = run_tool_info(tool_info, root=root, cfg=config)
+    exit_code = _handle_pre_execution_requests(
+        tool_info=tool_info,
+        fetch_all_tools=fetch_all_tools,
+        orchestrator=orchestrator,
+        config=config,
+        root=root,
+        quiet=quiet,
+        verbose=verbose,
+    )
+    if exit_code is not None:
         raise typer.Exit(code=exit_code)
+
+    progress_coordinator = _LintProgressCoordinator(
+        config=config,
+        hooks=hooks,
+        quiet=quiet,
+    )
+    result = progress_coordinator.run(orchestrator, config, root)
+
+    _handle_reporting(
+        result,
+        config,
+        report_json,
+        sarif_out,
+        pr_summary_out,
+    )
+    raise typer.Exit(code=1 if result.failed else 0)
+
+
+def _validate_mode_conflicts(*, doctor: bool, tool_info: str | None, fetch_all_tools: bool) -> None:
+    if doctor and tool_info:
+        raise typer.BadParameter("--doctor and --tool-info cannot be combined")
+    if doctor and fetch_all_tools:
+        raise typer.BadParameter("--doctor and --fetch-all-tools cannot be combined")
+    if tool_info and fetch_all_tools:
+        raise typer.BadParameter("--tool-info and --fetch-all-tools cannot be combined")
+
+
+def _validate_action_flags(*, fix_only: bool, check_only: bool, verbose: bool, quiet: bool) -> None:
+    if fix_only and check_only:
+        raise typer.BadParameter("--fix-only and --check-only are mutually exclusive")
+    if verbose and quiet:
+        raise typer.BadParameter("--verbose and --quiet cannot be combined")
+
+
+def _determine_root(
+    *,
+    ctx: typer.Context,
+    requested_root: Path,
+    invocation_cwd: Path,
+    normalized_paths: list[Path],
+) -> Path:
+    root_source = _parameter_source_name(ctx, "root")
+    root = _normalise_path(requested_root, invocation_cwd)
+    if root_source in {"DEFAULT", "DEFAULT_MAP"} and normalized_paths:
+        derived_root = _derive_default_root(normalized_paths)
+        if derived_root is not None:
+            return derived_root
+    return root
+
+
+def _resolve_jobs(jobs: int | None) -> int:
+    return jobs if jobs is not None else default_parallel_jobs()
+
+
+def _normalize_type_checking(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.lower()
+    if normalized not in {"lenient", "standard", "strict"}:
+        raise typer.BadParameter("--type-checking must be one of: lenient, standard, strict")
+    return normalized
+
+
+def _normalize_bandit_option(value: str | None, option_label: str) -> str | None:
+    if value is None:
+        return None
+    normalized = value.lower()
+    if normalized not in {"low", "medium", "high"}:
+        raise typer.BadParameter(f"{option_label} must be one of: low, medium, high")
+    return normalized
+
+
+def _validate_pylint_fail_under(value: float | None) -> None:
+    if value is None:
+        return
+    if not (0 <= value <= 10):
+        raise typer.BadParameter("--pylint-fail-under must be between 0 and 10")
+
+
+def _normalize_sensitivity(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.lower()
+    if normalized not in {"low", "medium", "high", "maximum"}:
+        raise typer.BadParameter("--sensitivity must be one of: low, medium, high, maximum")
+    return normalized
+
+
+def _prepare_paths_and_root(
+    *,
+    ctx: typer.Context,
+    requested_root: Path,
+    raw_paths: list[Path] | None,
+    invocation_cwd: Path,
+    no_emoji: bool,
+) -> tuple[list[Path], Path]:
+    provided_paths = list(raw_paths or [])
+    normalized_paths = [_normalise_path(arg, invocation_cwd) for arg in provided_paths]
+
+    root = _determine_root(
+        ctx=ctx,
+        requested_root=requested_root,
+        invocation_cwd=invocation_cwd,
+        normalized_paths=normalized_paths,
+    )
+
+    if normalized_paths and not is_py_qa_workspace(root):
+        normalized_paths, ignored_py_qa = filter_py_qa_paths(normalized_paths, root)
+        if ignored_py_qa:
+            unique = ", ".join(dict.fromkeys(ignored_py_qa))
+            warn(
+                (
+                    f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
+                    "unless lint runs inside the py_qa workspace."
+                ),
+                use_emoji=not no_emoji,
+            )
+
+    return normalized_paths, root
+
+
+def _prepare_lint_parameters(
+    *,
+    jobs: int | None,
+    type_checking: str | None,
+    bandit_severity: str | None,
+    bandit_confidence: str | None,
+    pylint_fail_under: float | None,
+    sensitivity: str | None,
+) -> tuple[int, _LintThresholds]:
+    effective_jobs = _resolve_jobs(jobs)
+
+    normalized_type_checking = _normalize_type_checking(type_checking)
+    normalized_bandit_severity = _normalize_bandit_option(bandit_severity, "--bandit-severity")
+    normalized_bandit_confidence = _normalize_bandit_option(
+        bandit_confidence,
+        "--bandit-confidence",
+    )
+    _validate_pylint_fail_under(pylint_fail_under)
+    normalized_sensitivity = _normalize_sensitivity(sensitivity)
+
+    thresholds = _LintThresholds(
+        type_checking=normalized_type_checking,
+        bandit_severity=normalized_bandit_severity,
+        bandit_confidence=normalized_bandit_confidence,
+        sensitivity=normalized_sensitivity,
+    )
+    return effective_jobs, thresholds
+
+
+def _handle_pre_execution_requests(
+    *,
+    tool_info: str | None,
+    fetch_all_tools: bool,
+    orchestrator: Orchestrator,
+    config: Config,
+    root: Path,
+    quiet: bool,
+    verbose: bool,
+) -> int | None:
+    if tool_info:
+        return run_tool_info(tool_info, root=root, cfg=config)
     if fetch_all_tools:
-        total_actions = sum(len(tool.actions) for tool in DEFAULT_REGISTRY.tools())
-        progress_enabled = total_actions > 0 and not quiet and config.output.color and is_tty()
-        console = console_manager.get(color=config.output.color, emoji=config.output.emoji)
-        results: list[tuple[str, str, PreparedCommand | None, str | None]]
+        return _handle_fetch_all_tools(
+            orchestrator,
+            config,
+            root=root,
+            quiet=quiet,
+            verbose=verbose,
+        )
+    return None
 
-        if progress_enabled:
-            progress = Progress(
-                SpinnerColumn(),
-                TextColumn("{task.description}"),
-                BarColumn(bar_width=None),
-                TimeElapsedColumn(),
-                console=console,
-                transient=not verbose,
+
+def _create_lint_options(
+    *,
+    paths: list[Path],
+    root: Path,
+    changed_only: bool,
+    diff_ref: str,
+    include_untracked: bool,
+    base_branch: str | None,
+    paths_from_stdin: bool,
+    dirs: Sequence[Path],
+    exclude: Sequence[Path],
+    filters: Sequence[str],
+    only: Sequence[str],
+    language: Sequence[str],
+    fix_only: bool,
+    check_only: bool,
+    verbose: bool,
+    quiet: bool,
+    no_color: bool,
+    no_emoji: bool,
+    no_stats: bool,
+    output_mode: str,
+    show_passing: bool,
+    jobs: int,
+    bail: bool,
+    no_cache: bool,
+    cache_dir: Path,
+    pr_summary_out: Path | None,
+    pr_summary_limit: int,
+    pr_summary_min_severity: str,
+    pr_summary_template: str,
+    use_local_linters: bool,
+    strict_config: bool,
+    line_length: int,
+    sql_dialect: str,
+    max_complexity: int | None,
+    max_arguments: int | None,
+    type_checking: str | None,
+    bandit_severity: str | None,
+    bandit_confidence: str | None,
+    pylint_fail_under: float | None,
+    sensitivity: str | None,
+    advice: bool,
+    disable_test_suppressions: bool,
+    provided: set[str],
+) -> LintOptions:
+    return LintOptions(
+        paths=list(paths),
+        root=root,
+        changed_only=changed_only,
+        diff_ref=diff_ref,
+        include_untracked=include_untracked,
+        base_branch=base_branch,
+        paths_from_stdin=paths_from_stdin,
+        dirs=list(dirs),
+        exclude=list(exclude),
+        filters=list(filters),
+        only=list(only),
+        language=list(language),
+        fix_only=fix_only,
+        check_only=check_only,
+        verbose=verbose,
+        quiet=quiet,
+        no_color=no_color,
+        no_emoji=no_emoji,
+        no_stats=no_stats,
+        output_mode=output_mode,
+        show_passing=show_passing,
+        jobs=jobs,
+        bail=bail,
+        no_cache=no_cache,
+        cache_dir=cache_dir,
+        pr_summary_out=pr_summary_out,
+        pr_summary_limit=pr_summary_limit,
+        pr_summary_min_severity=pr_summary_min_severity,
+        pr_summary_template=pr_summary_template,
+        use_local_linters=use_local_linters,
+        strict_config=strict_config,
+        line_length=line_length,
+        sql_dialect=sql_dialect,
+        max_complexity=max_complexity,
+        max_arguments=max_arguments,
+        type_checking=type_checking,
+        bandit_severity=bandit_severity,
+        bandit_confidence=bandit_confidence,
+        pylint_fail_under=pylint_fail_under,
+        sensitivity=sensitivity,
+        advice=advice,
+        disable_test_suppressions=disable_test_suppressions,
+        provided=set(provided),
+    )
+
+
+def _build_lint_config(options: LintOptions) -> Config:
+    try:
+        return build_config(options)
+    except (ValueError, ConfigError) as exc:  # invalid option combinations
+        raise typer.BadParameter(str(exc)) from exc
+
+
+def _handle_fetch_all_tools(
+    orchestrator: Orchestrator,
+    config: Config,
+    *,
+    root: Path,
+    quiet: bool,
+    verbose: bool,
+) -> int:
+    total_actions = sum(len(tool.actions) for tool in DEFAULT_REGISTRY.tools())
+    progress_enabled = total_actions > 0 and not quiet and config.output.color and is_tty()
+    console = console_manager.get(color=config.output.color, emoji=config.output.emoji)
+    results: list[tuple[str, str, PreparedCommand | None, str | None]]
+
+    if progress_enabled:
+        progress = Progress(
+            SpinnerColumn(),
+            TextColumn("{task.description}"),
+            BarColumn(bar_width=None),
+            TimeElapsedColumn(),
+            console=console,
+            transient=not verbose,
+        )
+        task_id = progress.add_task("Preparing tools", total=total_actions)
+
+        def progress_callback(
+            event: FetchEvent,
+            tool_name: str,
+            action_name: str,
+            index: int,
+            total: int,
+            message: str | None,
+        ) -> None:
+            description = f"{tool_name}:{action_name}"
+            if event == "start":
+                status = "Preparing"
+                completed = index - 1
+            elif event == "completed":
+                status = "Prepared"
+                completed = index
+            else:
+                status = "Error"
+                completed = index
+                if message and verbose:
+                    console.print(f"[red]{description} failed: {message}[/red]")
+            progress.update(
+                task_id,
+                completed=completed,
+                total=total,
+                description=f"{status} {description}",
             )
-            task_id = progress.add_task("Preparing tools", total=total_actions)
 
-            def progress_callback(
-                event: FetchEvent,
-                tool_name: str,
-                action_name: str,
-                index: int,
-                total: int,
-                message: str | None,
-            ) -> None:
-                description = f"{tool_name}:{action_name}"
-                if event == "start":
-                    status = "Preparing"
-                    completed = index - 1
-                elif event == "completed":
-                    status = "Prepared"
-                    completed = index
-                else:
-                    status = "Error"
-                    completed = index
-                    if message and verbose:
-                        console.print(f"[red]{description} failed: {message}[/red]")
-                progress.update(
-                    task_id,
-                    completed=completed,
-                    total=total,
-                    description=f"{status} {description}",
-                )
-
-            with progress:
-                results = orchestrator.fetch_all_tools(
-                    config,
-                    root=root,
-                    callback=progress_callback,
-                )
-        else:
-            results = orchestrator.fetch_all_tools(config, root=root)
-        results.sort(key=lambda item: (item[0], item[1]))
-
-        if not quiet:
-            table = Table(
-                title="Tool Preparation",
-                box=box.ROUNDED,
-                show_header=True,
-                header_style="bold" if config.output.color else None,
+        with progress:
+            results = orchestrator.fetch_all_tools(
+                config,
+                root=root,
+                callback=progress_callback,
             )
-            table.add_column("Tool", style="cyan" if config.output.color else None)
-            table.add_column("Action", style="cyan" if config.output.color else None)
-            table.add_column("Status", style="magenta" if config.output.color else None)
-            table.add_column("Source", style="magenta" if config.output.color else None)
-            table.add_column("Version", style="green" if config.output.color else None)
-            failures: list[tuple[str, str, str]] = []
-            for tool_name, action_name, prepared, error in results:
-                if prepared is None:
-                    status = "error"
-                    source = "-"
-                    version = "-"
-                    failures.append((tool_name, action_name, error or "unknown error"))
-                else:
-                    status = "ready"
-                    source = prepared.source
-                    version = prepared.version or "unknown"
-                table.add_row(tool_name, action_name, status, source, version)
-            console.print(table)
-            info(
-                f"Prepared {len(results)} tool action(s) without execution.",
+    else:
+        results = orchestrator.fetch_all_tools(config, root=root)
+
+    results.sort(key=lambda item: (item[0], item[1]))
+
+    if not quiet:
+        table = Table(
+            title="Tool Preparation",
+            box=box.ROUNDED,
+            show_header=True,
+            header_style="bold" if config.output.color else None,
+        )
+        table.add_column("Tool", style="cyan" if config.output.color else None)
+        table.add_column("Action", style="cyan" if config.output.color else None)
+        table.add_column("Status", style="magenta" if config.output.color else None)
+        table.add_column("Source", style="magenta" if config.output.color else None)
+        table.add_column("Version", style="green" if config.output.color else None)
+        failures: list[tuple[str, str, str]] = []
+        for tool_name, action_name, prepared, error in results:
+            if prepared is None:
+                status = "error"
+                source = "-"
+                version = "-"
+                failures.append((tool_name, action_name, error or "unknown error"))
+            else:
+                status = "ready"
+                source = prepared.source
+                version = prepared.version or "unknown"
+            table.add_row(tool_name, action_name, status, source, version)
+        console.print(table)
+        info(
+            f"Prepared {len(results)} tool action(s) without execution.",
+            use_emoji=config.output.emoji,
+            use_color=config.output.color,
+        )
+        for tool_name, action_name, message in failures:
+            warn(
+                f"Failed to prepare {tool_name}:{action_name} — {message}",
                 use_emoji=config.output.emoji,
                 use_color=config.output.color,
             )
-            for tool_name, action_name, message in failures:
-                warn(
-                    f"Failed to prepare {tool_name}:{action_name} — {message}",
-                    use_emoji=config.output.emoji,
-                    use_color=config.output.color,
-                )
-        raise typer.Exit(code=0)
-    progress_enabled = (
-        config.output.output == "concise" and not quiet and not config.output.quiet and config.output.color and is_tty()
-    )
+    return 0
 
-    extra_phases = 2  # post-processing + rendering
-    progress: Progress | None = None
-    progress_task_id: int | None = None
-    progress_lock = Lock()
-    progress_console = None
-    progress_total = extra_phases
-    progress_completed = 0
-    progress_started = False
 
-    if progress_enabled:
+class _LintProgressCoordinator:
+    """Encapsulates lint progress coordination and reporting."""
+
+    def __init__(self, *, config: Config, hooks: OrchestratorHooks, quiet: bool) -> None:
+        self._config = config
+        self._hooks = hooks
+        self._progress_lock = Lock()
+        self._extra_phases = 2  # post-processing + rendering
+        self._progress_total = self._extra_phases
+        self._progress_completed = 0
+        self._progress_started = False
+        self._progress_console = None
+        self._progress: Progress | None = None
+        self._progress_task_id: int | None = None
+        self.enabled = (
+            config.output.output == "concise"
+            and not quiet
+            and not config.output.quiet
+            and config.output.color
+            and is_tty()
+        )
+        if not self.enabled:
+            return
+
         console = console_manager.get(color=config.output.color, emoji=config.output.emoji)
-        progress_console = console
+        self._progress_console = console
         console_width = getattr(console.size, "width", 100)
         reserved_columns = 40
         bar_available = max(10, console_width - reserved_columns)
         bar_width = max(20, int(bar_available * 0.8))
 
-        progress = Progress(
+        self._progress = Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             BarColumn(bar_width=bar_width),
@@ -460,144 +730,139 @@ def lint_command(
             console=console,
             transient=True,
         )
-        progress_task_id = progress.add_task(
+        self._progress_task_id = self._progress.add_task(
             "Linting",
-            total=progress_total,
+            total=self._progress_total,
             current_status="[cyan]waiting[/]" if config.output.color else "waiting",
         )
+        self._register_hooks()
 
-        def ensure_started() -> None:
-            nonlocal progress_started
-            if progress is None or progress_started:
-                return
-            progress.start()
-            progress_started = True
+    def run(self, orchestrator: Orchestrator, config: Config, root: Path) -> RunResult:
+        result = orchestrator.run(config, root=root)
+        if not self.enabled:
+            return result
 
-        def before_tool(tool_name: str) -> None:
-            if progress is None or progress_task_id is None:
-                return
-            with progress_lock:
-                ensure_started()
-                progress.update(
-                    progress_task_id,
-                    description=f"Linting {tool_name}",
-                    current_status="[cyan]running[/]" if config.output.color else "running",
-                )
+        self._advance_rendering_phase()
+        summary = self._finalise(not result.failed)
+        if self._progress_started and self._progress is not None:
+            self._progress.stop()
+        if summary and self._progress_console is not None:
+            self._progress_console.print(summary)
+        return result
 
-        def after_tool(outcome) -> None:  # noqa: ANN001
-            if progress is None or progress_task_id is None:
-                return
-            nonlocal progress_completed
-            status = "[green]ok[/]" if outcome.ok and config.output.color else ("ok" if outcome.ok else "issues")
-            if not outcome.ok and config.output.color:
-                status = "[red]issues[/]"
-            label = f"{outcome.tool}:{outcome.action}"
-            with progress_lock:
-                ensure_started()
-                progress.advance(progress_task_id, advance=1)
-                progress_completed += 1
-                progress.update(
-                    progress_task_id,
-                    current_status=f"{label} {status}",
-                )
+    def _register_hooks(self) -> None:
+        if not self.enabled:
+            return
+        self._hooks.before_tool = self._before_tool
+        self._hooks.after_tool = self._after_tool
+        self._hooks.after_discovery = self._after_discovery
+        self._hooks.after_execution = self._after_execution
+        self._hooks.after_plan = self._after_plan
 
-        def after_discovery(file_count: int) -> None:
-            if progress is None or progress_task_id is None:
-                return
-            with progress_lock:
-                ensure_started()
-                status = "[cyan]queued[/]" if config.output.color else "queued"
-                progress.update(
-                    progress_task_id,
-                    description=f"Linting ({file_count} files)",
-                    current_status=status,
-                )
+    def _ensure_started(self) -> None:
+        if not self.enabled or self._progress is None or self._progress_started:
+            return
+        self._progress.start()
+        self._progress_started = True
 
-        def after_execution_hook(_result: RunResult) -> None:
-            if progress is None or progress_task_id is None:
-                return
-            nonlocal progress_completed
-            with progress_lock:
-                ensure_started()
-                progress.advance(progress_task_id, advance=1)
-                progress_completed += 1
-                status = "[cyan]post-processing[/]" if config.output.color else "post-processing"
-                progress.update(
-                    progress_task_id,
-                    current_status=status,
-                )
+    def _before_tool(self, tool_name: str) -> None:
+        if not self.enabled or self._progress_task_id is None or self._progress is None:
+            return
+        with self._progress_lock:
+            self._ensure_started()
+            self._progress.update(
+                self._progress_task_id,
+                description=f"Linting {tool_name}",
+                current_status="[cyan]running[/]" if self._config.output.color else "running",
+            )
 
-        def advance_rendering_phase() -> None:
-            if progress is None or progress_task_id is None:
-                return
-            nonlocal progress_completed
-            with progress_lock:
-                ensure_started()
-                progress.advance(progress_task_id, advance=1)
-                progress_completed += 1
-                status = "[cyan]rendering output[/]" if config.output.color else "rendering output"
-                progress.update(
-                    progress_task_id,
-                    current_status=status,
-                )
+    def _after_tool(self, outcome: Any) -> None:  # noqa: ANN401
+        if not self.enabled or self._progress_task_id is None or self._progress is None:
+            return
+        status = (
+            "[green]ok[/]"
+            if outcome.ok and self._config.output.color
+            else ("ok" if outcome.ok else "issues")
+        )
+        if not outcome.ok and self._config.output.color:
+            status = "[red]issues[/]"
+        label = f"{outcome.tool}:{outcome.action}"
+        with self._progress_lock:
+            self._ensure_started()
+            self._progress.advance(self._progress_task_id, advance=1)
+            self._progress_completed += 1
+            self._progress.update(
+                self._progress_task_id,
+                current_status=f"{label} {status}",
+            )
 
-        hooks.before_tool = before_tool
-        hooks.after_tool = after_tool
-        hooks.after_discovery = after_discovery
-        hooks.after_execution = after_execution_hook
+    def _after_discovery(self, file_count: int) -> None:
+        if not self.enabled or self._progress_task_id is None or self._progress is None:
+            return
+        with self._progress_lock:
+            self._ensure_started()
+            status = "[cyan]queued[/]" if self._config.output.color else "queued"
+            self._progress.update(
+                self._progress_task_id,
+                description=f"Linting ({file_count} files)",
+                current_status=status,
+            )
 
-        def after_plan_hook(total_actions: int) -> None:
-            if progress is None or progress_task_id is None:
-                return
-            nonlocal progress_total
-            with progress_lock:
-                ensure_started()
-                progress_total = total_actions + extra_phases
-                progress.update(progress_task_id, total=progress_total)
+    def _after_execution(self, _result: RunResult) -> None:
+        if not self.enabled or self._progress_task_id is None or self._progress is None:
+            return
+        with self._progress_lock:
+            self._ensure_started()
+            self._progress.advance(self._progress_task_id, advance=1)
+            self._progress_completed += 1
+            status = "[cyan]post-processing[/]" if self._config.output.color else "post-processing"
+            self._progress.update(
+                self._progress_task_id,
+                current_status=status,
+            )
 
-        hooks.after_plan = after_plan_hook
+    def _advance_rendering_phase(self) -> None:
+        if not self.enabled or self._progress_task_id is None or self._progress is None:
+            return
+        with self._progress_lock:
+            self._ensure_started()
+            self._progress.advance(self._progress_task_id, advance=1)
+            self._progress_completed += 1
+            status = (
+                "[cyan]rendering output[/]" if self._config.output.color else "rendering output"
+            )
+            self._progress.update(
+                self._progress_task_id,
+                current_status=status,
+            )
 
-    def _finalise_progress(success: bool) -> Text | None:
-        if progress is None or progress_task_id is None:
+    def _after_plan(self, total_actions: int) -> None:
+        if not self.enabled or self._progress_task_id is None or self._progress is None:
+            return
+        with self._progress_lock:
+            self._ensure_started()
+            self._progress_total = total_actions + self._extra_phases
+            self._progress.update(self._progress_task_id, total=self._progress_total)
+
+    def _finalise(self, success: bool) -> Text | None:
+        if not self.enabled or self._progress_task_id is None or self._progress is None:
             return None
         summary = "Linting complete" if success else "Linting halted"
-        status_text = (
-            "[green]done[/]"
-            if success and config.output.color
-            else ("[red]issues detected[/]" if config.output.color else ("done" if success else "issues detected"))
-        )
-        with progress_lock:
-            total = max(progress_total, progress_completed)
-            progress.update(
-                progress_task_id,
+        if self._config.output.color:
+            status_text = "[green]done[/]" if success else "[red]issues detected[/]"
+        else:
+            status_text = "done" if success else "issues detected"
+        with self._progress_lock:
+            total = max(self._progress_total, self._progress_completed)
+            self._progress.update(
+                self._progress_task_id,
                 total=total,
                 description=summary,
                 current_status=status_text,
             )
-        if config.output.color:
+        if self._config.output.color:
             return Text(summary, style="green" if success else "red")
         return Text(summary)
-
-    final_summary: Text | None = None
-    if progress is not None:
-        result = orchestrator.run(config, root=root)
-        advance_rendering_phase()
-        final_summary = _finalise_progress(not result.failed)
-        if progress_started:
-            progress.stop()
-    else:
-        result = orchestrator.run(config, root=root)
-
-    if final_summary and progress_console is not None:
-        progress_console.print(final_summary)
-    _handle_reporting(
-        result,
-        config,
-        report_json,
-        sarif_out,
-        pr_summary_out,
-    )
-    raise typer.Exit(code=1 if result.failed else 0)
 
 
 def _handle_reporting(

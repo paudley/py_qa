@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 from typer.testing import CliRunner
 
@@ -35,7 +36,7 @@ line-length = 88
 
     assert result.exit_code == 0
     stdout = result.stdout.split("\n\n# Warnings", 1)[0]
-    payload = json.loads(stdout)
+    payload = cast("dict[str, Any]", json.loads(stdout))
     assert payload["execution"]["jobs"] == 3
     assert payload["execution"]["line_length"] == 120
     assert payload["execution"]["sql_dialect"] == "postgresql"

@@ -29,7 +29,11 @@ class GitDiscovery(DiscoveryStrategy):
         candidates.update(diff_targets)
         if config.include_untracked:
             candidates.update(self._untracked(root))
-        bounded = {path.resolve() for path in candidates if path.exists() and self._within_limits(path, limits)}
+        bounded = {
+            path.resolve()
+            for path in candidates
+            if path.exists() and self._within_limits(path, limits)
+        }
         return sorted(bounded)
 
     def _diff_names(self, config: FileDiscoveryConfig, root: Path) -> Iterator[Path]:
@@ -37,7 +41,11 @@ class GitDiscovery(DiscoveryStrategy):
             cmd = ["git", "diff", "--name-only", "--cached"]
         else:
             diff_ref = self._resolve_diff_ref(config, root)
-            cmd = ["git", "diff", "--name-only", diff_ref, "--"] if diff_ref else ["git", "status", "--short"]
+            cmd = (
+                ["git", "diff", "--name-only", diff_ref, "--"]
+                if diff_ref
+                else ["git", "status", "--short"]
+            )
             if not diff_ref:
                 for line in self._runner(cmd, root):
                     line = line.strip()

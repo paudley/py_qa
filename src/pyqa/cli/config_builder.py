@@ -8,6 +8,7 @@ import re
 import sys
 import tomllib
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal, TypeVar, cast
 
@@ -65,10 +66,13 @@ _BASE_TOOL_FILTERS: Final[dict[str, list[str]]] = {
 }
 
 
-def _build_default_tool_filters() -> dict[str, list[str]]:
-    merged: dict[str, list[str]] = {tool: list(patterns) for tool, patterns in _BASE_TOOL_FILTERS.items()}
-    for tool, patterns in flatten_test_suppressions().items():
-        merged.setdefault(tool, []).extend(patterns)
+def _build_default_tool_filters(*, include_test_suppressions: bool = True) -> dict[str, list[str]]:
+    merged: dict[str, list[str]] = {
+        tool: list(patterns) for tool, patterns in _BASE_TOOL_FILTERS.items()
+    }
+    if include_test_suppressions:
+        for tool, patterns in flatten_test_suppressions().items():
+            merged.setdefault(tool, []).extend(patterns)
     return {tool: list(dict.fromkeys(patterns)) for tool, patterns in merged.items()}
 
 
@@ -115,7 +119,9 @@ def build_config(options: LintOptions) -> Config:
         execution=execution_cfg,
         dedupe=dedupe_cfg,
         severity_rules=list(base_config.severity_rules),
-        tool_settings={tool: dict(settings) for tool, settings in base_config.tool_settings.items()},
+        tool_settings={
+            tool: dict(settings) for tool, settings in base_config.tool_settings.items()
+        },
     )
     if "sensitivity" in options.provided and options.sensitivity:
         config.severity.sensitivity = options.sensitivity
@@ -303,7 +309,8 @@ def _resolved_roots(
 
     if "dirs" in options.provided:
         resolved_dirs = (
-            directory if directory.is_absolute() else (project_root / directory) for directory in options.dirs
+            directory if directory.is_absolute() else (project_root / directory)
+            for directory in options.dirs
         )
         roots.extend(path.resolve() for path in resolved_dirs)
 
@@ -331,7 +338,9 @@ def _resolved_explicit_files(
                 if resolved_path not in explicit_files:
                     explicit_files.append(resolved_path)
 
-    boundaries = _unique_paths(boundary for boundary in _derive_boundaries(user_dirs, user_files) if boundary)
+    boundaries = _unique_paths(
+        boundary for boundary in _derive_boundaries(user_dirs, user_files) if boundary
+    )
     if not boundaries:
         return explicit_files, []
 
@@ -396,44 +405,89 @@ def _select_value(
 def _build_output(current: OutputConfig, options: LintOptions, project_root: Path) -> OutputConfig:
     provided = options.provided
 
-    tool_filters: ToolFilters = {tool: patterns.copy() for tool, patterns in DEFAULT_TOOL_FILTERS.items()}
-    for tool, patterns in current.tool_filters.items():
-        tool_filters.setdefault(tool, []).extend(patterns)
-    if "filters" in provided:
-        parsed = _parse_filters(options.filters)
-        for tool, patterns in parsed.items():
-            tool_filters.setdefault(tool, []).extend(patterns)
-    normalised_filters: ToolFilters = {tool: list(dict.fromkeys(patterns)) for tool, patterns in tool_filters.items()}
+    filters = _merge_output_tool_filters(current.tool_filters, options)
+    flags = _resolve_output_flags(current, options, provided)
+    output_mode = _resolve_output_mode(current, options, provided)
+    summary = _resolve_pr_summary_settings(current, options, provided, project_root)
 
+    show_passing = flags.show_passing
+    show_stats = flags.show_stats
+    if flags.quiet:
+        show_passing = False
+        show_stats = False
+
+    return _model_clone(
+        current,
+        verbose=flags.verbose,
+        quiet=flags.quiet,
+        color=flags.color,
+        emoji=flags.emoji,
+        show_passing=show_passing,
+        show_stats=show_stats,
+        advice=flags.advice,
+        output=output_mode,
+        tool_filters=filters,
+        pr_summary_out=summary.out_path,
+        pr_summary_limit=summary.limit,
+        pr_summary_min_severity=summary.min_severity,
+        pr_summary_template=summary.template,
+    )
+
+
+@dataclass(frozen=True)
+class _OutputFlags:
+    verbose: bool
+    quiet: bool
+    color: bool
+    emoji: bool
+    show_passing: bool
+    show_stats: bool
+    advice: bool
+
+
+@dataclass(frozen=True)
+class _OutputSummary:
+    out_path: Path | None
+    limit: int
+    min_severity: str
+    template: str
+
+
+def _merge_output_tool_filters(
+    current_filters: Mapping[str, list[str]],
+    options: LintOptions,
+) -> ToolFilters:
+    include_test_filters = not options.disable_test_suppressions
+    base_filters = (
+        DEFAULT_TOOL_FILTERS
+        if include_test_filters
+        else _build_default_tool_filters(include_test_suppressions=False)
+    )
+
+    merged: ToolFilters = {tool: patterns.copy() for tool, patterns in base_filters.items()}
+    for tool, patterns in current_filters.items():
+        merged.setdefault(tool, []).extend(patterns)
+
+    if "filters" in options.provided:
+        for tool, patterns in _parse_filters(options.filters).items():
+            merged.setdefault(tool, []).extend(patterns)
+
+    return {tool: list(dict.fromkeys(patterns)) for tool, patterns in merged.items() if patterns}
+
+
+def _resolve_output_flags(
+    current: OutputConfig,
+    options: LintOptions,
+    provided: set[str],
+) -> _OutputFlags:
     verbose = options.verbose if "verbose" in provided else current.verbose
     quiet = options.quiet if "quiet" in provided else current.quiet
     color = (not options.no_color) if "no_color" in provided else current.color
     emoji = (not options.no_emoji) if "no_emoji" in provided else current.emoji
-    output_mode = _normalize_output_mode(options.output_mode) if "output_mode" in provided else current.output
     show_passing = options.show_passing if "show_passing" in provided else current.show_passing
     show_stats = (not options.no_stats) if "no_stats" in provided else current.show_stats
     advice = options.advice if "advice" in provided else current.advice
-    if quiet:
-        show_passing = False
-        show_stats = False
-
-    pr_summary_out = (
-        _resolve_optional_path(project_root, options.pr_summary_out)
-        if "pr_summary_out" in provided
-        else current.pr_summary_out
-    )
-    pr_summary_limit = options.pr_summary_limit if "pr_summary_limit" in provided else current.pr_summary_limit
-    pr_summary_min = (
-        _normalize_min_severity(options.pr_summary_min_severity)
-        if "pr_summary_min_severity" in provided
-        else current.pr_summary_min_severity
-    )
-    pr_summary_template = (
-        options.pr_summary_template if "pr_summary_template" in provided else current.pr_summary_template
-    )
-
-    return _model_clone(
-        current,
+    return _OutputFlags(
         verbose=verbose,
         quiet=quiet,
         color=color,
@@ -441,12 +495,46 @@ def _build_output(current: OutputConfig, options: LintOptions, project_root: Pat
         show_passing=show_passing,
         show_stats=show_stats,
         advice=advice,
-        output=output_mode,
-        tool_filters=normalised_filters,
-        pr_summary_out=pr_summary_out,
-        pr_summary_limit=pr_summary_limit,
-        pr_summary_min_severity=pr_summary_min,
-        pr_summary_template=pr_summary_template,
+    )
+
+
+def _resolve_output_mode(
+    current: OutputConfig,
+    options: LintOptions,
+    provided: set[str],
+) -> str:
+    if "output_mode" not in provided:
+        return current.output
+    return _normalize_output_mode(options.output_mode)
+
+
+def _resolve_pr_summary_settings(
+    current: OutputConfig,
+    options: LintOptions,
+    provided: set[str],
+    project_root: Path,
+) -> _OutputSummary:
+    out_path = (
+        _resolve_optional_path(project_root, options.pr_summary_out)
+        if "pr_summary_out" in provided
+        else current.pr_summary_out
+    )
+    limit = options.pr_summary_limit if "pr_summary_limit" in provided else current.pr_summary_limit
+    min_severity = (
+        _normalize_min_severity(options.pr_summary_min_severity)
+        if "pr_summary_min_severity" in provided
+        else current.pr_summary_min_severity
+    )
+    template = (
+        options.pr_summary_template
+        if "pr_summary_template" in provided
+        else current.pr_summary_template
+    )
+    return _OutputSummary(
+        out_path=out_path,
+        limit=limit,
+        min_severity=min_severity,
+        template=template,
     )
 
 
@@ -472,12 +560,18 @@ def _build_execution(
 
     cache_enabled = (not options.no_cache) if "no_cache" in provided else current.cache_enabled
     cache_dir = (
-        _resolve_path(project_root, options.cache_dir).resolve() if "cache_dir" in provided else current.cache_dir
+        _resolve_path(project_root, options.cache_dir).resolve()
+        if "cache_dir" in provided
+        else current.cache_dir
     )
-    use_local_linters = options.use_local_linters if "use_local_linters" in provided else current.use_local_linters
+    use_local_linters = (
+        options.use_local_linters if "use_local_linters" in provided else current.use_local_linters
+    )
     line_length = options.line_length if "line_length" in provided else current.line_length
     sql_dialect = options.sql_dialect if "sql_dialect" in provided else current.sql_dialect
-    python_version = options.python_version if "python_version" in provided else current.python_version
+    python_version = (
+        options.python_version if "python_version" in provided else current.python_version
+    )
 
     return _model_clone(
         current,

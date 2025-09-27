@@ -15,7 +15,7 @@ from ...process_utils import run_command
 from ...tools.base import Tool
 from .. import constants as tool_constants
 from ..models import PreparedCommand
-from ..utils import _slugify
+from ..utils import slugify
 from .base import RuntimeHandler
 
 
@@ -86,7 +86,7 @@ class PerlRuntime(RuntimeHandler):
 
     def _ensure_local_tool(self, tool: Tool, binary_name: str) -> Path:
         requirement = tool.package or tool.name
-        slug = _slugify(requirement)
+        slug = slugify(requirement)
         prefix = tool_constants.PERL_CACHE_DIR / slug
         meta_file = tool_constants.PERL_META_DIR / f"{slug}.json"
         binary = tool_constants.PERL_BIN_DIR / binary_name
@@ -127,7 +127,9 @@ class PerlRuntime(RuntimeHandler):
     def _perl_env(root: Path) -> dict[str, str]:
         path_value = os.environ.get("PATH", "")
         combined = (
-            f"{tool_constants.PERL_BIN_DIR}{os.pathsep}{path_value}" if path_value else str(tool_constants.PERL_BIN_DIR)
+            f"{tool_constants.PERL_BIN_DIR}{os.pathsep}{path_value}"
+            if path_value
+            else str(tool_constants.PERL_BIN_DIR)
         )
         return {
             "PATH": combined,

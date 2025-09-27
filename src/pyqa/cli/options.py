@@ -55,6 +55,7 @@ class LintOptions:
     pylint_fail_under: float | None = None
     sensitivity: str | None = None
     advice: bool = False
+    disable_test_suppressions: bool = False
 
 
 @dataclass(slots=True)

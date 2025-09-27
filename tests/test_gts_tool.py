@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pyqa.config import Config, ExecutionConfig, OutputConfig
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _GtsCommand
+from pyqa.tools.builtins import GtsCommand
 
 
 def _context(tmp_path: Path) -> ToolContext:
@@ -27,7 +27,7 @@ def test_gts_command_adds_files_and_json_format(tmp_path: Path) -> None:
     )
     action = ToolAction(
         name="lint",
-        command=_GtsCommand(base=("gts", "lint", "--", "--format", "json")),
+        command=GtsCommand(base=("gts", "lint", "--", "--format", "json")),
         append_files=True,
     )
     built = action.build_command(ctx)
@@ -44,7 +44,7 @@ def test_gts_command_with_settings(tmp_path: Path) -> None:
         files=[],
         settings={"config": config_path, "project": project_path, "args": ["--quiet"]},
     )
-    command = _GtsCommand(base=("gts", "lint", "--", "--format", "json"))
+    command = GtsCommand(base=("gts", "lint", "--", "--format", "json"))
     built = command.build(ctx)
     assert "--config" in built
     assert str(config_path) in built

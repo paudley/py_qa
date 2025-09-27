@@ -28,7 +28,7 @@ YARN_LOCKFILE: Final[str] = "yarn.lock"
 NPM_MANIFEST: Final[str] = "package.json"
 GO_MANIFEST: Final[str] = "go.mod"
 CARGO_MANIFEST: Final[str] = "Cargo.toml"
-SKIPPED_STATUS: Final[Literal["skipped"]] = "skipped"
+SKIPPED_STATUS: Final = "skipped"
 
 
 class WorkspaceKind(Enum):
@@ -340,7 +340,9 @@ class WorkspacePlanner:
         enabled_managers: Iterable[str] | None = None,
     ) -> UpdatePlan:
         allowed: set[WorkspaceKind] | None = (
-            {WorkspaceKind.from_str(kind) for kind in enabled_managers} if enabled_managers else None
+            {WorkspaceKind.from_str(kind) for kind in enabled_managers}
+            if enabled_managers
+            else None
         )
         items: list[UpdatePlanItem] = []
         for workspace in workspaces:
@@ -443,7 +445,9 @@ class WorkspaceUpdater:
 
         completed = self._runner(spec.args, workspace.directory)
         if completed.returncode != 0:
-            message = f"Command '{' '.join(spec.args)}' failed with exit code {completed.returncode}"
+            message = (
+                f"Command '{' '.join(spec.args)}' failed with exit code {completed.returncode}"
+            )
             fail(message, use_emoji=self._use_emoji)
             detail = ExecutionDetail(command=spec, status="failed", message=message)
             summary = f"{rel_path}: {message}"

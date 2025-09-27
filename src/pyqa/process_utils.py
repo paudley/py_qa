@@ -89,7 +89,11 @@ def run_command(
     except subprocess.TimeoutExpired as exc:
         stdout = _ensure_text(exc.stdout) or ""
         stderr = _ensure_text(exc.stderr)
-        timeout_msg = f"Command timed out after {timeout:.1f}s" if timeout is not None else "Command timed out"
+        timeout_msg = (
+            f"Command timed out after {timeout:.1f}s"
+            if timeout is not None
+            else "Command timed out"
+        )
         combined_stderr = f"{stderr}\n{timeout_msg}" if stderr else timeout_msg
         completed = subprocess.CompletedProcess(
             args=(list(exc.cmd) if isinstance(exc.cmd, (list, tuple)) else list(normalized)),

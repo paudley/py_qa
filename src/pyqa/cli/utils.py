@@ -64,7 +64,11 @@ def check_tool_status(tool: Tool) -> ToolStatus:
         )
     except FileNotFoundError:
         status = "vendored" if tool.runtime != "binary" else "uninstalled"
-        runtime_note = f"Runtime '{tool.runtime}' can vend this tool on demand." if tool.runtime != "binary" else ""
+        runtime_note = (
+            f"Runtime '{tool.runtime}' can vend this tool on demand."
+            if tool.runtime != "binary"
+            else ""
+        )
         notes = f"Executable '{version_cmd[0]}' not found on PATH. {runtime_note}".strip()
         return ToolStatus(
             name=tool.name,
@@ -107,7 +111,6 @@ def check_tool_status(tool: Tool) -> ToolStatus:
 
 def display_relative_path(path: Path, root: Path) -> str:
     """Return a stable display string for ``path`` relative to ``root`` when possible."""
-
     try:
         return path.resolve().relative_to(root.resolve()).as_posix()
     except (ValueError, OSError):
@@ -124,7 +127,6 @@ def filter_py_qa_paths(paths: Iterable[Path], root: Path) -> tuple[list[Path], l
     resolved relative to ``root`` when necessary so callers can forward them to
     downstream logic without additional normalization.
     """
-
     root_resolved = root.resolve()
     if is_py_qa_workspace(root_resolved):
         return [(_maybe_resolve(path)) for path in paths], []
