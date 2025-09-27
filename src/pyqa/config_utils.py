@@ -43,6 +43,19 @@ def _coerce_optional_int(value: Any, current: int, context: str) -> int:
     raise ConfigError(f"{context} must be an integer")
 
 
+def _coerce_optional_float(value: Any, current: float, context: str) -> float:
+    if value is None:
+        return current
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError as exc:  # pragma: no cover - validation path
+            raise ConfigError(f"{context} must be a float") from exc
+    raise ConfigError(f"{context} must be a float")
+
+
 def _coerce_string_sequence(value: Any, context: str) -> list[str]:
     if value is None:
         return []
@@ -263,6 +276,7 @@ __all__ = [
     "_KNOWN_SECTIONS",
     "_coerce_iterable",
     "_coerce_optional_int",
+    "_coerce_optional_float",
     "_coerce_string_sequence",
     "_deep_merge",
     "_existing_unique_paths",

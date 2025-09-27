@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Helpers for capturing Rich progress output in CLI tests."""
 
 from __future__ import annotations

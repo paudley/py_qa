@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Utilities for normalising reported filesystem paths."""
 
 from __future__ import annotations

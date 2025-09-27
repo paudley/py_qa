@@ -1,15 +1,18 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Duplicate code detection for DRY-focused advice."""
 
 from __future__ import annotations
 
 import ast
 import copy
+import difflib
 import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Sequence, cast
 
+from ..annotations import AnnotationEngine
 from ..config import DuplicateDetectionConfig
 from ..models import Diagnostic, RunResult
 
@@ -33,6 +36,16 @@ class DuplicateCluster:
     fingerprint: str
     summary: str
     occurrences: tuple[DuplicateOccurrence, ...]
+
+
+_DOC_ENGINE: AnnotationEngine | None = None
+
+
+def _ensure_doc_engine() -> AnnotationEngine:
+    global _DOC_ENGINE
+    if _DOC_ENGINE is None:
+        _DOC_ENGINE = AnnotationEngine()
+    return _DOC_ENGINE
 
 
 class _CanonicalisingTransformer(ast.NodeTransformer):
@@ -117,6 +130,8 @@ def detect_duplicate_code(
         clusters.extend(_detect_ast_duplicates(result, config))
     if config.cross_diagnostics:
         clusters.extend(_detect_diagnostic_duplicates(result, config))
+    if config.doc_similarity_enabled:
+        clusters.extend(_detect_docstring_duplicates(result, config))
 
     return [
         {
@@ -258,6 +273,127 @@ def _detect_diagnostic_duplicates(
         )
 
 
+def _detect_docstring_duplicates(
+    result: RunResult,
+    config: DuplicateDetectionConfig,
+) -> Iterable[DuplicateCluster]:
+    occurrences, texts = _collect_docstrings(result, config)
+    if len(occurrences) < 2:
+        return []
+
+    engine = _ensure_doc_engine()
+    nlp = engine.language_model()  # leverage shared spaCy model
+    docs = list(nlp.pipe(texts, disable=("parser", "ner")))
+    normalized_texts = [" ".join(text.lower().split()) for text in texts]
+    clusters: dict[int, list[int]] = {}
+    parent = list(range(len(docs)))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    def union(left: int, right: int) -> None:
+        root_left = find(left)
+        root_right = find(right)
+        if root_left != root_right:
+            parent[root_right] = root_left
+
+    threshold = config.doc_similarity_threshold
+    for i in range(len(docs)):
+        for j in range(i + 1, len(docs)):
+            similarity = _doc_similarity(docs[i], docs[j], normalized_texts[i], normalized_texts[j])
+            if similarity >= threshold:
+                union(i, j)
+
+    groups: dict[int, list[int]] = {}
+    for index in range(len(docs)):
+        root = find(index)
+        groups.setdefault(root, []).append(index)
+
+    clusters_found: list[DuplicateCluster] = []
+    for indices in groups.values():
+        if len(indices) < 2:
+            continue
+        occurrences_subset = [occurrences[i] for i in indices]
+        summary = _format_doc_summary(len(occurrences_subset))
+        fingerprint = hashlib.sha1(  # noqa: S324 - informational hash
+            "|".join(sorted(f"{entry.file}:{entry.line}" for entry in occurrences_subset)).encode("utf-8"),
+            usedforsecurity=False,
+        ).hexdigest()
+        clusters_found.append(
+            DuplicateCluster(
+                kind="docstring",
+                fingerprint=fingerprint,
+                summary=summary,
+                occurrences=tuple(occurrences_subset),
+            ),
+        )
+
+    return clusters_found
+
+
+def _collect_docstrings(
+    result: RunResult,
+    config: DuplicateDetectionConfig,
+) -> tuple[list[DuplicateOccurrence], list[str]]:
+    root_path = result.root.resolve()
+    occurrences: list[DuplicateOccurrence] = []
+    texts: list[str] = []
+
+    for path in result.files:
+        if path.suffix != ".py":
+            continue
+        rel_path = _relative_path(root_path, path)
+        if not config.doc_include_tests and _looks_like_test_path(rel_path):
+            continue
+        try:
+            source = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        try:
+            module = ast.parse(source)
+        except SyntaxError:
+            continue
+        source_lines = source.splitlines()
+
+        module_doc = ast.get_docstring(module)
+        if module_doc and len(module_doc) >= config.doc_min_chars:
+            line = _docstring_line(module.body[0])
+            occurrences.append(
+                DuplicateOccurrence(
+                    file=rel_path,
+                    line=line,
+                    function=None,
+                    size=len(module_doc.splitlines()),
+                    snippet=_normalise_docstring_excerpt(module_doc),
+                ),
+            )
+            texts.append(module_doc)
+
+        for node in ast.walk(module):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            doc = ast.get_docstring(node)
+            if not doc or len(doc) < config.doc_min_chars:
+                continue
+            line = _docstring_line(node.body[0]) if node.body else getattr(node, "lineno", None)
+            name = getattr(node, "name", None)
+            occurrences.append(
+                DuplicateOccurrence(
+                    file=rel_path,
+                    line=line,
+                    function=name,
+                    size=len(doc.splitlines()),
+                    snippet=_normalise_docstring_excerpt(doc),
+                ),
+            )
+            texts.append(doc)
+
+    return occurrences, texts
+
+
 def _diagnostic_key(diag: Diagnostic) -> tuple[str, str, str] | None:
     message = diag.message.splitlines()[0].strip()
     if not message:
@@ -274,6 +410,16 @@ def _format_ast_summary(size_hint: int, count: int) -> str:
 
 def _format_diagnostic_summary(tool: str, code: str, message: str, files: int) -> str:
     return f"Repeated {tool}:{code} diagnostic '{message}' across {files} files"
+
+
+def _format_doc_summary(count: int) -> str:
+    return f"Similar docstrings detected across {count} code objects"
+
+
+def _doc_similarity(doc_a, doc_b, text_a: str, text_b: str) -> float:
+    if doc_a.vector_norm and doc_b.vector_norm:
+        return float(doc_a.similarity(doc_b))
+    return difflib.SequenceMatcher(None, text_a, text_b).ratio()
 
 
 def _relative_path(root: Path, path: Path) -> str:
@@ -319,3 +465,11 @@ def _is_docstring(node: ast.AST) -> bool:
 def _looks_like_test_path(path: str) -> bool:
     normalized = path.lower()
     return normalized.startswith("tests/") or "/tests/" in normalized
+
+
+def _docstring_line(node: ast.AST) -> int | None:
+    return getattr(node, "lineno", None)
+
+
+def _normalise_docstring_excerpt(text: str) -> str:
+    return " ".join(segment.strip() for segment in text.splitlines()[:2])

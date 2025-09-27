@@ -246,6 +246,56 @@ RAW_TOOL_SETTING_SCHEMA: RawToolSettingSchema = {
             "description": "Additional arguments appended to isort.",
         },
     },
+    "eslint": {
+        "config": {
+            "type": "path",
+            "description": "Custom eslint configuration file path.",
+        },
+        "ignore-path": {
+            "type": "path",
+            "description": "Path to eslint ignore file.",
+        },
+        "max-warnings": {
+            "type": "int",
+            "description": "Maximum warnings allowed before eslint exits non-zero.",
+        },
+        "args": {
+            "type": "list[str]",
+            "description": "Additional arguments appended to the eslint invocation.",
+        },
+    },
+    "stylelint": {
+        "config": {
+            "type": "path",
+            "description": "Custom stylelint configuration file path.",
+        },
+        "ignore-path": {
+            "type": "path",
+            "description": "Path to stylelint ignore file.",
+        },
+        "max-warnings": {
+            "type": "int",
+            "description": "Maximum warnings allowed before stylelint exits non-zero.",
+        },
+        "args": {
+            "type": "list[str]",
+            "description": "Additional arguments appended to the stylelint command.",
+        },
+    },
+    "tsc": {
+        "project": {
+            "type": "path",
+            "description": "Path passed to tsc via --project.",
+        },
+        "strict": {
+            "type": "bool",
+            "description": "Toggle TypeScript strict mode for linting runs.",
+        },
+        "args": {
+            "type": "list[str]",
+            "description": "Additional tsc arguments to append.",
+        },
+    },
     "mypy": {
         "exclude-gitignore": {
             "type": "bool",
