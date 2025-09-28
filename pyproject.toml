@@ -5,8 +5,37 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[dependency-groups]
-dev = [
+[project]
+name = "pyqa"
+version = "0.1.0"
+description = "Polyglot lint orchestration toolkit"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.12"
+dependencies = [
+    "cython>=3.1.4",
+    "jsonschema>=4.23.0",
+    "packaging>=24.1",
+    "pydantic>=2.9.2",
+    "sqlfluff>=3.4.2",
+    "tree-sitter-bash",
+    "tree-sitter-dockerfile",
+    "tree-sitter-go>=0.25.0",
+    "tree-sitter-json>=0.24.8",
+    "tree-sitter-javascript>=0.25.0",
+    "tree-sitter-lua",
+    "tree-sitter-typescript>=0.21.0",
+    "tree-sitter-make",
+    "tree-sitter-markdown>=0.5.1",
+    "tree-sitter-php",
+    "tree-sitter-python>=0.25.0",
+    "tree-sitter-rust>=0.24.0",
+    "tree-sitter-sql>=0.3.8",
+    "tree-sitter-toml",
+    "tree-sitter-yaml",
+    "tree-sitter>=0.25.1",
+    "typer>=0.12",
+    "spacy>=3.8.7",
     "autopep8>=2.3.2",
     "black>=25.1.0",
     "botocore-stubs>=1.40.32",
@@ -51,38 +80,6 @@ dev = [
     "bandit>=1.8.6",
 ]
 
-[project]
-name = "pyqa"
-version = "0.1.0"
-description = "Polyglot lint orchestration toolkit"
-readme = "README.md"
-license = { file = "LICENSE" }
-requires-python = ">=3.12"
-dependencies = [
-    "cython>=3.1.4",
-    "packaging>=24.1",
-    "pydantic>=2.9.2",
-    "sqlfluff>=3.4.2",
-    "tree-sitter-bash",
-    "tree-sitter-dockerfile",
-    "tree-sitter-go>=0.25.0",
-    "tree-sitter-json>=0.24.8",
-    "tree-sitter-javascript>=0.25.0",
-    "tree-sitter-lua",
-    "tree-sitter-typescript>=0.21.0",
-    "tree-sitter-make",
-    "tree-sitter-markdown>=0.5.1",
-    "tree-sitter-php",
-    "tree-sitter-python>=0.25.0",
-    "tree-sitter-rust>=0.24.0",
-    "tree-sitter-sql>=0.3.8",
-    "tree-sitter-toml",
-    "tree-sitter-yaml",
-    "tree-sitter>=0.25.1",
-    "typer>=0.12",
-    "spacy>=3.8.7",
-]
-
 [project.scripts]
 pyqa = "pyqa.cli:app"
 
@@ -91,25 +88,6 @@ exclude_dirs = ["tests"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pyqa"]
-
-[tool.isort]
-profile = "black"
-
-[tool.pylint.main]
-disable = [
-    "missing-module-docstring",
-    "missing-class-docstring",
-    "missing-function-docstring",
-    "too-few-public-methods",
-    "too-many-instance-attributes",
-    "too-many-arguments",
-    "too-many-positional-arguments",
-    "too-many-locals",
-    "too-many-branches",
-    "too-many-statements",
-    "too-many-return-statements",
-]
-max-line-length = 120
 
 [tool.uv]
 managed = true
@@ -120,7 +98,5 @@ pythonpath = ["src"]
 [tool.pyqa.quality]
 skip_globs = [
     "ref_docs/**",
-    "lint_report*.json",
     "py_qa/**",
-    "pyreadstat_patch/**",
 ]
