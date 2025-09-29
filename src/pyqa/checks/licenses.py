@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import re
 import tomllib
+from datetime import datetime
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
@@ -25,6 +26,20 @@ KNOWN_LICENSE_SNIPPETS: Final[Mapping[str, str]] = {
 _COPYRIGHT_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"copyright\s*\(c\)\s*(?P<body>.+)",
     re.IGNORECASE,
+)
+
+_SPDX_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"SPDX-License-Identifier:\s*([^\s*]+)",
+    re.IGNORECASE,
+)
+
+_NOTICE_PREFIX: Final[re.Pattern[str]] = re.compile(
+    r"copyright\s*\(c\)\s*",
+    re.IGNORECASE,
+)
+
+_YEAR_RANGE: Final[re.Pattern[str]] = re.compile(
+    r"(?P<start>\d{4})(?:\s*[-–]\s*(?P<end>\d{4}))?",
 )
 
 
@@ -193,6 +208,8 @@ def verify_file_license(
     content: str,
     policy: LicensePolicy,
     root: Path,
+    *,
+    current_year: int | None = None,
 ) -> list[str]:
     """Return list of issues detected for *path* under the provided *policy*."""
     if policy.should_skip(path, root):
@@ -200,23 +217,39 @@ def verify_file_license(
 
     issues: list[str] = []
     lower_content = content.lower()
+    year = current_year or datetime.now().year
 
-    if policy.spdx_id and policy.require_spdx:
-        tag = f"SPDX-License-Identifier: {policy.spdx_id}"
-        if tag not in content:
-            if not any(
-                alt and f"SPDX-License-Identifier: {alt}" in content
-                for alt in (policy.allow_alternate_spdx or ())
-            ) and not _matches_snippet(lower_content, policy.license_snippet):
-                issues.append(f"Missing SPDX license tag '{tag}'")
+    if policy.require_spdx:
+        identifiers = extract_spdx_identifiers(content)
+        expected_id = policy.spdx_id
+        expected_tag = f"SPDX-License-Identifier: {expected_id}" if expected_id else None
+        allowed = {spdx for spdx in (expected_id, *(policy.allow_alternate_spdx or ())) if spdx}
 
-    if policy.require_notice and policy.canonical_notice:
+        if expected_id:
+            conflicting = sorted(identifier for identifier in identifiers if identifier not in allowed)
+            if conflicting:
+                formatted = ", ".join(conflicting)
+                issues.append(
+                    f"Found SPDX license identifier(s) {formatted}; expected '{expected_id}'.",
+                )
+            elif not identifiers.intersection(allowed) and not _matches_snippet(lower_content, policy.license_snippet):
+                issues.append(f"Missing SPDX license tag '{expected_tag}'")
+        elif not identifiers and not _matches_snippet(lower_content, policy.license_snippet):
+            issues.append("Missing SPDX license tag; configure a project SPDX identifier or header snippet.")
+
+    if policy.require_notice:
         observed = policy.match_notice(content)
+        expected = expected_notice(policy, observed, current_year=year)
         if not observed:
-            issues.append(f"Missing copyright notice '{policy.canonical_notice}'")
-        elif not _notices_equal(observed, policy.canonical_notice):
+            if expected:
+                issues.append(f"Missing copyright notice '{expected}'")
+            elif policy.canonical_notice:
+                issues.append(f"Missing copyright notice '{policy.canonical_notice}'")
+            else:
+                issues.append("Missing copyright notice")
+        elif expected and not _notices_equal(observed, expected):
             issues.append(
-                f"Mismatched copyright notice. Found '{observed}' but expected '{policy.canonical_notice}'.",
+                f"Mismatched copyright notice. Found '{observed}' but expected '{expected}'.",
             )
 
     return issues
@@ -235,6 +268,95 @@ def _notices_equal(left: str, right: str) -> bool:
 def normalise_notice(value: str) -> str:
     stripped = _strip_comment_prefix(value)
     return re.sub(r"\s+", " ", stripped).strip().lower()
+
+
+def extract_spdx_identifiers(content: str) -> set[str]:
+    """Return all SPDX identifiers declared within *content*."""
+    identifiers: set[str] = set()
+    for match in _SPDX_PATTERN.finditer(content):
+        candidate = match.group(1).strip()
+        if candidate:
+            identifiers.add(candidate)
+    return identifiers
+
+
+@dataclass(frozen=True)
+class _NoticeParts:
+    start: int | None
+    end: int | None
+    owner: str | None
+
+
+def expected_notice(
+    policy: LicensePolicy,
+    observed_notice: str | None,
+    *,
+    current_year: int | None = None,
+) -> str | None:
+    """Build the canonical notice string expected for a file under *policy*."""
+    if not policy.require_notice:
+        return None
+
+    base_notice = policy.canonical_notice or observed_notice
+    if not base_notice:
+        return None
+
+    baseline = _parse_notice(base_notice)
+    observed = _parse_notice(observed_notice)
+
+    owner = baseline.owner or observed.owner
+    if owner is None:
+        return base_notice
+
+    year = current_year or datetime.now().year
+    start_candidates = [value for value in (observed.start, baseline.start) if value]
+    if start_candidates:
+        start_year = min(start_candidates)
+    else:
+        start_year = year
+
+    end_candidates = [value for value in (observed.end, baseline.end) if value]
+    end_year = max(end_candidates) if end_candidates else None
+    if end_year is not None and end_year < start_year:
+        end_year = start_year
+
+    latest = max(filter(None, (end_year, year)), default=year)
+    if latest < start_year:
+        latest = start_year
+
+    if latest == start_year:
+        year_expression = f"{start_year}"
+    else:
+        year_expression = f"{start_year}-{latest}"
+
+    return f"Copyright (c) {year_expression} {owner}".strip()
+
+
+def _parse_notice(value: str | None) -> _NoticeParts:
+    if not value:
+        return _NoticeParts(None, None, None)
+
+    stripped = value.strip()
+    match = _NOTICE_PREFIX.match(stripped)
+    if not match:
+        return _NoticeParts(None, None, stripped or None)
+
+    body = stripped[match.end() :].strip()
+    if not body:
+        return _NoticeParts(None, None, None)
+
+    year_match = _YEAR_RANGE.match(body)
+    if not year_match:
+        return _NoticeParts(None, None, body or None)
+
+    start_year = int(year_match.group("start"))
+    end_year: int | None = None
+    end_str = year_match.group("end")
+    if end_str and end_str.isdigit():
+        end_year = int(end_str)
+
+    owner = body[year_match.end() :].strip() or None
+    return _NoticeParts(start_year, end_year, owner)
 
 
 def _build_canonical_notice(

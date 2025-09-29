@@ -16,6 +16,7 @@ from typing import Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from .banned import BannedWordChecker
+from .checks.license_fixer import LicenseFixError, LicenseHeaderFixer
 from .checks.licenses import (
     LicensePolicy,
     load_license_policy,
@@ -80,6 +81,7 @@ class QualityContext:
     files: Sequence[Path]
     quality: QualityConfigSection
     license_policy: LicensePolicy | None
+    fix: bool = False
 
 
 class QualityCheck(Protocol):
@@ -123,6 +125,8 @@ class LicenseCheck:
         if not policy:
             return
 
+        fixer = LicenseHeaderFixer(policy) if ctx.fix else None
+        current_year = fixer.current_year if fixer else None
         observed_notices: set[str] = set()
         for path in ctx.files:
             if not _is_textual_candidate(path):
@@ -133,7 +137,27 @@ class LicenseCheck:
                 result.add_warning(f"Unable to read file for license check: {exc}", path)
                 continue
 
-            issues = verify_file_license(path, content, policy, ctx.root)
+            issues = verify_file_license(path, content, policy, ctx.root, current_year=current_year)
+            if issues and fixer:
+                try:
+                    updated = fixer.apply(path, content)
+                except LicenseFixError as exc:
+                    result.add_warning(f"Automatic license fix skipped: {exc}", path)
+                else:
+                    if updated:
+                        try:
+                            path.write_text(updated, encoding="utf-8")
+                        except OSError as exc:
+                            result.add_error(f"Failed to update license header: {exc}", path)
+                            continue
+                        content = updated
+                        issues = verify_file_license(
+                            path,
+                            content,
+                            policy,
+                            ctx.root,
+                            current_year=current_year,
+                        )
             for issue in issues:
                 result.add_error(issue, path)
 
@@ -271,7 +295,7 @@ class QualityChecker:
             "schema": SchemaCheck(),
         }
 
-    def run(self) -> QualityCheckResult:
+    def run(self, *, fix: bool = False) -> QualityCheckResult:
         result = QualityCheckResult()
         raw_files = self._collector.collect(self._explicit_files, staged=self._staged)
         files = self._filter_files(raw_files)
@@ -280,6 +304,7 @@ class QualityChecker:
             files=files,
             quality=self.quality,
             license_policy=self.license_policy,
+            fix=fix,
         )
         for name, check in self._available_checks.items():
             if name not in self._selected_checks:

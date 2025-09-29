@@ -43,6 +43,12 @@ def main(
         "--staged/--no-staged",
         help="Use staged files instead of discovering all tracked files when no PATHS are provided.",
     ),
+    fix: bool = typer.Option(
+        False,
+        "--fix",
+        help="Attempt to repair license notices and SPDX tags before re-running checks.",
+        is_flag=True,
+    ),
     check: list[str] | None = typer.Option(
         None,
         "--check",
@@ -104,7 +110,7 @@ def main(
         checks=selected_checks,
         staged=staged,
     )
-    result = checker.run()
+    result = checker.run(fix=fix)
     _render_result(result, root, emoji)
     raise typer.Exit(code=result.exit_code())
 

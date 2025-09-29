@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -103,6 +104,60 @@ print('ok')
     assert result.exit_code() == 0
 
 
+def test_quality_checker_fix_mode_adds_headers(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    target = tmp_path / "script.py"
+    target.write_text("print('hello')\n", encoding="utf-8")
+
+    config = _load_quality_config(tmp_path)
+    checker = QualityChecker(
+        root=tmp_path,
+        quality=config.quality,
+        license_overrides=config.license,
+        files=[target],
+        checks={"license"},
+    )
+    result = checker.run(fix=True)
+
+    assert result.exit_code() == 0
+    content = target.read_text(encoding="utf-8")
+    assert content.splitlines()[0] == "# SPDX-License-Identifier: MIT"
+    current_year = datetime.now().year
+    if current_year == 2025:
+        expected_notice = "# Copyright (c) 2025 Blackcat Informatics® Inc."
+    else:
+        expected_notice = (
+            f"# Copyright (c) 2025-{current_year} Blackcat Informatics® Inc."
+        )
+    assert expected_notice in content
+
+
+def test_quality_checker_fix_mode_conflicting_license(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    target = tmp_path / "example.js"
+    target.write_text(
+        """// SPDX-License-Identifier: Apache-2.0
+console.log('test');
+""",
+        encoding="utf-8",
+    )
+
+    config = _load_quality_config(tmp_path)
+    checker = QualityChecker(
+        root=tmp_path,
+        quality=config.quality,
+        license_overrides=config.license,
+        files=[target],
+        checks={"license"},
+    )
+    result = checker.run(fix=True)
+
+    assert result.exit_code() == 1
+    assert any("Apache-2.0" in issue.message for issue in result.errors)
+    content = target.read_text(encoding="utf-8")
+    assert "Apache-2.0" in content
+
+
 def test_schema_check_reports_outdated_file(tmp_path: Path) -> None:
     _write_repo_layout(tmp_path)
     schema_file = tmp_path / "ref_docs" / "tool-schema.json"
@@ -147,16 +202,40 @@ def test_cli_reports_license_error(tmp_path: Path) -> None:
         app,
         [
             "check-quality",
-            str(target),
             "--root",
             str(tmp_path),
             "--no-schema",
             "--no-emoji",
+            str(target),
         ],
     )
 
     assert result.exit_code == 1
     assert "Missing SPDX" in result.stdout
+
+
+def test_cli_fix_mode_updates_file(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    target = tmp_path / "main.py"
+    target.write_text("print('cli')\n", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "check-quality",
+            "--root",
+            str(tmp_path),
+            "--no-schema",
+            "--no-emoji",
+            "--fix",
+            str(target),
+        ],
+    )
+
+    assert result.exit_code == 0
+    content = target.read_text(encoding="utf-8")
+    assert content.startswith("# SPDX-License-Identifier: MIT\n")
 
 
 def test_check_quality_ignores_py_qa_directory(tmp_path: Path) -> None:
