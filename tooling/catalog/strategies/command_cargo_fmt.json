@@ -1,6 +1,0 @@
-{
-  "schemaVersion": "1.0.0",
-  "id": "command_cargo_fmt",
-  "type": "command",
-  "implementation": "pyqa.tooling.strategies.cargo_fmt_command"
-}

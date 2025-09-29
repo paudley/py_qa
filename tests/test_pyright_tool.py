@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import pyright_command
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -39,7 +39,7 @@ def test_pyright_command_build(tmp_path: Path) -> None:
         },
     )
 
-    builder = pyright_command(_pyright_config())
+    builder = command_option_map(_pyright_config())
     action = ToolAction(name="type-check", command=builder)
 
     command = action.build_command(ctx)

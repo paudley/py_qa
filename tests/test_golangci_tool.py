@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import golangci_lint_command
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -29,9 +29,6 @@ def _golangci_command_config() -> dict[str, object]:
     raise AssertionError("golangci-lint command configuration missing from catalog")
 
 
-_GOLANGCI_COMMAND = golangci_lint_command(_golangci_command_config())
-
-
 def test_golangci_command_includes_enable_all(tmp_path: Path) -> None:
     cfg = Config()
     ctx = ToolContext(
@@ -41,11 +38,8 @@ def test_golangci_command_includes_enable_all(tmp_path: Path) -> None:
         settings={"disable": ["govet"], "enable": ["gofmt"]},
     )
 
-    action = ToolAction(
-        name="lint",
-        command=_GOLANGCI_COMMAND,
-        append_files=False,
-    )
+    builder = command_option_map(_golangci_command_config())
+    action = ToolAction(name="lint", command=builder, append_files=False)
 
     command = action.build_command(ctx)
     assert "--enable-all" in command
@@ -61,11 +55,8 @@ def test_golangci_respects_disable_enable_all_flag(tmp_path: Path) -> None:
         settings={"enable-all": False},
     )
 
-    action = ToolAction(
-        name="lint",
-        command=_GOLANGCI_COMMAND,
-        append_files=False,
-    )
+    builder = command_option_map(_golangci_command_config())
+    action = ToolAction(name="lint", command=builder, append_files=False)
 
     command = action.build_command(ctx)
     assert "--enable-all" not in command

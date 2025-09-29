@@ -7,13 +7,29 @@
   "runtime": {
     "type": "binary"
   },
+  "options": [
+    {
+      "name": "relaxed",
+      "type": "bool",
+      "description": "Enable relaxed linting mode (-r)."
+    },
+    {
+      "name": "strict",
+      "type": "bool",
+      "description": "Enable strict linting mode (-s)."
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to lualint."
+    }
+  ],
   "actions": [
     {
       "name": "lint",
       "command": {
-        "strategy": "command_lualint",
+        "strategy": "command_download_binary",
         "config": {
-          "base": ["lua"],
           "download": {
             "name": "lualint",
             "cacheSubdir": "lualint",
@@ -24,7 +40,13 @@
                 "chmod": true
               }
             ]
-          }
+          },
+          "base": ["lua", "${binary}"],
+          "options": [
+            {"setting": "relaxed", "type": "flag", "flag": "-r"},
+            {"setting": "strict", "type": "flag", "flag": "-s"},
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "description": "Static analysis for Lua globals via lualint.",

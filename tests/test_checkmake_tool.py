@@ -8,8 +8,21 @@ from __future__ import annotations
 from pathlib import Path
 
 from pyqa.config import Config
-from pyqa.tooling.strategies import checkmake_command
-from pyqa.tools.base import ToolContext
+from pyqa.tooling import ToolCatalogLoader
+from pyqa.tooling.strategies import command_option_map
+from pyqa.tools.base import ToolAction, ToolContext
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_CATALOG_ROOT = _PROJECT_ROOT / "tooling" / "catalog"
+
+
+def _checkmake_config() -> dict[str, object]:
+    loader = ToolCatalogLoader(catalog_root=_CATALOG_ROOT)
+    snapshot = loader.load_snapshot()
+    for definition in snapshot.tools:
+        if definition.name == "checkmake":
+            return dict(definition.actions[0].command.reference.config)
+    raise AssertionError("checkmake command configuration missing from catalog")
 
 
 def test_checkmake_command_build(tmp_path: Path) -> None:
@@ -24,11 +37,12 @@ def test_checkmake_command_build(tmp_path: Path) -> None:
         },
     )
 
-    builder = checkmake_command({"base": ["checkmake", "lint"]})
-    command = list(builder.build(ctx))
-    command.extend(str(path) for path in ctx.files)
+    builder = command_option_map(_checkmake_config())
+    action = ToolAction(name="lint", command=builder)
+    command = action.build_command(ctx)
+
     assert command[0] == "checkmake"
     assert "--format" in command and "json" in command
-    assert "--config" in command
-    assert "--ignore" in command
+    assert "--config" in command and str((tmp_path / "checkmake.yml").resolve()) in command
+    assert "--ignore" in command and "missing-help-text" in command
     assert command[-1].endswith("Makefile")

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import pylint_command
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -43,7 +43,7 @@ def test_pylint_command_build(tmp_path: Path) -> None:
         },
     )
 
-    builder = pylint_command(_pylint_config())
+    builder = command_option_map(_pylint_config())
     action = ToolAction(name="lint", command=builder, append_files=False)
 
     command = action.build_command(ctx)

@@ -492,7 +492,8 @@
         },
         "default": {
           "type": ["string", "boolean", "number", "array", "object", "null"]
-        }
+        },
+        "defaultFrom": { "type": "string" }
       }
     },
     "CommandDownloadBinaryConfig": {

@@ -2,29 +2,33 @@
 
 ## Completion Status
 
-- Catalog schemas, language definitions, and strategy manifests now cover every
-  tool with checksum-backed caching reused across orchestrator entry points.
-- Runtime helpers (`catalog_metadata`, `tools.settings`, CLI builders) source
-  suppressions, duplicates, and option schemas exclusively from the catalog.
-- Legacy command classes are partially retired, but bespoke strategy
-  implementations still embed tool-specific logic (e.g. Ruff, pylint,
-  golangci-lint). Further generalisation is tracked under next steps.
-- Documentation (`docs/tooling/TOOL_CATALOG_GUIDE.md`, `ref_docs/tool-schema.json`)
-  reflects the catalog workflow and exported metadata.
-- Full `uv run pytest` passes with the catalog registry as the sole execution
-  path, demonstrating complete parity with the previous implementation.
-- Installer helpers are re-exported directly from `pyqa.tools.builtin_helpers`,
-  eliminating redundant wrappers.
-- Strategy-focused tests assert command factories directly without
-  `ToolAction` scaffolding.
-- `pyqa config export-tools --check` now validates schema freshness for CI.
-- Catalog metadata helpers memoise tool options to avoid redundant resolution.
-- Tool documentation lives under `tooling/catalog/docs` and surfaces through
-  catalog-driven `documentation` metadata consumed by CLI help panels.
-- Generic download strategies replace bespoke `ensure_*` helpers; catalog
-  definitions describe platform assets for actionlint, hadolint, and lualint.
-- Phase-aware ordering now lives in `ToolRegistry`, derived entirely from
-  catalog metadata.
+- Shared `command_option_map` strategy now drives every catalog action (Python
+  helpers have been removed entirely); bespoke strategy modules were deleted
+  to force pure catalog control.
+- All tool JSON definitions have been updated to rely on option maps, but
+  supporting helper utilities (`_require_string_sequence`, `_load_attribute`,
+  `_build_field_spec`, catalog option transforms) still live outside the
+  consolidated `strategies.py` module and need reinstatement after the module
+  purge.
+- `uv run pytest` is green again after shoring up catalog defaults: restored
+  python-version flag parity for pylint/mypy/pyright, fixed pyupgrade flag
+  duplication and double file appends, reintroduced cpplint recursive flag
+  wiring, and made golangci-lint's `--enable-all` opt-out via setting.
+- Catalog JSON now mirrors the legacy CLI surface for these tools; continue
+  auditing remaining actions to ensure helper parity before deleting any
+  residual shims.
+- Pruned the obsolete `CommandBuilder` subclasses from
+  `pyqa.tools.builtin_commands_python` and `pyqa.tools.builtin_commands_misc`,
+  leaving only the shared helper functions consumed by the catalog strategies.
+- Bandit now sources its default severity and confidence levels directly from
+  catalog metadata (`defaultFrom`), reducing the bespoke fallback logic in
+  command builders.
+- Catalog defaults now cover TypeScript strict mode and lint warning budgets,
+  wiring shared strictness/severity knobs directly into `tsc`, `stylelint`, and
+  `eslint` without Python-side ensures.
+- Mypy strict mode moved entirely into catalog metadata; default runs are
+  "standard", with strict flags only emitted when strictness is explicitly
+  requested (CLI `--strict` or sensitivity maximum).
 
 ## Guiding Principles
 
@@ -33,6 +37,17 @@
 - **Liskov Substitution (LSP):** Tool consumers operate against stable interfaces; any compliant tool schema instance can be injected without breaking callers.
 - **Interface Segregation (ISP):** Separate read-only views (e.g., CLI summaries, runtime adapters) from authoring/validation utilities so consumers depend only on what they use.
 - **Dependency Inversion (DIP):** High-level orchestration depends on abstractions (`ToolRegistry`, `ToolDefinition` protocol) while concrete parsers/loaders depend on JSON modules.
+
+## Constraints & Guardrails
+
+- Tests and production code must import modules identically; avoid modifying
+  `sys.path` or other interpreter-level import hooks.
+- Execute all verification commands with `uv run …` to ensure the resolved
+  environment matches production expectations.
+- Focus implementation changes within `src/`; Python code under `tooling/`
+  remains off-limits for runtime helpers.
+- Defer compatibility shims—complete catalog migrations first, then backfill
+  tests and adapters once new wiring is stable.
 
 ## Code Requirements
 
@@ -190,24 +205,32 @@
 
 ## Current Focus & Next Steps
 
-1. **Generalise Command Options**
-   - Replace tool-specific builders (Ruff, Black, ESLint, golangci-lint, etc.)
-     with catalog-driven option mappings so CLI flag wiring lives in JSON.
-   - Introduce reusable command-option strategies (value/path/flag mappings)
-     that mirror the `command_download_binary` option table.
+1. **Finish Option Map Migration**
+   - Every tool now references `command_option_map`; focus shifts to policing
+     helper coverage and closing parity gaps.
+   - Restore shared helpers required by the consolidated strategy module
+     (`_load_attribute`, `_build_field_spec`, `_require_string_sequence`,
+     parser normalisers) so catalog option wiring can execute.
+   - Reconcile behavioural regressions highlighted by the failing tests
+     (pylint defaults/plugins, prettier/sqlfluff path handling, remark output
+     paths, etc.) before removing the temporary skips.
 
-2. **Catalog Defaults & Diagnostics**
-   - Move linter default thresholds currently seeded in `Config.ensure(...)`
-     (line lengths, pylint complexity, bandit severities) into shared catalog
-     fragments or runtime metadata.
-   - Relocate special-case suppression logic (`pylint` R0801/W0613/W0212
-     handling in `execution.orchestrator`) into catalog `diagnostics`
-     post-processors or suppression lists.
+2. **Externalise Defaults & Diagnostics**
+   - Relocate hard-coded defaults from `Config.ensure(...)` and
+     `_resolve_default_reference` into catalog fragments or `defaultFrom`
+     aliases.
+   - Surface pylint suppression/diagnostic tweaks in catalog metadata or
+     dedicated post-processing strategies.
+   - Capture python-version derived flags (pyupgrade, target tags) as reusable
+     strategy transforms configurable via JSON.
 
-3. **Retire Legacy Helpers**
-   - Port `pyqa.tools.builtin_commands_python` behaviour into strategies or
-     catalog metadata (pylint plugin discovery, pyupgrade flags) and remove the
-     module once callers migrate.
+3. **Testing & CLI Wiring**
+   - Once migrations stabilise, update tests to exercise catalog lookups rather
+     than importing legacy builders directly.
+   - Ensure CLI entry points initialise registries explicitly with the catalog
+     data path (no implicit side effects in `pyqa/__init__`).
+  - Execute `uv run pytest` to re-baseline the suite after the new wiring is in
+     place and address any fixture updates in a dedicated pass.
 
 ## Additional Opportunities
 

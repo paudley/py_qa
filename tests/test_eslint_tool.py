@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import eslint_command
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -45,7 +45,7 @@ def test_eslint_lint_command_build(tmp_path: Path) -> None:
         },
     )
 
-    builder = eslint_command(_eslint_command_config("lint"))
+    builder = command_option_map(_eslint_command_config("lint"))
     action = ToolAction(name="lint", command=builder)
 
     command = action.build_command(ctx)
@@ -71,9 +71,37 @@ def test_eslint_fix_command_build(tmp_path: Path) -> None:
         },
     )
 
-    builder = eslint_command(_eslint_command_config("fix"))
+    builder = command_option_map(_eslint_command_config("fix"))
     action = ToolAction(name="fix", command=builder, append_files=False)
 
     command = action.build_command(ctx)
     assert command[:2] == ["eslint", "--fix"]
     assert "--error-on-unmatched-pattern" not in command
+
+
+def test_eslint_defaults_max_warnings(tmp_path: Path) -> None:
+    cfg = Config()
+    cfg.severity.max_warnings = 3
+    builder = command_option_map(_eslint_command_config("lint"))
+    action = ToolAction(name="lint", command=builder, ignore_exit=True)
+    ctx = ToolContext(
+        cfg=cfg,
+        root=tmp_path,
+        files=[tmp_path / "src" / "app.ts"],
+        settings=cfg.tool_settings.setdefault("eslint", {}),
+    )
+
+    command = action.build_command(ctx)
+    assert "--max-warnings" in command and "3" in command
+
+    cfg_default = Config()
+    action_default = ToolAction(name="lint", command=builder, ignore_exit=True)
+    ctx_default = ToolContext(
+        cfg=cfg_default,
+        root=tmp_path,
+        files=[tmp_path / "src" / "app.ts"],
+        settings=cfg_default.tool_settings.setdefault("eslint", {}),
+    )
+
+    command_default = action_default.build_command(ctx_default)
+    assert "--max-warnings" not in command_default

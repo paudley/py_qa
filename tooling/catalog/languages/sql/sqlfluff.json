@@ -14,11 +14,18 @@
     {
       "name": "lint",
       "command": {
-        "strategy": "command_sqlfluff",
+        "strategy": "command_option_map",
         "config": {
           "base": ["sqlfluff", "lint", "--format", "json"],
-          "is_fix": false,
-          "isFix": false
+          "appendFiles": false,
+          "options": [
+            {"setting": ["config", "config_path"], "type": "path", "flag": "--config"},
+            {"setting": "dialect", "type": "value", "flag": "--dialect", "defaultFrom": "execution.sql_dialect"},
+            {"setting": "templater", "type": "value", "flag": "--templater"},
+            {"setting": "rules", "type": "args", "flag": "--rules"},
+            {"setting": "processes", "type": "value", "flag": "--processes"},
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "description": "Lint SQL files using sqlfluff.",
@@ -32,11 +39,18 @@
     {
       "name": "fix",
       "command": {
-        "strategy": "command_sqlfluff",
+        "strategy": "command_option_map",
         "config": {
           "base": ["sqlfluff", "fix", "--force"],
-          "is_fix": true,
-          "isFix": true
+          "appendFiles": false,
+          "options": [
+            {"setting": ["config", "config_path"], "type": "path", "flag": "--config"},
+            {"setting": "dialect", "type": "value", "flag": "--dialect", "defaultFrom": "execution.sql_dialect"},
+            {"setting": "templater", "type": "value", "flag": "--templater"},
+            {"setting": "rules", "type": "args", "flag": "--rules"},
+            {"setting": "processes", "type": "value", "flag": "--processes"},
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "isFix": true,

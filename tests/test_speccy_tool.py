@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import speccy_command
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -33,7 +33,7 @@ def test_speccy_command_build(tmp_path: Path) -> None:
         settings={"ruleset": tmp_path / "rules.yaml", "skip": ["no-empty-servers"]},
     )
 
-    builder = speccy_command(_speccy_config())
+    builder = command_option_map(_speccy_config())
     action = ToolAction(name="lint", command=builder)
 
     command = action.build_command(ctx)

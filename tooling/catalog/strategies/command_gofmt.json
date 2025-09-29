@@ -1,6 +1,0 @@
-{
-  "schemaVersion": "1.0.0",
-  "id": "command_gofmt",
-  "type": "command",
-  "implementation": "pyqa.tooling.strategies.gofmt_command"
-}

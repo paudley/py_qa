@@ -152,6 +152,25 @@ def test_bandit_settings_extend_command(tmp_path: Path) -> None:
     assert any(str((tmp_path / "custom").resolve()) in part for part in cmd)
 
 
+def test_bandit_defaults_follow_config(tmp_path: Path) -> None:
+    cfg = Config()
+    cfg.severity.bandit_level = "high"
+    cfg.severity.bandit_confidence = "low"
+    cfg.tool_settings["bandit"] = {}
+    tool = _tool("bandit")
+    action = tool.actions[0]
+    ctx = ToolContext(
+        cfg=cfg,
+        root=tmp_path,
+        files=[],
+        settings=cfg.tool_settings["bandit"],
+    )
+
+    cmd = action.build_command(ctx)
+    assert "--severity-level" in cmd and "high" in cmd
+    assert "--confidence-level" in cmd and "low" in cmd
+
+
 def test_isort_settings(tmp_path: Path) -> None:
     cfg = Config()
     cfg.tool_settings["isort"] = {
@@ -278,7 +297,7 @@ def test_pylint_init_import_false(tmp_path: Path) -> None:
     assert "--init-import=n" in cmd
 
 
-def test_mypy_defaults_include_strict_flags(tmp_path: Path) -> None:
+def test_mypy_defaults_are_standard_mode(tmp_path: Path) -> None:
     cfg = Config()
     tool = _tool("mypy")
     action = tool.actions[0]
@@ -294,7 +313,16 @@ def test_mypy_defaults_include_strict_flags(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    expected_flags = {
+    baseline_flags = {
+        "--show-error-codes",
+        "--show-column-numbers",
+        "--exclude-gitignore",
+        "--sqlite-cache",
+    }
+    for flag in baseline_flags:
+        assert flag in cmd
+
+    strict_flags = {
         "--strict",
         "--warn-unused-ignores",
         "--warn-redundant-casts",
@@ -303,13 +331,63 @@ def test_mypy_defaults_include_strict_flags(tmp_path: Path) -> None:
         "--disallow-any-generics",
         "--check-untyped-defs",
         "--no-implicit-reexport",
-        "--show-error-codes",
-        "--show-column-numbers",
-        "--exclude-gitignore",
-        "--sqlite-cache",
     }
-    for flag in expected_flags:
+    for flag in strict_flags:
+        assert flag not in cmd
+    assert "--ignore-missing-imports" not in cmd
+
+
+def test_mypy_strict_mode_flags(tmp_path: Path) -> None:
+    cfg = Config()
+    cfg.strictness.type_checking = "strict"
+    tool = _tool("mypy")
+    action = tool.actions[0]
+
+    module = tmp_path / "module.py"
+    module.write_text("from typing import Any\n", encoding="utf-8")
+
+    ctx = ToolContext(
+        cfg=cfg,
+        root=tmp_path,
+        files=[module],
+        settings=cfg.tool_settings["mypy"],
+    )
+
+    cmd = action.build_command(ctx)
+    strict_flags = {
+        "--strict",
+        "--warn-unused-ignores",
+        "--warn-redundant-casts",
+        "--warn-unreachable",
+        "--disallow-untyped-decorators",
+        "--disallow-any-generics",
+        "--check-untyped-defs",
+        "--no-implicit-reexport",
+    }
+    for flag in strict_flags:
         assert flag in cmd
+    assert "--ignore-missing-imports" not in cmd
+
+
+def test_mypy_lenient_mode_enables_ignore_missing(tmp_path: Path) -> None:
+    cfg = Config()
+    cfg.strictness.type_checking = "lenient"
+    tool = _tool("mypy")
+    action = tool.actions[0]
+
+    module = tmp_path / "module.py"
+    module.write_text("from typing import Any\n", encoding="utf-8")
+
+    ctx = ToolContext(
+        cfg=cfg,
+        root=tmp_path,
+        files=[module],
+        settings=cfg.tool_settings["mypy"],
+    )
+
+    cmd = action.build_command(ctx)
+    assert "--strict" not in cmd
+    assert "--ignore-missing-imports" in cmd
 
 
 def test_mypy_defaults_python_version(tmp_path: Path) -> None:
@@ -519,6 +597,35 @@ def test_tsc_settings(tmp_path: Path) -> None:
     cmd = action.build_command(ctx)
     assert "--project" in cmd and str((tmp_path / "tsconfig.json").resolve()) in cmd
     assert "--watch" in cmd
+
+
+def test_tsc_defaults_follow_strictness(tmp_path: Path) -> None:
+    cfg = Config()
+    cfg.strictness.type_checking = "strict"
+    tool = _tool("tsc")
+    action = tool.actions[0]
+    ctx = ToolContext(
+        cfg=cfg,
+        root=tmp_path,
+        files=[],
+        settings=cfg.tool_settings.setdefault("tsc", {}),
+    )
+
+    cmd = action.build_command(ctx)
+    assert "--strict" in cmd
+
+    cfg_lenient = Config()
+    cfg_lenient.tool_settings.pop("tsc", None)
+    cfg_lenient.strictness.type_checking = "lenient"
+    ctx_lenient = ToolContext(
+        cfg=cfg_lenient,
+        root=tmp_path,
+        files=[],
+        settings=cfg_lenient.tool_settings.setdefault("tsc", {}),
+    )
+
+    cmd_lenient = action.build_command(ctx_lenient)
+    assert "--strict" not in cmd_lenient
 
 
 def test_golangci_settings(tmp_path: Path) -> None:

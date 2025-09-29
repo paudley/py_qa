@@ -10,12 +10,49 @@
     "minVersion": "3.3.0",
     "versionCommand": ["dotenv-linter", "--version"]
   },
+  "options": [
+    {
+      "name": "exclude",
+      "type": "path",
+      "description": "Directories or files to exclude from linting."
+    },
+    {
+      "name": "skip",
+      "type": "list[str]",
+      "description": "Rules to skip during linting (e.g. LeadingCharacter)."
+    },
+    {
+      "name": "schema",
+      "type": "path",
+      "description": "JSON schema used to validate dotenv files."
+    },
+    {
+      "name": "recursive",
+      "type": "bool",
+      "description": "Recurse into directories when linting."
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to dotenv-linter."
+    }
+  ],
   "actions": [
     {
       "name": "lint",
       "command": {
-        "strategy": "command_dotenv_linter",
-        "config": {}
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["dotenv-linter", "--no-color", "--quiet"],
+          "appendFiles": false,
+          "options": [
+            {"setting": "exclude", "type": "path", "flag": "--exclude"},
+            {"setting": "skip", "type": "args", "flag": "--skip"},
+            {"setting": "schema", "type": "path", "flag": "--schema"},
+            {"setting": "recursive", "type": "flag", "flag": "--recursive"},
+            {"setting": "args", "type": "args"}
+          ]
+        }
       },
       "description": "Lint .env files using dotenv-linter.",
       "parser": {

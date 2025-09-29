@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import prettier_command
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -43,7 +43,7 @@ def test_prettier_format_command_build(tmp_path: Path) -> None:
         },
     )
 
-    builder = prettier_command(_prettier_command_config("format"))
+    builder = command_option_map(_prettier_command_config("format"))
     action = ToolAction(name="format", command=builder, append_files=False)
 
     command = action.build_command(ctx)
@@ -65,7 +65,7 @@ def test_prettier_check_command_build(tmp_path: Path) -> None:
         settings={},
     )
 
-    builder = prettier_command(_prettier_command_config("check"))
+    builder = command_option_map(_prettier_command_config("check"))
     action = ToolAction(name="check", command=builder)
 
     command = action.build_command(ctx)

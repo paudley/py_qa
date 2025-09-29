@@ -66,12 +66,25 @@
     {
       "name": "lint",
       "command": {
-        "strategy": "command_golangci_lint",
+        "strategy": "command_option_map",
         "config": {
-          "base": ["golangci-lint", "run", "--out-format", "json"]
+          "base": ["golangci-lint", "run", "--out-format", "json"],
+          "appendFiles": false,
+          "options": [
+            {"setting": "config", "type": "path", "flag": "--config"},
+            {"setting": "deadline", "type": "value", "flag": "--deadline"},
+            {"setting": ["enable-all", "enable_all"], "type": "flag", "flag": "--enable-all", "default": true},
+            {"setting": "enable", "type": "args", "flag": "--enable"},
+            {"setting": "disable", "type": "args", "flag": "--disable"},
+            {"setting": "tests", "type": "value", "flag": "--tests", "transform": "bool_to_str"},
+            {"setting": "issues-exit-code", "type": "value", "flag": "--issues-exit-code"},
+            {"setting": "build-tags", "type": "args", "flag": "--build-tags", "joinWith": ","},
+            {"setting": "skip-dirs", "type": "args", "flag": "--skip-dirs"},
+            {"setting": "skip-files", "type": "args", "flag": "--skip-files"},
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
-      "appendFiles": false,
       "description": "Run golangci-lint across Go packages.",
       "parser": {
         "strategy": "parser_json",

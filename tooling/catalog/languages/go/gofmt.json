@@ -8,13 +8,24 @@
     "type": "binary",
     "versionCommand": ["go", "version"]
   },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to gofmt."
+    }
+  ],
   "actions": [
     {
       "name": "format",
       "command": {
-        "strategy": "command_gofmt",
+        "strategy": "command_option_map",
         "config": {
-          "base": ["gofmt", "-w"]
+          "base": ["gofmt", "-w"],
+          "appendFiles": false,
+          "options": [
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "isFix": true,
@@ -23,9 +34,13 @@
     {
       "name": "check",
       "command": {
-        "strategy": "command_gofmt",
+        "strategy": "command_option_map",
         "config": {
-          "base": ["gofmt", "-l"]
+          "base": ["gofmt", "-l"],
+          "appendFiles": false,
+          "options": [
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "description": "List Go files requiring gofmt.",

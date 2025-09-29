@@ -11,13 +11,43 @@
     "package": "phplint",
     "versionCommand": ["phplint", "--version"]
   },
+  "options": [
+    {
+      "name": "config",
+      "type": "path",
+      "description": "Configuration file passed to phplint (--configuration).",
+      "aliases": ["configuration"]
+    },
+    {
+      "name": "exclude",
+      "type": "path",
+      "description": "Paths excluded from linting."
+    },
+    {
+      "name": "include",
+      "type": "path",
+      "description": "Paths explicitly included for linting."
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to phplint."
+    }
+  ],
   "actions": [
     {
       "name": "lint",
       "command": {
-        "strategy": "command_phplint",
+        "strategy": "command_option_map",
         "config": {
-          "base": ["phplint"]
+          "base": ["phplint", "--no-ansi", "--no-progress"],
+          "appendFiles": false,
+          "options": [
+            {"setting": ["configuration", "config"], "type": "path", "flag": "--configuration"},
+            {"setting": "exclude", "type": "path", "flag": "--exclude"},
+            {"setting": "include", "type": "path", "flag": "--include"},
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "parser": {

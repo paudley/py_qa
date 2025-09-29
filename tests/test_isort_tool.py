@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import isort_command
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -41,7 +41,7 @@ def test_isort_sort_command(tmp_path: Path) -> None:
         },
     )
 
-    builder = isort_command(_isort_config("sort"))
+    builder = command_option_map(_isort_config("sort"))
     action = ToolAction(name="sort", command=builder, append_files=False)
 
     command = action.build_command(ctx)
@@ -56,7 +56,7 @@ def test_isort_check_command(tmp_path: Path) -> None:
     cfg = Config()
     ctx = ToolContext(cfg=cfg, root=tmp_path, files=[], settings={})
 
-    builder = isort_command(_isort_config("check"))
+    builder = command_option_map(_isort_config("check"))
     action = ToolAction(name="check", command=builder)
 
     command = action.build_command(ctx)

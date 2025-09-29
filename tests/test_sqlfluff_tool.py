@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import sqlfluff_command
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -41,7 +41,7 @@ def test_sqlfluff_lint_command(tmp_path: Path) -> None:
         },
     )
 
-    builder = sqlfluff_command(_sqlfluff_config("lint"))
+    builder = command_option_map(_sqlfluff_config("lint"))
     action = ToolAction(name="lint", command=builder, append_files=False)
 
     command = action.build_command(ctx)
@@ -60,7 +60,7 @@ def test_sqlfluff_fix_command(tmp_path: Path) -> None:
         settings={},
     )
 
-    builder = sqlfluff_command(_sqlfluff_config("fix"))
+    builder = command_option_map(_sqlfluff_config("fix"))
     action = ToolAction(name="fix", command=builder)
 
     command = action.build_command(ctx)

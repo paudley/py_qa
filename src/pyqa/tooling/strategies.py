@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, NamedTuple, cast
-from ..catalog.types import JSONValue
+from .catalog.types import JSONValue
 from collections.abc import Iterator
 
 from ..models import RawDiagnostic
@@ -30,47 +30,86 @@ from ..tools.builtin_helpers import (
 from .loader import CatalogIntegrityError
 
 __all__ = [
+    "command_download_binary",
+    "command_option_map",
+    "command_project_scanner",
+    "install_download_artifact",
     "json_parser",
     "parser_json_diagnostics",
     "text_parser",
-    "install_download_artifact",
-    "command_download_binary",
-    "command_project_scanner",
-    "command_option_map",
-    "black_command",
-    "isort_command",
-    "mypy_command",
-    "pylint_command",
-    "pyright_command",
-    "ruff_command",
-    "ruff_format_command",
-    "sqlfluff_command",
-    "perltidy_command",
-    "perlcritic_command",
-    "lualint_command",
-    "luacheck_command",
-    "phplint_command",
-    "dockerfilelint_command",
-    "checkmake_command",
-    "gts_command",
-    "tsc_command",
-    "cpplint_command",
-    "gofmt_command",
-    "cargo_fmt_command",
-    "cargo_clippy_command",
-    "mdformat_command",
-    "eslint_command",
-    "prettier_command",
-    "remark_lint_command",
-    "selene_command",
-    "golangci_lint_command",
-    "kube_linter_command",
-    "yamllint_command",
-    "speccy_command",
-    "command_stylelint",
-    "dotenv_linter_command",
-    "pyupgrade_command",
 ]
+
+
+def install_download_artifact(config: Mapping[str, JSONValue]) -> Callable[[ToolContext], None]:
+    """Return a catalog-driven installer for download artifacts."""
+
+    plain_config = cast(JSONValue, _as_plain_json(config))
+    if not isinstance(plain_config, Mapping):
+        raise CatalogIntegrityError("install_download_artifact: configuration must be an object")
+
+    download_config = plain_config.get("download")
+    if not isinstance(download_config, Mapping):
+        raise CatalogIntegrityError("install_download_artifact: 'download' must be an object")
+    download_mapping = cast(Mapping[str, JSONValue], download_config)
+
+    version_value = plain_config.get("version")
+    if version_value is not None and not isinstance(version_value, str):
+        raise CatalogIntegrityError("install_download_artifact: 'version' must be a string when provided")
+
+    context_label = plain_config.get("contextLabel")
+    if context_label is None:
+        context_value = "install_download_artifact.download"
+    elif isinstance(context_label, str) and context_label.strip():
+        context_value = context_label
+    else:
+        raise CatalogIntegrityError("install_download_artifact: 'contextLabel' must be a non-empty string")
+
+    def installer(ctx: ToolContext) -> None:
+        cache_root = ctx.root / ".lint-cache"
+        _download_artifact_for_tool(
+            download_mapping,
+            version=version_value,
+            cache_root=cache_root,
+            context=context_value,
+        )
+
+    return installer
+
+
+def _load_attribute(path: str, *, context: str) -> Any:
+    module_path, _, attribute = path.rpartition(".")
+    if not module_path:
+        raise CatalogIntegrityError(f"{context}: '{path}' is not a valid import path")
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as exc:
+        raise CatalogIntegrityError(f"{context}: unable to import module '{module_path}'") from exc
+    try:
+        return getattr(module, attribute)
+    except AttributeError as exc:
+        raise CatalogIntegrityError(f"{context}: module '{module_path}' has no attribute '{attribute}'") from exc
+
+
+def _require_string_sequence(
+    config: Mapping[str, JSONValue],
+    key: str,
+    *,
+    context: str,
+) -> tuple[str, ...]:
+    value = config.get(key)
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        raise CatalogIntegrityError(f"{context}: expected '{key}' to be an array of arguments")
+    result = tuple(str(item) for item in value)
+    if not result:
+        raise CatalogIntegrityError(f"{context}: '{key}' must contain at least one argument")
+    return result
+
+
+def _require_str(config: Mapping[str, JSONValue], key: str, *, context: str) -> str:
+    value = config.get(key)
+    if not isinstance(value, str):
+        raise CatalogIntegrityError(f"{context}: expected '{key}' to be a string")
+    return value
 
 
 @dataclass(slots=True)
@@ -102,30 +141,51 @@ class _OptionMapping:
             if self.join_separator is not None:
                 combined = self.join_separator.join(str(item) for item in values)
                 if self.flag:
-                    command.extend([self.flag, combined])
+                    if self.flag.endswith("="):
+                        command.append(f"{self.flag}{combined}")
+                    else:
+                        command.extend([self.flag, combined])
                 else:
                     command.append(combined)
                 return
             for entry in values:
                 if self.flag:
-                    command.extend([self.flag, str(entry)])
+                    text = str(entry)
+                    if self.flag.endswith("="):
+                        command.append(f"{self.flag}{text}")
+                    else:
+                        command.extend([self.flag, text])
                 else:
                     command.append(str(entry))
             return
         if self.option_type == "path":
-            if isinstance(value, (str, Path)) and str(value) in self.literal_values:
-                resolved = str(value)
+            values: Sequence[JSONValue]
+            if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+                values = cast(Sequence[JSONValue], value)
             else:
-                resolved = str(_resolve_path(ctx.root, value))
-            if self.flag:
-                command.extend([self.flag, resolved])
-            else:
-                command.append(resolved)
+                values = (value,)
+            for entry in values:
+                if entry is None:
+                    continue
+                if isinstance(entry, (str, Path)) and str(entry) in self.literal_values:
+                    resolved = str(entry)
+                else:
+                    resolved = str(_resolve_path(ctx.root, entry))
+                if self.flag:
+                    if self.flag.endswith("="):
+                        command.append(f"{self.flag}{resolved}")
+                    else:
+                        command.extend([self.flag, resolved])
+                else:
+                    command.append(resolved)
             return
         if self.option_type == "value":
             text = str(value)
             if self.flag:
-                command.extend([self.flag, text])
+                if self.flag.endswith("="):
+                    command.append(f"{self.flag}{text}")
+                else:
+                    command.extend([self.flag, text])
             else:
                 command.append(text)
             return
@@ -171,6 +231,26 @@ class _OptionMapping:
             return _python_version_number(_coerce_version_string(value, ctx))
         if self.transform == "pyupgrade_flag":
             return _pyupgrade_flag_from_version(_coerce_version_string(value, ctx))
+        if self.transform == "strictness_is_strict":
+            if isinstance(value, str):
+                return value.strip().lower() == "strict"
+            if isinstance(value, bool):
+                return value
+            return bool(value)
+        if self.transform == "strictness_is_lenient":
+            if isinstance(value, str):
+                return value.strip().lower() == "lenient"
+            return False
+        if self.transform == "bool_to_yn":
+            bool_value = _as_bool(value)
+            if bool_value is None:
+                bool_value = bool(value)
+            return "y" if bool_value else "n"
+        if self.transform == "bool_to_str":
+            bool_value = _as_bool(value)
+            if bool_value is None:
+                bool_value = bool(value)
+            return "true" if bool_value else "false"
         return value
 
 
@@ -182,16 +262,23 @@ def _resolve_default_reference(token: str, ctx: ToolContext) -> JSONValue | None
         "severity.bandit_level": ctx.cfg.severity.bandit_level,
         "severity.bandit_confidence": ctx.cfg.severity.bandit_confidence,
         "severity.pylint_fail_under": ctx.cfg.severity.pylint_fail_under,
+        "severity.max_warnings": ctx.cfg.severity.max_warnings,
         "strictness.type_checking": ctx.cfg.strictness.type_checking,
+        "execution.sql_dialect": getattr(ctx.cfg.execution, "sql_dialect", None),
     }
     if token in mapping:
         return mapping[token]
     if token == "python.target_version_tag":
         return _python_version_tag(_python_target_version(ctx))
+    if token == "python.target_version":
+        return _python_target_version(ctx)
     if token == "python.target_version_number":
         return _python_version_number(_python_target_version(ctx))
-    if token == "pyupgrade.default_flag":
-        return _pyupgrade_flag_from_version(_python_target_version(ctx))
+    if token == "python.discover_pylint_plugins":
+        plugins = _discover_pylint_plugins(ctx.root)
+        return tuple(plugins)
+    if token == "tool.root":
+        return str(ctx.root)
     if token.startswith("tool_setting."):
         setting_name = token.split(".", 1)[1]
         return cast(JSONValue | None, _setting(ctx.settings, setting_name))
@@ -462,6 +549,67 @@ class _JsonDiagnosticExtractor:
             specs[field_name] = self._build_field_spec(field_name, raw_spec)
         return specs
 
+    def _build_field_spec(self, name: str, raw_spec: Any) -> _FieldSpec:
+        """Create a field specification for a single diagnostic attribute."""
+
+        if isinstance(raw_spec, str):
+            path_tokens = _tokenize_path(raw_spec, allow_wildcards=False)
+            return _FieldSpec(
+                name=name,
+                path=path_tokens,
+                value=None,
+                has_value=False,
+                default=None,
+                has_default=False,
+                remap={},
+            )
+
+        if not isinstance(raw_spec, Mapping):
+            raise CatalogIntegrityError(
+                f"parser_json_diagnostics: mapping for field '{name}' must be a string or object"
+            )
+
+        path_value = raw_spec.get("path")
+        if path_value is None:
+            path_tokens: tuple[_PathComponent, ...] | None = None
+        elif isinstance(path_value, str):
+            path_tokens = _tokenize_path(path_value, allow_wildcards=False)
+        else:
+            raise CatalogIntegrityError(
+                f"parser_json_diagnostics: field '{name}' has non-string 'path' configuration"
+            )
+
+        const_value = raw_spec.get("value")
+        has_const = "value" in raw_spec
+
+        default_value = raw_spec.get("default")
+        has_default = "default" in raw_spec
+
+        map_value = raw_spec.get("map")
+        remap: dict[str, Any] = {}
+        if map_value is not None:
+            if not isinstance(map_value, Mapping):
+                raise CatalogIntegrityError(
+                    f"parser_json_diagnostics: field '{name}' has non-object 'map' configuration"
+                )
+            for key, mapped_value in map_value.items():
+                if not isinstance(key, str):
+                    raise CatalogIntegrityError(
+                        f"parser_json_diagnostics: field '{name}' mapping keys must be strings"
+                    )
+                remap[key.casefold()] = mapped_value
+                remap[key] = mapped_value
+
+        return _FieldSpec(
+            name=name,
+            path=path_tokens,
+            value=const_value,
+            has_value=has_const,
+            default=default_value,
+            has_default=has_default,
+            remap=remap,
+        )
+
 
 @dataclass(slots=True)
 class _OptionCommandStrategy(CommandBuilder):
@@ -591,63 +739,6 @@ def _parse_option_mapping(entry: Mapping[str, Any], *, context: str) -> _OptionM
         default_from=default_from_value,
         transform=transform_value,
     )
-
-    def _build_field_spec(self, name: str, raw_spec: Any) -> _FieldSpec:
-        """Create a field specification for a single diagnostic attribute."""
-
-        if isinstance(raw_spec, str):
-            path_tokens = _tokenize_path(raw_spec, allow_wildcards=False)
-            return _FieldSpec(
-                name=name,
-                path=path_tokens,
-                value=None,
-                has_value=False,
-                default=None,
-                has_default=False,
-                remap={},
-            )
-
-        if not isinstance(raw_spec, Mapping):
-            raise CatalogIntegrityError(
-                f"parser_json_diagnostics: mapping for field '{name}' must be a string or object"
-            )
-
-        path_value = raw_spec.get("path")
-        if path_value is None:
-            path_tokens: tuple[_PathComponent, ...] | None = None
-        elif isinstance(path_value, str):
-            path_tokens = _tokenize_path(path_value, allow_wildcards=False)
-        else:
-            raise CatalogIntegrityError(f"parser_json_diagnostics: field '{name}' has non-string 'path' configuration")
-
-        const_value = raw_spec.get("value")
-        has_const = "value" in raw_spec
-
-        default_value = raw_spec.get("default")
-        has_default = "default" in raw_spec
-
-        map_value = raw_spec.get("map")
-        remap: dict[str, Any] = {}
-        if map_value is not None:
-            if not isinstance(map_value, Mapping):
-                raise CatalogIntegrityError(
-                    f"parser_json_diagnostics: field '{name}' has non-object 'map' configuration"
-                )
-            for key, mapped_value in map_value.items():
-                if not isinstance(key, str):
-                    raise CatalogIntegrityError(f"parser_json_diagnostics: field '{name}' mapping keys must be strings")
-                remap[key.casefold()] = mapped_value
-                remap[key] = mapped_value
-
-        return _FieldSpec(
-            name=name,
-            path=path_tokens,
-            value=const_value,
-            has_value=has_const,
-            default=default_value,
-            has_default=has_default,
-            remap=remap,
-        )
 
 
 def _coerce_int(value: Any | None) -> int | None:
@@ -809,6 +900,7 @@ class _CommandOption:
     negate_flag: str | None
     literal_values: tuple[str, ...]
     default: Any | None
+    default_from: str | None
 
     def apply(self, *, ctx: ToolContext, command: list[str]) -> None:
         """Append CLI arguments derived from the configured option.
@@ -821,6 +913,8 @@ class _CommandOption:
         raw_value = _setting(ctx.settings, self.primary, *self.aliases)
         if raw_value is None and self.default is not None:
             raw_value = self.default
+        if raw_value is None and self.default_from is not None:
+            raw_value = _resolve_default_reference(self.default_from, ctx)
         if raw_value is None:
             return
         if self.kind == "args":
@@ -1107,6 +1201,13 @@ def _parse_command_option(entry: Any, *, index: int) -> _CommandOption:
         raise CatalogIntegrityError(f"{context}: 'literalValues' must be a string or array of strings")
 
     default_value = entry.get("default")
+    default_from_value = entry.get("defaultFrom")
+    if default_from_value is None:
+        default_from = None
+    elif isinstance(default_from_value, str):
+        default_from = default_from_value
+    else:
+        raise CatalogIntegrityError(f"{context}: 'defaultFrom' must be a string when provided")
 
     return _CommandOption(
         primary=names[0],
@@ -1117,6 +1218,7 @@ def _parse_command_option(entry: Any, *, index: int) -> _CommandOption:
         negate_flag=negate_flag,
         literal_values=literal_values,
         default=default_value,
+        default_from=default_from,
     )
 
 
@@ -1379,1840 +1481,6 @@ def _parse_project_target_plan(entry: Any) -> _ProjectTargetPlan:
         filter_excluded=filter_excluded,
         prefix=prefix,
     )
-
-
-@dataclass(slots=True)
-class _SeleneStrategy(CommandBuilder):
-    """Command builder tailored for the Selene Lua linter."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        display_style = _setting(settings, "display-style", "display_style")
-        if not display_style:
-            display_style = "Json2"
-        cmd.extend(["--display-style", str(display_style)])
-
-        color = _setting(settings, "color")
-        if not color:
-            color = "Never"
-        cmd.extend(["--color", str(color)])
-
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-
-        for pattern in _settings_list(_setting(settings, "pattern")):
-            cmd.extend(["--pattern", str(pattern)])
-
-        num_threads = _setting(settings, "num-threads", "num_threads")
-        if num_threads is not None:
-            cmd.extend(["--num-threads", str(num_threads)])
-
-        if _as_bool(_setting(settings, "allow-warnings", "allow_warnings")):
-            cmd.append("--allow-warnings")
-
-        if _as_bool(_setting(settings, "no-exclude", "no_exclude")):
-            cmd.append("--no-exclude")
-
-        if _as_bool(_setting(settings, "quiet")):
-            cmd.append("--quiet")
-
-        if _as_bool(_setting(settings, "no-summary", "no_summary")):
-            cmd.append("--no-summary")
-
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
-
-        return tuple(cmd)
-
-
-def selene_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for Selene."""
-
-    base_args = _require_string_sequence(config, "base", context="command_selene")
-    return _SeleneStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _GolangciLintStrategy(CommandBuilder):
-    """Command builder that replicates golangci-lint CLI behaviour."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-
-        deadline = _setting(settings, "deadline")
-        if deadline:
-            cmd.extend(["--deadline", str(deadline)])
-
-        enable_all_setting = _setting(settings, "enable-all", "enable_all")
-        if enable_all_setting is None or _as_bool(enable_all_setting) is not False:
-            if "--enable-all" not in cmd:
-                cmd.append("--enable-all")
-
-        for item in _settings_list(_setting(settings, "enable")):
-            cmd.extend(["--enable", str(item)])
-
-        for item in _settings_list(_setting(settings, "disable")):
-            cmd.extend(["--disable", str(item)])
-
-        tests = _as_bool(_setting(settings, "tests"))
-        if tests is not None:
-            cmd.extend(["--tests", "true" if tests else "false"])
-
-        issues_exit_code = _setting(settings, "issues-exit-code", "issues_exit_code")
-        if issues_exit_code is not None:
-            cmd.extend(["--issues-exit-code", str(issues_exit_code)])
-
-        build_tags = _settings_list(_setting(settings, "build-tags", "build_tags"))
-        if build_tags:
-            cmd.extend(["--build-tags", ",".join(build_tags)])
-
-        for pattern in _settings_list(_setting(settings, "skip-files", "skip_files")):
-            cmd.extend(["--skip-files", str(pattern)])
-
-        for pattern in _settings_list(_setting(settings, "skip-dirs", "skip_dirs")):
-            cmd.extend(["--skip-dirs", str(pattern)])
-
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
-
-        return tuple(cmd)
-
-
-def golangci_lint_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for golangci-lint."""
-
-    base_args = _require_string_sequence(config, "base", context="command_golangci_lint")
-    return _GolangciLintStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _KubeLinterStrategy(CommandBuilder):
-    """Command builder for kube-linter invocations."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-
-        root = ctx.root
-        settings = ctx.settings
-
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-
-        if _as_bool(_setting(settings, "fail-if-no-objects-found")):
-            cmd.append("--fail-if-no-objects-found")
-
-        if _as_bool(_setting(settings, "fail-on-invalid-resource")):
-            cmd.append("--fail-on-invalid-resource")
-
-        if _as_bool(_setting(settings, "verbose")):
-            cmd.append("--verbose")
-
-        if _as_bool(_setting(settings, "add-all-built-in")):
-            cmd.append("--add-all-built-in")
-
-        if _as_bool(_setting(settings, "do-not-auto-add-defaults")):
-            cmd.append("--do-not-auto-add-defaults")
-
-        for include in _settings_list(_setting(settings, "include")):
-            cmd.extend(["--include", str(include)])
-
-        for exclude in _settings_list(_setting(settings, "exclude")):
-            cmd.extend(["--exclude", str(exclude)])
-
-        for path in _settings_list(_setting(settings, "ignore-paths", "ignore_paths")):
-            cmd.extend(["--ignore-paths", str(_resolve_path(root, path))])
-
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
-
-        return tuple(cmd)
-
-
-def kube_linter_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for kube-linter."""
-
-    base_args = _require_string_sequence(config, "base", context="command_kube_linter")
-    return _KubeLinterStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _EslintStrategy(CommandBuilder):
-    """Command builder accommodating ESLint lint and fix actions."""
-
-    base: tuple[str, ...]
-    is_fix: bool = False
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-
-        for ext in _settings_list(_setting(settings, "ext", "extensions")):
-            cmd.extend(["--ext", str(ext)])
-
-        ignore_path = _setting(settings, "ignore-path", "ignore_path")
-        if ignore_path:
-            cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
-
-        resolve_plugins = _setting(
-            settings,
-            "resolve-plugins-relative-to",
-            "resolve_plugins_relative_to",
-        )
-        if resolve_plugins:
-            cmd.extend(
-                [
-                    "--resolve-plugins-relative-to",
-                    str(_resolve_path(root, resolve_plugins)),
-                ],
-            )
-
-        for directory in _settings_list(_setting(settings, "rulesdir", "rules-dir")):
-            cmd.extend(["--rulesdir", str(_resolve_path(root, directory))])
-
-        max_warnings = _setting(settings, "max-warnings", "max_warnings")
-        if max_warnings is not None:
-            cmd.extend(["--max-warnings", str(max_warnings)])
-
-        cache_value = _as_bool(_setting(settings, "cache"))
-        if cache_value is True:
-            cmd.append("--cache")
-        elif cache_value is False:
-            cmd.append("--no-cache")
-
-        cache_location = _setting(settings, "cache-location", "cache_location")
-        if cache_location:
-            cmd.extend(["--cache-location", str(_resolve_path(root, cache_location))])
-
-        fix_type = _settings_list(_setting(settings, "fix-type", "fix_type"))
-        if fix_type:
-            cmd.extend(["--fix-type", ",".join(fix_type)])
-
-        if _as_bool(_setting(settings, "quiet")):
-            cmd.append("--quiet")
-
-        no_error_unmatched = _as_bool(
-            _setting(
-                settings,
-                "no-error-on-unmatched-pattern",
-                "no_error_on_unmatched_pattern",
-            ),
-        )
-        if no_error_unmatched is True:
-            cmd.append("--no-error-on-unmatched-pattern")
-        elif no_error_unmatched is False and not self.is_fix:
-            cmd.append("--error-on-unmatched-pattern")
-
-        report_unused = _setting(
-            settings,
-            "report-unused-disable-directives",
-            "report_unused_disable_directives",
-        )
-        if report_unused:
-            cmd.extend(
-                [
-                    "--report-unused-disable-directives",
-                    str(report_unused),
-                ],
-            )
-
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
-
-        return tuple(cmd)
-
-
-def eslint_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for ESLint."""
-
-    base_args = _require_string_sequence(config, "base", context="command_eslint")
-    is_fix_raw = config.get("isFix")
-    if is_fix_raw is None:
-        is_fix = False
-    elif isinstance(is_fix_raw, bool):
-        is_fix = is_fix_raw
-    else:
-        raise CatalogIntegrityError("command_eslint: 'isFix' must be a boolean when provided")
-    return _EslintStrategy(base=base_args, is_fix=is_fix)
-
-
-@dataclass(slots=True)
-class _RuffStrategy(CommandBuilder):
-    """Command builder wrapping ruff lint/fix behaviour."""
-
-    base: tuple[str, ...]
-    mode: str
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-
-        for option in ("select", "ignore", "extend-select", "extend-ignore"):
-            values = _settings_list(_setting(settings, option))
-            if values:
-                cmd.extend([f"--{option}", ",".join(values)])
-
-        line_length = _setting(settings, "line-length")
-        if line_length is None:
-            line_length = ctx.cfg.execution.line_length
-        if line_length is not None:
-            cmd.extend(["--line-length", str(line_length)])
-
-        target_version = _setting(settings, "target-version")
-        if target_version:
-            cmd.extend(["--target-version", str(target_version)])
-        else:
-            cmd.extend(["--target-version", _python_version_tag(_python_target_version(ctx))])
-
-        per_file_ignores = _settings_list(_setting(settings, "per-file-ignores"))
-        if per_file_ignores:
-            cmd.extend(["--per-file-ignores", ";".join(per_file_ignores)])
-
-        exclude = _settings_list(_setting(settings, "exclude"))
-        if exclude:
-            cmd.extend(["--exclude", ",".join(exclude)])
-
-        extend_exclude = _settings_list(_setting(settings, "extend-exclude"))
-        if extend_exclude:
-            cmd.extend(["--extend-exclude", ",".join(extend_exclude)])
-
-        respect_gitignore = _as_bool(_setting(settings, "respect-gitignore"))
-        if respect_gitignore is True:
-            cmd.append("--respect-gitignore")
-        elif respect_gitignore is False:
-            cmd.append("--no-respect-gitignore")
-
-        preview = _as_bool(_setting(settings, "preview"))
-        if preview is True:
-            cmd.append("--preview")
-        elif preview is False:
-            cmd.append("--no-preview")
-
-        if _as_bool(_setting(settings, "unsafe-fixes")):
-            cmd.append("--unsafe-fixes")
-
-        if self.mode == "lint":
-            if _as_bool(_setting(settings, "fix")):
-                cmd.append("--fix")
-        elif _as_bool(_setting(settings, "fix")) is False:
-            cmd = [part for part in cmd if part != "--fix"]
-
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
-
-        return tuple(cmd)
-
-
-def ruff_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for ruff lint/fix runs."""
-
-    base_args = _require_string_sequence(config, "base", context="command_ruff")
-    mode_value = _require_str(config, "mode", context="command_ruff")
-    if mode_value not in {"lint", "fix"}:
-        raise CatalogIntegrityError("command_ruff: 'mode' must be 'lint' or 'fix'")
-    return _RuffStrategy(base=base_args, mode=mode_value)
-
-
-@dataclass(slots=True)
-class _RuffFormatStrategy(CommandBuilder):
-    """Command builder that wraps ruff format invocations."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-
-        line_length = _setting(settings, "line-length")
-        if line_length is None:
-            line_length = ctx.cfg.execution.line_length
-        if line_length is not None:
-            cmd.extend(["--line-length", str(line_length)])
-
-        target_version = _setting(settings, "target-version")
-        if target_version:
-            cmd.extend(["--target-version", str(target_version)])
-        else:
-            cmd.extend(["--target-version", _python_version_tag(_python_target_version(ctx))])
-
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
-
-        return tuple(cmd)
-
-
-def ruff_format_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for ruff format actions."""
-
-    base_args = _require_string_sequence(config, "base", context="command_ruff_format")
-    return _RuffFormatStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _BlackStrategy(CommandBuilder):
-    """Command builder providing Black formatter behaviour."""
-
-    base: tuple[str, ...]
-    mode: str
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-
-        line_length = _setting(settings, "line-length")
-        if line_length is not None:
-            cmd.extend(["--line-length", str(line_length)])
-
-        target_versions = _settings_list(_setting(settings, "target-version"))
-        if target_versions:
-            for version in target_versions:
-                cmd.extend(["--target-version", str(version)])
-        else:
-            cmd.extend(["--target-version", _python_version_tag(_python_target_version(ctx))])
-
-        if _as_bool(_setting(settings, "preview")):
-            cmd.append("--preview")
-
-        if _as_bool(_setting(settings, "skip-string-normalization")):
-            cmd.append("--skip-string-normalization")
-
-        if _as_bool(_setting(settings, "skip-magic-trailing-comma")):
-            cmd.append("--skip-magic-trailing-comma")
-
-        workers = _setting(settings, "workers")
-        if workers is not None:
-            cmd.extend(["-j", str(workers)])
-
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
-
-        return tuple(cmd)
-
-
-def black_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for Black."""
-
-    base_args = _require_string_sequence(config, "base", context="command_black")
-    mode_value = _require_str(config, "mode", context="command_black")
-    return _BlackStrategy(base=base_args, mode=mode_value)
-
-
-@dataclass(slots=True)
-class _IsortStrategy(CommandBuilder):
-    """Command builder that wraps isort CLI arguments."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        settings_path = _setting(settings, "settings-path", "config")
-        if settings_path:
-            cmd.extend(["--settings-path", str(_resolve_path(root, settings_path))])
-
-        profile = _setting(settings, "profile")
-        if profile:
-            cmd.extend(["--profile", str(profile)])
-        else:
-            cmd.extend(["--profile", "black"])
-
-        line_length = _setting(settings, "line-length")
-        if line_length is None:
-            line_length = ctx.cfg.execution.line_length
-        if line_length is not None:
-            cmd.extend(["--line-length", str(line_length)])
-
-        py_version = _setting(settings, "py", "python-version")
-        if py_version is not None:
-            cmd.extend(["--py", str(py_version)])
-        else:
-            cmd.extend(["--py", _python_version_number(_python_target_version(ctx))])
-
-        for option in ("multi-line", "indent", "wrap-length"):
-            value = _setting(settings, option, option.replace("-", "_"))
-            if value is not None:
-                cmd.extend([f"--{option}", str(value)])
-
-        src_paths = _settings_list(_setting(settings, "src"))
-        for path in src_paths:
-            cmd.extend(["--src", str(_resolve_path(root, path))])
-
-        for key in ("virtual-env", "conda-env"):
-            value = _setting(settings, key, key.replace("-", "_"))
-            if value:
-                cmd.extend([f"--{key}", str(_resolve_path(root, value))])
-
-        for skip in _settings_list(_setting(settings, "skip")):
-            cmd.extend(["--skip", str(skip)])
-
-        for skip in _settings_list(_setting(settings, "extend-skip", "extend_skip")):
-            cmd.extend(["--extend-skip", str(skip)])
-
-        for pattern in _settings_list(_setting(settings, "skip-glob", "skip_glob")):
-            cmd.extend(["--skip-glob", str(pattern)])
-
-        for pattern in _settings_list(_setting(settings, "extend-skip-glob", "extend_skip_glob")):
-            cmd.extend(["--extend-skip-glob", str(pattern)])
-
-        if _as_bool(_setting(settings, "filter-files", "filter_files")):
-            cmd.append("--filter-files")
-
-        if _as_bool(_setting(settings, "float-to-top", "float_to_top")):
-            cmd.append("--float-to-top")
-
-        if _as_bool(_setting(settings, "combine-as", "combine_as")):
-            cmd.append("--combine-as")
-
-        if _as_bool(_setting(settings, "combine-star", "combine_star")):
-            cmd.append("--combine-star")
-
-        color = _as_bool(_setting(settings, "color"))
-        if color is True:
-            cmd.append("--color")
-        elif color is False:
-            cmd.append("--no-color")
-
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
-
-        return tuple(cmd)
-
-
-def isort_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for isort."""
-
-    base_args = _require_string_sequence(config, "base", context="command_isort")
-    return _IsortStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _PrettierStrategy(CommandBuilder):
-    """Command builder that mirrors Prettier CLI argument handling."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-
-        parser = _setting(settings, "parser")
-        if parser:
-            cmd.extend(["--parser", str(parser)])
-
-        ignore_path = _setting(settings, "ignore-path", "ignore_path")
-        if ignore_path:
-            cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
-
-        for directory in _settings_list(
-            _setting(settings, "plugin-search-dir", "plugin_search_dir"),
-        ):
-            cmd.extend(["--plugin-search-dir", str(_resolve_path(root, directory))])
-
-        for plugin in _settings_list(_setting(settings, "plugin", "plugins")):
-            cmd.extend(["--plugin", str(plugin)])
-
-        loglevel = _setting(settings, "loglevel")
-        if loglevel:
-            cmd.extend(["--log-level", str(loglevel)])
-
-        precedence = _setting(settings, "config-precedence", "config_precedence")
-        if precedence:
-            cmd.extend(["--config-precedence", str(precedence)])
-
-        single_quote = _as_bool(_setting(settings, "single-quote", "single_quote"))
-        if single_quote is True:
-            cmd.append("--single-quote")
-        elif single_quote is False:
-            cmd.append("--no-single-quote")
-
-        tab_width = _setting(settings, "tab-width", "tab_width")
-        if tab_width is not None:
-            cmd.extend(["--tab-width", str(tab_width)])
-
-        use_tabs = _as_bool(_setting(settings, "use-tabs", "use_tabs"))
-        if use_tabs is True:
-            cmd.append("--use-tabs")
-        elif use_tabs is False:
-            cmd.append("--no-use-tabs")
-
-        trailing_comma = _setting(settings, "trailing-comma", "trailing_comma")
-        if trailing_comma:
-            cmd.extend(["--trailing-comma", str(trailing_comma)])
-
-        print_width = _setting(settings, "print-width", "print_width")
-        if print_width is None:
-            print_width = ctx.cfg.execution.line_length
-        if print_width is not None:
-            cmd.extend(["--print-width", str(print_width)])
-
-        semi = _as_bool(_setting(settings, "semi"))
-        if semi is True:
-            cmd.append("--semi")
-        elif semi is False:
-            cmd.append("--no-semi")
-
-        end_of_line = _setting(settings, "end-of-line", "end_of_line")
-        if end_of_line:
-            cmd.extend(["--end-of-line", str(end_of_line)])
-
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
-
-        return tuple(cmd)
-
-
-def prettier_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for Prettier."""
-
-    base_args = _require_string_sequence(config, "base", context="command_prettier")
-    return _PrettierStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _YamllintStrategy(CommandBuilder):
-    """Command builder that mirrors yamllint CLI behaviour."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        config_file = _setting(settings, "config-file", "config_file")
-        if config_file:
-            cmd.extend(["--config-file", str(_resolve_path(root, config_file))])
-
-        config_data = _setting(settings, "config-data", "config_data")
-        if config_data:
-            cmd.extend(["--config-data", str(config_data)])
-
-        if _as_bool(_setting(settings, "strict")):
-            cmd.append("--strict")
-
-        if "--format" not in cmd and "-f" not in cmd:
-            cmd.extend(["--format", "parsable"])
-
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
-
-        files = [str(path) for path in ctx.files]
-        if files:
-            cmd.extend(files)
-
-        return tuple(cmd)
-
-
-def yamllint_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for yamllint."""
-
-    base_args = _require_string_sequence(config, "base", context="command_yamllint")
-    return _YamllintStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _MypyStrategy(CommandBuilder):
-    """Command builder replicating mypy CLI behaviour."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        config_file = _setting(settings, "config", "config-file")
-        if config_file:
-            cmd.extend(["--config-file", str(_resolve_path(root, config_file))])
-
-        flag_map = {
-            "exclude-gitignore": "--exclude-gitignore",
-            "sqlite-cache": "--sqlite-cache",
-            "strict": "--strict",
-            "ignore-missing-imports": "--ignore-missing-imports",
-            "namespace-packages": "--namespace-packages",
-            "warn-unused-configs": "--warn-unused-configs",
-            "warn-return-any": "--warn-return-any",
-            "warn-redundant-casts": "--warn-redundant-casts",
-            "warn-unused-ignores": "--warn-unused-ignores",
-            "warn-unreachable": "--warn-unreachable",
-            "disallow-untyped-decorators": "--disallow-untyped-decorators",
-            "disallow-any-generics": "--disallow-any-generics",
-            "check-untyped-defs": "--check-untyped-defs",
-            "no-implicit-reexport": "--no-implicit-reexport",
-            "show-error-codes": "--show-error-codes",
-            "show-column-numbers": "--show-column-numbers",
-        }
-        for setting_name, flag in flag_map.items():
-            if _as_bool(_setting(settings, setting_name, setting_name.replace("-", "_"))):
-                cmd.append(flag)
-
-        python_version = _setting(settings, "python-version", "python_version")
-        if not python_version:
-            python_version = _python_target_version(ctx)
-        if python_version:
-            cmd.extend(["--python-version", str(python_version)])
-
-        python_exec = _setting(settings, "python-executable", "python_executable")
-        if python_exec:
-            cmd.extend(["--python-executable", str(_resolve_path(root, python_exec))])
-
-        plugins = _settings_list(_setting(settings, "plugins"))
-        for plugin in plugins:
-            cmd.extend(["--plugin", str(plugin)])
-
-        cache_dir = _setting(settings, "cache-dir", "cache_dir")
-        if cache_dir:
-            cmd.extend(["--cache-dir", str(_resolve_path(root, cache_dir))])
-
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
-
-        return tuple(cmd)
-
-
-def mypy_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for mypy."""
-
-    base_args = _require_string_sequence(config, "base", context="command_mypy")
-    return _MypyStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _PylintStrategy(CommandBuilder):
-    """Command builder mirroring pylint CLI behaviour."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        rcfile = _setting(settings, "rcfile", "config")
-        if rcfile:
-            cmd.extend(["--rcfile", str(_resolve_path(root, rcfile))])
-
-        explicit_plugins = _settings_list(_setting(settings, "load-plugins", "plugins"))
-        if explicit_plugins:
-            for plugin in explicit_plugins:
-                cmd.extend(["--load-plugins", str(plugin)])
-        else:
-            plugins = _discover_pylint_plugins(root)
-            if plugins:
-                cmd.extend(["--load-plugins", ",".join(plugins)])
-
-        disable = _settings_list(_setting(settings, "disable"))
-        if disable:
-            cmd.extend(["--disable", ",".join(disable)])
-
-        enable = _settings_list(_setting(settings, "enable"))
-        if enable:
-            cmd.extend(["--enable", ",".join(enable)])
-
-        jobs = _setting(settings, "jobs")
-        if jobs is not None:
-            cmd.extend(["-j", str(jobs)])
-
-        fail_under = _setting(settings, "fail-under", "fail_under")
-        if fail_under is not None:
-            cmd.extend(["--fail-under", str(fail_under)])
-
-        if _as_bool(_setting(settings, "exit-zero", "exit_zero")):
-            cmd.append("--exit-zero")
-
-        score = _setting(settings, "score")
-        if score is not None:
-            cmd.append(f"--score={'y' if _as_bool(score) else 'n'}")
-
-        reports = _setting(settings, "reports")
-        if reports is not None:
-            cmd.append(f"--reports={'y' if _as_bool(reports) else 'n'}")
-
-        line_length = _setting(settings, "max-line-length", "max_line_length")
-        if line_length is None:
-            line_length = ctx.cfg.execution.line_length
-        if line_length is not None:
-            cmd.extend(["--max-line-length", str(line_length)])
-
-        complexity = _setting(settings, "max-complexity", "max_complexity")
-        if complexity is None:
-            complexity = ctx.cfg.complexity.max_complexity
-        if complexity is not None:
-            cmd.extend(["--max-complexity", str(complexity)])
-
-        max_args = _setting(settings, "max-args", "max_args")
-        if max_args is None:
-            max_args = ctx.cfg.complexity.max_arguments
-        if max_args is not None:
-            cmd.extend(["--max-args", str(max_args)])
-
-        max_pos_args = _setting(settings, "max-positional-arguments", "max_positional_arguments")
-        if max_pos_args is None:
-            max_pos_args = ctx.cfg.complexity.max_arguments
-        if max_pos_args is not None:
-            cmd.extend(["--max-positional-arguments", str(max_pos_args)])
-
-        init_import = _setting(settings, "init-import", "init_import")
-        if init_import is not None:
-            cmd.append(f"--init-import={'y' if _as_bool(init_import) else 'n'}")
-
-        py_version = _setting(settings, "py-version", "py_version")
-        if py_version is None:
-            py_version = _python_target_version(ctx)
-        if py_version:
-            cmd.extend(["--py-version", str(py_version)])
-
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
-
-        return tuple(cmd)
-
-
-def pylint_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for pylint."""
-
-    base_args = _require_string_sequence(config, "base", context="command_pylint")
-    return _PylintStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _PyrightStrategy(CommandBuilder):
-    """Command builder replicating pyright CLI behaviour."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        project = _setting(settings, "project", "config")
-        if project:
-            cmd.extend(["--project", str(_resolve_path(root, project))])
-
-        venv_path = _setting(settings, "venv-path", "venv_path")
-        if venv_path:
-            cmd.extend(["--venv-path", str(_resolve_path(root, venv_path))])
-
-        pythonpath = _setting(settings, "pythonpath")
-        if pythonpath:
-            cmd.extend(["--pythonpath", str(_resolve_path(root, pythonpath))])
-
-        typeshed_path = _setting(settings, "typeshed-path", "typeshed_path")
-        if typeshed_path:
-            cmd.extend(["--typeshed-path", str(_resolve_path(root, typeshed_path))])
-
-        python_platform = _setting(settings, "python-platform", "python_platform")
-        if python_platform:
-            cmd.extend(["--pythonplatform", str(python_platform)])
-
-        python_version = _setting(settings, "python-version", "python_version")
-        if not python_version:
-            python_version = _python_target_version(ctx)
-        if python_version:
-            cmd.extend(["--pythonversion", str(python_version)])
-
-        if _as_bool(_setting(settings, "lib")):
-            cmd.append("--lib")
-
-        verifytypes = _setting(settings, "verifytypes")
-        if verifytypes:
-            cmd.extend(["--verifytypes", str(verifytypes)])
-
-        if _as_bool(_setting(settings, "ignoreexternal", "ignore-external")):
-            cmd.append("--ignoreexternal")
-
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
-
-        return tuple(cmd)
-
-
-def pyright_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for pyright."""
-
-    base_args = _require_string_sequence(config, "base", context="command_pyright")
-    return _PyrightStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _SqlfluffStrategy(CommandBuilder):
-    """Command builder modelling sqlfluff lint/fix behaviour."""
-
-    base: tuple[str, ...]
-    is_fix: bool = False
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        config_path = _setting(settings, "config", "config_path")
-        if config_path:
-            cmd.extend(["--config", str(_resolve_path(root, config_path))])
-
-        dialect = _setting(settings, "dialect") or getattr(ctx.cfg.execution, "sql_dialect", None)
-        if dialect:
-            cmd.extend(["--dialect", str(dialect)])
-
-        templater = _setting(settings, "templater")
-        if templater:
-            cmd.extend(["--templater", str(templater)])
-
-        for rule in _settings_list(_setting(settings, "rules")):
-            cmd.extend(["--rules", str(rule)])
-
-        processes = _setting(settings, "processes")
-        if processes is not None:
-            cmd.extend(["--processes", str(processes)])
-
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
-
-        return tuple(cmd)
-
-
-def sqlfluff_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for sqlfluff."""
-
-    base_args = _require_string_sequence(config, "base", context="command_sqlfluff")
-    is_fix_value = _as_bool(config.get("isFix")) if config.get("isFix") is not None else False
-    return _SqlfluffStrategy(base=base_args, is_fix=is_fix_value)
-
-
-@dataclass(slots=True)
-class _RemarkLintStrategy(CommandBuilder):
-    """Command builder that mirrors remark-lint CLI behaviour."""
-
-    base: tuple[str, ...]
-    is_fix: bool = False
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        if not self.is_fix and "--report" not in cmd:
-            cmd.extend(["--report", "json"])
-        if not self.is_fix and "--frail" not in cmd:
-            cmd.append("--frail")
-        if not self.is_fix and "--quiet" not in cmd:
-            cmd.append("--quiet")
-        if not self.is_fix and "--no-color" not in cmd:
-            cmd.append("--no-color")
-
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-
-        for plugin in _settings_list(_setting(settings, "use")):
-            cmd.extend(["--use", str(plugin)])
-
-        ignore_path = _setting(settings, "ignore-path", "ignore_path")
-        if ignore_path:
-            cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
-
-        for value in _settings_list(_setting(settings, "setting")):
-            cmd.extend(["--setting", str(value)])
-
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
-
-        files = [str(path) for path in ctx.files]
-        if files:
-            cmd.extend(files)
-        elif self.is_fix:
-            cmd.append(str(root))
-        if self.is_fix and "--output" not in cmd and "-o" not in cmd:
-            cmd.append("--output")
-
-        return tuple(cmd)
-
-
-@dataclass(slots=True)
-class _SpeccyStrategy(CommandBuilder):
-    """Command builder that configures Speccy lint invocations."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        if "--reporter" not in cmd:
-            cmd.extend(["--reporter", "json"])
-
-        ruleset = _setting(settings, "ruleset")
-        if ruleset:
-            cmd.extend(["--ruleset", str(_resolve_path(root, ruleset))])
-
-        for value in _settings_list(_setting(settings, "skip")):
-            cmd.extend(["--skip", str(value)])
-
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
-
-        files = [str(path) for path in ctx.files]
-        if files:
-            cmd.extend(files)
-
-        return tuple(cmd)
-
-
-def speccy_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for Speccy."""
-
-    base_args = _require_string_sequence(config, "base", context="command_speccy")
-    return _SpeccyStrategy(base=base_args)
-
-
-def remark_lint_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for remark-lint."""
-
-    base_args = _require_string_sequence(config, "base", context="command_remark_lint")
-    is_fix_raw = config.get("isFix")
-    if is_fix_raw is None:
-        is_fix = False
-    elif isinstance(is_fix_raw, bool):
-        is_fix = is_fix_raw
-    else:
-        raise CatalogIntegrityError("command_remark_lint: 'isFix' must be a boolean when provided")
-    return _RemarkLintStrategy(base=base_args, is_fix=is_fix)
-
-
-@dataclass(slots=True)
-class _StylelintStrategy(CommandBuilder):
-    """Command builder for stylelint supporting lint and fix modes."""
-
-    base: tuple[str, ...]
-    is_fix: bool = False
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-
-        config_basedir = _setting(settings, "config-basedir", "config_basedir")
-        if config_basedir:
-            cmd.extend(["--config-basedir", str(_resolve_path(root, config_basedir))])
-
-        ignore_path = _setting(settings, "ignore-path", "ignore_path")
-        if ignore_path:
-            cmd.extend(["--ignore-path", str(_resolve_path(root, ignore_path))])
-
-        custom_syntax = _setting(settings, "custom-syntax", "custom_syntax")
-        if custom_syntax:
-            cmd.extend(["--custom-syntax", str(custom_syntax)])
-
-        if _as_bool(_setting(settings, "allow-empty-input", "allow_empty_input")):
-            cmd.append("--allow-empty-input")
-
-        if _as_bool(_setting(settings, "disable-default-ignores", "disable_default_ignores")):
-            cmd.append("--disable-default-ignores")
-
-        if _as_bool(_setting(settings, "quiet")):
-            cmd.append("--quiet")
-
-        max_warnings = _setting(settings, "max-warnings", "max_warnings")
-        if max_warnings is not None:
-            cmd.extend(["--max-warnings", str(max_warnings)])
-
-        if not self.is_fix and "--formatter" not in cmd and "--custom-formatter" not in cmd:
-            cmd.extend(["--formatter", "json"])
-
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
-
-        return tuple(cmd)
-
-
-@dataclass(slots=True)
-class _DotenvLinterStrategy(CommandBuilder):
-    """Command builder that mirrors dotenv-linter argument handling."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        if "--no-color" not in cmd:
-            cmd.append("--no-color")
-        if "--quiet" not in cmd:
-            cmd.append("--quiet")
-
-        root = ctx.root
-        settings = ctx.settings
-
-        for exclude in _settings_list(_setting(settings, "exclude")):
-            cmd.extend(["--exclude", str(_resolve_path(root, exclude))])
-
-        for skip in _settings_list(_setting(settings, "skip")):
-            cmd.extend(["--skip", str(skip)])
-
-        schema = _setting(settings, "schema")
-        if schema:
-            cmd.extend(["--schema", str(_resolve_path(root, schema))])
-
-        if _as_bool(_setting(settings, "recursive")):
-            cmd.append("--recursive")
-
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
-
-        return tuple(cmd)
-
-
-def command_stylelint(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for stylelint."""
-
-    base_config = config.get("base")
-    if base_config is None:
-        base_args = ("stylelint",)
-    else:
-        base_tuple = _normalize_sequence(base_config)
-        if not base_tuple:
-            raise CatalogIntegrityError("command_stylelint: 'base' must contain at least one argument")
-        base_args = tuple(str(part) for part in base_tuple)
-
-    is_fix_value = config.get("isFix")
-    if isinstance(is_fix_value, bool):
-        is_fix = is_fix_value
-    elif is_fix_value is None:
-        is_fix = False
-    else:
-        raise CatalogIntegrityError("command_stylelint: 'isFix' must be a boolean")
-
-    return _StylelintStrategy(base=base_args, is_fix=is_fix)
-
-
-def dotenv_linter_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for dotenv-linter."""
-
-    base_config = config.get("base")
-    if base_config is None:
-        base_args = ("dotenv-linter",)
-    else:
-        base_tuple = _normalize_sequence(base_config)
-        if not base_tuple:
-            raise CatalogIntegrityError("dotenv_linter_command: 'base' must contain at least one argument")
-        base_args = tuple(str(part) for part in base_tuple)
-    return _DotenvLinterStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _PyupgradeStrategy(CommandBuilder):
-    """Command builder that applies pyupgrade-specific arguments."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        settings = ctx.settings
-
-        pyplus_value = _setting(settings, "pyplus", "py_plus", "py_version")
-        if pyplus_value:
-            flag = str(pyplus_value).strip()
-            if not flag.startswith("--"):
-                flag = _pyupgrade_flag_from_version(flag)
-            cmd.append(flag)
-        else:
-            cmd.append(_pyupgrade_flag_from_version(_python_target_version(ctx)))
-
-        bool_flags = {
-            "keep-mock": "--keep-mock",
-            "keep-runtime-typing": "--keep-runtime-typing",
-            "keep-percent-format": "--keep-percent-format",
-            "keep-annotations": "--keep-annotations",
-            "keep-logging-format": "--keep-logging-format",
-            "exit-zero-even-if-changed": "--exit-zero-even-if-changed",
-            "no-verify": "--no-verify",
-        }
-
-        for key, flag in bool_flags.items():
-            if _as_bool(_setting(settings, key, key.replace("-", "_"))):
-                cmd.append(flag)
-
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
-
-        return tuple(cmd)
-
-
-def pyupgrade_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for pyupgrade."""
-
-    base_config = config.get("base")
-    if base_config is None:
-        base_args = ("pyupgrade",)
-    else:
-        base_tuple = _normalize_sequence(base_config)
-        if not base_tuple:
-            raise CatalogIntegrityError("pyupgrade_command: 'base' must contain at least one argument")
-        base_args = tuple(str(part) for part in base_tuple)
-    return _PyupgradeStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _PerltidyStrategy(CommandBuilder):
-    """Command builder providing perltidy arguments."""
-
-    base: tuple[str, ...]
-    is_fix: bool
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        profile = _setting(settings, "profile", "configuration")
-        if profile:
-            cmd.extend(["--profile", str(_resolve_path(root, profile))])
-
-        extra = _settings_list(_setting(settings, "args"))
-        if extra:
-            cmd.extend(str(arg) for arg in extra)
-
-        if self.is_fix:
-            if "-b" not in cmd:
-                cmd.extend(["-b", '-bext=""'])
-            if "-q" not in cmd:
-                cmd.append("-q")
-        else:
-            if "--check-only" not in cmd:
-                cmd.append("--check-only")
-            if "-q" not in cmd:
-                cmd.append("-q")
-
-        return tuple(cmd)
-
-
-def perltidy_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for perltidy."""
-
-    base_args = _require_string_sequence(config, "base", context="command_perltidy")
-    is_fix_value = config.get("isFix")
-    is_fix = bool(is_fix_value) if isinstance(is_fix_value, bool) else False
-    return _PerltidyStrategy(base=base_args, is_fix=is_fix)
-
-
-@dataclass(slots=True)
-class _PerlCriticStrategy(CommandBuilder):
-    """Command builder providing perlcritic arguments."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        if "--nocolor" not in cmd:
-            cmd.append("--nocolor")
-        if "--verbose" not in cmd:
-            cmd.extend(["--verbose", "%f:%l:%c:%m (%p)"])
-
-        severity = _setting(settings, "severity")
-        if severity:
-            cmd.extend(["--severity", str(severity)])
-
-        theme = _setting(settings, "theme")
-        if theme:
-            cmd.extend(["--theme", str(theme)])
-
-        profile = _setting(settings, "profile", "configuration")
-        if profile:
-            cmd.extend(["--profile", str(_resolve_path(root, profile))])
-
-        for policy in _settings_list(_setting(settings, "include")):
-            cmd.extend(["--include", str(policy)])
-
-        for policy in _settings_list(_setting(settings, "exclude")):
-            cmd.extend(["--exclude", str(policy)])
-
-        extra = _settings_list(_setting(settings, "args"))
-        if extra:
-            cmd.extend(str(arg) for arg in extra)
-
-        return tuple(cmd)
-
-
-def perlcritic_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for perlcritic."""
-
-    base_args = _require_string_sequence(config, "base", context="command_perlcritic")
-    return _PerlCriticStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _LualintStrategy(CommandBuilder):
-    """Command builder that invokes the lualint shim."""
-
-    base: tuple[str, ...]
-    download: Mapping[str, Any]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cache_root = ctx.root / ".lint-cache"
-        script = _download_artifact_for_tool(
-            self.download,
-            version=None,
-            cache_root=cache_root,
-            context="command_lualint.download",
-        )
-        cmd = list(self.base)
-        cmd.append(str(script))
-
-        relaxed = _as_bool(_setting(ctx.settings, "relaxed"))
-        strict = _as_bool(_setting(ctx.settings, "strict"))
-        if relaxed:
-            cmd.append("-r")
-        if strict:
-            cmd.append("-s")
-
-        extra = _settings_list(_setting(ctx.settings, "args"))
-        if extra:
-            cmd.extend(str(arg) for arg in extra)
-        return tuple(cmd)
-
-
-def lualint_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for lualint."""
-
-    base_args = _require_string_sequence(config, "base", context="command_lualint")
-    download_config = config.get("download")
-    if not isinstance(download_config, Mapping):
-        raise CatalogIntegrityError("command_lualint: missing 'download' configuration")
-    return _LualintStrategy(base=base_args, download=download_config)
-
-
-@dataclass(slots=True)
-class _LuacheckStrategy(CommandBuilder):
-    """Command builder that mirrors luacheck CLI behaviour."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-
-        def ensure_flag(flag: str, *values: str) -> None:
-            if flag not in cmd:
-                cmd.append(flag)
-                cmd.extend(values)
-
-        ensure_flag("--formatter", "plain")
-        if "--codes" not in cmd:
-            cmd.append("--codes")
-        if "--ranges" not in cmd:
-            cmd.append("--ranges")
-        if "--no-color" not in cmd:
-            cmd.append("--no-color")
-
-        root = ctx.root
-        settings = ctx.settings
-
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-
-        line_length = _setting(settings, "max-line-length", "max_line_length")
-        if line_length is None:
-            line_length = ctx.cfg.execution.line_length
-        if line_length is not None:
-            ensure_flag("--max-line-length", str(line_length))
-
-        max_code_length = _setting(settings, "max-code-line-length", "max_code_line_length")
-        if max_code_length is None:
-            max_code_length = line_length
-        if max_code_length is not None:
-            ensure_flag("--max-code-line-length", str(max_code_length))
-
-        max_string_length = _setting(settings, "max-string-line-length", "max_string_line_length")
-        if max_string_length is None:
-            max_string_length = line_length
-        if max_string_length is not None:
-            ensure_flag("--max-string-line-length", str(max_string_length))
-
-        max_comment_length = _setting(settings, "max-comment-line-length", "max_comment_line_length")
-        if max_comment_length is None:
-            max_comment_length = line_length
-        if max_comment_length is not None:
-            ensure_flag("--max-comment-line-length", str(max_comment_length))
-
-        max_cyclomatic = _setting(settings, "max-cyclomatic-complexity", "max_cyclomatic_complexity")
-        if max_cyclomatic is None:
-            max_cyclomatic = ctx.cfg.complexity.max_complexity
-        if max_cyclomatic is not None:
-            ensure_flag("--max-cyclomatic-complexity", str(max_cyclomatic))
-
-        std = _setting(settings, "std")
-        if std:
-            cmd.extend(["--std", str(std)])
-
-        globals_list = _settings_list(_setting(settings, "globals"))
-        if globals_list:
-            cmd.extend(["--globals", ",".join(globals_list)])
-
-        read_globals = _settings_list(_setting(settings, "read-globals", "read_globals"))
-        if read_globals:
-            cmd.extend(["--read-globals", ",".join(read_globals)])
-
-        ignore = _settings_list(_setting(settings, "ignore"))
-        if ignore:
-            cmd.extend(["--ignore", ",".join(ignore)])
-
-        exclude = _settings_list(_setting(settings, "exclude-files", "exclude_files"))
-        for value in exclude:
-            cmd.extend(["--exclude-files", str(_resolve_path(root, value))])
-
-        if _as_bool(_setting(settings, "quiet")):
-            cmd.append("--quiet")
-
-        extra = _settings_list(_setting(settings, "args"))
-        if extra:
-            cmd.extend(str(arg) for arg in extra)
-
-        return tuple(cmd)
-
-
-def luacheck_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for luacheck."""
-
-    base_args = _require_string_sequence(config, "base", context="command_luacheck")
-    return _LuacheckStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _PhplintStrategy(CommandBuilder):
-    """Command builder handling phplint options."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        if "--no-ansi" not in cmd:
-            cmd.append("--no-ansi")
-        if "--no-progress" not in cmd:
-            cmd.append("--no-progress")
-
-        config = _setting(settings, "configuration", "config")
-        if config:
-            cmd.extend(["--configuration", str(_resolve_path(root, config))])
-
-        for path in _settings_list(_setting(settings, "exclude")):
-            cmd.extend(["--exclude", str(_resolve_path(root, path))])
-
-        for path in _settings_list(_setting(settings, "include")):
-            cmd.extend(["--include", str(_resolve_path(root, path))])
-
-        extra = _settings_list(_setting(settings, "args"))
-        if extra:
-            cmd.extend(str(arg) for arg in extra)
-
-        return tuple(cmd)
-
-
-def phplint_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for phplint."""
-
-    base_args = _require_string_sequence(config, "base", context="command_phplint")
-    return _PhplintStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _DockerfilelintStrategy(CommandBuilder):
-    """Command builder for dockerfilelint."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        config = _setting(ctx.settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-        extra = _settings_list(_setting(ctx.settings, "args"))
-        if extra:
-            cmd.extend(str(arg) for arg in extra)
-        return tuple(cmd)
-
-
-def dockerfilelint_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for dockerfilelint."""
-
-    base_args = _require_string_sequence(config, "base", context="command_dockerfilelint")
-    return _DockerfilelintStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _CheckmakeStrategy(CommandBuilder):
-    """Command builder for checkmake."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-        if "--format" not in cmd and "-f" not in cmd:
-            cmd.extend(["--format", "json"])
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-        for rule in _settings_list(_setting(settings, "ignore")):
-            cmd.extend(["--ignore", str(rule)])
-        extra = _settings_list(_setting(settings, "args"))
-        if extra:
-            cmd.extend(str(arg) for arg in extra)
-        return tuple(cmd)
-
-
-def checkmake_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for checkmake."""
-
-    base_args = _require_string_sequence(config, "base", context="command_checkmake")
-    return _CheckmakeStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _GtsStrategy(CommandBuilder):
-    """Command builder replicating gts CLI behaviour."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        project = _setting(settings, "project")
-        if project:
-            cmd.extend(["--project", str(_resolve_path(root, project))])
-
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-
-        extra = _settings_list(_setting(settings, "args"))
-        if extra:
-            cmd.extend(str(arg) for arg in extra)
-        return tuple(cmd)
-
-
-def gts_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for gts."""
-
-    base_args = _require_string_sequence(config, "base", context="command_gts")
-    return _GtsStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _TscStrategy(CommandBuilder):
-    """Command builder providing TypeScript compiler arguments."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        project = _setting(settings, "project")
-        if project:
-            cmd.extend(["--project", str(_resolve_path(root, project))])
-
-        pretty = _setting(settings, "pretty")
-        if pretty is not None:
-            cmd.extend(["--pretty", "true" if _as_bool(pretty) else "false"])
-
-        if _as_bool(_setting(settings, "incremental")):
-            cmd.append("--incremental")
-        if _as_bool(_setting(settings, "watch")):
-            cmd.append("--watch")
-        if _as_bool(_setting(settings, "skip-lib-check", "skip_lib_check")):
-            cmd.append("--skipLibCheck")
-        if _as_bool(_setting(settings, "strict")):
-            cmd.append("--strict")
-
-        extra = _settings_list(_setting(settings, "args"))
-        if extra:
-            cmd.extend(str(arg) for arg in extra)
-        return tuple(cmd)
-
-
-def tsc_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for tsc."""
-
-    base_args = _require_string_sequence(config, "base", context="command_tsc")
-    return _TscStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _CpplintStrategy(CommandBuilder):
-    """Command builder providing cpplint options."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        line_length = _setting(settings, "linelength", "line-length")
-        if line_length is None:
-            line_length = ctx.cfg.execution.line_length
-        if line_length is not None:
-            cmd.append(f"--linelength={line_length}")
-
-        for value in _settings_list(_setting(settings, "filter")):
-            cmd.append(f"--filter={value}")
-
-        for path in _settings_list(_setting(settings, "exclude")):
-            cmd.append(f"--exclude={_resolve_path(root, path)}")
-
-        extensions = _settings_list(_setting(settings, "extensions"))
-        if extensions:
-            cmd.append(f"--extensions={','.join(str(ext) for ext in extensions)}")
-
-        headers = _settings_list(_setting(settings, "headers"))
-        if headers:
-            cmd.append(f"--headers={','.join(str(h) for h in headers)}")
-
-        include_order = _setting(settings, "includeorder")
-        if include_order:
-            cmd.append(f"--includeorder={include_order}")
-
-        counting = _setting(settings, "counting")
-        if counting:
-            cmd.append(f"--counting={counting}")
-
-        repository = _setting(settings, "repository")
-        if repository:
-            cmd.append(f"--repository={_resolve_path(root, repository)}")
-
-        root_flag = _setting(settings, "root")
-        if root_flag:
-            cmd.append(f"--root={_resolve_path(root, root_flag)}")
-
-        if _as_bool(_setting(settings, "recursive")):
-            cmd.append("--recursive")
-        if _as_bool(_setting(settings, "quiet")):
-            cmd.append("--quiet")
-
-        extra = _settings_list(_setting(settings, "args"))
-        if extra:
-            cmd.extend(str(arg) for arg in extra)
-        return tuple(cmd)
-
-
-def cpplint_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for cpplint."""
-
-    base_args = _require_string_sequence(config, "base", context="command_cpplint")
-    return _CpplintStrategy(base=base_args)
-
-
-@dataclass(slots=True)
-class _StaticCommandStrategy(CommandBuilder):
-    """Command builder returning a static command tuple."""
-
-    base: tuple[str, ...]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        return tuple(self.base)
-
-
-def static_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder that yields *base* without modification."""
-
-    base_args = _require_string_sequence(config, "base", context="command_static")
-    return _StaticCommandStrategy(base=base_args)
-
-
-def gofmt_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for gofmt."""
-
-    return static_command(config)
-
-
-def cargo_fmt_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for cargo fmt."""
-
-    return static_command(config)
-
-
-def cargo_clippy_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for cargo clippy."""
-
-    return static_command(config)
-
-
-def mdformat_command(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder configured for mdformat."""
-
-    return static_command(config)
-
-
-def install_download_artifact(config: Mapping[str, Any]) -> Callable[[ToolContext], None]:
-    """Return an installer that provisions catalog-defined downloads.
-
-    Args:
-        config: Mapping describing the download targets, optional version, and
-            optional context label used for error reporting.
-
-    Returns:
-        Callable[[ToolContext], None]: Installer that ensures the artifact exists
-        in the tool cache prior to execution.
-
-    Raises:
-        CatalogIntegrityError: If required fields are missing or invalid.
-    """
-
-    plain_config = _as_plain_json(config)
-    if not isinstance(plain_config, Mapping):
-        raise CatalogIntegrityError("install_download_artifact: configuration must be an object")
-
-    download_config = plain_config.get("download")
-    if not isinstance(download_config, Mapping):
-        raise CatalogIntegrityError("install_download_artifact: 'download' must be an object")
-
-    version_value = plain_config.get("version")
-    if version_value is not None and not isinstance(version_value, str):
-        raise CatalogIntegrityError("install_download_artifact: 'version' must be a string when provided")
-
-    context_label = plain_config.get("contextLabel")
-    if context_label is None:
-        context_value = "install_download_artifact.download"
-    elif isinstance(context_label, str) and context_label.strip():
-        context_value = context_label
-    else:
-        raise CatalogIntegrityError("install_download_artifact: 'contextLabel' must be a non-empty string")
-
-    def installer(ctx: ToolContext) -> None:
-        cache_root = ctx.root / ".lint-cache"
-        _download_artifact_for_tool(
-            download_config,
-            version=version_value,
-            cache_root=cache_root,
-            context=context_value,
-        )
-
-    return installer
-
-
-def _load_attribute(path: str, *, context: str) -> Any:
-    try:
-        module_path, _, attribute = path.rpartition(".")
-        if not module_path:
-            raise CatalogIntegrityError(f"{context}: '{path}' is not a valid import path")
-        module = importlib.import_module(module_path)
-        return getattr(module, attribute)
-    except (ImportError, AttributeError) as exc:
-        raise CatalogIntegrityError(f"{context}: unable to import '{path}'") from exc
-
-
-def _require_string_sequence(
-    config: Mapping[str, Any],
-    key: str,
-    *,
-    context: str,
-) -> tuple[str, ...]:
-    """Return a required sequence of strings from *config* keyed by *key*.
-
-    Args:
-        config: Mapping that may contain the target value.
-        key: Key to extract within the mapping.
-        context: Human-readable description used in error messages.
-
-    Returns:
-        tuple[str, ...]: Normalised sequence of string arguments.
-
-    Raises:
-        CatalogIntegrityError: If the value is missing, not a sequence, or empty.
-    """
-
-    value = config.get(key)
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
-        raise CatalogIntegrityError(f"{context}: expected '{key}' to be an array of arguments")
-    result = tuple(str(item) for item in value)
-    if not result:
-        raise CatalogIntegrityError(f"{context}: '{key}' must contain at least one argument")
-    return result
-
-
-def _require_str(config: Mapping[str, Any], key: str, *, context: str) -> str:
-    value = config.get(key)
-    if not isinstance(value, str):
-        raise CatalogIntegrityError(f"{context}: expected '{key}' to be a string")
-    return value
 
 
 def _normalize_sequence(value: Any) -> tuple[Any, ...]:

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import selene_command
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -29,9 +29,6 @@ def _selene_command_config() -> dict[str, object]:
     raise AssertionError("selene command configuration missing from catalog")
 
 
-_SELENE_COMMAND = selene_command(_selene_command_config())
-
-
 def test_selene_command_build(tmp_path: Path) -> None:
     cfg = Config()
     ctx = ToolContext(
@@ -49,11 +46,8 @@ def test_selene_command_build(tmp_path: Path) -> None:
         },
     )
 
-    action = ToolAction(
-        name="lint",
-        command=_SELENE_COMMAND,
-        append_files=True,
-    )
+    builder = command_option_map(_selene_command_config())
+    action = ToolAction(name="lint", command=builder)
 
     command = action.build_command(ctx)
     assert command[0] == "selene"

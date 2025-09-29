@@ -84,10 +84,38 @@
       "name": "lint",
       "ignoreExit": true,
       "command": {
-        "strategy": "command_eslint",
+        "strategy": "command_option_map",
         "config": {
           "base": ["eslint", "--format", "json"],
-          "isFix": false
+          "options": [
+            {"setting": "config", "type": "path", "flag": "--config"},
+            {"setting": "ext", "type": "args", "flag": "--ext"},
+            {"setting": "ignore-path", "type": "path", "flag": "--ignore-path"},
+            {"setting": "resolve-plugins-relative-to", "type": "path", "flag": "--resolve-plugins-relative-to"},
+            {"setting": "rulesdir", "type": "path", "flag": "--rulesdir"},
+            {
+              "setting": "max-warnings",
+              "type": "value",
+              "flag": "--max-warnings",
+              "defaultFrom": "severity.max_warnings"
+            },
+            {"setting": "cache", "type": "flag", "flag": "--cache", "negateFlag": "--no-cache"},
+            {"setting": "cache-location", "type": "path", "flag": "--cache-location"},
+            {"setting": "fix-type", "type": "args", "flag": "--fix-type", "joinWith": ","},
+            {"setting": "quiet", "type": "flag", "flag": "--quiet"},
+            {
+              "setting": "no-error-on-unmatched-pattern",
+              "type": "flag",
+              "flag": "--no-error-on-unmatched-pattern",
+              "negateFlag": "--error-on-unmatched-pattern"
+            },
+            {
+              "setting": "report-unused-disable-directives",
+              "type": "value",
+              "flag": "--report-unused-disable-directives"
+            },
+            {"setting": "args", "type": "args"}
+          ]
         }
       }
     },
@@ -95,10 +123,33 @@
       "name": "fix",
       "isFix": true,
       "command": {
-        "strategy": "command_eslint",
+        "strategy": "command_option_map",
         "config": {
           "base": ["eslint", "--fix"],
-          "isFix": true
+          "options": [
+            {"setting": "config", "type": "path", "flag": "--config"},
+            {"setting": "ext", "type": "args", "flag": "--ext"},
+            {"setting": "ignore-path", "type": "path", "flag": "--ignore-path"},
+            {"setting": "resolve-plugins-relative-to", "type": "path", "flag": "--resolve-plugins-relative-to"},
+            {"setting": "rulesdir", "type": "path", "flag": "--rulesdir"},
+            {
+              "setting": "max-warnings",
+              "type": "value",
+              "flag": "--max-warnings",
+              "defaultFrom": "severity.max_warnings"
+            },
+            {"setting": "cache", "type": "flag", "flag": "--cache", "negateFlag": "--no-cache"},
+            {"setting": "cache-location", "type": "path", "flag": "--cache-location"},
+            {"setting": "fix-type", "type": "args", "flag": "--fix-type", "joinWith": ","},
+            {"setting": "quiet", "type": "flag", "flag": "--quiet"},
+            {"setting": "no-error-on-unmatched-pattern", "type": "flag", "flag": "--no-error-on-unmatched-pattern"},
+            {
+              "setting": "report-unused-disable-directives",
+              "type": "value",
+              "flag": "--report-unused-disable-directives"
+            },
+            {"setting": "args", "type": "args"}
+          ]
         }
       }
     }

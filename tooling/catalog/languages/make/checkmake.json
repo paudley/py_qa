@@ -11,13 +11,36 @@
     "package": "github.com/checkmake/checkmake/cmd/checkmake",
     "versionCommand": ["checkmake", "--version"]
   },
+  "options": [
+    {
+      "name": "config",
+      "type": "path",
+      "description": "Custom checkmake configuration file."
+    },
+    {
+      "name": "ignore",
+      "type": "list[str]",
+      "description": "Rule identifiers to suppress during linting."
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to checkmake."
+    }
+  ],
   "actions": [
     {
       "name": "lint",
       "command": {
-        "strategy": "command_checkmake",
+        "strategy": "command_option_map",
         "config": {
-          "base": ["checkmake", "lint"]
+          "base": ["checkmake", "lint", "--format", "json"],
+          "appendFiles": false,
+          "options": [
+            {"setting": "config", "type": "path", "flag": "--config"},
+            {"setting": "ignore", "type": "args", "flag": "--ignore"},
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "parser": {

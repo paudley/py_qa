@@ -16,10 +16,7 @@
     },
     "options": {
       "type": "array",
-      "description": "Declarative option mappings resolved at runtime.",
-      "items": {
-        "type": "object"
-      }
+      "description": "Declarative option mappings resolved at runtime."
     }
   }
 }

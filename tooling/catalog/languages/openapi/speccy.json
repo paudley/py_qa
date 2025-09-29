@@ -11,13 +11,36 @@
     "package": "speccy",
     "versionCommand": ["speccy", "--version"]
   },
+  "options": [
+    {
+      "name": "ruleset",
+      "type": "path",
+      "description": "Speccy ruleset file."
+    },
+    {
+      "name": "skip",
+      "type": "list[str]",
+      "description": "Checks to skip during linting."
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to speccy."
+    }
+  ],
   "actions": [
     {
       "name": "lint",
       "command": {
-        "strategy": "command_speccy",
+        "strategy": "command_option_map",
         "config": {
-          "base": ["speccy", "lint"]
+          "base": ["speccy", "lint", "--reporter", "json"],
+          "appendFiles": false,
+          "options": [
+            {"setting": "ruleset", "type": "path", "flag": "--ruleset"},
+            {"setting": "skip", "type": "args", "flag": "--skip"},
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "parser": {

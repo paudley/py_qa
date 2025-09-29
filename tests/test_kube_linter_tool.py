@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import kube_linter_command
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -29,9 +29,6 @@ def _kube_linter_command_config() -> dict[str, object]:
     raise AssertionError("kube-linter command configuration missing from catalog")
 
 
-_KUBE_LINTER_COMMAND = kube_linter_command(_kube_linter_command_config())
-
-
 def test_kube_linter_command_build(tmp_path: Path) -> None:
     cfg = Mock()
     cfg.execution.line_length = 120
@@ -47,11 +44,8 @@ def test_kube_linter_command_build(tmp_path: Path) -> None:
         },
     )
 
-    action = ToolAction(
-        name="lint",
-        command=_KUBE_LINTER_COMMAND,
-        append_files=True,
-    )
+    builder = command_option_map(_kube_linter_command_config())
+    action = ToolAction(name="lint", command=builder)
 
     command = action.build_command(ctx)
     assert tuple(command[:4]) == ("kube-linter", "lint", "--format", "json")

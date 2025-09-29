@@ -14,11 +14,15 @@
     {
       "name": "lint",
       "command": {
-        "strategy": "command_gts",
+        "strategy": "command_option_map",
         "config": {
           "base": ["gts", "lint", "--", "--format", "json"],
-          "is_fix": false,
-          "isFix": false
+          "appendFiles": false,
+          "options": [
+            {"setting": "project", "type": "path", "flag": "--project"},
+            {"setting": "config", "type": "path", "flag": "--config"},
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "description": "Run Google's TypeScript style checks via gts.",
@@ -32,11 +36,15 @@
     {
       "name": "fix",
       "command": {
-        "strategy": "command_gts",
+        "strategy": "command_option_map",
         "config": {
           "base": ["gts", "fix"],
-          "is_fix": true,
-          "isFix": true
+          "appendFiles": false,
+          "options": [
+            {"setting": "project", "type": "path", "flag": "--project"},
+            {"setting": "config", "type": "path", "flag": "--config"},
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "isFix": true,

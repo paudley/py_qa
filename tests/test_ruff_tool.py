@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import ruff_command, ruff_format_command
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -47,7 +47,7 @@ def test_ruff_lint_command(tmp_path: Path) -> None:
         settings={"preview": True, "args": ["src"]},
     )
 
-    builder = ruff_command(_ruff_config("lint"))
+    builder = command_option_map(_ruff_config("lint"))
     action = ToolAction(name="lint", command=builder, append_files=False)
 
     command = action.build_command(ctx)
@@ -62,7 +62,7 @@ def test_ruff_format_command(tmp_path: Path) -> None:
     cfg.execution.line_length = 99
     ctx = ToolContext(cfg=cfg, root=tmp_path, files=[], settings={})
 
-    builder = ruff_format_command(_ruff_format_config())
+    builder = command_option_map(_ruff_format_config())
     action = ToolAction(name="format", command=builder)
 
     command = action.build_command(ctx)

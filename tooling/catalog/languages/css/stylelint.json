@@ -28,6 +28,26 @@
       "description": "Path to stylelint ignore file."
     },
     {
+      "name": "custom-syntax",
+      "type": "str",
+      "description": "Custom syntax module passed to --custom-syntax."
+    },
+    {
+      "name": "allow-empty-input",
+      "type": "bool",
+      "description": "Allow empty input without treating it as an error."
+    },
+    {
+      "name": "disable-default-ignores",
+      "type": "bool",
+      "description": "Disable the built-in ignore patterns."
+    },
+    {
+      "name": "quiet",
+      "type": "bool",
+      "description": "Suppress non-error output."
+    },
+    {
       "name": "max-warnings",
       "type": "int",
       "description": "Maximum warnings allowed before stylelint exits non-zero."
@@ -37,9 +57,24 @@
     {
       "name": "lint",
       "command": {
-        "strategy": "command_stylelint",
+        "strategy": "command_option_map",
         "config": {
-          "base": ["stylelint"]
+          "base": ["stylelint", "--formatter", "json"],
+          "options": [
+            {"setting": "config", "type": "path", "flag": "--config"},
+            {"setting": "ignore-path", "type": "path", "flag": "--ignore-path"},
+            {"setting": "custom-syntax", "type": "value", "flag": "--custom-syntax"},
+            {"setting": "allow-empty-input", "type": "flag", "flag": "--allow-empty-input"},
+            {"setting": "disable-default-ignores", "type": "flag", "flag": "--disable-default-ignores"},
+            {"setting": "quiet", "type": "flag", "flag": "--quiet"},
+            {
+              "setting": "max-warnings",
+              "type": "value",
+              "flag": "--max-warnings",
+              "defaultFrom": "severity.max_warnings"
+            },
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "parser": {
@@ -53,10 +88,24 @@
       "name": "fix",
       "isFix": true,
       "command": {
-        "strategy": "command_stylelint",
+        "strategy": "command_option_map",
         "config": {
           "base": ["stylelint", "--fix"],
-          "isFix": true
+          "options": [
+            {"setting": "config", "type": "path", "flag": "--config"},
+            {"setting": "ignore-path", "type": "path", "flag": "--ignore-path"},
+            {"setting": "custom-syntax", "type": "value", "flag": "--custom-syntax"},
+            {"setting": "allow-empty-input", "type": "flag", "flag": "--allow-empty-input"},
+            {"setting": "disable-default-ignores", "type": "flag", "flag": "--disable-default-ignores"},
+            {"setting": "quiet", "type": "flag", "flag": "--quiet"},
+            {
+              "setting": "max-warnings",
+              "type": "value",
+              "flag": "--max-warnings",
+              "defaultFrom": "severity.max_warnings"
+            },
+            {"setting": "args", "type": "args"}
+          ]
         }
       }
     }

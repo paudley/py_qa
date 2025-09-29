@@ -191,7 +191,7 @@ class StrictnessConfig(BaseModel):
 
     model_config = ConfigDict(validate_assignment=True)
 
-    type_checking: Literal["lenient", "standard", "strict"] = "strict"
+    type_checking: Literal["lenient", "standard", "strict"] = "standard"
 
 
 class SeverityConfig(BaseModel):
@@ -489,76 +489,25 @@ class Config(BaseModel):
                     prefer_list.append(tool_name)
             self.dedupe.dedupe_prefer = prefer_list
 
-        def baseline_value(tool: str, key: str) -> object:
-            if baseline is None:
-                return NO_BASELINE
-            return baseline.value_for(tool, key)
-
-        def matches_baseline(tool: str, key: str, existing: object) -> bool:
-            expected = baseline_value(tool, key)
-            if expected is NO_BASELINE:
-                return existing is UNSET
-            if existing is UNSET:
-                return expected is None
-            return existing == expected
-
-        def ensure(tool: str, key: str, value: object | None) -> None:
-            tool_map = settings.setdefault(tool, {})
-            existing = tool_map.get(key, UNSET)
-            if override:
-                if value is None:
-                    if existing is UNSET or not matches_baseline(tool, key, existing):
-                        return
-                    tool_map.pop(key, None)
-                else:
-                    if existing is not UNSET and not matches_baseline(tool, key, existing):
-                        return
-                    tool_map[key] = value
-                if not tool_map:
-                    settings.pop(tool, None)
-            elif value is not None:
-                tool_map.setdefault(key, value)
-
-        line_length = self.execution.line_length
-        for tool_name, key in (
-            ("black", "line-length"),
-            ("isort", "line-length"),
-            ("ruff", "line-length"),
-            ("ruff-format", "line-length"),
-            ("pylint", "max-line-length"),
-            ("luacheck", "max-line-length"),
-            ("luacheck", "max-code-line-length"),
-            ("luacheck", "max-string-line-length"),
-            ("luacheck", "max-comment-line-length"),
-            ("prettier", "print-width"),
-        ):
-            ensure(tool_name, key, line_length)
-
-        complexity = self.complexity
-        ensure("pylint", "max-complexity", complexity.max_complexity)
-        ensure("luacheck", "max-cyclomatic-complexity", complexity.max_complexity)
-        ensure("pylint", "max-args", complexity.max_arguments)
-        ensure("pylint", "max-positional-arguments", complexity.max_arguments)
-
-        strict_level = self.strictness.type_checking
         mypy_settings = settings.setdefault("mypy", {})
         baseline_mypy = _expected_mypy_profile(baseline.type_checking) if baseline is not None else {}
 
         def set_mypy(key: str, value: object | None) -> None:
             existing = mypy_settings.get(key, UNSET)
             baseline_value = baseline_mypy.get(key, NO_BASELINE)
-            if override:
-                if value is None:
+            if value is None:
+                if override:
                     if existing is UNSET:
                         return
                     if baseline_value is not NO_BASELINE and existing != baseline_value:
                         return
-                    mypy_settings.pop(key, None)
-                else:
-                    if existing is not UNSET and baseline_value is not NO_BASELINE and existing != baseline_value:
-                        return
-                    mypy_settings[key] = value
-            elif value is not None:
+                mypy_settings.pop(key, None)
+                return
+            if override:
+                if existing is not UNSET and baseline_value is not NO_BASELINE and existing != baseline_value:
+                    return
+                mypy_settings[key] = value
+            else:
                 mypy_settings.setdefault(key, value)
 
         set_mypy("exclude-gitignore", True)
@@ -566,45 +515,16 @@ class Config(BaseModel):
         set_mypy("show-error-codes", True)
         set_mypy("show-column-numbers", True)
 
-        strict_flags = (
-            "warn-redundant-casts",
-            "warn-unused-ignores",
-            "warn-unreachable",
-            "disallow-untyped-decorators",
-            "disallow-any-generics",
-            "check-untyped-defs",
-            "no-implicit-reexport",
-        )
-        if strict_level == "strict":
-            set_mypy("strict", True)
-            for flag in strict_flags:
-                set_mypy(flag, True)
-            if override:
-                mypy_settings.pop("ignore-missing-imports", None)
-        else:
-            set_mypy("strict", False)
-            if override:
-                for flag in strict_flags:
-                    mypy_settings.pop(flag, None)
-            if strict_level == "lenient":
-                set_mypy("ignore-missing-imports", True)
-            elif override:
-                mypy_settings.pop("ignore-missing-imports", None)
+        set_mypy("strict", None)
+        set_mypy("warn-redundant-casts", None)
+        set_mypy("warn-unused-ignores", None)
+        set_mypy("warn-unreachable", None)
+        set_mypy("disallow-untyped-decorators", None)
+        set_mypy("disallow-any-generics", None)
+        set_mypy("check-untyped-defs", None)
+        set_mypy("no-implicit-reexport", None)
+        set_mypy("ignore-missing-imports", None)
 
-        ensure("tsc", "strict", strict_level == "strict")
-
-        severity = self.severity
-        ensure("bandit", "severity", severity.bandit_level)
-        ensure("bandit", "confidence", severity.bandit_confidence)
-
-        ensure("pylint", "fail-under", severity.pylint_fail_under)
-        pylint_settings_snapshot = self.tool_settings.get("pylint", {})
-        init_import_value = (
-            pylint_settings_snapshot.get("init-import") if isinstance(pylint_settings_snapshot, dict) else None
-        )
-        ensure("pylint", "init-import", init_import_value)
-        ensure("stylelint", "max-warnings", severity.max_warnings)
-        ensure("eslint", "max-warnings", severity.max_warnings)
 
 
 __all__ = [

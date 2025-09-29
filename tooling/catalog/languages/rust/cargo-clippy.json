@@ -10,13 +10,24 @@
     "minVersion": "1.81.0",
     "versionCommand": ["cargo", "--version"]
   },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to the cargo clippy invocation."
+    }
+  ],
   "actions": [
     {
       "name": "lint",
       "command": {
-        "strategy": "command_cargo_clippy",
+        "strategy": "command_option_map",
         "config": {
-          "base": ["cargo", "clippy", "--message-format=json"]
+          "base": ["cargo", "clippy", "--message-format=json"],
+          "appendFiles": false,
+          "options": [
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "appendFiles": false,

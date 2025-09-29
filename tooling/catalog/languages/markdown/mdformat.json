@@ -10,13 +10,24 @@
     "minVersion": "0.7.22",
     "versionCommand": ["mdformat", "--version"]
   },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to mdformat."
+    }
+  ],
   "actions": [
     {
       "name": "format",
       "command": {
-        "strategy": "command_mdformat",
+        "strategy": "command_option_map",
         "config": {
-          "base": ["mdformat"]
+          "base": ["mdformat"],
+          "appendFiles": false,
+          "options": [
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "isFix": true,
@@ -25,9 +36,13 @@
     {
       "name": "check",
       "command": {
-        "strategy": "command_mdformat",
+        "strategy": "command_option_map",
         "config": {
-          "base": ["mdformat", "--check"]
+          "base": ["mdformat", "--check"],
+          "appendFiles": false,
+          "options": [
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "ignoreExit": true,

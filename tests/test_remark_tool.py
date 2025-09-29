@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import remark_lint_command
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -41,7 +41,7 @@ def test_remark_lint_command_build(tmp_path: Path) -> None:
         },
     )
 
-    builder = remark_lint_command(_remark_config("lint"))
+    builder = command_option_map(_remark_config("lint"))
     action = ToolAction(name="lint", command=builder)
 
     cmd = action.build_command(ctx)
@@ -62,7 +62,7 @@ def test_remark_fix_command_build(tmp_path: Path) -> None:
         settings={},
     )
 
-    builder = remark_lint_command(_remark_config("fix"))
+    builder = command_option_map(_remark_config("fix"))
     action = ToolAction(name="fix", command=builder)
 
     cmd = action.build_command(ctx)

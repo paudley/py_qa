@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import yamllint_command
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -38,7 +38,7 @@ def test_yamllint_command_build(tmp_path: Path) -> None:
         },
     )
 
-    builder = yamllint_command(_yamllint_config())
+    builder = command_option_map(_yamllint_config())
     action = ToolAction(name="lint", command=builder, append_files=True)
 
     command = action.build_command(ctx)

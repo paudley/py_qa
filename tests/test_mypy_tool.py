@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import mypy_command
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -40,7 +40,7 @@ def test_mypy_command_build(tmp_path: Path) -> None:
         },
     )
 
-    builder = mypy_command(_mypy_config())
+    builder = command_option_map(_mypy_config())
     action = ToolAction(name="type-check", command=builder, append_files=False)
 
     command = action.build_command(ctx)

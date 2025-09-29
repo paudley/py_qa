@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Blackcat Informatics® Inc.
-# SPDX-License-Identifier: MIT
-"""Command builder implementations for built-in tools."""
+"""Helper utilities retained for catalog-driven command strategies."""
 
 from __future__ import annotations
 
@@ -9,12 +8,9 @@ import importlib
 import importlib.util
 import re
 import sys
-from collections.abc import Sequence
-from dataclasses import dataclass
 from pathlib import Path
 
-from .base import CommandBuilder, ToolContext
-from .builtin_helpers import _as_bool, _resolve_path, _setting, _settings_list
+from .base import ToolContext
 
 _BASE_PYLINT_PLUGINS: tuple[str, ...] = (
     "pylint.extensions.bad_builtin",
@@ -54,6 +50,8 @@ _OPTIONAL_PYLINT_PLUGINS: dict[str, str] = {
 
 
 def _python_target_version(ctx: ToolContext) -> str:
+    """Return the configured Python version or fall back to the interpreter."""
+
     version = getattr(ctx.cfg.execution, "python_version", None)
     if version:
         return str(version)
@@ -62,6 +60,8 @@ def _python_target_version(ctx: ToolContext) -> str:
 
 
 def _python_version_components(version: str) -> tuple[int, int]:
+    """Extract major/minor components from a Python version string."""
+
     match = re.search(r"(\d{1,2})(?:[._-]?(\d{1,2}))?", version)
     if not match:
         return sys.version_info.major, sys.version_info.minor
@@ -71,16 +71,22 @@ def _python_version_components(version: str) -> tuple[int, int]:
 
 
 def _python_version_tag(version: str) -> str:
+    """Convert *version* into ruff/black style ``pyXY`` tag."""
+
     major, minor = _python_version_components(version)
     return f"py{major}{minor}"
 
 
 def _python_version_number(version: str) -> str:
+    """Convert *version* into isort style ``XY`` number without separator."""
+
     major, minor = _python_version_components(version)
     return f"{major}{minor}"
 
 
 def _pyupgrade_flag_from_version(version: str) -> str:
+    """Map a Python version specifier to pyupgrade's ``--pyXY-plus`` flag."""
+
     normalized = version.lower().lstrip("py").rstrip("+")
     if not normalized:
         normalized = f"{sys.version_info.major}.{sys.version_info.minor}"
@@ -96,7 +102,8 @@ def _pyupgrade_flag_from_version(version: str) -> str:
 
 
 def _discover_pylint_plugins(root: Path) -> tuple[str, ...]:
-    """Return the set of pylint plugins that should be enabled by default."""
+    """Return default pylint plugins, discovering optional extras when present."""
+
     discovered: set[str] = set()
 
     def _loadable(module: str) -> bool:
@@ -123,349 +130,10 @@ def _discover_pylint_plugins(root: Path) -> tuple[str, ...]:
     return tuple(sorted(discovered))
 
 
-@dataclass(slots=True)
-class _RuffCommand(CommandBuilder):
-    base: Sequence[str]
-    mode: str  # "lint" or "fix"
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-
-        select = _settings_list(_setting(settings, "select"))
-        if select:
-            cmd.extend(["--select", ",".join(select)])
-
-        ignore = _settings_list(_setting(settings, "ignore"))
-        if ignore:
-            cmd.extend(["--ignore", ",".join(ignore)])
-
-        extend_select = _settings_list(_setting(settings, "extend-select"))
-        if extend_select:
-            cmd.extend(["--extend-select", ",".join(extend_select)])
-
-        extend_ignore = _settings_list(_setting(settings, "extend-ignore"))
-        if extend_ignore:
-            cmd.extend(["--extend-ignore", ",".join(extend_ignore)])
-
-        line_length = _setting(settings, "line-length")
-        if line_length is None:
-            line_length = ctx.cfg.execution.line_length
-        if line_length is not None:
-            cmd.extend(["--line-length", str(line_length)])
-
-        target_version = _setting(settings, "target-version")
-        if target_version:
-            cmd.extend(["--target-version", str(target_version)])
-        else:
-            cmd.extend(
-                [
-                    "--target-version",
-                    _python_version_tag(_python_target_version(ctx)),
-                ],
-            )
-
-        per_file_ignores = _settings_list(_setting(settings, "per-file-ignores"))
-        if per_file_ignores:
-            cmd.extend(["--per-file-ignores", ";".join(per_file_ignores)])
-
-        exclude = _settings_list(_setting(settings, "exclude"))
-        if exclude:
-            cmd.extend(["--exclude", ",".join(exclude)])
-
-        extend_exclude = _settings_list(_setting(settings, "extend-exclude"))
-        if extend_exclude:
-            cmd.extend(["--extend-exclude", ",".join(extend_exclude)])
-
-        respect_gitignore = _as_bool(_setting(settings, "respect-gitignore"))
-        if respect_gitignore is True:
-            cmd.append("--respect-gitignore")
-        elif respect_gitignore is False:
-            cmd.append("--no-respect-gitignore")
-
-        preview = _as_bool(_setting(settings, "preview"))
-        if preview is True:
-            cmd.append("--preview")
-        elif preview is False:
-            cmd.append("--no-preview")
-
-        if _as_bool(_setting(settings, "unsafe-fixes")):
-            cmd.append("--unsafe-fixes")
-
-        if self.mode == "lint":
-            if _as_bool(_setting(settings, "fix")):
-                cmd.append("--fix")
-        elif _as_bool(_setting(settings, "fix")) is False:
-            cmd = [part for part in cmd if part != "--fix"]
-
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
-
-        return tuple(cmd)
-
-
-@dataclass(slots=True)
-class _RuffFormatCommand(CommandBuilder):
-    base: Sequence[str]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-
-        line_length = _setting(settings, "line-length")
-        if line_length is None:
-            line_length = ctx.cfg.execution.line_length
-        if line_length is not None:
-            cmd.extend(["--line-length", str(line_length)])
-
-        target_version = _setting(settings, "target-version")
-        if target_version:
-            cmd.extend(["--target-version", str(target_version)])
-        else:
-            cmd.extend(
-                [
-                    "--target-version",
-                    _python_version_tag(_python_target_version(ctx)),
-                ],
-            )
-
-        exclude = _settings_list(_setting(settings, "exclude"))
-        if exclude:
-            cmd.extend(["--exclude", ",".join(exclude)])
-
-        extend_exclude = _settings_list(_setting(settings, "extend-exclude"))
-        if extend_exclude:
-            cmd.extend(["--extend-exclude", ",".join(extend_exclude)])
-
-        respect_gitignore = _as_bool(_setting(settings, "respect-gitignore"))
-        if respect_gitignore is True:
-            cmd.append("--respect-gitignore")
-        elif respect_gitignore is False:
-            cmd.append("--no-respect-gitignore")
-
-        preview = _as_bool(_setting(settings, "preview"))
-        if preview is True:
-            cmd.append("--preview")
-        elif preview is False:
-            cmd.append("--no-preview")
-
-        stdin_filename = _setting(settings, "stdin-filename")
-        if stdin_filename:
-            cmd.extend(["--stdin-filename", str(stdin_filename)])
-
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
-
-        return tuple(cmd)
-
-
-@dataclass(slots=True)
-class _IsortCommand(CommandBuilder):
-    base: Sequence[str]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        settings_path = _setting(settings, "settings-path", "config")
-        if settings_path:
-            cmd.extend(["--settings-path", str(_resolve_path(root, settings_path))])
-
-        profile = _setting(settings, "profile")
-        if profile:
-            cmd.extend(["--profile", str(profile)])
-        else:
-            cmd.extend(["--profile", "black"])
-
-        line_length = _setting(settings, "line-length")
-        if line_length is None:
-            line_length = ctx.cfg.execution.line_length
-        if line_length is not None:
-            cmd.extend(["--line-length", str(line_length)])
-
-        py_version = _setting(settings, "py", "python-version")
-        if py_version is not None:
-            cmd.extend(["--py", str(py_version)])
-        else:
-            cmd.extend(["--py", _python_version_number(_python_target_version(ctx))])
-
-        multi_line = _setting(settings, "multi-line", "multi_line")
-        if multi_line:
-            cmd.extend(["--multi-line", str(multi_line)])
-
-        src_paths = _settings_list(_setting(settings, "src"))
-        for path in src_paths:
-            cmd.extend(["--src", str(_resolve_path(root, path))])
-
-        virtual_env = _setting(settings, "virtual-env", "virtual_env")
-        if virtual_env:
-            cmd.extend(["--virtual-env", str(_resolve_path(root, virtual_env))])
-
-        conda_env = _setting(settings, "conda-env", "conda_env")
-        if conda_env:
-            cmd.extend(["--conda-env", str(_resolve_path(root, conda_env))])
-
-        for skip in _settings_list(_setting(settings, "skip")):
-            cmd.extend(["--skip", str(skip)])
-
-        for skip in _settings_list(_setting(settings, "extend-skip", "extend_skip")):
-            cmd.extend(["--extend-skip", str(skip)])
-
-        for pattern in _settings_list(_setting(settings, "skip-glob", "skip_glob")):
-            cmd.extend(["--skip-glob", str(pattern)])
-
-        for pattern in _settings_list(_setting(settings, "extend-skip-glob", "extend_skip_glob")):
-            cmd.extend(["--extend-skip-glob", str(pattern)])
-
-        if _as_bool(_setting(settings, "filter-files", "filter_files")):
-            cmd.append("--filter-files")
-
-        if _as_bool(_setting(settings, "float-to-top", "float_to_top")):
-            cmd.append("--float-to-top")
-
-        if _as_bool(_setting(settings, "combine-as", "combine_as")):
-            cmd.append("--combine-as")
-
-        if _as_bool(_setting(settings, "combine-star", "combine_star")):
-            cmd.append("--combine-star")
-
-        color = _as_bool(_setting(settings, "color"))
-        if color is True:
-            cmd.append("--color")
-        elif color is False:
-            cmd.append("--no-color")
-
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
-
-        return tuple(cmd)
-
-
-@dataclass(slots=True)
-class _BlackCommand(CommandBuilder):
-    base: Sequence[str]
-    mode: str
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        config = _setting(settings, "config")
-        if config:
-            cmd.extend(["--config", str(_resolve_path(root, config))])
-
-        line_length = _setting(settings, "line-length")
-        if line_length is not None:
-            cmd.extend(["--line-length", str(line_length)])
-
-        target_versions = _settings_list(_setting(settings, "target-version"))
-        for version in target_versions:
-            cmd.extend(["--target-version", str(version)])
-        if not target_versions:
-            cmd.extend(
-                [
-                    "--target-version",
-                    _python_version_tag(_python_target_version(ctx)),
-                ],
-            )
-
-        if _as_bool(_setting(settings, "preview")):
-            cmd.append("--preview")
-
-        if _as_bool(_setting(settings, "skip-string-normalization")):
-            cmd.append("--skip-string-normalization")
-
-        if _as_bool(_setting(settings, "skip-magic-trailing-comma")):
-            cmd.append("--skip-magic-trailing-comma")
-
-        workers = _setting(settings, "workers")
-        if workers is not None:
-            cmd.extend(["-j", str(workers)])
-
-        additional_args = _settings_list(_setting(settings, "args"))
-        if additional_args:
-            cmd.extend(str(arg) for arg in additional_args)
-
-        return tuple(cmd)
-
-
-@dataclass(slots=True)
-class _CpplintCommand(CommandBuilder):
-    base: Sequence[str]
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        cmd = list(self.base)
-        root = ctx.root
-        settings = ctx.settings
-
-        line_length = _setting(settings, "linelength", "line-length")
-        if line_length is None:
-            line_length = ctx.cfg.execution.line_length
-        if line_length is not None:
-            cmd.append(f"--linelength={line_length}")
-
-        for filt in _settings_list(_setting(settings, "filter")):
-            cmd.append(f"--filter={filt}")
-
-        for exclude in _settings_list(_setting(settings, "exclude")):
-            cmd.append(f"--exclude={_resolve_path(root, exclude)}")
-
-        extensions = _settings_list(_setting(settings, "extensions"))
-        if extensions:
-            cmd.append(f"--extensions={','.join(str(ext) for ext in extensions)}")
-
-        headers = _settings_list(_setting(settings, "headers"))
-        if headers:
-            cmd.append(f"--headers={','.join(str(h) for h in headers)}")
-
-        include_order = _setting(settings, "includeorder")
-        if include_order:
-            cmd.append(f"--includeorder={include_order}")
-
-        counting = _setting(settings, "counting")
-        if counting:
-            cmd.append(f"--counting={counting}")
-
-        repository = _setting(settings, "repository")
-        if repository:
-            cmd.append(f"--repository={_resolve_path(root, repository)}")
-
-        root_flag = _setting(settings, "root")
-        if root_flag:
-            cmd.append(f"--root={_resolve_path(root, root_flag)}")
-
-        if _as_bool(_setting(settings, "recursive")):
-            cmd.append("--recursive")
-
-        if _as_bool(_setting(settings, "quiet")):
-            cmd.append("--quiet")
-
-        args = _settings_list(_setting(settings, "args"))
-        if args:
-            cmd.extend(str(arg) for arg in args)
-
-        return tuple(cmd)
-
-
 __all__ = [
-    "_BlackCommand",
-    "_CpplintCommand",
-    "_IsortCommand",
-    "_RuffCommand",
-    "_RuffFormatCommand",
+    "_discover_pylint_plugins",
+    "_python_target_version",
+    "_python_version_number",
+    "_python_version_tag",
+    "_pyupgrade_flag_from_version",
 ]

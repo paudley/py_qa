@@ -79,13 +79,13 @@ def test_build_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     exclude_names = {path.name for path in file_cfg["excludes"]}
     assert ".lint-cache" in exclude_names
     assert ".cache" in exclude_names
-    assert cfg.tool_settings["mypy"]["strict"] is True
+    assert "strict" not in cfg.tool_settings["mypy"]
     assert cfg.tool_settings["mypy"]["show-error-codes"] is True
-    assert cfg.tool_settings["pylint"]["max-complexity"] == 10
-    assert cfg.tool_settings["luacheck"]["max-cyclomatic-complexity"] == 10
-    assert cfg.tool_settings["bandit"]["severity"] == "medium"
-    assert cfg.tool_settings["bandit"]["confidence"] == "medium"
-    assert cfg.tool_settings["pylint"]["fail-under"] == 9.5
+    assert cfg.complexity.max_complexity == 10
+    assert cfg.complexity.max_arguments == 5
+    assert cfg.tool_settings.get("bandit", {}).get("severity") is None
+    assert cfg.tool_settings.get("bandit", {}).get("confidence") is None
+    assert cfg.severity.pylint_fail_under == 9.5
     assert "ruff" in cfg.dedupe.dedupe_prefer
     assert "pyright" in cfg.dedupe.dedupe_prefer
 
@@ -125,12 +125,11 @@ def test_build_config_cli_overrides_complexity_and_strictness(
     cfg: Config = build_config(options)
     assert cfg.complexity.max_complexity == 7
     assert cfg.complexity.max_arguments == 4
-    assert cfg.tool_settings["pylint"]["max-complexity"] == 7
-    assert cfg.tool_settings["pylint"]["max-args"] == 4
-    assert cfg.tool_settings["luacheck"]["max-cyclomatic-complexity"] == 7
+    assert cfg.complexity.max_complexity == 7
+    assert cfg.complexity.max_arguments == 4
     assert cfg.strictness.type_checking == "lenient"
-    assert cfg.tool_settings["mypy"]["strict"] is False
-    assert cfg.tool_settings["mypy"].get("ignore-missing-imports") is True
+    assert "strict" not in cfg.tool_settings["mypy"]
+    assert cfg.tool_settings["mypy"].get("ignore-missing-imports") is None
     for flag in [
         "warn-redundant-casts",
         "warn-unused-ignores",
@@ -141,12 +140,9 @@ def test_build_config_cli_overrides_complexity_and_strictness(
         "no-implicit-reexport",
     ]:
         assert flag not in cfg.tool_settings["mypy"]
-    assert cfg.tool_settings["tsc"]["strict"] is False
     assert cfg.severity.bandit_level == "high"
     assert cfg.severity.bandit_confidence == "low"
-    assert cfg.tool_settings["bandit"]["severity"] == "high"
-    assert cfg.tool_settings["bandit"]["confidence"] == "low"
-    assert cfg.tool_settings["pylint"]["fail-under"] == 8.0
+    assert cfg.severity.pylint_fail_under == 8.0
 
 
 def test_sensitivity_low_adjusts_shared_knobs(
@@ -179,13 +175,12 @@ def test_sensitivity_low_adjusts_shared_knobs(
     assert cfg.severity.bandit_confidence == "low"
     assert cfg.severity.pylint_fail_under == 8.0
     assert cfg.severity.max_warnings == 200
-    assert cfg.tool_settings["mypy"].get("strict") is False
-    assert cfg.tool_settings["mypy"].get("ignore-missing-imports") is True
-    assert cfg.tool_settings["pylint"]["max-complexity"] == 15
-    assert cfg.tool_settings["luacheck"]["max-cyclomatic-complexity"] == 15
-    assert cfg.tool_settings["stylelint"]["max-warnings"] == 200
-    assert cfg.tool_settings["bandit"]["severity"] == "low"
-    assert cfg.tool_settings["bandit"]["confidence"] == "low"
+    assert "strict" not in cfg.tool_settings["mypy"]
+    assert cfg.tool_settings["mypy"].get("ignore-missing-imports") is None
+    assert cfg.tool_settings.get("tsc", {}).get("strict") is None
+    assert cfg.tool_settings.get("stylelint", {}).get("max-warnings") is None
+    assert cfg.tool_settings.get("bandit", {}).get("severity") is None
+    assert cfg.tool_settings.get("bandit", {}).get("confidence") is None
 
 
 def test_sensitivity_maximum_sets_ruff_select_all(
@@ -211,7 +206,7 @@ def test_sensitivity_maximum_sets_ruff_select_all(
     cfg = build_config(options)
 
     assert cfg.tool_settings["ruff"]["select"] == ["ALL"]
-    assert cfg.tool_settings["pylint"]["init-import"] is True
+    assert cfg.tool_settings.get("pylint", {}).get("init-import") is True
 
 
 def test_sensitivity_maximum_does_not_override_existing_ruff_select() -> None:
@@ -223,7 +218,7 @@ def test_sensitivity_maximum_does_not_override_existing_ruff_select() -> None:
     cfg.apply_sensitivity_profile(cli_overrides=set())
 
     assert cfg.tool_settings["ruff"]["select"] == ["F", "E"]
-    assert cfg.tool_settings["pylint"]["init-import"] is False
+    assert cfg.tool_settings.get("pylint", {}).get("init-import") is False
 
 
 def test_sensitivity_respects_explicit_line_length_override(
@@ -255,8 +250,8 @@ def test_sensitivity_respects_explicit_line_length_override(
     assert cfg.strictness.type_checking == "strict"
     assert cfg.severity.bandit_level == "high"
     assert cfg.severity.max_warnings == 0
-    assert cfg.tool_settings["black"]["line-length"] == 150
-    assert cfg.tool_settings["stylelint"]["max-warnings"] == 0
+    assert cfg.execution.line_length == 150
+    assert cfg.severity.max_warnings == 0
 
 
 def test_python_version_from_python_version_file(

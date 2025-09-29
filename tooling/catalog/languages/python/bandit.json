@@ -101,12 +101,14 @@
             {
               "setting": ["severity", "severity_level"],
               "flag": "--severity-level",
-              "type": "value"
+              "type": "value",
+              "defaultFrom": "severity.bandit_level"
             },
             {
               "setting": ["confidence", "confidence_level"],
               "flag": "--confidence-level",
-              "type": "value"
+              "type": "value",
+              "defaultFrom": "severity.bandit_confidence"
             },
             {
               "setting": ["skip", "skips"],

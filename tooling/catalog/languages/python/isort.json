@@ -114,9 +114,32 @@
       "name": "sort",
       "isFix": true,
       "command": {
-        "strategy": "command_isort",
+        "strategy": "command_option_map",
         "config": {
-          "base": ["isort"]
+          "base": ["isort"],
+          "appendFiles": false,
+          "options": [
+            {"setting": "settings-path", "type": "path", "flag": "--settings-path"},
+            {"setting": "profile", "type": "value", "flag": "--profile", "default": "black"},
+            {"setting": "line-length", "type": "value", "flag": "--line-length", "defaultFrom": "execution.line_length"},
+            {"setting": ["py", "python-version"], "type": "value", "flag": "--py", "defaultFrom": "python.target_version_number"},
+            {"setting": "multi-line", "type": "value", "flag": "--multi-line"},
+            {"setting": "indent", "type": "value", "flag": "--indent"},
+            {"setting": "wrap-length", "type": "value", "flag": "--wrap-length"},
+            {"setting": "src", "type": "path", "flag": "--src"},
+            {"setting": "virtual-env", "type": "path", "flag": "--virtual-env"},
+            {"setting": "conda-env", "type": "path", "flag": "--conda-env"},
+            {"setting": "skip", "type": "args", "flag": "--skip"},
+            {"setting": "extend-skip", "type": "args", "flag": "--extend-skip"},
+            {"setting": "skip-glob", "type": "args", "flag": "--skip-glob"},
+            {"setting": "extend-skip-glob", "type": "args", "flag": "--extend-skip-glob"},
+            {"setting": "filter-files", "type": "flag", "flag": "--filter-files"},
+            {"setting": "float-to-top", "type": "flag", "flag": "--float-to-top"},
+            {"setting": "combine-as", "type": "flag", "flag": "--combine-as"},
+            {"setting": "combine-star", "type": "flag", "flag": "--combine-star"},
+            {"setting": "color", "type": "flag", "flag": "--color", "negateFlag": "--no-color"},
+            {"setting": "args", "type": "args"}
+          ]
         }
       }
     },
@@ -124,9 +147,32 @@
       "name": "check",
       "ignoreExit": true,
       "command": {
-        "strategy": "command_isort",
+        "strategy": "command_option_map",
         "config": {
-          "base": ["isort", "--check-only"]
+          "base": ["isort", "--check-only"],
+          "appendFiles": false,
+          "options": [
+            {"setting": "settings-path", "type": "path", "flag": "--settings-path"},
+            {"setting": "profile", "type": "value", "flag": "--profile", "default": "black"},
+            {"setting": "line-length", "type": "value", "flag": "--line-length", "defaultFrom": "execution.line_length"},
+            {"setting": ["py", "python-version"], "type": "value", "flag": "--py", "defaultFrom": "python.target_version_number"},
+            {"setting": "multi-line", "type": "value", "flag": "--multi-line"},
+            {"setting": "indent", "type": "value", "flag": "--indent"},
+            {"setting": "wrap-length", "type": "value", "flag": "--wrap-length"},
+            {"setting": "src", "type": "path", "flag": "--src"},
+            {"setting": "virtual-env", "type": "path", "flag": "--virtual-env"},
+            {"setting": "conda-env", "type": "path", "flag": "--conda-env"},
+            {"setting": "skip", "type": "args", "flag": "--skip"},
+            {"setting": "extend-skip", "type": "args", "flag": "--extend-skip"},
+            {"setting": "skip-glob", "type": "args", "flag": "--skip-glob"},
+            {"setting": "extend-skip-glob", "type": "args", "flag": "--extend-skip-glob"},
+            {"setting": "filter-files", "type": "flag", "flag": "--filter-files"},
+            {"setting": "float-to-top", "type": "flag", "flag": "--float-to-top"},
+            {"setting": "combine-as", "type": "flag", "flag": "--combine-as"},
+            {"setting": "combine-star", "type": "flag", "flag": "--combine-star"},
+            {"setting": "color", "type": "flag", "flag": "--color", "negateFlag": "--no-color"},
+            {"setting": "args", "type": "args"}
+          ]
         }
       }
     }

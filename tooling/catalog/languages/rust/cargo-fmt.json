@@ -8,14 +8,24 @@
     "type": "binary",
     "versionCommand": ["rustfmt", "--version"]
   },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to cargo fmt."
+    }
+  ],
   "actions": [
     {
       "name": "format",
       "command": {
-        "strategy": "command_cargo_fmt",
+        "strategy": "command_option_map",
         "config": {
           "base": ["cargo", "fmt"],
-          "isFix": true
+          "appendFiles": false,
+          "options": [
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "isFix": true,
@@ -25,10 +35,13 @@
     {
       "name": "check",
       "command": {
-        "strategy": "command_cargo_fmt",
+        "strategy": "command_option_map",
         "config": {
           "base": ["cargo", "fmt", "--check"],
-          "isFix": false
+          "appendFiles": false,
+          "options": [
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "appendFiles": false,

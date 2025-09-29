@@ -10,15 +10,31 @@
     "minVersion": "20240112",
     "versionCommand": ["perltidy", "--version"]
   },
+  "options": [
+    {
+      "name": "profile",
+      "type": "path",
+      "description": "Perltidy profile file controlling formatting.",
+      "aliases": ["configuration"]
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to perltidy."
+    }
+  ],
   "actions": [
     {
       "name": "format",
       "command": {
-        "strategy": "command_perltidy",
+        "strategy": "command_option_map",
         "config": {
-          "base": ["perltidy"],
-          "is_fix": true,
-          "isFix": true
+          "base": ["perltidy", "-b", "-bext=\"\"", "-q"],
+          "appendFiles": false,
+          "options": [
+            {"setting": ["profile", "configuration"], "type": "path", "flag": "--profile"},
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "isFix": true,
@@ -27,11 +43,14 @@
     {
       "name": "check",
       "command": {
-        "strategy": "command_perltidy",
+        "strategy": "command_option_map",
         "config": {
-          "base": ["perltidy"],
-          "is_fix": false,
-          "isFix": false
+          "base": ["perltidy", "--check-only", "-q"],
+          "appendFiles": false,
+          "options": [
+            {"setting": ["profile", "configuration"], "type": "path", "flag": "--profile"},
+            {"setting": "args", "type": "args"}
+          ]
         }
       },
       "description": "Verify Perl formatting without modifying files."
