@@ -1,4 +1,7 @@
 # SPDX-License-Identifier: MIT
+
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 # Legacy builtins module exposing installer helpers and registry wiring.
 
 from __future__ import annotations

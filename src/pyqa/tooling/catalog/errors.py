@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Custom exceptions raised by tooling catalog operations."""
 
 from __future__ import annotations

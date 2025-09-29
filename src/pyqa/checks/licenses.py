@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import re
 import tomllib
-from datetime import datetime
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Final
@@ -271,13 +271,38 @@ def normalise_notice(value: str) -> str:
 
 
 def extract_spdx_identifiers(content: str) -> set[str]:
-    """Return all SPDX identifiers declared within *content*."""
+    """Return SPDX identifiers found in comment lines within *content*."""
+
     identifiers: set[str] = set()
-    for match in _SPDX_PATTERN.finditer(content):
-        candidate = match.group(1).strip()
+    for line in content.splitlines():
+        payload = _comment_payload(line)
+        if payload is None:
+            stripped = line.lstrip()
+            if not stripped.lower().startswith("spdx-license-identifier:"):
+                continue
+            payload = stripped
+        match = _SPDX_PATTERN.search(payload)
+        if not match:
+            continue
+        candidate = match.group(1).strip().rstrip('"').rstrip("'/")
         if candidate:
             identifiers.add(candidate)
     return identifiers
+
+
+def _comment_payload(line: str) -> str | None:
+    stripped = line.lstrip()
+    if not stripped:
+        return None
+    for prefix in ("#", "//", "/*", "*", "--", ";", "<!--", ".."):
+        if stripped.startswith(prefix):
+            payload = stripped[len(prefix) :].lstrip()
+            if prefix == "<!--" and payload.endswith("-->"):
+                payload = payload[:-3].rstrip()
+            if prefix == "/*" and payload.endswith("*/"):
+                payload = payload[:-2].rstrip()
+            return payload
+    return None
 
 
 @dataclass(frozen=True)

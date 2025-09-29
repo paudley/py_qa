@@ -345,11 +345,7 @@ def _render_pretty(result: RunResult, cfg: OutputConfig) -> None:
     root_display = colorize(str(Path(result.root).resolve()), "blue", cfg.color)
     print(f"Root: {root_display}")
     for outcome in result.outcomes:
-        status = (
-            colorize("PASS", "green", cfg.color)
-            if outcome.ok
-            else colorize("FAIL", "red", cfg.color)
-        )
+        status = colorize("PASS", "green", cfg.color) if outcome.ok else colorize("FAIL", "red", cfg.color)
         print(f"\n{outcome.tool}:{outcome.action} — {status}")
         if outcome.stdout:
             print(colorize("stdout:", "cyan", cfg.color))
@@ -478,8 +474,7 @@ def _emit_stats_line(result: RunResult, cfg: OutputConfig, diagnostics_count: in
     metrics = _gather_metrics(result)
     loc_count = sum(metric.line_count for metric in metrics.values())
     suppression_counts = {
-        label: sum(metric.suppressions.get(label, 0) for metric in metrics.values())
-        for label in SUPPRESSION_LABELS
+        label: sum(metric.suppressions.get(label, 0) for metric in metrics.values()) for label in SUPPRESSION_LABELS
     }
     files_count = len(result.files)
     total_suppressions = sum(suppression_counts.values())

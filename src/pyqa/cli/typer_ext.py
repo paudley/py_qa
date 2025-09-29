@@ -35,9 +35,7 @@ class SortedTyperCommand(TyperCommand):
                 formatter.write_dl(args)
 
         if option_entries:
-            sorted_records = [
-                record for _, record in sorted(option_entries, key=lambda item: item[0])
-            ]
+            sorted_records = [record for _, record in sorted(option_entries, key=lambda item: item[0])]
             with formatter.section(_("Options")):
                 formatter.write_dl(sorted_records)
 

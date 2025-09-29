@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Fragment resolution helpers for catalog documents."""
 
 from __future__ import annotations

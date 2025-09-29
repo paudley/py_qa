@@ -1,4 +1,7 @@
 # SPDX-License-Identifier: MIT
+
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Schema metadata describing supported tool-specific configuration keys."""
 
 from __future__ import annotations

@@ -16,9 +16,11 @@ from pyqa.tool_env import (
     RUST_BIN_DIR,
     CommandPreparer,
     PreparedCommand,
-    desired_version,
 )
 from pyqa.tool_env import constants as tool_constants
+from pyqa.tool_env import (
+    desired_version,
+)
 from pyqa.tool_env.runtimes import go as go_runtime
 from pyqa.tool_env.runtimes import lua as lua_runtime
 from pyqa.tool_env.runtimes import npm as npm_runtime

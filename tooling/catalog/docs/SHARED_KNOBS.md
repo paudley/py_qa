@@ -1,5 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # Shared Knobs Across pyqa Tools
 
 The table below summarises which bundled tools participate in the project-wide

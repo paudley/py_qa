@@ -244,11 +244,7 @@ class QualityFileCollector:
         if staged:
             git_discovery = GitDiscovery()
             config = FileDiscoveryConfig(pre_commit=True, include_untracked=True, changed_only=True)
-            return [
-                path.resolve()
-                for path in git_discovery.discover(config, self.root)
-                if path.exists()
-            ]
+            return [path.resolve() for path in git_discovery.discover(config, self.root) if path.exists()]
 
         tracked = list_tracked_files(self.root)
         if tracked:
@@ -256,11 +252,7 @@ class QualityFileCollector:
 
         filesystem_discovery = FilesystemDiscovery()
         config = FileDiscoveryConfig()
-        return [
-            path.resolve()
-            for path in filesystem_discovery.discover(config, self.root)
-            if path.exists()
-        ]
+        return [path.resolve() for path in filesystem_discovery.discover(config, self.root) if path.exists()]
 
     def _resolve(self, path: Path) -> Path:
         return path if path.is_absolute() else (self.root / path).resolve()
@@ -425,8 +417,6 @@ def _is_textual_candidate(path: Path) -> bool:
         ".toml",
         ".md",
         ".rst",
-        ".txt",
-        ".json",
         ".yaml",
         ".yml",
         ".ini",
@@ -434,6 +424,7 @@ def _is_textual_candidate(path: Path) -> bool:
         ".sh",
         ".bash",
         ".ps1",
+        ".jsonc",
         ".c",
         ".h",
         ".cpp",

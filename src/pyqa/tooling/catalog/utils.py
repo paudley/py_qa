@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Utility helpers for validating and normalising catalog JSON structures."""
 
 from __future__ import annotations

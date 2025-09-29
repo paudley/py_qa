@@ -431,11 +431,7 @@ def lint_command(
             results = orchestrator.fetch_all_tools(config, root=root)
         tool_lookup = {tool.name: tool for tool in DEFAULT_REGISTRY.tools()}
         phase_rank = {
-            name: (
-                PHASE_SORT_ORDER.index(tool.phase)
-                if tool.phase in PHASE_SORT_ORDER
-                else len(PHASE_SORT_ORDER)
-            )
+            name: (PHASE_SORT_ORDER.index(tool.phase) if tool.phase in PHASE_SORT_ORDER else len(PHASE_SORT_ORDER))
             for name, tool in tool_lookup.items()
         }
         results.sort(
@@ -486,11 +482,7 @@ def lint_command(
                 )
         raise typer.Exit(code=0)
     progress_enabled = (
-        config.output.output == "concise"
-        and not quiet
-        and not config.output.quiet
-        and config.output.color
-        and is_tty()
+        config.output.output == "concise" and not quiet and not config.output.quiet and config.output.color and is_tty()
     )
 
     extra_phases = 2  # post-processing + rendering
@@ -548,11 +540,7 @@ def lint_command(
             if progress is None or progress_task_id is None:
                 return
             nonlocal progress_completed
-            status = (
-                "[green]ok[/]"
-                if outcome.ok and config.output.color
-                else ("ok" if outcome.ok else "issues")
-            )
+            status = "[green]ok[/]" if outcome.ok and config.output.color else ("ok" if outcome.ok else "issues")
             if not outcome.ok and config.output.color:
                 status = "[red]issues[/]"
             label = f"{outcome.tool}:{outcome.action}"
@@ -627,11 +615,7 @@ def lint_command(
         status_text = (
             "[green]done[/]"
             if success and config.output.color
-            else (
-                "[red]issues detected[/]"
-                if config.output.color
-                else ("done" if success else "issues detected")
-            )
+            else ("[red]issues detected[/]" if config.output.color else ("done" if success else "issues detected"))
         )
         with progress_lock:
             total = max(progress_total, progress_completed)

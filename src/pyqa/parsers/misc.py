@@ -165,11 +165,7 @@ def parse_cpplint(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawD
     results: list[RawDiagnostic] = []
     for line in stdout:
         stripped = line.strip()
-        if (
-            not stripped
-            or stripped.startswith("Done processing")
-            or stripped.startswith("Total errors")
-        ):
+        if not stripped or stripped.startswith("Done processing") or stripped.startswith("Total errors"):
             continue
         match = _CPPLINT_PATTERN.match(stripped)
         if not match:
@@ -311,9 +307,7 @@ def parse_golangci_lint(payload: Any, _context: ToolContext) -> Sequence[RawDiag
 
 def parse_cargo_clippy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse Cargo clippy JSON payloads."""
-    records = (
-        payload if isinstance(payload, list) else [payload] if isinstance(payload, dict) else []
-    )
+    records = payload if isinstance(payload, list) else [payload] if isinstance(payload, dict) else []
     results: list[RawDiagnostic] = []
     for record in records:
         if not isinstance(record, dict):

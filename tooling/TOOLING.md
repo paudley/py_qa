@@ -1,3 +1,7 @@
+<!-- SPDX-License-Identifier: MIT -->
+
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # Catalog Tooling Overview
 
 PyQA resolves every tool definition through a data-first catalog. The Python

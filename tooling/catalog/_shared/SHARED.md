@@ -1,3 +1,7 @@
+<!-- SPDX-License-Identifier: MIT -->
+
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # Shared Catalog Fragments
 
 The `_shared` directory contains reusable JSON fragments that can be merged into

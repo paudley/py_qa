@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """I/O helpers for reading catalog JSON documents and schemas."""
 
 from __future__ import annotations

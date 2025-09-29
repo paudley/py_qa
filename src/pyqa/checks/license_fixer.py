@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 from .licenses import (
     LicensePolicy,
@@ -120,11 +120,7 @@ class LicenseHeaderFixer:
 
         identifiers = extract_spdx_identifiers(content)
         if self.policy.spdx_id:
-            allowed = {
-                spdx
-                for spdx in (self.policy.spdx_id, *(self.policy.allow_alternate_spdx or ()))
-                if spdx
-            }
+            allowed = {spdx for spdx in (self.policy.spdx_id, *(self.policy.allow_alternate_spdx or ())) if spdx}
             conflicting = [identifier for identifier in identifiers if identifier not in allowed]
             if conflicting:
                 raise ConflictingLicenseError(conflicting)
@@ -190,8 +186,14 @@ def _inject_header(content: str, style: str, spdx_line: str | None, notice_line:
 
     trailing_newline = body.endswith("\n")
     lines = body.splitlines()
-    insert_at = _insertion_index(style, lines)
-    _prune_existing_header(lines, insert_at, style)
+    insert_at = _insertion_index(style, lines, keep_existing_spdx=spdx_line is None)
+    insert_at = _prune_existing_header(
+        lines,
+        insert_at,
+        style,
+        remove_spdx=spdx_line is not None,
+        remove_notice=notice_line is not None,
+    )
 
     if insert_at < len(lines) and lines[insert_at].strip():
         header_lines.append("")
@@ -205,7 +207,7 @@ def _inject_header(content: str, style: str, spdx_line: str | None, notice_line:
     return new_body
 
 
-def _insertion_index(style: str, lines: list[str]) -> int:
+def _insertion_index(style: str, lines: list[str], *, keep_existing_spdx: bool) -> int:
     if not lines:
         return 0
 
@@ -226,23 +228,50 @@ def _insertion_index(style: str, lines: list[str]) -> int:
     else:
         while index < len(lines) and not lines[index].strip():
             index += 1
+
+    if keep_existing_spdx:
+        while index < len(lines):
+            comment = _extract_comment(style, lines[index])
+            if comment and comment.lower().startswith("spdx-license-identifier:"):
+                index += 1
+                continue
+            break
     return index
 
 
-def _prune_existing_header(lines: list[str], start: int, style: str) -> None:
+def _prune_existing_header(
+    lines: list[str],
+    start: int,
+    style: str,
+    *,
+    remove_spdx: bool,
+    remove_notice: bool,
+) -> int:
     removed = False
-    while start < len(lines):
-        comment = _extract_comment(style, lines[start])
+    index = start
+    while index < len(lines):
+        comment = _extract_comment(style, lines[index])
         if comment is None:
             break
         lowered = comment.lower()
-        if lowered.startswith("spdx-license-identifier:") or lowered.startswith("copyright"):
-            lines.pop(start)
-            removed = True
+        if lowered.startswith("spdx-license-identifier:"):
+            if remove_spdx:
+                lines.pop(index)
+                removed = True
+                continue
+            index += 1
             continue
+        if lowered.startswith("copyright"):
+            if remove_notice:
+                lines.pop(index)
+                removed = True
+                continue
+            break
         break
-    if removed and start < len(lines) and not lines[start].strip():
-        lines.pop(start)
+
+    if removed and index < len(lines) and not lines[index].strip():
+        lines.pop(index)
+    return index
 
 
 def _format_comment(style: str, text: str) -> str:

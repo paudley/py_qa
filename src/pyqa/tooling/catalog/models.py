@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Catalog data structures and helpers used by the loader."""
 
 from __future__ import annotations

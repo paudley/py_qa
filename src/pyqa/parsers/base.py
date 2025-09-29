@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from collections.abc import Mapping as MappingABC
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 

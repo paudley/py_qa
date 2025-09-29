@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Tests for integrating catalog snapshots with the runtime tool registry."""
 
 from __future__ import annotations
@@ -328,9 +331,5 @@ def test_register_catalog_tools_refreshes_cache_on_change(
     )
 
     assert load_calls == 1
-    command = (
-        registry.get("sample-tool")
-        .actions[0]
-        .build_command(ToolContext(cfg=Config(), root=tmp_path))
-    )
+    command = registry.get("sample-tool").actions[0].build_command(ToolContext(cfg=Config(), root=tmp_path))
     assert command[-2:] == ["echo", "two"]

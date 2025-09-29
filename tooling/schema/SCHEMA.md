@@ -1,3 +1,7 @@
+<!-- SPDX-License-Identifier: MIT -->
+
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # Catalog Schema Overview
 
 The files in `tooling/schema/` define the JSON Schema documents that validate

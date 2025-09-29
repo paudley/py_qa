@@ -1,3 +1,7 @@
+<!-- SPDX-License-Identifier: MIT -->
+
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # Tool Catalog Authoring Guide
 
 The PyQA tool registry is now sourced from JSON metadata under `tooling/catalog`.

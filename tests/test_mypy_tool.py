@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Tests for the mypy strategy."""
 
 from __future__ import annotations

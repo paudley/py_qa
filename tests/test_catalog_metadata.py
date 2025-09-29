@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Tests for catalog-derived metadata helpers."""
 
 from __future__ import annotations
@@ -52,9 +55,7 @@ def test_catalog_tool_options_with_choices() -> None:
     options = catalog_tool_options()
     ruff_options = options.get("ruff")
     assert ruff_options is not None
-    assert any(
-        option.name == "line-length" and option.option_type == "int" for option in ruff_options
-    )
+    assert any(option.name == "line-length" and option.option_type == "int" for option in ruff_options)
     target_version = next(
         (option for option in ruff_options if option.name == "target-version"),
         None,

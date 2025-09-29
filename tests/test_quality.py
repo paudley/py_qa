@@ -126,9 +126,7 @@ def test_quality_checker_fix_mode_adds_headers(tmp_path: Path) -> None:
     if current_year == 2025:
         expected_notice = "# Copyright (c) 2025 Blackcat Informatics® Inc."
     else:
-        expected_notice = (
-            f"# Copyright (c) 2025-{current_year} Blackcat Informatics® Inc."
-        )
+        expected_notice = f"# Copyright (c) 2025-{current_year} Blackcat Informatics® Inc."
     assert expected_notice in content
 
 
@@ -236,6 +234,27 @@ def test_cli_fix_mode_updates_file(tmp_path: Path) -> None:
     assert result.exit_code == 0
     content = target.read_text(encoding="utf-8")
     assert content.startswith("# SPDX-License-Identifier: MIT\n")
+
+
+def test_license_check_skips_json_and_txt(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    json_target = tmp_path / "data.json"
+    json_target.write_text('{\n  "value": 42\n}\n', encoding="utf-8")
+    text_target = tmp_path / "notes.txt"
+    text_target.write_text("reminder\n", encoding="utf-8")
+
+    config = _load_quality_config(tmp_path)
+    checker = QualityChecker(
+        root=tmp_path,
+        quality=config.quality,
+        license_overrides=config.license,
+        files=[json_target, text_target],
+        checks={"license"},
+    )
+    result = checker.run()
+
+    assert result.exit_code() == 0
+    assert not result.issues
 
 
 def test_check_quality_ignores_py_qa_directory(tmp_path: Path) -> None:
