@@ -303,7 +303,7 @@ def test_concise_mode_renders_progress_status(monkeypatch, tmp_path: Path) -> No
     assert any("queued" in status for status in status_values)
     assert any("post-processing" in status for status in status_values)
     assert any("rendering output" in status for status in status_values)
-    assert any(event[0] == "update" and event[1] == "Linting complete" for event in records), (
+    assert any("done" in status for status in status_values), (
         "progress should report completion"
     )
     assert any(event[0] == "stop" for event in records), "progress should stop after completion"

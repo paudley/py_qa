@@ -73,6 +73,7 @@ class AnnotationEngine:
         self._nlp: Language | None = None
         self._nlp_lock = threading.Lock()
         self._resolver = TreeSitterContextResolver()
+        self._download_attempted = False
 
     def annotate_run(self, result: RunResult) -> dict[int, DiagnosticAnnotation]:
         """Return annotations for each diagnostic in ``result`` keyed by ``id``."""
@@ -129,7 +130,17 @@ class AnnotationEngine:
             try:
                 self._nlp = spacy.load(self._model_name)
             except Exception:  # pragma: no cover - spaCy optional
-                self._nlp = None
+                should_retry = False
+                if not self._download_attempted:
+                    self._download_attempted = True
+                    should_retry = _download_spacy_model(self._model_name)
+                if should_retry:
+                    try:
+                        self._nlp = spacy.load(self._model_name)
+                    except Exception:
+                        self._nlp = None
+                else:
+                    self._nlp = None
             return self._nlp
 
 
@@ -262,6 +273,20 @@ def _dedupe_spans(spans: Sequence[MessageSpan]) -> list[MessageSpan]:
 
 def _overlap(left: MessageSpan, right: MessageSpan) -> bool:
     return max(left.start, right.start) < min(left.end, right.end)
+
+
+def _download_spacy_model(model_name: str) -> bool:
+    if spacy is None:
+        return False
+    try:
+        from spacy.cli import download  # type: ignore[import]
+    except Exception:  # pragma: no cover - spaCy optional command missing
+        return False
+    try:
+        download(model_name)  # type: ignore[call-arg]
+        return True
+    except BaseException:  # pragma: no cover - network or install issue / SystemExit
+        return False
 
 
 __all__ = [
