@@ -237,7 +237,9 @@ class Orchestrator:
         """Prepare every tool action to warm caches without executing them."""
         root_path = self._prepare_runtime(root)
         cache_dir = (
-            cfg.execution.cache_dir if cfg.execution.cache_dir.is_absolute() else root_path / cfg.execution.cache_dir
+            cfg.execution.cache_dir
+            if cfg.execution.cache_dir.is_absolute()
+            else root_path / cfg.execution.cache_dir
         )
         system_preferred = not cfg.execution.use_local_linters
         use_local_override = cfg.execution.use_local_linters
@@ -304,7 +306,10 @@ class Orchestrator:
 
     def _discover_files(self, cfg: Config, root: Path) -> list[Path]:
         matched_files = self._discovery.run(cfg.file_discovery, root)
-        limits = [entry if entry.is_absolute() else (root / entry) for entry in cfg.file_discovery.limit_to]
+        limits = [
+            entry if entry.is_absolute() else (root / entry)
+            for entry in cfg.file_discovery.limit_to
+        ]
         limits = [limit.resolve() for limit in limits]
         if limits:
             matched_files = [path for path in matched_files if self._is_within_limits(path, limits)]
@@ -315,7 +320,11 @@ class Orchestrator:
         return matched_files
 
     def _initialize_cache(self, cfg: Config, root: Path) -> _CacheContext:
-        cache_dir = cfg.execution.cache_dir if cfg.execution.cache_dir.is_absolute() else root / cfg.execution.cache_dir
+        cache_dir = (
+            cfg.execution.cache_dir
+            if cfg.execution.cache_dir.is_absolute()
+            else root / cfg.execution.cache_dir
+        )
         if not cfg.execution.cache_enabled:
             return _CacheContext(cache=None, token=None, cache_dir=cache_dir, versions={})
         cache = ResultCache(cache_dir)
@@ -633,7 +642,9 @@ class Orchestrator:
         from_cache: bool,
     ) -> None:
         metrics_map = (
-            dict(file_metrics) if file_metrics is not None else self._collect_metrics_for_files(state, context.files)
+            dict(file_metrics)
+            if file_metrics is not None
+            else self._collect_metrics_for_files(state, context.files)
         )
         self._update_state_metrics(state, metrics_map)
         state.outcomes[order] = outcome

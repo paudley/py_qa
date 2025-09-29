@@ -146,7 +146,20 @@
     }
   ],
   "extends": ["python_defaults"],
-  "fileExtensions": [".c", ".cc", ".cpp", ".cxx", ".c++", ".cu", ".cuh", ".h", ".hh", ".hpp", ".h++", ".hxx"],
+  "fileExtensions": [
+    ".c",
+    ".cc",
+    ".cpp",
+    ".cxx",
+    ".c++",
+    ".cu",
+    ".cuh",
+    ".h",
+    ".hh",
+    ".hpp",
+    ".h++",
+    ".hxx"
+  ],
   "configFiles": ["CPPLINT.cfg"],
   "documentation": {
     "help": {

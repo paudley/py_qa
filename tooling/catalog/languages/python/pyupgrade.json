@@ -8,7 +8,11 @@
     "type": "python",
     "package": "pyupgrade",
     "minVersion": "3.19.1",
-    "versionCommand": ["python", "-c", "import importlib.metadata as im; print(im.version('pyupgrade'))"]
+    "versionCommand": [
+      "python",
+      "-c",
+      "import importlib.metadata as im; print(im.version('pyupgrade'))"
+    ]
   },
   "options": [
     {

@@ -49,7 +49,7 @@ strategy/schema:
   Supported mapping fields: `setting`, `type` (`value`, `path`, `args`, `flag`,
   `repeatFlag`), `flag`, `negateFlag`, `joinWith`, `literalValues`, `default`.
 - `targets` (object) – optional file selection rules (`suffixes`, `contains`,
-  `fallbackDirectory`, `defaultToRoot`).
+  `pathMustInclude`, `fallbackDirectory`, `defaultToRoot`).
 
 ### `command_project_scanner`
 

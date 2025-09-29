@@ -64,7 +64,11 @@ def check_tool_status(tool: Tool) -> ToolStatus:
         )
     except FileNotFoundError:
         status = "vendored" if tool.runtime != "binary" else "uninstalled"
-        runtime_note = f"Runtime '{tool.runtime}' can vend this tool on demand." if tool.runtime != "binary" else ""
+        runtime_note = (
+            f"Runtime '{tool.runtime}' can vend this tool on demand."
+            if tool.runtime != "binary"
+            else ""
+        )
         notes = f"Executable '{version_cmd[0]}' not found on PATH. {runtime_note}".strip()
         return ToolStatus(
             name=tool.name,

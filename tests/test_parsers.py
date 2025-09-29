@@ -439,7 +439,9 @@ def test_parse_tombi() -> None:
 
 def test_parse_perlcritic() -> None:
     parser = TextParser(parse_perlcritic)
-    stdout = "lib/Foo.pm:12:8:ProhibitUnusedVariables: MyVar is never used (ProhibitUnusedVariables)\n"
+    stdout = (
+        "lib/Foo.pm:12:8:ProhibitUnusedVariables: MyVar is never used (ProhibitUnusedVariables)\n"
+    )
     diags = parser.parse(stdout, "", context=_ctx())
     assert len(diags) == 1
     diag = diags[0]

@@ -520,6 +520,9 @@
         "type": { "type": "string", "enum": ["filePattern"] },
         "suffixes": { "type": "array", "items": { "type": "string" } },
         "contains": { "type": "array", "items": { "type": "string" } },
+        "pathMustInclude": {
+          "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+        },
         "fallbackDirectory": { "type": "string" },
         "defaultToRoot": { "type": "boolean", "default": false }
       }

@@ -1001,6 +1001,7 @@ class _TargetSelector:
     mode: Literal["filePattern"]
     suffixes: tuple[str, ...]
     contains: tuple[str, ...]
+    path_requires: tuple[tuple[str, ...], ...]
     fallback_directory: str | None
     default_to_root: bool
 
@@ -1017,6 +1018,10 @@ class _TargetSelector:
                 continue
             if self.contains and not any(fragment in text for fragment in self.contains):
                 continue
+            if self.path_requires and not _path_matches_requirements(
+                candidate, ctx.root, self.path_requires,
+            ):
+                continue
             matched.append(candidate)
 
         if matched:
@@ -1031,6 +1036,68 @@ class _TargetSelector:
         if self.default_to_root:
             return [str(root)]
         return []
+
+
+def _normalise_path_requirement(raw: str) -> tuple[str, ...]:
+    """Convert requirement string into normalised path segments."""
+    cleaned = raw.replace("\\", "/").strip()
+    if not cleaned:
+        return ()
+    segments = [segment for segment in cleaned.split("/") if segment]
+    return tuple(segments)
+
+
+def _path_matches_requirements(
+    candidate: Path,
+    root: Path,
+    requirements: tuple[tuple[str, ...], ...],
+) -> bool:
+    """Return True when *candidate* satisfies all required path fragments."""
+    if not requirements:
+        return True
+
+    parts = _candidate_parts(candidate, root)
+    if not parts:
+        return False
+
+    return all(_has_path_sequence(parts, requirement) for requirement in requirements)
+
+
+def _candidate_parts(candidate: Path, root: Path) -> tuple[str, ...]:
+    """Return normalised path components for *candidate* relative to *root* when possible."""
+    try:
+        if candidate.is_absolute():
+            try:
+                relative = candidate.relative_to(root)
+            except ValueError:
+                relative = candidate
+        else:
+            relative = candidate
+        parts = tuple(part for part in relative.parts if part not in ("", "."))
+        if parts:
+            return parts
+    except OSError:
+        pass
+
+    fallback = candidate.as_posix().split("/")
+    return tuple(part for part in fallback if part)
+
+
+def _has_path_sequence(parts: Sequence[str], required: tuple[str, ...]) -> bool:
+    """Check whether *required* appears as a contiguous sequence within *parts*."""
+    if not required:
+        return True
+    if len(required) == 1:
+        target = required[0]
+        return any(part == target for part in parts)
+
+    limit = len(parts) - len(required) + 1
+    if limit <= 0:
+        return False
+    for offset in range(limit):
+        if all(parts[offset + idx] == required[idx] for idx in range(len(required))):
+            return True
+    return False
 
 
 @dataclass(slots=True)
@@ -1288,6 +1355,22 @@ def _parse_target_selector(entry: Any, *, context: str) -> _TargetSelector:
     else:
         raise CatalogIntegrityError(f"{context}: 'contains' must be a string or array of strings")
 
+    path_requires_value = entry.get("pathMustInclude", ())
+    if isinstance(path_requires_value, str):
+        raw_requires = (path_requires_value,)
+    elif isinstance(path_requires_value, Sequence) and not isinstance(
+        path_requires_value,
+        (str, bytes, bytearray),
+    ):
+        raw_requires = tuple(str(item) for item in path_requires_value if item is not None)
+    else:
+        raise CatalogIntegrityError(
+            f"{context}: 'pathMustInclude' must be a string or array of strings",
+        )
+    path_requires = tuple(
+        requirement for item in raw_requires if (requirement := _normalise_path_requirement(item))
+    )
+
     fallback_value = entry.get("fallbackDirectory")
     if fallback_value is None:
         fallback_directory: str | None = None
@@ -1308,6 +1391,7 @@ def _parse_target_selector(entry: Any, *, context: str) -> _TargetSelector:
         mode="filePattern",
         suffixes=suffixes,
         contains=contains,
+        path_requires=path_requires,
         fallback_directory=fallback_directory,
         default_to_root=default_to_root,
     )

@@ -226,16 +226,23 @@ def verify_file_license(
         allowed = {spdx for spdx in (expected_id, *(policy.allow_alternate_spdx or ())) if spdx}
 
         if expected_id:
-            conflicting = sorted(identifier for identifier in identifiers if identifier not in allowed)
+            conflicting = sorted(
+                identifier for identifier in identifiers if identifier not in allowed
+            )
             if conflicting:
                 formatted = ", ".join(conflicting)
                 issues.append(
                     f"Found SPDX license identifier(s) {formatted}; expected '{expected_id}'.",
                 )
-            elif not identifiers.intersection(allowed) and not _matches_snippet(lower_content, policy.license_snippet):
+            elif not identifiers.intersection(allowed) and not _matches_snippet(
+                lower_content,
+                policy.license_snippet,
+            ):
                 issues.append(f"Missing SPDX license tag '{expected_tag}'")
         elif not identifiers and not _matches_snippet(lower_content, policy.license_snippet):
-            issues.append("Missing SPDX license tag; configure a project SPDX identifier or header snippet.")
+            issues.append(
+                "Missing SPDX license tag; configure a project SPDX identifier or header snippet.",
+            )
 
     if policy.require_notice:
         observed = policy.match_notice(content)
@@ -272,7 +279,6 @@ def normalise_notice(value: str) -> str:
 
 def extract_spdx_identifiers(content: str) -> set[str]:
     """Return SPDX identifiers found in comment lines within *content*."""
-
     identifiers: set[str] = set()
     for line in content.splitlines():
         payload = _comment_payload(line)
@@ -346,8 +352,7 @@ def expected_notice(
         end_year = start_year
 
     latest = max(filter(None, (end_year, year)), default=year)
-    if latest < start_year:
-        latest = start_year
+    latest = max(latest, start_year)
 
     if latest == start_year:
         year_expression = f"{start_year}"

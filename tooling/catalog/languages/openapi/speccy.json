@@ -5,7 +5,14 @@
   "extends": ["npm_runtime"],
   "languages": ["openapi"],
   "phase": "lint",
-  "fileExtensions": ["openapi.yaml", "openapi.yml", "swagger.yaml", "swagger.yml", "speccy.yaml", "speccy.yml"],
+  "fileExtensions": [
+    "openapi.yaml",
+    "openapi.yml",
+    "swagger.yaml",
+    "swagger.yml",
+    "speccy.yaml",
+    "speccy.yml"
+  ],
   "runtime": {
     "type": "npm",
     "package": "speccy",

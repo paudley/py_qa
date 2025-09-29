@@ -289,12 +289,16 @@ def test_concise_mode_renders_progress_status(monkeypatch, tmp_path: Path) -> No
     records = progress_instances[0].records
     assert any(event[0] == "start" for event in records)
     advances = [event for event in records if event[0] == "advance"]
-    assert len(advances) == 4, "two actions plus post-processing and rendering phases should advance"
+    assert len(advances) == 4, (
+        "two actions plus post-processing and rendering phases should advance"
+    )
     assert any(event[0] == "update" and event[2] == 4 for event in records), (
         "progress total should include tool actions and extra phases"
     )
     assert any(event[0] == "update" and event[1].startswith("Linting ruff") for event in records)
-    status_updates = [event for event in records if event[0] == "update" and isinstance(event[3], dict)]
+    status_updates = [
+        event for event in records if event[0] == "update" and isinstance(event[3], dict)
+    ]
     status_values = [event[3].get("current_status", "") for event in status_updates]
     assert any("queued" in status for status in status_values)
     assert any("post-processing" in status for status in status_values)

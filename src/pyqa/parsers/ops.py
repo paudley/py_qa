@@ -99,7 +99,9 @@ def parse_dockerfilelint(payload: Any, _context: ToolContext) -> Sequence[RawDia
                 continue
             title = str(issue.get("title", "")).strip()
             description = str(issue.get("description", "")).strip()
-            message = title if description == "" else f"{title}: {description}" if title else description
+            message = (
+                title if description == "" else f"{title}: {description}" if title else description
+            )
             if not message:
                 continue
             results.append(

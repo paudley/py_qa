@@ -65,6 +65,10 @@ def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
             raw_code = diag.code or "-"
             code = raw_code.strip() or "-"
             raw_message = diag.message.splitlines()[0]
+            if (diag.code or "").strip().lower() == "duplicate-code":
+                formatted = _summarize_duplicate_code(diag.message, root_path)
+                if formatted:
+                    raw_message = formatted
             message = _clean_message(code, raw_message) or "<no message provided>"
             function = _normalise_symbol(diag.function)
             record = (file_path, line_no, function, tool_name, code, message)
@@ -248,6 +252,61 @@ def _highlight_for_output(
     return "".join(result)
 
 
+def _summarize_duplicate_code(message: str, root: Path) -> str:
+    """Create a concise duplicate-code message including file references."""
+
+    lines = [line.strip() for line in message.splitlines() if line.strip()]
+    if not lines:
+        return ""
+
+    header = lines[0]
+    locations: list[str] = []
+    for detail in lines[1:]:
+        if not detail.startswith("=="):
+            continue
+        entry = detail[2:]
+        name, _, span = entry.partition(":")
+        name = name.strip()
+        span = span.strip("[] ")
+        display = _resolve_duplicate_code_target(name, root)
+        if span:
+            display = f"{display}:{span}"
+        locations.append(display)
+
+    if locations:
+        return f"{header}: {', '.join(locations)}"
+    return header
+
+
+def _resolve_duplicate_code_target(name: str, root: Path) -> str:
+    """Resolve a pylint duplicate-code location entry to a displayable path."""
+
+    normalized = name.strip()
+    if not normalized:
+        return name
+
+    candidate = Path(normalized)
+    if candidate.is_absolute():
+        try:
+            return str(candidate.relative_to(root))
+        except ValueError:
+            return str(candidate)
+
+    if candidate.exists():
+        try:
+            return str(candidate.relative_to(root))
+        except ValueError:
+            return str(candidate)
+
+    dotted = normalized.replace("\\", "/").replace(".", "/")
+    for suffix in (".py", ".pyi"):
+        possible = root / f"{dotted}{suffix}"
+        if possible.exists():
+            return str(possible.relative_to(root))
+
+    return normalized
+
+
 def _infer_annotation_targets(message: str) -> int:
     spans = _ANNOTATION_ENGINE.message_spans(message)
     return sum(1 for span in spans if span.style == "ansi256:213")
@@ -345,7 +404,11 @@ def _render_pretty(result: RunResult, cfg: OutputConfig) -> None:
     root_display = colorize(str(Path(result.root).resolve()), "blue", cfg.color)
     print(f"Root: {root_display}")
     for outcome in result.outcomes:
-        status = colorize("PASS", "green", cfg.color) if outcome.ok else colorize("FAIL", "red", cfg.color)
+        status = (
+            colorize("PASS", "green", cfg.color)
+            if outcome.ok
+            else colorize("FAIL", "red", cfg.color)
+        )
         print(f"\n{outcome.tool}:{outcome.action} — {status}")
         if outcome.stdout:
             print(colorize("stdout:", "cyan", cfg.color))
@@ -474,7 +537,8 @@ def _emit_stats_line(result: RunResult, cfg: OutputConfig, diagnostics_count: in
     metrics = _gather_metrics(result)
     loc_count = sum(metric.line_count for metric in metrics.values())
     suppression_counts = {
-        label: sum(metric.suppressions.get(label, 0) for metric in metrics.values()) for label in SUPPRESSION_LABELS
+        label: sum(metric.suppressions.get(label, 0) for metric in metrics.values())
+        for label in SUPPRESSION_LABELS
     }
     files_count = len(result.files)
     total_suppressions = sum(suppression_counts.values())

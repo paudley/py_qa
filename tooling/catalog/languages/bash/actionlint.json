@@ -127,11 +127,13 @@
             "type": "filePattern",
             "suffixes": [".yml", ".yaml"],
             "contains": ["/.github/workflows/"],
+            "pathMustInclude": ".github",
             "fallbackDirectory": ".github/workflows",
             "defaultToRoot": true
           }
         }
       },
+      "appendFiles": false,
       "parser": {
         "strategy": "parser_json",
         "config": {

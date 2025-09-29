@@ -127,7 +127,9 @@ def parse_mypy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
         message = str(item.get("message", "")).strip()
         severity = str(item.get("severity", "error")).lower()
         code = item.get("code") or item.get("error_code")
-        function = item.get("function") or item.get("name") or item.get("target") or item.get("symbol")
+        function = (
+            item.get("function") or item.get("name") or item.get("target") or item.get("symbol")
+        )
         if isinstance(function, str) and function:
             function = function.split(".")[-1]
         else:
