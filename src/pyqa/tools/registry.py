@@ -20,14 +20,22 @@ class ToolRegistry(Mapping[str, Tool]):
 
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
-        self._by_language: dict[str, set[str]] = defaultdict(set)
+        self._by_language: dict[str, list[str]] = defaultdict(list)
 
     def register(self, tool: Tool) -> None:
         if tool.name in self._tools:
             raise ValueError(f"Tool '{tool.name}' already registered")
         self._tools[tool.name] = tool
         for language in tool.languages:
-            self._by_language[language].add(tool.name)
+            entries = self._by_language[language]
+            if tool.name not in entries:
+                entries.append(tool.name)
+
+    def reset(self) -> None:
+        """Remove all tools from the registry."""
+
+        self._tools.clear()
+        self._by_language.clear()
 
     def get(self, name: str) -> Tool:
         return self._tools[name]
@@ -41,8 +49,8 @@ class ToolRegistry(Mapping[str, Tool]):
 
     def tools_for_language(self, language: str) -> Iterable[Tool]:
         """Yield tools associated with *language*."""
-        names = self._by_language.get(language, set())
-        return (self._tools[name] for name in names)
+        names = self._by_language.get(language, [])
+        return (self._tools[name] for name in names if name in self._tools)
 
     def __contains__(self, name: object) -> bool:  # type: ignore[override]
         return isinstance(name, str) and name in self._tools

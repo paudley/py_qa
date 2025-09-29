@@ -1,0 +1,120 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "eslint",
+  "description": "JavaScript linter ESLint.",
+  "extends": ["npm_runtime"],
+  "languages": ["javascript", "typescript"],
+  "phase": "lint",
+  "fileExtensions": [".js", ".jsx", ".ts", ".tsx"],
+  "configFiles": [".eslintrc.js", ".eslintrc.cjs", ".eslintrc.json", ".eslintrc"],
+  "runtime": {
+    "type": "npm",
+    "package": "eslint",
+    "versionCommand": ["eslint", "--version"]
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to ESLint."
+    },
+    {
+      "name": "cache",
+      "type": "bool",
+      "description": "Enable ESLint result caching."
+    },
+    {
+      "name": "cache-location",
+      "type": "path",
+      "description": "Where ESLint stores cache data."
+    },
+    {
+      "name": "config",
+      "type": "path",
+      "description": "ESLint configuration file or directory."
+    },
+    {
+      "name": "ext",
+      "type": "list[str]",
+      "description": "Additional file extensions to lint."
+    },
+    {
+      "name": "fix-type",
+      "type": "list[str]",
+      "description": "Limit fixes to the given rule types."
+    },
+    {
+      "name": "ignore-path",
+      "type": "path",
+      "description": "Custom .eslintignore file path."
+    },
+    {
+      "name": "max-warnings",
+      "type": "int",
+      "description": "Exit with error if warnings exceed this count."
+    },
+    {
+      "name": "no-error-on-unmatched-pattern",
+      "type": "bool",
+      "description": "Treat unmatched patterns as success instead of failure."
+    },
+    {
+      "name": "quiet",
+      "type": "bool",
+      "description": "Suppress reporting of warnings."
+    },
+    {
+      "name": "report-unused-disable-directives",
+      "type": "str",
+      "description": "Control reporting for unused eslint-disable comments."
+    },
+    {
+      "name": "resolve-plugins-relative-to",
+      "type": "path",
+      "description": "Directory from which ESLint resolves plugins."
+    },
+    {
+      "name": "rulesdir",
+      "type": "list[str]",
+      "description": "Directories containing custom ESLint rules."
+    }
+  ],
+  "actions": [
+    {
+      "name": "lint",
+      "ignoreExit": true,
+      "command": {
+        "strategy": "command_eslint",
+        "config": {
+          "base": ["eslint", "--format", "json"],
+          "isFix": false
+        }
+      }
+    },
+    {
+      "name": "fix",
+      "isFix": true,
+      "command": {
+        "strategy": "command_eslint",
+        "config": {
+          "base": ["eslint", "--fix"],
+          "isFix": true
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/eslint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/eslint_cmd_help.txt",
+      "format": "text"
+    },
+    "shared": {
+      "path": "docs/SHARED_KNOBS.md",
+      "format": "markdown"
+    }
+  }
+}

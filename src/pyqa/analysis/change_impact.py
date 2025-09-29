@@ -18,7 +18,6 @@ _HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 
 def apply_change_impact(result: RunResult) -> None:
     """Attach impact metadata to diagnostics inside ``result``."""
-
     changes = _collect_changed_lines(result.root)
     if not changes:
         return

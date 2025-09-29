@@ -15,22 +15,22 @@ PyQA is maintained by Blackcat Informatics® Inc. and we take security seriously
 
 ### Please DO NOT:
 
-* Open a public GitHub issue for security vulnerabilities
-* Post about the vulnerability on social media or forums
+- Open a public GitHub issue for security vulnerabilities
+- Post about the vulnerability on social media or forums
 
 ### Please DO:
 
-* Email **security@blackcat.ca** (PGP key below)
-* Include the word "SECURITY" in the subject line
-* Provide detailed steps to reproduce the vulnerability
-* Include the impact and potential exploit scenarios
+- Email **security@blackcat.ca** (PGP key below)
+- Include the word "SECURITY" in the subject line
+- Provide detailed steps to reproduce the vulnerability
+- Include the impact and potential exploit scenarios
 
 ### What to Expect
 
-* **Acknowledgment**: We will acknowledge receipt of your vulnerability report within 48 hours
-* **Assessment**: We will investigate and validate the reported vulnerability within 7 days
-* **Resolution**: We aim to release a patch within 30 days of validation
-* **Disclosure**: We will coordinate public disclosure with you after the patch is released
+- **Acknowledgment**: We will acknowledge receipt of your vulnerability report within 48 hours
+- **Assessment**: We will investigate and validate the reported vulnerability within 7 days
+- **Resolution**: We aim to release a patch within 30 days of validation
+- **Disclosure**: We will coordinate public disclosure with you after the patch is released
 
 ## Responsible Disclosure Process
 
@@ -42,14 +42,14 @@ PyQA is maintained by Blackcat Informatics® Inc. and we take security seriously
 
 ## Security Advisories & Updates
 
-* Watch the repository for releases and advisories.
-* Subscribe to security alerts on GitHub.
-* Run `uv sync --group dev` regularly to pick up patched dependencies.
+- Watch the repository for releases and advisories.
+- Subscribe to security alerts on GitHub.
+- Run `uv sync --group dev` regularly to pick up patched dependencies.
 
 ## Contact
 
-* Email: <security@blackcat.ca>
-* PGP Key (optional for encrypted reports):
+- Email: <security@blackcat.ca>
+- PGP Key (optional for encrypted reports):
 
 \-----BEGIN PGP PUBLIC KEY BLOCK-----
 Version: GnuPG v2

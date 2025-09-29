@@ -12,11 +12,11 @@ SOLID is a mnemonic acronym that represents five foundational design principles 
 
 The five principles are 1:
 
-* **S** - Single-responsibility Principle (SRP)
-* **O** - Open-closed Principle (OCP)
-* **L** - Liskov Substitution Principle (LSP)
-* **I** - Interface Segregation Principle (ISP)
-* **D** - Dependency Inversion Principle (DIP)
+- **S** - Single-responsibility Principle (SRP)
+- **O** - Open-closed Principle (OCP)
+- **L** - Liskov Substitution Principle (LSP)
+- **I** - Interface Segregation Principle (ISP)
+- **D** - Dependency Inversion Principle (DIP)
 
 ### **The Problem SOLID Solves**
 
@@ -54,10 +54,10 @@ Python
 
 \# Violation of SRP\
 class Order:\
-def \_\_init\_\_(self, order\_id: str, items: list\[dict]):\
-self.order\_id = order\_id\
+def \_\_init\_\_(self, order_id: str, items: list\[dict]):\
+self.order_id = order_id\
 self.items = items\
-self.total\_price = 0.0
+self.total_price = 0.0
 
 ```
 def calculate\_total\_price(self) \-\> None:
@@ -104,30 +104,30 @@ quantity: int
 
 class Order:\
 """Data class responsible only for holding order information."""\
-def \_\_init\_\_(self, order\_id: str, items: list\[OrderItem]):\
-self.order\_id = order\_id\
+def \_\_init\_\_(self, order_id: str, items: list\[OrderItem]):\
+self.order_id = order_id\
 self.items = items\
-self.total\_price: float | None = None # Price is calculated externally
+self.total_price: float | None = None # Price is calculated externally
 
 class OrderCalculator:\
 """Responsible solely for order-related calculations."""\
 @staticmethod\
-def calculate\_total(order: Order) -> float:\
+def calculate_total(order: Order) -> float:\
 price = sum(item\['price'] \* item\['quantity'] for item in order.items)\
-order.total\_price = price\
+order.total_price = price\
 return price
 
 class OrderPersistence:\
 """Responsible solely for saving and retrieving orders from a database."""\
 def save(self, order: Order) -> None:\
-print(f"Saving order {order.order\_id} with total ${order.total\_price:.2f} to the database...")\
+print(f"Saving order {order.order_id} with total ${order.total_price:.2f} to the database...")\
 \# Database logic would go here
 
 class InvoiceGenerator:\
 """Responsible solely for generating invoices."""\
 @staticmethod\
 def generate(order: Order) -> str:\
-if order.total\_price is None:\
+if order.total_price is None:\
 raise ValueError("Total price has not been calculated for this order.")
 
 ```
@@ -164,15 +164,15 @@ Consider a system that needs to apply various types of discounts to an order tot
 
 #### **Violation Example**
 
-An initial, naive implementation might place the discount logic directly within the Order class using a series of if/elif/else blocks. This design violates OCP because adding a new type of discount (e.g., a "Holiday" discount) requires modifying the calculate\_total method, thereby opening up existing, working code to potential errors.9
+An initial, naive implementation might place the discount logic directly within the Order class using a series of if/elif/else blocks. This design violates OCP because adding a new type of discount (e.g., a "Holiday" discount) requires modifying the calculate_total method, thereby opening up existing, working code to potential errors.9
 
 Python
 
 \# Violation of OCP\
 class Order:\
-def \_\_init\_\_(self, total: float, discount\_type: str | None = None):\
+def \_\_init\_\_(self, total: float, discount_type: str | None = None):\
 self.total = total\
-self.discount\_type = discount\_type
+self.discount_type = discount_type
 
 ```
 def get\_final\_price(self) \-\> float:
@@ -284,10 +284,10 @@ The Liskov Substitution Principle (LSP), named after Barbara Liskov, states that
 
 LSP is fundamentally about behavioral subtyping, which goes beyond simply matching method signatures. A subclass must honor the implicit "contract" established by its superclass to ensure that it behaves in a way that clients of the superclass would expect.16 This contract includes several key rules 17:
 
-* **Pre-conditions cannot be strengthened:** A subclass method should not demand more from its inputs than the base class method. For example, if a base method accepts any integer, a subclass override cannot require that the integer be positive.
-* **Post-conditions cannot be weakened:** A subclass method must fulfill all the promises of the base class method. If a base method guarantees it will return a list of items, a subclass override cannot return None or a single item.
-* **Invariants must be preserved:** Invariants are conditions or properties of the class that must always hold true. A subclass must not violate any invariants established by its base class.
-* **No new exception types:** A subclass method should not throw types of exceptions that the base class method is not declared to throw. A common violation of LSP is overriding a method only to raise a NotImplementedError, which signals a broken abstraction.16
+- **Pre-conditions cannot be strengthened:** A subclass method should not demand more from its inputs than the base class method. For example, if a base method accepts any integer, a subclass override cannot require that the integer be positive.
+- **Post-conditions cannot be weakened:** A subclass method must fulfill all the promises of the base class method. If a base method guarantees it will return a list of items, a subclass override cannot return None or a single item.
+- **Invariants must be preserved:** Invariants are conditions or properties of the class that must always hold true. A subclass must not violate any invariants established by its base class.
+- **No new exception types:** A subclass method should not throw types of exceptions that the base class method is not declared to throw. A common violation of LSP is overriding a method only to raise a NotImplementedError, which signals a broken abstraction.16
 
 ### **Practical Implementation**
 
@@ -311,11 +311,11 @@ def fly(self):\
 \# Ostriches cannot fly. This breaks the contract of the Bird superclass.\
 raise NotImplementedError("Ostriches cannot fly!")
 
-def make\_bird\_fly(bird: Bird):\
+def make_bird_fly(bird: Bird):\
 \# This function works for a generic Bird, but will crash for an Ostrich.\
 bird.fly()
 
-\# make\_bird\_fly(Ostrich()) # This would raise NotImplementedError
+\# make_bird_fly(Ostrich()) # This would raise NotImplementedError
 
 #### **Adherent Refactoring**
 
@@ -347,7 +347,7 @@ class Ostrich(Bird):\
 def run(self):\
 print("The ostrich is running fast.")
 
-def make\_flying\_bird\_fly(bird: FlyingBird):\
+def make_flying_bird_fly(bird: FlyingBird):\
 \# This function now correctly operates only on birds that can fly.\
 bird.fly()
 
@@ -355,14 +355,14 @@ bird.fly()
 eagle = Eagle()\
 ostrich = Ostrich()
 
-make\_flying\_bird\_fly(eagle) # Works correctly\
-\# make\_flying\_bird\_fly(ostrich) # This would correctly cause a static type error.
+make_flying_bird_fly(eagle) # Works correctly\
+\# make_flying_bird_fly(ostrich) # This would correctly cause a static type error.
 
 ### **The Role of @override in Python 3.12**
 
 Python 3.12 introduced the @typing.override decorator as part of PEP 698.13 This decorator serves to make a developer's intent explicit: it signals to static type checkers (like Mypy) that a method is
 
-*intended* to override a method from a parent class.
+_intended_ to override a method from a parent class.
 
 While @override does not enforce LSP at runtime, it is a powerful tool for maintaining it during development. It helps prevent accidental LSP violations that occur due to refactoring. For example, if a method in the base class is renamed or its signature changes, any subclass method decorated with @override that no longer matches will trigger a static analysis error. This immediately alerts the developer that the subclass is no longer correctly implementing the superclass contract, allowing them to fix the issue before it becomes a runtime bug.
 
@@ -384,7 +384,7 @@ print("Saving PDF document...")
 
 ### **LSP as a Litmus Test for Abstractions**
 
-The Liskov Substitution Principle should be viewed as more than just a rule for inheritance; it is a critical diagnostic tool for validating the quality of abstractions. When developers create class hierarchies, they often model them on real-world "is-a" relationships (e.g., "a square is a rectangle"). However, LSP violations reveal that the *behavioral* "is-a" relationship does not hold true within the context of the program's logic.14
+The Liskov Substitution Principle should be viewed as more than just a rule for inheritance; it is a critical diagnostic tool for validating the quality of abstractions. When developers create class hierarchies, they often model them on real-world "is-a" relationships (e.g., "a square is a rectangle"). However, LSP violations reveal that the _behavioral_ "is-a" relationship does not hold true within the context of the program's logic.14
 
 When a subclass is forced to throw a NotImplementedError or fundamentally alter the expected behavior of its parent, it is a clear signal that the abstraction defined by the parent class is flawed—it is either incorrect or too specific for its intended use. Therefore, an LSP violation is not just a bug in the subclass but a design smell that points to a deeper issue in the parent class's abstraction. By using LSP as a litmus test during the design phase, developers are forced to consider behavior over simple taxonomy, which leads to the creation of more robust, correct, and truly substitutable class hierarchies.
 
@@ -416,7 +416,7 @@ from abc import ABC, abstractmethod
 class IMachine(ABC):\
 """A fat interface for all office machines."""\
 @abstractmethod\
-def print\_document(self, document):\
+def print_document(self, document):\
 pass
 
 ```
@@ -430,7 +430,7 @@ def fax\_document(self, document):
 ```
 
 class SimplePrinter(IMachine):\
-def print\_document(self, document):\
+def print_document(self, document):\
 print(f"Printing {document}...")
 
 ```
@@ -455,29 +455,29 @@ from abc import ABC, abstractmethod
 class IPrinter(ABC):\
 """A focused interface for printing."""\
 @abstractmethod\
-def print\_document(self, document):\
+def print_document(self, document):\
 pass
 
 class IScanner(ABC):\
 """A focused interface for scanning."""\
 @abstractmethod\
-def scan\_document(self, document):\
+def scan_document(self, document):\
 pass
 
 class IFax(ABC):\
 """A focused interface for faxing."""\
 @abstractmethod\
-def fax\_document(self, document):\
+def fax_document(self, document):\
 pass
 
 class SimplePrinter(IPrinter):\
 """Implements only the interface it needs."""\
-def print\_document(self, document):\
+def print_document(self, document):\
 print(f"Printing {document}...")
 
 class MultiFunctionDevice(IPrinter, IScanner, IFax):\
 """A device that can perform multiple roles."""\
-def print\_document(self, document):\
+def print_document(self, document):\
 print(f"Printing {document} from MFD...")
 
 ```
@@ -528,7 +528,7 @@ Python
 \# Violation of DIP\
 class EmailClient:\
 """A low-level module for sending emails."""\
-def send\_email(self, recipient: str, message: str):\
+def send_email(self, recipient: str, message: str):\
 print(f"Sending email to {recipient}: {message}")
 
 class NotificationService:\
@@ -582,11 +582,11 @@ print(f"Sending SMS to {recipient}: {message}")
 
 \# The system can now be configured with different low-level modules\
 \# without changing the NotificationService.\
-email\_notifier = NotificationService(EmailClient())\
-sms\_notifier = NotificationService(SmsClient())
+email_notifier = NotificationService(EmailClient())\
+sms_notifier = NotificationService(SmsClient())
 
-email\_notifier.send\_notification("test@example.com", "Hello via Email!")\
-sms\_notifier.send\_notification("+1234567890", "Hello via SMS!")
+email_notifier.send_notification("test@example.com", "Hello via Email!")\
+sms_notifier.send_notification("+1234567890", "Hello via SMS!")
 
 This design is highly flexible. The NotificationService is completely decoupled from the specific delivery mechanism, making the system easier to maintain, test, and extend.23
 
@@ -596,8 +596,8 @@ The Dependency Inversion Principle is not just a pattern for decoupling individu
 
 The architecture is structured as follows:
 
-* The **"ports"** are the interfaces defined by the application's core (the high-level module). These ports represent the needs of the business logic. For example, the core might define a UserRepositoryPort interface with methods like find\_by\_id and save. These ports are the abstractions that DIP refers to.
-* The **"adapters"** are the concrete implementations of these ports that interact with the outside world (the low-level modules). For instance, a SqlUserRepositoryAdapter and an InMemoryUserRepositoryAdapter could both implement the UserRepositoryPort. The former would translate method calls into SQL queries, while the latter would use an in-memory dictionary for testing purposes.
+- The **"ports"** are the interfaces defined by the application's core (the high-level module). These ports represent the needs of the business logic. For example, the core might define a UserRepositoryPort interface with methods like find_by_id and save. These ports are the abstractions that DIP refers to.
+- The **"adapters"** are the concrete implementations of these ports that interact with the outside world (the low-level modules). For instance, a SqlUserRepositoryAdapter and an InMemoryUserRepositoryAdapter could both implement the UserRepositoryPort. The former would translate method calls into SQL queries, while the latter would use an in-memory dictionary for testing purposes.
 
 DIP is the principle that enforces this structure. The flow of dependencies is inverted to always point inwards, towards the application core. The core logic depends only on the ports (abstractions) it defines. The adapters, which contain all the messy details of external technologies, also depend on these ports by implementing them. This allows the core business logic of an application to be developed and tested in complete isolation from its delivery mechanisms and infrastructure, leading to a highly maintainable and technology-agnostic system.
 
@@ -613,9 +613,9 @@ Using DI provides numerous benefits that directly support SOLID design: it promo
 
 Python's dynamic nature and support for keyword arguments make implementing DI straightforward. The most common techniques are:
 
-* **Constructor Injection:** This is the most common, explicit, and generally preferred form of DI. Dependencies are passed as arguments to the class's \_\_init\_\_ method and assigned to instance variables. This pattern ensures that an object is created in a fully valid and operational state, as all its required dependencies are provided upon instantiation.27 The\
+- **Constructor Injection:** This is the most common, explicit, and generally preferred form of DI. Dependencies are passed as arguments to the class's \_\_init\_\_ method and assigned to instance variables. This pattern ensures that an object is created in a fully valid and operational state, as all its required dependencies are provided upon instantiation.27 The\
   NotificationService example in the previous chapter uses constructor injection.
-* **Setter Injection:** With this pattern, dependencies are provided through a dedicated public setter method after the object has been created. This is useful for optional dependencies or for situations where a dependency might need to be changed during the object's lifecycle. However, it can lead to objects existing in an incomplete state before the setter is called, which can be a source of bugs.27
+- **Setter Injection:** With this pattern, dependencies are provided through a dedicated public setter method after the object has been created. This is useful for optional dependencies or for situations where a dependency might need to be changed during the object's lifecycle. However, it can lead to objects existing in an incomplete state before the setter is called, which can be a source of bugs.27
 
 ### **DI Frameworks: Automating Assembly**
 
@@ -642,8 +642,8 @@ Let's expand on the NotificationService example from the previous chapter to dem
 Python
 
 import os\
-from dependency\_injector import containers, providers\
-from dependency\_injector.wiring import inject, Provide\
+from dependency_injector import containers, providers\
+from dependency_injector.wiring import inject, Provide\
 from unittest.mock import Mock
 
 \# --- Application Components (from Chapter 5) ---
@@ -665,9 +665,9 @@ def send\_notification(self, user: str, message: str):
 ```
 
 class EmailClient(IMessageClient):\
-def \_\_init\_\_(self, api\_key: str):\
-self.api\_key = api\_key\
-print(f"EmailClient initialized with API key:...{api\_key\[-4:]}")
+def \_\_init\_\_(self, api_key: str):\
+self.api_key = api_key\
+print(f"EmailClient initialized with API key:...{api_key\[-4:]}")
 
 ```
 def send(self, recipient: str, message: str) \-\> None:
@@ -675,9 +675,9 @@ def send(self, recipient: str, message: str) \-\> None:
 ```
 
 class SmsClient(IMessageClient):\
-def \_\_init\_\_(self, account\_sid: str):\
-self.account\_sid = account\_sid\
-print(f"SmsClient initialized with Account SID:...{account\_sid\[-4:]}")
+def \_\_init\_\_(self, account_sid: str):\
+self.account_sid = account_sid\
+print(f"SmsClient initialized with Account SID:...{account_sid\[-4:]}")
 
 ```
 def send(self, recipient: str, message: str) \-\> None:
@@ -723,9 +723,9 @@ notification\_service \= providers.Factory(
 \# --- Main Application Logic ---
 
 @inject\
-def main(service: NotificationService = Provide\[AppContainer.notification\_service]):\
+def main(service: NotificationService = Provide\[AppContainer.notification_service]):\
 """Main function with dependencies injected by the container."""\
-service.send\_notification("user@example.com", "Your order has shipped!")
+service.send_notification("user@example.com", "Your order has shipped!")
 
 if \_\_name\_\_ == "\_\_main\_\_":\
 \# Create the container instance\

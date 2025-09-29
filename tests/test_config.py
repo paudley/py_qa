@@ -86,6 +86,8 @@ def test_build_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert cfg.tool_settings["bandit"]["severity"] == "medium"
     assert cfg.tool_settings["bandit"]["confidence"] == "medium"
     assert cfg.tool_settings["pylint"]["fail-under"] == 9.5
+    assert "ruff" in cfg.dedupe.dedupe_prefer
+    assert "pyright" in cfg.dedupe.dedupe_prefer
 
 
 def test_build_config_cli_overrides_complexity_and_strictness(

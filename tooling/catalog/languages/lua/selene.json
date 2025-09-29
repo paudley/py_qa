@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "selene",
+  "description": "Modern Lua linter powered by selene.",
+  "languages": ["lua"],
+  "phase": "lint",
+  "runtime": {
+    "type": "rust",
+    "package": "selene",
+    "minVersion": "0.29.0",
+    "versionCommand": ["selene", "--version"]
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_selene",
+        "config": {
+          "base": ["selene"]
+        }
+      },
+      "description": "Lint Lua sources with Selene.",
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.python.parse_selene"
+        }
+      }
+    }
+  ],
+  "fileExtensions": [".lua"],
+  "configFiles": ["selene.toml"],
+  "tags": ["requires-cargo"],
+  "documentation": {
+    "help": {
+      "path": "docs/selene_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/selene_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

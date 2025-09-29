@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "command_project_scanner",
+  "type": "command",
+  "description": "Compose project-aware scanner commands with exclude and target planning.",
+  "implementation": "pyqa.tooling.strategies.command_project_scanner",
+  "config": {
+    "base": {
+      "type": "array",
+      "required": true,
+      "description": "Base command arguments executed for every invocation."
+    },
+    "exclude": {
+      "type": "object",
+      "required": false,
+      "description": "Configuration controlling how exclude paths are resolved."
+    },
+    "targets": {
+      "type": "object",
+      "required": false,
+      "description": "Rules for selecting scanner targets from context metadata."
+    },
+    "options": {
+      "type": "array",
+      "required": false,
+      "description": "List of option mappings translating settings into CLI flags."
+    }
+  }
+}

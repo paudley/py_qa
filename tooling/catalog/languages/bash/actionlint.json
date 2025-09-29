@@ -1,0 +1,153 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "actionlint",
+  "description": "GitHub Actions workflow linting.",
+  "languages": ["yaml"],
+  "phase": "lint",
+  "fileExtensions": [".yml", ".yaml"],
+  "runtime": {
+    "type": "binary",
+    "install": {
+      "strategy": "installer_download_artifact",
+      "config": {
+        "version": "1.7.1",
+        "contextLabel": "install_actionlint.download",
+        "download": {
+          "name": "actionlint",
+          "cacheSubdir": "actionlint",
+          "targets": [
+            {
+              "os": ["linux"],
+              "arch": ["x86_64", "amd64"],
+              "url": "https://github.com/rhysd/actionlint/releases/download/v{version}/actionlint_{version}_linux_amd64.tar.gz",
+              "archive": {
+                "format": "tar.gz",
+                "member": "actionlint"
+              },
+              "filename": "actionlint",
+              "chmod": true
+            },
+            {
+              "os": ["linux"],
+              "arch": ["arm64", "aarch64"],
+              "url": "https://github.com/rhysd/actionlint/releases/download/v{version}/actionlint_{version}_linux_arm64.tar.gz",
+              "archive": {
+                "format": "tar.gz",
+                "member": "actionlint"
+              },
+              "filename": "actionlint",
+              "chmod": true
+            },
+            {
+              "os": ["darwin"],
+              "arch": ["x86_64", "amd64"],
+              "url": "https://github.com/rhysd/actionlint/releases/download/v{version}/actionlint_{version}_darwin_amd64.tar.gz",
+              "archive": {
+                "format": "tar.gz",
+                "member": "actionlint"
+              },
+              "filename": "actionlint",
+              "chmod": true
+            },
+            {
+              "os": ["darwin"],
+              "arch": ["arm64", "aarch64"],
+              "url": "https://github.com/rhysd/actionlint/releases/download/v{version}/actionlint_{version}_darwin_arm64.tar.gz",
+              "archive": {
+                "format": "tar.gz",
+                "member": "actionlint"
+              },
+              "filename": "actionlint",
+              "chmod": true
+            }
+          ]
+        }
+      }
+    }
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_download_binary",
+        "config": {
+          "version": "1.7.1",
+          "download": {
+            "name": "actionlint",
+            "cacheSubdir": "actionlint",
+            "targets": [
+              {
+                "os": ["linux"],
+                "arch": ["x86_64", "amd64"],
+                "url": "https://github.com/rhysd/actionlint/releases/download/v{version}/actionlint_{version}_linux_amd64.tar.gz",
+                "archive": {
+                  "format": "tar.gz",
+                  "member": "actionlint"
+                },
+                "filename": "actionlint",
+                "chmod": true
+              },
+              {
+                "os": ["linux"],
+                "arch": ["arm64", "aarch64"],
+                "url": "https://github.com/rhysd/actionlint/releases/download/v{version}/actionlint_{version}_linux_arm64.tar.gz",
+                "archive": {
+                  "format": "tar.gz",
+                  "member": "actionlint"
+                },
+                "filename": "actionlint",
+                "chmod": true
+              },
+              {
+                "os": ["darwin"],
+                "arch": ["x86_64", "amd64"],
+                "url": "https://github.com/rhysd/actionlint/releases/download/v{version}/actionlint_{version}_darwin_amd64.tar.gz",
+                "archive": {
+                  "format": "tar.gz",
+                  "member": "actionlint"
+                },
+                "filename": "actionlint",
+                "chmod": true
+              },
+              {
+                "os": ["darwin"],
+                "arch": ["arm64", "aarch64"],
+                "url": "https://github.com/rhysd/actionlint/releases/download/v{version}/actionlint_{version}_darwin_arm64.tar.gz",
+                "archive": {
+                  "format": "tar.gz",
+                  "member": "actionlint"
+                },
+                "filename": "actionlint",
+                "chmod": true
+              }
+            ]
+          },
+          "base": ["${binary}", "-format", "{{json .}}", "-no-color"],
+          "targets": {
+            "type": "filePattern",
+            "suffixes": [".yml", ".yaml"],
+            "contains": ["/.github/workflows/"],
+            "fallbackDirectory": ".github/workflows",
+            "defaultToRoot": true
+          }
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.ops.parse_actionlint"
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/actionlint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/actionlint_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

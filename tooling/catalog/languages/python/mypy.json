@@ -1,0 +1,162 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "mypy",
+  "description": "Python static type checking with mypy.",
+  "extends": ["python_defaults"],
+  "languages": ["python"],
+  "phase": "analysis",
+  "fileExtensions": [".py", ".pyi"],
+  "configFiles": ["pyproject.toml", "mypy.ini", "setup.cfg"],
+  "runtime": {
+    "type": "python",
+    "package": "mypy",
+    "minVersion": "1.18.1",
+    "versionCommand": ["mypy", "--version"]
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments passed to mypy."
+    },
+    {
+      "name": "cache-dir",
+      "type": "path",
+      "description": "Location for mypy cache data."
+    },
+    {
+      "name": "check-untyped-defs",
+      "type": "bool",
+      "description": "Type check function bodies with no type hints."
+    },
+    {
+      "name": "config",
+      "type": "path",
+      "description": "Custom mypy configuration file to load."
+    },
+    {
+      "name": "disallow-any-generics",
+      "type": "bool",
+      "description": "Error when using generic types with implicit Any."
+    },
+    {
+      "name": "disallow-untyped-decorators",
+      "type": "bool",
+      "description": "Error on decorators without type annotations."
+    },
+    {
+      "name": "exclude-gitignore",
+      "type": "bool",
+      "description": "Respect .gitignore entries when discovering modules."
+    },
+    {
+      "name": "ignore-missing-imports",
+      "type": "bool",
+      "description": "Suppress errors about missing type information"
+    },
+    {
+      "name": "namespace-packages",
+      "type": "bool",
+      "description": "Treat packages without __init__.py as namespaces."
+    },
+    {
+      "name": "no-implicit-reexport",
+      "type": "bool",
+      "description": "Disable implicit re-exporting of imported names."
+    },
+    {
+      "name": "plugins",
+      "type": "list[str]",
+      "description": "Mypy plugins to load via --plugin."
+    },
+    {
+      "name": "python-executable",
+      "type": "path",
+      "description": "Interpreter executable used for type checking."
+    },
+    {
+      "name": "python-version",
+      "type": "str",
+      "description": "Python version string for type checking."
+    },
+    {
+      "name": "show-column-numbers",
+      "type": "bool",
+      "description": "Include column numbers in diagnostic output."
+    },
+    {
+      "name": "show-error-codes",
+      "type": "bool",
+      "description": "Display error codes alongside messages."
+    },
+    {
+      "name": "sqlite-cache",
+      "type": "bool",
+      "description": "Enable SQLite cache backend for mypy."
+    },
+    {
+      "name": "strict",
+      "type": "bool",
+      "description": "Enable mypy strict mode."
+    },
+    {
+      "name": "warn-redundant-casts",
+      "type": "bool",
+      "description": "Warn when casting yields the same type."
+    },
+    {
+      "name": "warn-return-any",
+      "type": "bool",
+      "description": "Warn when returning Any typed values."
+    },
+    {
+      "name": "warn-unreachable",
+      "type": "bool",
+      "description": "Warn when statements are statically unreachable."
+    },
+    {
+      "name": "warn-unused-configs",
+      "type": "bool",
+      "description": "Warn when config options are unused."
+    },
+    {
+      "name": "warn-unused-ignores",
+      "type": "bool",
+      "description": "Warn about unused # type: ignore directives."
+    }
+  ],
+  "actions": [
+    {
+      "name": "type-check",
+      "command": {
+        "strategy": "command_mypy",
+        "config": {
+          "base": ["mypy", "--output", "json"]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.python.parse_mypy"
+        }
+      }
+    }
+  ],
+  "suppressions": {
+    "tests": ["^mypy, (?:.+/)?tests?/.*:.*no-untyped-def.*$", "^mypy, (?:.+/)?tests?/.*:.*attr-defined.*$"]
+  },
+  "documentation": {
+    "help": {
+      "path": "docs/mypy_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/mypy_cmd_help.txt",
+      "format": "text"
+    },
+    "shared": {
+      "path": "docs/SHARED_KNOBS.md",
+      "format": "markdown"
+    }
+  }
+}

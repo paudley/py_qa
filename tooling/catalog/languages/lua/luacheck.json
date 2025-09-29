@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "luacheck",
+  "description": "Lua static analyzer supporting custom standards.",
+  "languages": ["lua"],
+  "phase": "lint",
+  "runtime": {
+    "type": "lua",
+    "package": "luacheck",
+    "minVersion": "1.2.0",
+    "versionCommand": ["luacheck", "--version"]
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to luacheck."
+    },
+    {
+      "name": "config",
+      "type": "path",
+      "description": "luacheck configuration file."
+    },
+    {
+      "name": "exclude-files",
+      "type": "list[str]",
+      "description": "Paths or globs excluded from linting."
+    },
+    {
+      "name": "globals",
+      "type": "list[str]",
+      "description": "Global identifiers treated as defined."
+    },
+    {
+      "name": "ignore",
+      "type": "list[str]",
+      "description": "Diagnostic codes or patterns to ignore."
+    },
+    {
+      "name": "max-code-line-length",
+      "type": "int",
+      "description": "Maximum length for code lines (excluding comments/strings)."
+    },
+    {
+      "name": "max-comment-line-length",
+      "type": "int",
+      "description": "Maximum length for comment lines."
+    },
+    {
+      "name": "max-cyclomatic-complexity",
+      "type": "int",
+      "description": "Upper limit for function cyclomatic complexity."
+    },
+    {
+      "name": "max-line-length",
+      "type": "int",
+      "description": "Maximum permitted line length."
+    },
+    {
+      "name": "max-string-line-length",
+      "type": "int",
+      "description": "Maximum length for lines inside multi-line strings."
+    },
+    {
+      "name": "quiet",
+      "type": "bool",
+      "description": "Suppress non-critical luacheck output."
+    },
+    {
+      "name": "read-globals",
+      "type": "list[str]",
+      "description": "Globals allowed for read-only access."
+    },
+    {
+      "name": "std",
+      "type": "str",
+      "description": "Standard globals set to load (e.g. luajit, love, ngx)."
+    }
+  ],
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_luacheck",
+        "config": {
+          "base": ["luacheck"]
+        }
+      },
+      "description": "Lint Lua sources using luacheck.",
+      "parser": {
+        "strategy": "parser_text",
+        "config": {
+          "transform": "pyqa.parsers.lua.parse_luacheck"
+        }
+      }
+    }
+  ],
+  "fileExtensions": [".lua"],
+  "tags": ["requires-luarocks"],
+  "documentation": {
+    "help": {
+      "path": "docs/luacheck_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/luacheck_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

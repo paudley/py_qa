@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "kube-linter",
+  "description": "Kubernetes deployment misconfiguration detector.",
+  "extends": ["go_runtime"],
+  "languages": ["kubernetes"],
+  "phase": "analysis",
+  "fileExtensions": [".yml", ".yaml"],
+  "runtime": {
+    "type": "go",
+    "package": "golang.stackrox.io/kube-linter/cmd/kube-linter@v0.7.6",
+    "minVersion": "0.7.6",
+    "versionCommand": ["kube-linter", "version"]
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_kube_linter",
+        "config": {
+          "base": ["kube-linter", "lint", "--format", "json"]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.ops.parse_kube_linter"
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/kube-linter_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/kube-linter_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

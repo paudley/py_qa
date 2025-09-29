@@ -30,6 +30,8 @@ from ..models import RunResult
 from ..reporting.emitters import write_json_report, write_pr_summary, write_sarif_report
 from ..reporting.formatters import render
 from ..tool_env.models import PreparedCommand
+from ..tooling.loader import CatalogIntegrityError, CatalogValidationError, ToolCatalogLoader
+from ..tools.builtin_registry import initialize_registry
 from ..tools.registry import DEFAULT_REGISTRY
 from ..workspace import is_py_qa_workspace
 from .config_builder import build_config
@@ -37,6 +39,16 @@ from .doctor import run_doctor
 from .options import LintOptions
 from .tool_info import run_tool_info
 from .utils import filter_py_qa_paths
+
+PHASE_SORT_ORDER: tuple[str, ...] = (
+    "lint",
+    "format",
+    "analysis",
+    "security",
+    "test",
+    "coverage",
+    "utility",
+)
 
 
 def lint_command(
@@ -328,6 +340,8 @@ def lint_command(
     except (ValueError, ConfigError) as exc:  # invalid option combinations
         raise typer.BadParameter(str(exc)) from exc
 
+    catalog_snapshot = initialize_registry(registry=DEFAULT_REGISTRY)
+
     hooks = OrchestratorHooks()
     orchestrator = Orchestrator(
         registry=DEFAULT_REGISTRY,
@@ -336,7 +350,12 @@ def lint_command(
     )
 
     if tool_info:
-        exit_code = run_tool_info(tool_info, root=root, cfg=config)
+        exit_code = run_tool_info(
+            tool_info,
+            root=root,
+            cfg=config,
+            catalog_snapshot=catalog_snapshot,
+        )
         raise typer.Exit(code=exit_code)
     if fetch_all_tools:
         total_actions = sum(len(tool.actions) for tool in DEFAULT_REGISTRY.tools())
@@ -390,7 +409,18 @@ def lint_command(
                 )
         else:
             results = orchestrator.fetch_all_tools(config, root=root)
-        results.sort(key=lambda item: (item[0], item[1]))
+        tool_lookup = {tool.name: tool for tool in DEFAULT_REGISTRY.tools()}
+        phase_rank = {
+            name: PHASE_SORT_ORDER.index(tool.phase) if tool.phase in PHASE_SORT_ORDER else len(PHASE_SORT_ORDER)
+            for name, tool in tool_lookup.items()
+        }
+        results.sort(
+            key=lambda item: (
+                phase_rank.get(item[0], len(PHASE_SORT_ORDER)),
+                item[0],
+                item[1],
+            ),
+        )
 
         if not quiet:
             table = Table(
@@ -401,11 +431,13 @@ def lint_command(
             )
             table.add_column("Tool", style="cyan" if config.output.color else None)
             table.add_column("Action", style="cyan" if config.output.color else None)
+            table.add_column("Phase", style="cyan" if config.output.color else None)
             table.add_column("Status", style="magenta" if config.output.color else None)
             table.add_column("Source", style="magenta" if config.output.color else None)
             table.add_column("Version", style="green" if config.output.color else None)
             failures: list[tuple[str, str, str]] = []
             for tool_name, action_name, prepared, error in results:
+                phase = getattr(tool_lookup.get(tool_name), "phase", "-")
                 if prepared is None:
                     status = "error"
                     source = "-"
@@ -415,7 +447,7 @@ def lint_command(
                     status = "ready"
                     source = prepared.source
                     version = prepared.version or "unknown"
-                table.add_row(tool_name, action_name, status, source, version)
+                table.add_row(tool_name, action_name, phase, status, source, version)
             console.print(table)
             info(
                 f"Prepared {len(results)} tool action(s) without execution.",

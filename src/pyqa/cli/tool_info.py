@@ -14,7 +14,9 @@ from rich.table import Table
 
 from ..config import Config, ConfigError
 from ..config_loader import ConfigLoader
+from ..tooling import CatalogSnapshot, ToolDefinition
 from ..tools.base import Tool, ToolContext
+from ..tools.builtins import initialize_registry
 from ..tools.registry import DEFAULT_REGISTRY
 from .utils import ToolStatus, check_tool_status
 
@@ -25,14 +27,10 @@ def run_tool_info(
     *,
     cfg: Config | None = None,
     console: Console | None = None,
+    catalog_snapshot: CatalogSnapshot | None = None,
 ) -> int:
     """Present detailed information about *tool_name* and return an exit status."""
     console = console or Console()
-
-    tool = DEFAULT_REGISTRY.try_get(tool_name)
-    if tool is None:
-        console.print(Panel(f"[red]Unknown tool:[/red] {tool_name}", border_style="red"))
-        return 1
 
     if cfg is None:
         loader = ConfigLoader.for_root(root)
@@ -48,14 +46,24 @@ def run_tool_info(
         current_cfg = cfg
         load_result = None
 
+    if catalog_snapshot is None:
+        catalog_snapshot = initialize_registry(registry=DEFAULT_REGISTRY)
+
+    tool = DEFAULT_REGISTRY.try_get(tool_name)
+    if tool is None:
+        console.print(Panel(f"[red]Unknown tool:[/red] {tool_name}", border_style="red"))
+        return 1
+
     status = check_tool_status(tool)
 
     console.print(Panel(f"[bold cyan]{tool.name}[/bold cyan]", title="Tool"))
 
     overrides = current_cfg.tool_settings.get(tool.name, {}) or {}
 
-    console.print(_build_metadata_table(tool, status))
+    catalog_tool = _find_catalog_tool(tool.name, catalog_snapshot)
+    console.print(_build_metadata_table(tool, status, catalog_tool))
     console.print(_build_actions_table(tool, current_cfg, root, overrides))
+    _render_documentation(console, tool)
 
     if overrides:
         console.print(
@@ -98,7 +106,11 @@ def run_tool_info(
     return 0
 
 
-def _build_metadata_table(tool: Tool, status: ToolStatus) -> Table:
+def _build_metadata_table(
+    tool: Tool,
+    status: ToolStatus,
+    catalog_tool: ToolDefinition | None = None,
+) -> Table:
     table = Table(title="Metadata", box=box.SIMPLE, expand=True)
     table.add_column("Field", style="bold")
     table.add_column("Value", overflow="fold")
@@ -113,6 +125,8 @@ def _build_metadata_table(tool: Tool, status: ToolStatus) -> Table:
     table.add_row("Languages", ", ".join(tool.languages) or "-")
     table.add_row("File Extensions", ", ".join(tool.file_extensions) or "-")
     table.add_row("Config Files", ", ".join(tool.config_files) or "-")
+    if catalog_tool is not None:
+        table.add_row("Phase", catalog_tool.phase)
     version_cmd = " ".join(map(str, tool.version_command)) if tool.version_command else "-"
     table.add_row("Version Command", version_cmd)
     table.add_row("Current Version", status.version or "-")
@@ -121,6 +135,18 @@ def _build_metadata_table(tool: Tool, status: ToolStatus) -> Table:
     if status.path:
         table.add_row("Executable Path", status.path)
     return table
+
+
+def _find_catalog_tool(
+    name: str,
+    snapshot: CatalogSnapshot | None,
+) -> ToolDefinition | None:
+    if snapshot is None:
+        return None
+    for definition in snapshot.tools:
+        if definition.name == name or name in definition.aliases:
+            return definition
+    return None
 
 
 def _build_actions_table(
@@ -149,6 +175,39 @@ def _build_actions_table(
         command_str = " ".join(map(str, command)) if command else "-"
         table.add_row(action.name, action_type, command_str, action.description or "-")
     return table
+
+
+def _render_documentation(console: Console, tool: Tool) -> None:
+    documentation = getattr(tool, "documentation", None)
+    if documentation is None:
+        return
+
+    if documentation.help is not None:
+        console.print(
+            Panel(
+                documentation.help.content,
+                title="Help",
+                border_style="cyan",
+            ),
+        )
+
+    if documentation.command is not None:
+        console.print(
+            Panel(
+                documentation.command.content,
+                title="Command Reference",
+                border_style="cyan",
+            ),
+        )
+
+    if documentation.shared is not None:
+        console.print(
+            Panel(
+                documentation.shared.content,
+                title="Shared Knobs",
+                border_style="cyan",
+            ),
+        )
 
 
 __all__ = ["run_tool_info"]

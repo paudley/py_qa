@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "stylelint",
+  "description": "CSS and preprocessor linting via stylelint.",
+  "extends": ["npm_runtime"],
+  "languages": ["css"],
+  "phase": "lint",
+  "fileExtensions": [".css", ".scss", ".sass", ".less"],
+  "runtime": {
+    "type": "npm",
+    "package": "stylelint",
+    "versionCommand": ["stylelint", "--version"]
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to the stylelint command."
+    },
+    {
+      "name": "config",
+      "type": "path",
+      "description": "Custom stylelint configuration file path."
+    },
+    {
+      "name": "ignore-path",
+      "type": "path",
+      "description": "Path to stylelint ignore file."
+    },
+    {
+      "name": "max-warnings",
+      "type": "int",
+      "description": "Maximum warnings allowed before stylelint exits non-zero."
+    }
+  ],
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_stylelint",
+        "config": {
+          "base": ["stylelint"]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.javascript.parse_stylelint"
+        }
+      }
+    },
+    {
+      "name": "fix",
+      "isFix": true,
+      "command": {
+        "strategy": "command_stylelint",
+        "config": {
+          "base": ["stylelint", "--fix"],
+          "isFix": true
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/stylelint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/stylelint_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

@@ -23,6 +23,7 @@ from ..config import Config, ConfigError
 from ..config_loader import ConfigLoader, ConfigLoadResult
 from ..context import TreeSitterContextResolver
 from ..process_utils import run_command
+from ..tools.builtins import initialize_registry
 from ..tools.registry import DEFAULT_REGISTRY
 from .utils import ToolStatus, check_tool_status
 
@@ -65,6 +66,8 @@ def run_doctor(root: Path, *, console: Console | None = None) -> int:
     load_result = _load_configuration(root, console)
     if load_result is None:
         return 1
+
+    initialize_registry(registry=DEFAULT_REGISTRY)
 
     _render_environment_section(console)
     _render_grammar_section(console)

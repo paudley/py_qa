@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "sqlfluff",
+  "description": "SQL linter and formatter using sqlfluff.",
+  "languages": ["sql"],
+  "phase": "lint",
+  "runtime": {
+    "type": "python",
+    "package": "sqlfluff",
+    "minVersion": "3.1.0",
+    "versionCommand": ["sqlfluff", "--version"]
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_sqlfluff",
+        "config": {
+          "base": ["sqlfluff", "lint", "--format", "json"],
+          "is_fix": false,
+          "isFix": false
+        }
+      },
+      "description": "Lint SQL files using sqlfluff.",
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.config.parse_sqlfluff"
+        }
+      }
+    },
+    {
+      "name": "fix",
+      "command": {
+        "strategy": "command_sqlfluff",
+        "config": {
+          "base": ["sqlfluff", "fix", "--force"],
+          "is_fix": true,
+          "isFix": true
+        }
+      },
+      "isFix": true,
+      "description": "Autofix SQL files via sqlfluff fix."
+    }
+  ],
+  "extends": ["python_defaults"],
+  "fileExtensions": [".sql"],
+  "documentation": {
+    "help": {
+      "path": "docs/sqlfluff_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/sqlfluff_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

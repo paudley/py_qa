@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "checkmake",
+  "description": "Makefile linter powered by checkmake.",
+  "extends": ["go_runtime"],
+  "languages": ["make"],
+  "phase": "lint",
+  "fileExtensions": ["Makefile", "makefile", ".mk"],
+  "runtime": {
+    "type": "go",
+    "package": "github.com/checkmake/checkmake/cmd/checkmake",
+    "versionCommand": ["checkmake", "--version"]
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_checkmake",
+        "config": {
+          "base": ["checkmake", "lint"]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.misc.parse_checkmake"
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/checkmake_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/checkmake_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

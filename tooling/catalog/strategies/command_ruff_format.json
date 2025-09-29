@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "command_ruff_format",
+  "type": "command",
+  "description": "Construct ruff format commands.",
+  "implementation": "pyqa.tooling.strategies.ruff_format_command",
+  "config": {
+    "base": {
+      "type": "array",
+      "required": true,
+      "description": "Base command used to invoke ruff format."
+    }
+  }
+}

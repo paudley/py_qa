@@ -8,8 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from pyqa.config import Config
-from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _LuacheckCommand
+from pyqa.tooling.strategies import luacheck_command
+from pyqa.tools.base import ToolContext
 
 
 def test_luacheck_command_build(tmp_path: Path) -> None:
@@ -28,13 +28,9 @@ def test_luacheck_command_build(tmp_path: Path) -> None:
         },
     )
 
-    action = ToolAction(
-        name="lint",
-        command=_LuacheckCommand(base=("luacheck",)),
-        append_files=True,
-    )
-
-    command = action.build_command(ctx)
+    builder = luacheck_command({"base": ["luacheck"]})
+    command = list(builder.build(ctx))
+    command.extend(str(path) for path in ctx.files)
     assert command[0] == "luacheck"
     assert "--formatter" in command and "plain" in command
     assert "--codes" in command

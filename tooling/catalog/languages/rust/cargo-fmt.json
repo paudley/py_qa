@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "cargo-fmt",
+  "description": "Rust formatter via cargo fmt.",
+  "languages": ["rust"],
+  "phase": "lint",
+  "runtime": {
+    "type": "binary",
+    "versionCommand": ["rustfmt", "--version"]
+  },
+  "actions": [
+    {
+      "name": "format",
+      "command": {
+        "strategy": "command_cargo_fmt",
+        "config": {
+          "base": ["cargo", "fmt"],
+          "isFix": true
+        }
+      },
+      "isFix": true,
+      "appendFiles": false,
+      "description": "Format Rust code using rustfmt."
+    },
+    {
+      "name": "check",
+      "command": {
+        "strategy": "command_cargo_fmt",
+        "config": {
+          "base": ["cargo", "fmt", "--check"],
+          "isFix": false
+        }
+      },
+      "appendFiles": false,
+      "description": "Verify Rust formatting without changes."
+    }
+  ],
+  "fileExtensions": [".rs"],
+  "documentation": {
+    "help": {
+      "path": "docs/cargo-fmt_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/cargo-fmt_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

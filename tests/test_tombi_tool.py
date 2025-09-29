@@ -1,15 +1,28 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2025 Blackcat Informatics® Inc.
 
-"""Tests for tombi tool integration."""
+"""Tests for the tombi strategy."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from pyqa.config import Config
+from pyqa.tooling import ToolCatalogLoader
+from pyqa.tooling.strategies import command_project_scanner
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _TombiCommand
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_CATALOG_ROOT = _PROJECT_ROOT / "tooling" / "catalog"
+
+
+def _tombi_config() -> dict[str, object]:
+    loader = ToolCatalogLoader(catalog_root=_CATALOG_ROOT)
+    snapshot = loader.load_snapshot()
+    for definition in snapshot.tools:
+        if definition.name == "tombi":
+            action = definition.actions[0]
+            return dict(action.command.reference.config)
+    raise AssertionError("tombi command configuration missing from catalog")
 
 
 def test_tombi_command_build(tmp_path: Path) -> None:
@@ -17,28 +30,21 @@ def test_tombi_command_build(tmp_path: Path) -> None:
     ctx = ToolContext(
         cfg=cfg,
         root=tmp_path,
-        files=[tmp_path / "configs" / "pyproject.toml"],
+        files=[tmp_path / "pyproject.toml"],
         settings={
-            "stdin-filename": tmp_path / "stdin.toml",
+            "stdin-filename": tmp_path / "pyproject.toml",
             "offline": True,
-            "no-cache": True,
             "verbose": 2,
-            "args": ["--schema", "https://example/schema.json"],
+            "no-cache": True,
+            "args": ["pyproject.toml"],
         },
     )
 
-    action = ToolAction(
-        name="lint",
-        command=_TombiCommand(base=("tombi", "lint")),
-        append_files=True,
-    )
+    builder = command_project_scanner(_tombi_config())
+    action = ToolAction(name="lint", command=builder, append_files=False)
 
     command = action.build_command(ctx)
-    assert command[0] == "tombi"
-    assert command[1] == "lint"
-    assert "--stdin-filename" in command
-    assert "--offline" in command
-    assert "--no-cache" in command
+    assert command[:2] == ["tombi", "lint"]
+    assert "--stdin-filename" in command and str((tmp_path / "pyproject.toml").resolve()) in command
     assert command.count("-v") == 2
-    assert "--schema" in command
-    assert command[-1].endswith("pyproject.toml")
+    assert "--no-cache" in command

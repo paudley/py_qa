@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "speccy",
+  "description": "OpenAPI linter powered by Speccy.",
+  "extends": ["npm_runtime"],
+  "languages": ["openapi"],
+  "phase": "lint",
+  "fileExtensions": ["openapi.yaml", "openapi.yml", "swagger.yaml", "swagger.yml", "speccy.yaml", "speccy.yml"],
+  "runtime": {
+    "type": "npm",
+    "package": "speccy",
+    "versionCommand": ["speccy", "--version"]
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_speccy",
+        "config": {
+          "base": ["speccy", "lint"]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.config.parse_speccy"
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/speccy_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/speccy_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

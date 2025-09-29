@@ -4,7 +4,7 @@
 
 # **The Definitive Guide to High-Performance Data Manipulation with Polars LazyFrames**
 
-***
+---
 
 ## **Section 1: The Lazy Execution Paradigm: A Fundamental Shift in Data Processing**
 
@@ -22,26 +22,26 @@ Every lazy query in Polars follows a distinct, three-stage lifecycle. Internaliz
 
 #### **Stage 1: Initialization (The LazyFrame Object)**
 
-The process begins by creating a LazyFrame object. It is crucial to understand that a LazyFrame is not a container for data; it is a lightweight object that represents a *future computation* on a dataset.6 The most performant way to initialize a
+The process begins by creating a LazyFrame object. It is crucial to understand that a LazyFrame is not a container for data; it is a lightweight object that represents a _future computation_ on a dataset.6 The most performant way to initialize a
 
-LazyFrame is by using one of the scan\_\* functions, such as pl.scan\_csv() or pl.scan\_parquet(). These functions are nearly instantaneous, even on terabyte-scale datasets, because they do not read the data. Instead, they quickly inspect the file's metadata to infer the schema (column names and types), establishing the starting point of the query plan without incurring the cost of I/O.7
+LazyFrame is by using one of the scan\_\* functions, such as pl.scan_csv() or pl.scan_parquet(). These functions are nearly instantaneous, even on terabyte-scale datasets, because they do not read the data. Instead, they quickly inspect the file's metadata to infer the schema (column names and types), establishing the starting point of the query plan without incurring the cost of I/O.7
 
 #### **Stage 2: Transformation (Building the Plan)**
 
-Once a LazyFrame is initialized, every subsequent method call—such as .filter(), .with\_columns(), .group\_by(), or .join()—does not trigger any data processing. Instead, each call appends a new node to the logical query plan.4 This stage is where the user defines
+Once a LazyFrame is initialized, every subsequent method call—such as .filter(), .with_columns(), .group_by(), or .join()—does not trigger any data processing. Instead, each call appends a new node to the logical query plan.4 This stage is where the user defines
 
-*what* transformations are needed. The responsibility of determining *how* to execute these transformations most efficiently is delegated entirely to Polars' internal query optimizer. This separation of concerns is a core tenet of the lazy API.
+_what_ transformations are needed. The responsibility of determining _how_ to execute these transformations most efficiently is delegated entirely to Polars' internal query optimizer. This separation of concerns is a core tenet of the lazy API.
 
 #### **Stage 3: Execution (Triggering the Computation)**
 
 The meticulously constructed query plan remains dormant until its execution is explicitly triggered. There are two primary categories of triggers:
 
 1. **In-Memory Materialization:** The .collect() method is the most common trigger. When called, it passes the complete logical plan to the query optimizer, which generates an efficient physical execution plan. The engine then executes this plan, processes the data, and materializes the final result as a standard, in-memory Polars DataFrame.3
-2. **Out-of-Core Sinking:** For workflows where the final result is too large to fit in RAM, the .sink\_\*() methods (e.g., .sink\_parquet(), .sink\_csv()) serve as the execution trigger. These methods execute the query plan in a streaming fashion and write the results directly to a file on disk, batch by batch. This powerful technique allows Polars to process and generate datasets of arbitrary size, as the full result is never held in memory at once.10
+2. **Out-of-Core Sinking:** For workflows where the final result is too large to fit in RAM, the .sink\_\*() methods (e.g., .sink_parquet(), .sink_csv()) serve as the execution trigger. These methods execute the query plan in a streaming fashion and write the results directly to a file on disk, batch by batch. This powerful technique allows Polars to process and generate datasets of arbitrary size, as the full result is never held in memory at once.10
 
 The lazy API can be viewed as a contract between the developer and the Polars engine. The developer agrees to provide the full sequence of operations before demanding a result. In return, the engine guarantees that it will use its global view of this sequence to find and execute the most performant computation path possible. This symbiotic relationship is impossible in an eager framework, where the engine's lack of foresight about future operations is a fundamental barrier to holistic optimization. Therefore, the practice of chaining as many operations as feasible before a final .collect() or .sink\_\*() call is not merely a stylistic preference; it is the central mechanism for unlocking the profound performance advantages of Polars.
 
-***
+---
 
 ## **Section 2: Under the Hood: The Polars Query Optimizer**
 
@@ -57,9 +57,9 @@ Predicate pushdown is arguably the single most impactful optimization for I/O-bo
 
 Instead of loading a 100 GB dataset into memory and then discarding 99% of it with a .filter() call, predicate pushdown instructs the file scanner to only retrieve the rows that satisfy the condition. This dramatically reduces the amount of data that needs to be read from disk, transferred over a network, and processed by the CPU.
 
-* **For CSV Files:** The scanner can evaluate the predicate condition on each row as it is being parsed and simply discard rows that do not match, preventing them from ever being allocated in memory.
-* **For Parquet Files:** The benefit is even more profound. Parquet is a columnar format that stores data in chunks called "row groups." Crucially, the file's metadata contains statistics (such as minimum and maximum values) for each column within each row group. When a query with a filter like pl.col("transaction\_date") > "2024-01-01" is executed, the Polars scanner first reads this lightweight metadata. If it finds a row group where the maximum transaction\_date is "2023-12-31", it knows that no rows in that entire multi-megabyte chunk can possibly satisfy the predicate. Consequently, it skips reading that row group from disk entirely, leading to massive I/O savings.
-* **For Hive-Partitioned Data:** This principle extends to datasets partitioned into a directory structure (e.g., .../year=2024/month=01/data.parquet). A filter on the partition columns (pl.col("year") == 2024) allows Polars to prune the search space at the filesystem level, ignoring entire directories and avoiding the need to even request those files from the storage system.
+- **For CSV Files:** The scanner can evaluate the predicate condition on each row as it is being parsed and simply discard rows that do not match, preventing them from ever being allocated in memory.
+- **For Parquet Files:** The benefit is even more profound. Parquet is a columnar format that stores data in chunks called "row groups." Crucially, the file's metadata contains statistics (such as minimum and maximum values) for each column within each row group. When a query with a filter like pl.col("transaction_date") > "2024-01-01" is executed, the Polars scanner first reads this lightweight metadata. If it finds a row group where the maximum transaction_date is "2023-12-31", it knows that no rows in that entire multi-megabyte chunk can possibly satisfy the predicate. Consequently, it skips reading that row group from disk entirely, leading to massive I/O savings.
+- **For Hive-Partitioned Data:** This principle extends to datasets partitioned into a directory structure (e.g., .../year=2024/month=01/data.parquet). A filter on the partition columns (pl.col("year") == 2024) allows Polars to prune the search space at the filesystem level, ignoring entire directories and avoiding the need to even request those files from the storage system.
 
 ### **2.3 Projection Pushdown: Reading Only What You Need**
 
@@ -67,20 +67,20 @@ Projection pushdown is the column-oriented counterpart to predicate pushdown. Th
 
 If a query is initiated on a Parquet file with 200 columns, but the final output only depends on three of them, projection pushdown instructs the scanner to read only the data corresponding to those three columns. Because Parquet stores data column by column, the scanner can seek directly to the required data blocks on disk and ignore the other 197 columns, again providing a substantial reduction in I/O and memory usage.
 
-The true power of the optimizer is realized when these pushdowns are combined. A query that filters by user segment and calculates the average purchase amount will only touch the row groups that contain the relevant user segments, and within those row groups, it will only read the data for the user\_segment and purchase\_amount columns.
+The true power of the optimizer is realized when these pushdowns are combined. A query that filters by user segment and calculates the average purchase amount will only touch the row groups that contain the relevant user segments, and within those row groups, it will only read the data for the user_segment and purchase_amount columns.
 
 ### **2.4 A Symphony of Optimizations**
 
 While predicate and projection pushdown are the most prominent, the Polars optimizer performs a host of other valuable transformations 11:
 
-* **Slice Pushdown:** A query like lf.head(10) does not result in a full file scan. The optimizer pushes the slice information down to the scanner, which is instructed to stop reading data as soon as 10 rows have been collected.
-* **Expression Simplification & Constant Folding:** The optimizer performs algebraic simplification on expressions. For instance, pl.col("price") \_ (1.0 + 0.2) will be rewritten as pl.col("price") \_ 1.2 before execution, avoiding a redundant addition operation on every row.
-* **Common Subplan Elimination:** If a query involves using the same LazyFrame in multiple branches (e.g., in a self-join or a union), the optimizer will identify this common sub-plan, execute it only once, and cache the result for reuse, preventing redundant computation.
-* **Join Ordering:** In queries involving multiple joins, the optimizer can use cardinality estimates to reorder the joins. It will attempt to perform the most selective joins (those that produce the smallest intermediate results) first, which helps to minimize memory pressure throughout the rest of the pipeline.
+- **Slice Pushdown:** A query like lf.head(10) does not result in a full file scan. The optimizer pushes the slice information down to the scanner, which is instructed to stop reading data as soon as 10 rows have been collected.
+- **Expression Simplification & Constant Folding:** The optimizer performs algebraic simplification on expressions. For instance, pl.col("price") \_ (1.0 + 0.2) will be rewritten as pl.col("price") \_ 1.2 before execution, avoiding a redundant addition operation on every row.
+- **Common Subplan Elimination:** If a query involves using the same LazyFrame in multiple branches (e.g., in a self-join or a union), the optimizer will identify this common sub-plan, execute it only once, and cache the result for reuse, preventing redundant computation.
+- **Join Ordering:** In queries involving multiple joins, the optimizer can use cardinality estimates to reorder the joins. It will attempt to perform the most selective joins (those that produce the smallest intermediate results) first, which helps to minimize memory pressure throughout the rest of the pipeline.
 
-The query plan, made visible through the .explain() method, serves as a crucial feedback mechanism. By comparing the "naive" plan (what was written) to the "optimized" plan (what will be executed), a developer can gain a deep understanding of how their coding patterns directly influence performance. For example, observing that a SELECTION predicate has been integrated into the PARQUET SCAN node confirms that predicate pushdown was successful. This insight establishes a clear causal link: writing optimizer-friendly code—such as starting with scan\_parquet() instead of the read\_parquet().lazy() anti-pattern—directly enables these powerful performance gains. Therefore, inspecting the query plan is not an academic exercise; it is a fundamental practice for debugging, learning, and writing high-performance Polars code.
+The query plan, made visible through the .explain() method, serves as a crucial feedback mechanism. By comparing the "naive" plan (what was written) to the "optimized" plan (what will be executed), a developer can gain a deep understanding of how their coding patterns directly influence performance. For example, observing that a SELECTION predicate has been integrated into the PARQUET SCAN node confirms that predicate pushdown was successful. This insight establishes a clear causal link: writing optimizer-friendly code—such as starting with scan_parquet() instead of the read_parquet().lazy() anti-pattern—directly enables these powerful performance gains. Therefore, inspecting the query plan is not an academic exercise; it is a fundamental practice for debugging, learning, and writing high-performance Polars code.
 
-***
+---
 
 ## **Section 3: A Practical Guide to Core LazyFrame Operations**
 
@@ -98,12 +98,12 @@ import polars as pl
 
 \# BEST PRACTICE: Initiate the lazy query with a scan.\
 \# This only reads metadata and enables pushdown optimizations.\
-lf\_best = pl.scan\_parquet("data/large\_dataset.parquet")
+lf_best = pl.scan_parquet("data/large_dataset.parquet")
 
 \# ANTI-PATTERN: Avoid reading the full file into memory first.\
 \# This defeats the purpose of the lazy API for I/O operations.\
-\# df\_eager = pl.read\_parquet("data/large\_dataset.parquet")\
-\# lf\_bad = df\_eager.lazy()
+\# df_eager = pl.read_parquet("data/large_dataset.parquet")\
+\# lf_bad = df_eager.lazy()
 
 ### **3.2 Essential Transformations: The Lazy Way**
 
@@ -116,98 +116,98 @@ These are the most fundamental operations and map directly to the pushdown optim
 Python
 
 \# Example: Find the top 5 longest trips for a specific passenger count in 2023.\
-lazy\_query = (\
-pl.scan\_parquet("data/taxi\_trips.parquet")\
+lazy_query = (\
+pl.scan_parquet("data/taxi_trips.parquet")\
 .filter(\
-(pl.col("pickup\_datetime").dt.year() == 2023) &\
-(pl.col("passenger\_count") == 2)\
+(pl.col("pickup_datetime").dt.year() == 2023) &\
+(pl.col("passenger_count") == 2)\
 )\
-.select(\["pickup\_datetime", "trip\_distance", "total\_amount"])\
-.sort("trip\_distance", descending=True)\
+.select(\["pickup_datetime", "trip_distance", "total_amount"])\
+.sort("trip_distance", descending=True)\
 .head(5)\
 )
 
 \# The query is only a plan at this point. Let's inspect it.\
-print(lazy\_query.explain())
+print(lazy_query.explain())
 
 The optimized plan for this query will show the FILTER conditions (SELECTION) and the column select (PROJECTION) integrated directly into the PARQUET SCAN node. This confirms that Polars will only read the necessary row groups and columns from the file.
 
-#### **Creating and Modifying Columns (with\_columns)**
+#### **Creating and Modifying Columns (with_columns)**
 
-The with\_columns method is the idiomatic way to add or transform columns. Polars' expression system allows for complex feature engineering within a single, highly parallelized step.
+The with_columns method is the idiomatic way to add or transform columns. Polars' expression system allows for complex feature engineering within a single, highly parallelized step.
 
 Python
 
 \# Example: Calculate trip duration in minutes and the fare per mile.\
-lazy\_query = (\
-pl.scan\_parquet("data/taxi\_trips.parquet")\
-.filter(pl.col("trip\_distance") > 0)\
-.with\_columns(\
+lazy_query = (\
+pl.scan_parquet("data/taxi_trips.parquet")\
+.filter(pl.col("trip_distance") > 0)\
+.with_columns(\
 \# Calculate duration in minutes\
-duration\_minutes=(pl.col("dropoff\_datetime") - pl.col("pickup\_datetime")).dt.total\_seconds() / 60,\
+duration_minutes=(pl.col("dropoff_datetime") - pl.col("pickup_datetime")).dt.total_seconds() / 60,\
 \# Calculate fare per mile\
-fare\_per\_mile=pl.col("fare\_amount") / pl.col("trip\_distance")\
+fare_per_mile=pl.col("fare_amount") / pl.col("trip_distance")\
 )\
-.select(\["duration\_minutes", "fare\_per\_mile", "total\_amount"])\
+.select(\["duration_minutes", "fare_per_mile", "total_amount"])\
 )
 
 \# Execute the query to get the result\
-result\_df = lazy\_query.collect()
+result_df = lazy_query.collect()
 
-#### **Complex Aggregations (group\_by, agg)**
+#### **Complex Aggregations (group_by, agg)**
 
-Aggregations are a cornerstone of data analysis. Polars' lazy group\_by operations are executed using highly efficient, parallel hash-based algorithms.
+Aggregations are a cornerstone of data analysis. Polars' lazy group_by operations are executed using highly efficient, parallel hash-based algorithms.
 
 Python
 
 \# Example: Calculate summary statistics for each payment type.\
-lazy\_query = (\
-pl.scan\_parquet("data/taxi\_trips.parquet")\
-.group\_by("payment\_type")\
+lazy_query = (\
+pl.scan_parquet("data/taxi_trips.parquet")\
+.group_by("payment_type")\
 .agg(\
-avg\_fare=pl.col("fare\_amount").mean(),\
-std\_tip=pl.col("tip\_amount").std(),\
-total\_trips=pl.col("passenger\_count").count(),\
-avg\_passengers=pl.col("passenger\_count").mean()\
+avg_fare=pl.col("fare_amount").mean(),\
+std_tip=pl.col("tip_amount").std(),\
+total_trips=pl.col("passenger_count").count(),\
+avg_passengers=pl.col("passenger_count").mean()\
 )\
-.sort("total\_trips", descending=True)\
+.sort("total_trips", descending=True)\
 )
 
 \# Execute the aggregation\
-agg\_df = lazy\_query.collect()
+agg_df = lazy_query.collect()
 
 #### **Efficiently Joining Datasets (join)**
 
-Joins are handled lazily, allowing the optimizer to perform pushdown operations on both LazyFrames *before* executing the expensive join operation.
+Joins are handled lazily, allowing the optimizer to perform pushdown operations on both LazyFrames _before_ executing the expensive join operation.
 
 Python
 
 \# Create two LazyFrames\
-lf\_trips = pl.scan\_parquet("data/taxi\_trips.parquet").select(\["vendor\_id", "total\_amount"])\
-lf\_vendors = pl.scan\_csv("data/vendor\_lookup.csv").lazy() #.lazy() is fine here as the CSV is small
+lf_trips = pl.scan_parquet("data/taxi_trips.parquet").select(\["vendor_id", "total_amount"])\
+lf_vendors = pl.scan_csv("data/vendor_lookup.csv").lazy() #.lazy() is fine here as the CSV is small
 
 \# Example: Perform a left join to add vendor names to the trip data.\
-lazy\_join\_query = lf\_trips.join(\
-lf\_vendors,\
-on="vendor\_id",\
+lazy_join_query = lf_trips.join(\
+lf_vendors,\
+on="vendor_id",\
 how="left"\
 )
 
 \# The join is now part of the query plan.\
-print(lazy\_join\_query.explain())
+print(lazy_join_query.explain())
 
 \# Collect the final result\
-joined\_df = lazy\_join\_query.collect()
+joined_df = lazy_join_query.collect()
 
-The query plan will show a JOIN node, with the PARQUET SCAN and CSV SCAN as its inputs. Any filters applied to lf\_trips or lf\_vendors before the join would be pushed down into their respective scan nodes.
+The query plan will show a JOIN node, with the PARQUET SCAN and CSV SCAN as its inputs. Any filters applied to lf_trips or lf_vendors before the join would be pushed down into their respective scan nodes.
 
 ### **3.3 Inspecting the Plan: Your Performance Toolkit**
 
 To write truly high-performance code, one must be able to verify that the query optimizer is working as expected. Polars provides three essential tools for this purpose.
 
-* **.explain():** This is the primary tool for inspecting the query plan. It outputs a textual representation of the operations Polars will perform. Passing optimized=False shows the naive plan, which is useful for seeing how your code is transformed. Comparing the naive and optimized plans is the best way to learn how the optimizer works.13
-* **.show\_graph():** For complex queries with multiple joins and branches, the textual plan can be hard to follow. .show\_graph() provides a visual rendering of the query plan as a directed acyclic graph (DAG), which can make the data flow more intuitive. This requires the graphviz library to be installed.6
-* **.profile():** While .explain() shows the plan, .profile() executes the query and shows the time spent in each node of the plan. It returns a tuple containing the final DataFrame and a profiling DataFrame. This is the definitive tool for identifying the specific operation that is the bottleneck in a slow query.13
+- **.explain():** This is the primary tool for inspecting the query plan. It outputs a textual representation of the operations Polars will perform. Passing optimized=False shows the naive plan, which is useful for seeing how your code is transformed. Comparing the naive and optimized plans is the best way to learn how the optimizer works.13
+- **.show_graph():** For complex queries with multiple joins and branches, the textual plan can be hard to follow. .show_graph() provides a visual rendering of the query plan as a directed acyclic graph (DAG), which can make the data flow more intuitive. This requires the graphviz library to be installed.6
+- **.profile():** While .explain() shows the plan, .profile() executes the query and shows the time spent in each node of the plan. It returns a tuple containing the final DataFrame and a profiling DataFrame. This is the definitive tool for identifying the specific operation that is the bottleneck in a slow query.13
 
 The following table summarizes the connection between the automatic optimizations performed by Polars and the specific user actions that enable them. Understanding these relationships is key to consistently writing high-performance lazy queries.
 
@@ -219,7 +219,7 @@ The following table summarizes the connection between the automatic optimization
 | **Expression Simplification** | Pre-calculates constants and simplifies algebraic expressions before execution.     | This is fully automatic. Write clear, readable expressions; Polars will optimize them.         |
 | **Streaming Engine**          | Processes data in smaller, memory-fitting batches instead of all at once.           | For larger-than-RAM datasets, use .collect(streaming=True) or .sink\_\*().                     |
 
-***
+---
 
 ## **Section 4: Scaling to Massive Datasets with the Streaming Engine**
 
@@ -233,55 +233,55 @@ Activating the streaming engine is remarkably simple; it is enabled by passing a
 
 Python
 
-\# Assume 'very\_large\_dataset.parquet' is 100 GB and machine has 16 GB RAM.\
-lazy\_query = (\
-pl.scan\_parquet("data/very\_large\_dataset.parquet")\
-.group\_by("category")\
+\# Assume 'very_large_dataset.parquet' is 100 GB and machine has 16 GB RAM.\
+lazy_query = (\
+pl.scan_parquet("data/very_large_dataset.parquet")\
+.group_by("category")\
 .agg(pl.col("value").mean())\
 )
 
 \# This will fail with an Out-of-Memory (OOM) error on the standard engine.\
-\# result = lazy\_query.collect()
+\# result = lazy_query.collect()
 
 \# This will succeed by processing the file in chunks.\
-streaming\_result = lazy\_query.collect(streaming=True)
+streaming_result = lazy_query.collect(streaming=True)
 
-Interestingly, for very large datasets that *do* fit in memory, the streaming engine can sometimes be even faster than the default in-memory engine. This is because processing data in smaller, sequential batches can lead to better CPU cache utilization and avoid the performance penalties associated with cache misses that can occur when operating on massive, contiguous memory blocks.16
+Interestingly, for very large datasets that _do_ fit in memory, the streaming engine can sometimes be even faster than the default in-memory engine. This is because processing data in smaller, sequential batches can lead to better CPU cache utilization and avoid the performance penalties associated with cache misses that can occur when operating on massive, contiguous memory blocks.16
 
 ### **4.2 True Out-of-Core: Sinking Results Directly to Disk**
 
-The .collect(streaming=True) method solves the problem of processing input data that is larger than RAM, but it still assumes that the *final, materialized result* of the query can comfortably fit in memory. In many aggregation scenarios, this is a safe assumption. However, if the query is a transformation that does not reduce the number of rows (e.g., a large .with\_columns() operation), the result itself may be too large for memory.
+The .collect(streaming=True) method solves the problem of processing input data that is larger than RAM, but it still assumes that the _final, materialized result_ of the query can comfortably fit in memory. In many aggregation scenarios, this is a safe assumption. However, if the query is a transformation that does not reduce the number of rows (e.g., a large .with_columns() operation), the result itself may be too large for memory.
 
 For these cases, Polars provides the .sink\_\*() methods. These methods execute the query in streaming mode and write the output batches directly to a file on disk, completely bypassing the need to ever hold the full result set in memory.10
 
 Python
 
 \# Assume the result of this query is also larger than RAM.\
-lazy\_query = (\
-pl.scan\_parquet("data/very\_large\_dataset.parquet")\
-.with\_columns(\
-processed\_value=pl.col("value") \* 1.1\
+lazy_query = (\
+pl.scan_parquet("data/very_large_dataset.parquet")\
+.with_columns(\
+processed_value=pl.col("value") \* 1.1\
 )\
 )
 
 \# This will execute the query in streaming mode and write the output\
 \# directly to a new Parquet file without collecting in memory.\
-lazy\_query.sink\_parquet("data/processed\_large\_dataset.parquet")
+lazy_query.sink_parquet("data/processed_large_dataset.parquet")
 
 ### **4.3 Streaming-Compatible Operations: What Works and What Doesn't**
 
 Not all operations can be executed in a streaming fashion. The key principle is that an operation must be able to produce correct results by processing one batch at a time, potentially with some small, constant state carried between batches.
 
-* **Streamable Operations:** filter, with\_columns, select, and most aggregations (sum, mean, count, min, max) are perfectly streamable. For example, a global sum can be calculated by summing each batch and then summing the intermediate results.
-* **Non-Streamable Operations:** Operations that require a global view of the entire dataset at once are inherently difficult or impossible to stream. A full .sort() is the canonical example, as it's impossible to know if the first row of the first batch is the true first row of the entire dataset until all data has been seen. Other examples include certain window functions like .cum\_sum() which require the final value of the previous batch to process the current one.
+- **Streamable Operations:** filter, with_columns, select, and most aggregations (sum, mean, count, min, max) are perfectly streamable. For example, a global sum can be calculated by summing each batch and then summing the intermediate results.
+- **Non-Streamable Operations:** Operations that require a global view of the entire dataset at once are inherently difficult or impossible to stream. A full .sort() is the canonical example, as it's impossible to know if the first row of the first batch is the true first row of the entire dataset until all data has been seen. Other examples include certain window functions like .cum_sum() which require the final value of the previous batch to process the current one.
 
-A query can be *partially* streaming. The engine will execute as much of the plan as possible in streaming mode. When it encounters a non-streamable operation (a "pipeline breaker"), it will materialize the result up to that point in memory, execute the non-streamable operation, and then potentially resume streaming from there.
+A query can be _partially_ streaming. The engine will execute as much of the plan as possible in streaming mode. When it encounters a non-streamable operation (a "pipeline breaker"), it will materialize the result up to that point in memory, execute the non-streamable operation, and then potentially resume streaming from there.
 
 Troubleshooting Streaming Queries:\
 The .explain(streaming=True) method is the essential tool for debugging streaming performance. The output will explicitly demarcate which parts of the plan are running in streaming mode inside a --- STREAMING --- block. Any operations outside this block are pipeline breakers that will trigger an in-memory materialization.17\
-The primary strategy for handling massive datasets is to design a "streaming-aware" architecture. This involves structuring the query to perform as much data reduction as possible (e.g., filtering and aggregating) within the streaming part of the plan *before* any non-streamable operations. For instance, performing a group\_by().agg() before a .sort() is vastly more memory-efficient than the reverse, as the aggregation dramatically reduces the number of rows that need to be sorted in memory. This conscious planning of the query pipeline is critical for successfully processing data at scale.
+The primary strategy for handling massive datasets is to design a "streaming-aware" architecture. This involves structuring the query to perform as much data reduction as possible (e.g., filtering and aggregating) within the streaming part of the plan _before_ any non-streamable operations. For instance, performing a group_by().agg() before a .sort() is vastly more memory-efficient than the reverse, as the aggregation dramatically reduces the number of rows that need to be sorted in memory. This conscious planning of the query pipeline is critical for successfully processing data at scale.
 
-***
+---
 
 ## **Section 5: Advanced Strategies and Best Practices for Production Workloads**
 
@@ -291,9 +291,9 @@ Moving from proficient use to expert-level application of Polars LazyFrames invo
 
 The choice of file format has a profound impact on the performance of lazy queries. While Polars can lazily scan many formats, **Apache Parquet** is unequivocally the superior choice for several reasons:
 
-* **Columnar Storage:** Parquet stores data by column, not by row. This physical layout is a perfect match for projection pushdown. When a query only needs 3 out of 100 columns, the Polars scanner can read just those three contiguous blocks of data from disk, skipping the rest entirely.6
-* **Embedded Statistics:** As discussed, Parquet files store rich metadata, including min/max statistics for each column within each row group. This metadata is the key that enables effective predicate pushdown, allowing the engine to skip large chunks of files without reading them.
-* **Compression and Encoding:** Parquet supports efficient compression and encoding schemes that further reduce file size and I/O overhead.
+- **Columnar Storage:** Parquet stores data by column, not by row. This physical layout is a perfect match for projection pushdown. When a query only needs 3 out of 100 columns, the Polars scanner can read just those three contiguous blocks of data from disk, skipping the rest entirely.6
+- **Embedded Statistics:** As discussed, Parquet files store rich metadata, including min/max statistics for each column within each row group. This metadata is the key that enables effective predicate pushdown, allowing the engine to skip large chunks of files without reading them.
+- **Compression and Encoding:** Parquet supports efficient compression and encoding schemes that further reduce file size and I/O overhead.
 
 In contrast, row-based formats like CSV can be scanned lazily, but the engine gains far fewer optimization opportunities. It can still filter rows during the parse, but it cannot skip large blocks of the file based on metadata, making it inherently less efficient for selective queries on large datasets.
 
@@ -306,77 +306,77 @@ A typical structure might look like this:
 /dataset/\
 ├── year=2023/\
 │ ├── month=11/\
-│ │ ├── data\_part\_0.parquet\
-│ │ └── data\_part\_1.parquet\
+│ │ ├── data_part_0.parquet\
+│ │ └── data_part_1.parquet\
 │ └── month=12/\
-│ └── data\_part\_0.parquet\
+│ └── data_part_0.parquet\
 └── year=2024/\
 └── month=01/\
-└── data\_part\_0.parquet
+└── data_part_0.parquet
 
 The partition column values (year, month) are encoded directly in the file paths. This allows Polars' predicate pushdown to operate at the filesystem level. When a query includes a filter like pl.col("year") == 2023, the engine doesn't need to inspect any of the files in the year=2024 directory. It prunes them from the query plan entirely, drastically reducing the number of files that need to be listed and potentially read.
 
 #### **Reading Partitioned Data**
 
-Polars can automatically discover and utilize these partitions when scanning. The key is to use a glob pattern in the path and enable the hive\_partitioning option.
+Polars can automatically discover and utilize these partitions when scanning. The key is to use a glob pattern in the path and enable the hive_partitioning option.
 
 Python
 
 \# Scan a Hive-partitioned dataset from an S3 bucket\
-lazy\_query = pl.scan\_parquet(\
+lazy_query = pl.scan_parquet(\
 "s3://my-bucket/dataset/\*\*/\*.parquet",\
-hive\_partitioning=True\
+hive_partitioning=True\
 )
 
 \# This filter will be pushed down to the filesystem level,\
 \# only listing and reading files within the 'year=2024' directory.\
-filtered\_lf = lazy\_query.filter(pl.col("year") == 2024)
+filtered_lf = lazy_query.filter(pl.col("year") == 2024)
 
-print(filtered\_lf.explain())
+print(filtered_lf.explain())
 
-For more complex or non-standard partitioning schemes, pl.scan\_pyarrow\_dataset provides an alternative with more fine-grained control.
+For more complex or non-standard partitioning schemes, pl.scan_pyarrow_dataset provides an alternative with more fine-grained control.
 
 #### **Writing Partitioned Data**
 
-Creating partitioned datasets is a critical part of the data engineering lifecycle. Polars supports this through the .sink\_parquet() method combined with pl.PartitionByKey, or by leveraging the underlying pyarrow engine.
+Creating partitioned datasets is a critical part of the data engineering lifecycle. Polars supports this through the .sink_parquet() method combined with pl.PartitionByKey, or by leveraging the underlying pyarrow engine.
 
 Python
 
 \# Example of writing a partitioned dataset\
-source\_lf = pl.scan\_csv("data/source\_data.csv")
+source_lf = pl.scan_csv("data/source_data.csv")
 
-source\_lf.sink\_parquet(\
-"./output\_partitioned/",\
-partition\_by=\["category", "event\_year"],\
-\# Creates a Hive-style directory structure like /category=A/event\_year=2024/\
+source_lf.sink_parquet(\
+"./output_partitioned/",\
+partition_by=\["category", "event_year"],\
+\# Creates a Hive-style directory structure like /category=A/event_year=2024/\
 )
 
 ### **5.3 Structuring Complex Queries for Readability and Maintenance**
 
 As data pipelines grow, a single, monolithic lazy chain can become hundreds of lines long and difficult to debug or maintain. It is a best practice to structure complex queries into logical, reusable components.
 
-* **Functions:** Break down distinct logical stages of the pipeline (e.g., data cleaning, feature engineering, final aggregation) into separate functions. Each function should accept a LazyFrame as input and return a transformed LazyFrame.
-* **.pipe() Method:** The .pipe() method provides an elegant way to integrate these functions into a lazy chain. It passes the LazyFrame it's called on as the first argument to the provided function. This improves readability and makes the overall pipeline easier to test and reason about.18
+- **Functions:** Break down distinct logical stages of the pipeline (e.g., data cleaning, feature engineering, final aggregation) into separate functions. Each function should accept a LazyFrame as input and return a transformed LazyFrame.
+- **.pipe() Method:** The .pipe() method provides an elegant way to integrate these functions into a lazy chain. It passes the LazyFrame it's called on as the first argument to the provided function. This improves readability and makes the overall pipeline easier to test and reason about.18
 
 Python
 
-def add\_time\_features(lf: pl.LazyFrame) -> pl.LazyFrame:\
-return lf.with\_columns(\
+def add_time_features(lf: pl.LazyFrame) -> pl.LazyFrame:\
+return lf.with_columns(\
 month=pl.col("timestamp").dt.month(),\
 weekday=pl.col("timestamp").dt.weekday(),\
 )
 
-def summarize\_by\_user(lf: pl.LazyFrame) -> pl.LazyFrame:\
-return lf.group\_by("user\_id").agg(\
-total\_spent=pl.col("amount").sum()\
+def summarize_by_user(lf: pl.LazyFrame) -> pl.LazyFrame:\
+return lf.group_by("user_id").agg(\
+total_spent=pl.col("amount").sum()\
 )
 
 \# Build the pipeline using.pipe() for clarity\
-final\_lf = (\
-pl.scan\_parquet("data/transactions.parquet")\
-.pipe(add\_time\_features)\
-.pipe(summarize\_by\_user)\
-.filter(pl.col("total\_spent") > 1000)\
+final_lf = (\
+pl.scan_parquet("data/transactions.parquet")\
+.pipe(add_time_features)\
+.pipe(summarize_by_user)\
+.filter(pl.col("total_spent") > 1000)\
 )
 
 ### **5.4 The Strategic .collect(): Caching for Iterative Development**
@@ -385,7 +385,7 @@ While the guiding principle of lazy execution is to delay .collect() until the v
 
 In these scenarios, it is often wise to strategically materialize an intermediate result. By running the expensive initial steps once and calling .collect(), the developer creates a smaller, cleaned, in-memory DataFrame. Subsequent iterative analysis and experimentation can then be performed in eager mode on this cached result, providing instant feedback without the cost of re-running the initial heavy lifting.19 This is a conscious trade-off, sacrificing pure lazy execution for a significant boost in development velocity.
 
-***
+---
 
 ## **Conclusion**
 
@@ -393,11 +393,11 @@ The Polars LazyFrame API represents more than just a different syntax; it embodi
 
 Mastering lazy execution requires moving beyond a line-by-line mentality and learning to think in terms of building and refining a complete query plan. The key to success lies in a set of core best practices:
 
-* **Always initiate lazy I/O with scan\_\* functions** to enable pushdown optimizations at the source.
-* **Chain as many operations as possible** before a final .collect() or .sink\_\*() to give the optimizer the widest possible scope for improvement.
-* **Use .explain() and .profile() as essential tools** to inspect the query plan, verify that optimizations are being applied, and identify true performance bottlenecks.
-* **Embrace the streaming engine** via .collect(streaming=True) or .sink\_\*() as the default approach for any dataset that is large or of unknown size, architecting queries to be "streaming-aware."
-* **Leverage optimized file formats like Parquet and data layouts like Hive partitioning** to maximize the effectiveness of the query optimizer.
+- **Always initiate lazy I/O with scan\_\* functions** to enable pushdown optimizations at the source.
+- **Chain as many operations as possible** before a final .collect() or .sink\_\*() to give the optimizer the widest possible scope for improvement.
+- **Use .explain() and .profile() as essential tools** to inspect the query plan, verify that optimizations are being applied, and identify true performance bottlenecks.
+- **Embrace the streaming engine** via .collect(streaming=True) or .sink\_\*() as the default approach for any dataset that is large or of unknown size, architecting queries to be "streaming-aware."
+- **Leverage optimized file formats like Parquet and data layouts like Hive partitioning** to maximize the effectiveness of the query optimizer.
 
 By adopting these principles, data professionals can harness the full power of Polars to build data pipelines that are not only blazingly fast but also scalable, memory-efficient, and maintainable, confidently tackling data challenges of any size.
 

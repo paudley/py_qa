@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "remark-lint",
+  "description": "Markdown linting via remark-lint preset.",
+  "extends": ["npm_runtime"],
+  "languages": ["markdown"],
+  "phase": "lint",
+  "fileExtensions": [".md", ".mdx", ".markdown"],
+  "runtime": {
+    "type": "npm",
+    "package": "remark-cli",
+    "versionCommand": ["remark", "--version"]
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "ignoreExit": true,
+      "command": {
+        "strategy": "command_remark_lint",
+        "config": {
+          "base": ["remark", "--use", "remark-preset-lint-recommended"],
+          "isFix": false
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.config.parse_remark"
+        }
+      }
+    },
+    {
+      "name": "fix",
+      "isFix": true,
+      "command": {
+        "strategy": "command_remark_lint",
+        "config": {
+          "base": ["remark", "--use", "remark-preset-lint-recommended"],
+          "isFix": true
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/remark-lint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/remark-lint_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

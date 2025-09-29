@@ -8,8 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from pyqa.config import Config
-from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _DockerfilelintCommand
+from pyqa.tooling.strategies import dockerfilelint_command
+from pyqa.tools.base import ToolContext
 
 
 def test_dockerfilelint_command_build(tmp_path: Path) -> None:
@@ -21,13 +21,9 @@ def test_dockerfilelint_command_build(tmp_path: Path) -> None:
         settings={"config": tmp_path / ".dockerfilelintrc"},
     )
 
-    action = ToolAction(
-        name="lint",
-        command=_DockerfilelintCommand(base=("dockerfilelint", "--output", "json")),
-        append_files=True,
-    )
-
-    command = action.build_command(ctx)
+    builder = dockerfilelint_command({"base": ["dockerfilelint", "--output", "json"]})
+    command = list(builder.build(ctx))
+    command.extend(str(path) for path in ctx.files)
     assert command[0] == "dockerfilelint"
     assert "--output" in command and "json" in command
     assert "--config" in command and str(tmp_path / ".dockerfilelintrc") in command

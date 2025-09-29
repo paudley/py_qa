@@ -14,9 +14,11 @@ import re
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from ..annotations import AnnotationEngine
+from ..tools.catalog_metadata import catalog_duplicate_hint_codes
 
 
 @dataclass(frozen=True)
@@ -36,12 +38,10 @@ class AdviceBuilder:
     @property
     def annotation_engine(self) -> AnnotationEngine:
         """Return the underlying annotation engine (useful for cache priming)."""
-
         return self._engine
 
     def build(self, entries: Sequence[tuple[str, int, str, str, str, str]]) -> list[AdviceEntry]:
         """Generate advice entries from concise formatter tuples."""
-
         return generate_advice(entries, self._engine)
 
 
@@ -52,32 +52,12 @@ _COMPLEXITY_CODES = {
     ("ruff", "PLR0915"),
 }
 
-_DUPLICATE_HINT_CODES = {
-    "pylint": {"R0801"},
-    "ruff": {
-        "B014",
-        "B025",
-        "B033",
-        "PIE794",
-        "PIE796",
-        "PYI016",
-        "PYI062",
-        "PT014",
-        "SIM101",
-        "PLE0241",
-        "PLE1132",
-        "PLE1310",
-        "PLR0804",
-    },
-}
-
 
 def generate_advice(
     entries: Sequence[tuple[str, int, str, str, str, str]],
     annotation_engine: AnnotationEngine,
 ) -> list[AdviceEntry]:
     """Return SOLID-aligned guidance derived from normalised diagnostics."""
-
     diagnostics = [
         {
             "file": item[0],
@@ -321,9 +301,10 @@ def generate_advice(
 
     # Duplicate code
     duplicate_hit = False
+    duplicate_hint_codes = _duplicate_hint_code_map()
     for record in diagnostics:
-        tool_codes = _DUPLICATE_HINT_CODES.get(record["tool"], set())
-        if record["code"] in tool_codes:
+        tool_codes = duplicate_hint_codes.get(record["tool"], set())
+        if record["code"] and record["code"] in tool_codes:
             duplicate_hit = True
             break
     if duplicate_hit:
@@ -357,6 +338,19 @@ def generate_advice(
             )
 
     return advice
+
+
+@lru_cache(maxsize=1)
+def _duplicate_hint_code_map() -> dict[str, set[str]]:
+    """Return catalog-backed duplicate hint codes with fallback defaults.
+
+    Returns:
+        dict[str, set[str]]: Mapping of tool identifiers to diagnostic codes that
+        indicate duplicate findings.
+    """
+
+    catalog_codes = catalog_duplicate_hint_codes()
+    return {tool.lower(): {code.upper() for code in codes} for tool, codes in catalog_codes.items()}
 
 
 def _summarise_paths(paths: Sequence[str], *, limit: int = 5) -> str:

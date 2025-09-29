@@ -18,10 +18,10 @@ wire command-line tool analyzes a set of declarative instructions and generates 
 
 This design choice yields several critical advantages:
 
-* **Compile-Time Safety:** Any errors in the dependency graph, such as a missing provider or a type mismatch, are caught by the wire tool or the Go compiler itself. This transforms a category of potential runtime panics into predictable compile-time errors.1
-* **Performance:** By eschewing reflection, Wire introduces zero runtime performance overhead. The generated code is as efficient as manually written initialization code, making it suitable for the most performance-sensitive applications.4
-* **Clarity and Debuggability:** The generated wire\_gen.go file provides an explicit, readable, and debuggable trace of how the application's components are constructed. There is no "magic" happening behind the scenes, which simplifies reasoning about the application's startup behavior.2
-* **Static Analysis:** Because the entire dependency graph is resolved at compile time, it is statically knowable, opening opportunities for advanced tooling, visualization, and architectural validation.2
+- **Compile-Time Safety:** Any errors in the dependency graph, such as a missing provider or a type mismatch, are caught by the wire tool or the Go compiler itself. This transforms a category of potential runtime panics into predictable compile-time errors.1
+- **Performance:** By eschewing reflection, Wire introduces zero runtime performance overhead. The generated code is as efficient as manually written initialization code, making it suitable for the most performance-sensitive applications.4
+- **Clarity and Debuggability:** The generated wire_gen.go file provides an explicit, readable, and debuggable trace of how the application's components are constructed. There is no "magic" happening behind the scenes, which simplifies reasoning about the application's startup behavior.2
+- **Static Analysis:** Because the entire dependency graph is resolved at compile time, it is statically knowable, opening opportunities for advanced tooling, visualization, and architectural validation.2
 
 Accepting a build-time code generation step is a deliberate trade-off for achieving complete runtime safety, performance, and transparency. In large-scale, mission-critical systems where predictability and robustness are paramount, this trade-off is highly favorable. This design aligns perfectly with Go's broader ethos of favoring explicitness and clarity over implicit behavior.
 
@@ -29,7 +29,7 @@ Accepting a build-time code generation step is a deliberate trade-off for achiev
 
 Wire's architecture is built upon two simple yet powerful concepts: Providers and Injectors. Understanding their roles is key to mastering the framework.
 
-* **Providers:** A provider is an ordinary Go function that knows how to create a value of a specific type. The function's parameters are its dependencies, which Wire will satisfy by calling other providers.1 A crucial aspect of Wire's design is that these are just normal functions. Code written to be used with Wire remains perfectly useful for manual initialization, preventing lock-in to the framework.3\
+- **Providers:** A provider is an ordinary Go function that knows how to create a value of a specific type. The function's parameters are its dependencies, which Wire will satisfy by calling other providers.1 A crucial aspect of Wire's design is that these are just normal functions. Code written to be used with Wire remains perfectly useful for manual initialization, preventing lock-in to the framework.3\
   Go\
   // NewConfig is a provider for the Config struct. It has no dependencies.\
   func NewConfig() (\*Config, error) {\
@@ -41,7 +41,7 @@ Wire's architecture is built upon two simple yet powerful concepts: Providers an
   //... create database connection using cfg\
   }
 
-* **Injectors:** An injector is a function declaration that serves as the entry point for code generation. It is a template that defines the desired output of a dependency graph. An injector function is identified by two characteristics: it must be in a file with the //go:build wireinject build tag, and its body must contain only a call to wire.Build(...).6 The arguments to\
+- **Injectors:** An injector is a function declaration that serves as the entry point for code generation. It is a template that defines the desired output of a dependency graph. An injector function is identified by two characteristics: it must be in a file with the //go:build wireinject build tag, and its body must contain only a call to wire.Build(...).6 The arguments to\
   wire.Build are the set of providers Wire can use to construct the graph. The injector's signature specifies the inputs (parameters) and the final, desired component (return value).7\
   Go\
   //go:build wireinject
@@ -59,13 +59,13 @@ Wire's architecture is built upon two simple yet powerful concepts: Providers an
   return nil, nil // These return values are placeholders.\
   }
 
-When the wire command is executed, it analyzes the InitializeDatabase injector. It sees that the goal is to produce a \*sql.DB. To do this, it needs to call the NewDatabase provider. It then sees that NewDatabase requires a \*Config, which can be produced by the NewConfig provider. Wire then generates a wire\_gen.go file containing the concrete implementation, resolving the directed acyclic graph (DAG) of dependencies.8
+When the wire command is executed, it analyzes the InitializeDatabase injector. It sees that the goal is to produce a \*sql.DB. To do this, it needs to call the NewDatabase provider. It then sees that NewDatabase requires a \*Config, which can be produced by the NewConfig provider. Wire then generates a wire_gen.go file containing the concrete implementation, resolving the directed acyclic graph (DAG) of dependencies.8
 
 ### **A Note on Go 1.25+ and Future Compatibility**
 
 The forthcoming Go 1.25 release is expected to bring further improvements to the toolchain, runtime, and libraries, such as the generation of debug information using DWARF version 5, which can reduce binary size and link times.16
 
-Wire's code generation philosophy ensures its resilience and forward compatibility with such changes. Because the output of Wire is standard, idiomatic Go code, it automatically benefits from any and all improvements made to the Go compiler, linker, and debugging tools. The wire\_gen.go file is not a special artifact; it is simply Go code that is processed by the standard toolchain. Therefore, all principles, patterns, and techniques described in this guide remain fully applicable and are expected to function without issue in Go 1.25 and beyond.
+Wire's code generation philosophy ensures its resilience and forward compatibility with such changes. Because the output of Wire is standard, idiomatic Go code, it automatically benefits from any and all improvements made to the Go compiler, linker, and debugging tools. The wire_gen.go file is not a special artifact; it is simply Go code that is processed by the standard toolchain. Therefore, all principles, patterns, and techniques described in this guide remain fully applicable and are expected to function without issue in Go 1.25 and beyond.
 
 ## **Architecting for Modularity with Provider Sets**
 
@@ -277,7 +277,7 @@ new(...) is a compile-time mechanism to pass type information to Wire without ne
 
 Often, the dependency graph requires not just constructed objects but also simple, static values like configuration parameters or pre-existing variables.
 
-* **wire.Value**: This provider is used to inject a literal value into the graph. The value can be any non-interface type, such as a struct, a string, or an integer. This is the standard way to introduce application configuration, loaded from a file or environment, into the dependency graph.13\
+- **wire.Value**: This provider is used to inject a literal value into the graph. The value can be any non-interface type, such as a struct, a string, or an integer. This is the standard way to introduce application configuration, loaded from a file or environment, into the dependency graph.13\
   Go\
   type AppConfig struct {\
   Port int\
@@ -291,7 +291,7 @@ Often, the dependency graph requires not just constructed objects but also simpl
   //... other providers that depend on AppConfig\
   )
 
-* **wire.InterfaceValue**: This is a specialized version of wire.Value for cases where the value being provided is of a concrete type but needs to satisfy an interface dependency. A canonical example is providing os.Stdin (which is of type \*os.File) to a component that requires an io.Reader.13\
+- **wire.InterfaceValue**: This is a specialized version of wire.Value for cases where the value being provided is of a concrete type but needs to satisfy an interface dependency. A canonical example is providing os.Stdin (which is of type \*os.File) to a component that requires an io.Reader.13\
   Go\
   var ReaderSet = wire.NewSet(\
   wire.InterfaceValue(new(io.Reader), os.Stdin),\
@@ -301,7 +301,7 @@ Often, the dependency graph requires not just constructed objects but also simpl
 
 To reduce boilerplate for simple struct creation, Wire offers two utility providers:
 
-* **wire.Struct**: This provider instructs Wire to construct an instance of a struct by filling its exported fields with values from other providers in the graph. This eliminates the need to write a simple constructor function that just assigns fields.11 The special string\
+- **wire.Struct**: This provider instructs Wire to construct an instance of a struct by filling its exported fields with values from other providers in the graph. This eliminates the need to write a simple constructor function that just assigns fields.11 The special string\
   "\*" can be used to instruct Wire to fill all exported fields.\
   Go\
   type Foo struct { /\*... \*/ }\
@@ -317,7 +317,7 @@ To reduce boilerplate for simple struct creation, Wire offers two utility provid
   wire.Struct(new(FooBar), "\*"),\
   )
 
-* **wire.FieldsOf**: This provider performs the inverse operation. It takes a struct that already exists in the graph and makes its individual fields available as provided types.13 This is exceptionally useful for unpacking a master configuration struct into smaller, domain-specific configuration objects, which can then be injected into the relevant services. This pattern adheres to the Interface Segregation Principle by ensuring services only depend on the configuration they need.\
+- **wire.FieldsOf**: This provider performs the inverse operation. It takes a struct that already exists in the graph and makes its individual fields available as provided types.13 This is exceptionally useful for unpacking a master configuration struct into smaller, domain-specific configuration objects, which can then be injected into the relevant services. This pattern adheres to the Interface Segregation Principle by ensuring services only depend on the configuration they need.\
   Go\
   type DBConfig struct { /\*... \*/ }\
   type APIConfig struct { /\*... \*/ }\
@@ -336,10 +336,10 @@ To reduce boilerplate for simple struct creation, Wire offers two utility provid
 
 Robust applications must gracefully handle initialization failures and ensure that acquired resources (like database connections, file handles, or network listeners) are properly released. Wire has first-class support for this entire lifecycle through an extended provider signature: func(...) (T, func(), error).13
 
-* **Error Handling:** If any provider in the dependency graph returns a non-nil error, Wire immediately halts the initialization process. The generated code will not proceed to call subsequent providers.7
-* **Cleanup Functions:** A provider can return a func() as its second return value. This function contains the logic to clean up the resource created by the provider (e.g., db.Close()).9
-* **Lifecycle Orchestration:** Wire's generated code orchestrates this lifecycle perfectly.
-  1. If an error occurs during initialization, Wire calls the cleanup functions for all resources that were *successfully* initialized up to that point, in the reverse order of their creation, before returning the error.34
+- **Error Handling:** If any provider in the dependency graph returns a non-nil error, Wire immediately halts the initialization process. The generated code will not proceed to call subsequent providers.7
+- **Cleanup Functions:** A provider can return a func() as its second return value. This function contains the logic to clean up the resource created by the provider (e.g., db.Close()).9
+- **Lifecycle Orchestration:** Wire's generated code orchestrates this lifecycle perfectly.
+  1. If an error occurs during initialization, Wire calls the cleanup functions for all resources that were _successfully_ initialized up to that point, in the reverse order of their creation, before returning the error.34
   2. If initialization succeeds, the injector returns a single, aggregate cleanup function. The caller is responsible for deferring the execution of this function. When called, this aggregate function will execute all the individual cleanup functions in the correct reverse dependency order.7
 
 Go\
@@ -403,9 +403,9 @@ The structure of injectors serves as the composition root of the application and
 
 1. **Single Top-Level Injector:** For many monolithic applications, such as a standard web service or a single-purpose worker, a single top-level injector (e.g., InitializeApp or InitializeServer) is often sufficient. This injector composes all the necessary ProviderSets from different layers to build the final application object.31 This approach is simple and provides a clear, single entry point for understanding the entire application's construction.
 2. **Multiple, Per-Feature Injectors:** In more complex systems, it can be advantageous to have multiple, smaller injectors. This pattern is useful in several scenarios:
-   * **Multi-Binary Projects:** An application that produces multiple binaries (e.g., a gRPC server and a separate CLI tool) would have one injector for each binary's main function.
-   * **Independent Feature Testing:** Creating an injector for a specific feature or service (e.g., InitializeUserService) allows that feature to be instantiated and tested in isolation, without needing to build the entire application graph.39
-   * **Command-Line Tools:** A CLI with multiple subcommands is a prime use case. Each subcommand can have its own injector, which composes a set of common providers (for logging, configuration) with command-specific providers.10
+   - **Multi-Binary Projects:** An application that produces multiple binaries (e.g., a gRPC server and a separate CLI tool) would have one injector for each binary's main function.
+   - **Independent Feature Testing:** Creating an injector for a specific feature or service (e.g., InitializeUserService) allows that feature to be instantiated and tested in isolation, without needing to build the entire application graph.39
+   - **Command-Line Tools:** A CLI with multiple subcommands is a prime use case. Each subcommand can have its own injector, which composes a set of common providers (for logging, configuration) with command-specific providers.10
 
 The choice depends on the application's architecture, but the goal is to keep injectors focused on a single, coherent purpose.
 
@@ -430,14 +430,14 @@ The recommended strategy is to create test-specific injectors in files named \*\
 
 Go
 
-// in user/providers\_test.go\
+// in user/providers_test.go\
 var TestProviderSet = wire.NewSet(\
 NewUserService,\
 NewMockUserRepository, // Returns a mock that satisfies UserRepository interface\
 wire.Bind(new(UserRepository), new(\*MockUserRepository)),\
 )
 
-// in user/user\_test.go\
+// in user/user_test.go\
 //go:build wireinject
 
 func initializeTestUserService() (\*UserService, \*MockUserRepository) {\
@@ -464,7 +464,7 @@ Go
 package main\
 //...
 
-This allows a developer to run go generate./... from the project root to update all wire\_gen.go files automatically. This practice ensures that the generated code is always in sync with the provider and injector definitions, simplifying the development workflow and making it easy to integrate into CI/CD pipelines.
+This allows a developer to run go generate./... from the project root to update all wire_gen.go files automatically. This practice ensures that the generated code is always in sync with the provider and injector definitions, simplifying the development workflow and making it easy to integrate into CI/CD pipelines.
 
 ## **Identifying and Refactoring Wire Anti-Patterns**
 
@@ -488,7 +488,7 @@ The principles and patterns discussed can be synthesized into architectural blue
 
 CLI tools often consist of a set of commands, each with its own logic and dependencies, but also sharing common components like configuration loaders and loggers.6
 
-* **Structure:**
+- **Structure:**
   1. **Common Providers:** Create a common package that contains a CommonSet = wire.NewSet(...). This set should include providers for application-wide singletons like the logger, configuration loader, and any API clients shared across commands.
   2. **Injector-per-Command:** For each subcommand (e.g., create, delete, list), create a dedicated package (e.g., cmd/create). Inside this package, define an injector (e.g., InitializeCreateCommand).
   3. **Composition:** Each command's injector will call wire.Build with the common.CommonSet as well as its own command-specific providers.
@@ -498,11 +498,11 @@ CLI tools often consist of a set of commands, each with its own logic and depend
 
 Web services typically follow a layered architecture (e.g., handlers, services, repositories). Wire is exceptionally well-suited to enforcing the boundaries between these layers.31
 
-* **Structure:**
+- **Structure:**
   1. **Layered Provider Sets:** Each architectural layer should be in its own package and export a single ProviderSet.
-     * data/provider.go: Exports DataSet, containing database connections, repository implementations, and wire.Bind statements for repository interfaces.
-     * biz/provider.go: Exports BizSet, containing business logic use cases/services, which depend on interfaces from the data layer.
-     * service/provider.go: Exports ServiceSet, containing gRPC or HTTP handlers, which depend on interfaces from the business logic layer.
+     - data/provider.go: Exports DataSet, containing database connections, repository implementations, and wire.Bind statements for repository interfaces.
+     - biz/provider.go: Exports BizSet, containing business logic use cases/services, which depend on interfaces from the data layer.
+     - service/provider.go: Exports ServiceSet, containing gRPC or HTTP handlers, which depend on interfaces from the business logic layer.
   2. **Top-Level Injector:** A single top-level injector, InitializeApp or InitializeServer, located in cmd/server/wire.go, composes these layered sets: wire.Build(data.DataSet, biz.BizSet, service.ServiceSet,...).
   3. **Dependency Inversion:** This structure rigorously enforces the Dependency Inversion Principle. The biz layer knows nothing about the concrete database in data, and the service layer knows nothing about the concrete business logic implementation in biz. All connections are made through interfaces, with wire.Bind tying them together at the composition root.
 
@@ -510,7 +510,7 @@ Web services typically follow a layered architecture (e.g., handlers, services, 
 
 When building a library intended for consumption by other applications, the goal is to make it "DI-friendly" without forcing the consumer to use Wire.11
 
-* **Structure:**
+- **Structure:**
   1. **No Injectors:** The library itself should contain **no injector files** (i.e., no files with //go:build wireinject). The library's role is to provide components, not to build a final application.
   2. **Export a Public ProviderSet:** The library's primary entry point for DI is a single, exported ProviderSet. This set should include providers for all of the library's public, constructible types.
   3. **Include Interface Bindings:** If the library's components depend on interfaces that are also implemented within the library, the public ProviderSet must include the necessary wire.Bind statements. This ensures that a consumer can use the set without needing to know the library's internal implementation details.

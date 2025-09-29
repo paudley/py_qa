@@ -476,6 +476,19 @@ class Config(BaseModel):
         """Ensure shared configuration defaults are reflected in tool settings."""
         settings = self.tool_settings
 
+        try:
+            from .tools.catalog_metadata import catalog_duplicate_preference
+        except Exception:  # pragma: no cover - defensive import guard
+            duplicate_preference: tuple[str, ...] = ()
+        else:
+            duplicate_preference = catalog_duplicate_preference()
+        if duplicate_preference:
+            prefer_list = list(self.dedupe.dedupe_prefer)
+            for tool_name in duplicate_preference:
+                if tool_name not in prefer_list:
+                    prefer_list.append(tool_name)
+            self.dedupe.dedupe_prefer = prefer_list
+
         def baseline_value(tool: str, key: str) -> object:
             if baseline is None:
                 return NO_BASELINE

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "parser_text",
+  "type": "parser",
+  "description": "Wrap a text transform callable in the standard TextParser adapter.",
+  "implementation": "pyqa.tooling.strategies.text_parser",
+  "config": {
+    "transform": {
+      "type": "string",
+      "required": true,
+      "description": "Fully qualified transform function that accepts stdout text."
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "cargo-clippy",
+  "description": "Rust linting via cargo clippy.",
+  "languages": ["rust"],
+  "phase": "lint",
+  "runtime": {
+    "type": "rust",
+    "package": "rustup:clippy",
+    "minVersion": "1.81.0",
+    "versionCommand": ["cargo", "--version"]
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_cargo_clippy",
+        "config": {
+          "base": ["cargo", "clippy", "--message-format=json"]
+        }
+      },
+      "appendFiles": false,
+      "description": "Run Rust Clippy lints.",
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.misc.parse_cargo_clippy"
+        }
+      }
+    }
+  ],
+  "fileExtensions": [".rs"],
+  "documentation": {
+    "help": {
+      "path": "docs/cargo-clippy_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/cargo-clippy_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

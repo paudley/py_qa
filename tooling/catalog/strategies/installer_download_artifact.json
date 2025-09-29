@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "installer_download_artifact",
+  "type": "installer",
+  "description": "Download tool artifacts into the cache based on catalog metadata.",
+  "implementation": "pyqa.tooling.strategies.install_download_artifact",
+  "config": {
+    "version": {
+      "type": "string",
+      "required": false,
+      "description": "Optional version string passed to the download helper."
+    },
+    "download": {
+      "type": "object",
+      "required": true,
+      "description": "Download specification describing platform-specific tool assets."
+    },
+    "contextLabel": {
+      "type": "string",
+      "required": false,
+      "description": "Override for the diagnostic context used during downloads."
+    }
+  }
+}

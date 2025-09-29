@@ -28,7 +28,7 @@ YARN_LOCKFILE: Final[str] = "yarn.lock"
 NPM_MANIFEST: Final[str] = "package.json"
 GO_MANIFEST: Final[str] = "go.mod"
 CARGO_MANIFEST: Final[str] = "Cargo.toml"
-SKIPPED_STATUS: Final[Literal["skipped"]] = "skipped"
+SKIPPED_STATUS: Final = "skipped"
 
 
 class WorkspaceKind(Enum):

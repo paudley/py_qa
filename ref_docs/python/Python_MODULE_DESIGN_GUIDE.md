@@ -20,14 +20,14 @@ To better assess and design for cohesion, it is useful to understand the differe
 
 #### **Types of Cohesion**
 
-* **Functional Cohesion (Ideal):** This is the highest and most desirable level of cohesion. Every element within the module is essential for the performance of a single, specific task.3 For instance, a module named\
-  image\_filters.py that contains only functions for applying various filters (e.g., apply\_grayscale, apply\_blur) to image data exhibits functional cohesion.
-* **Sequential Cohesion (Acceptable):** Elements are grouped because the output of one element serves as the input for another, forming a chain of operations.3 A module that defines a pipeline for processing data—for example, reading raw data from a file, cleaning it, and then transforming it into a structured format—demonstrates sequential cohesion.
-* **Communicational Cohesion (Acceptable):** Elements are grouped because they operate on the same data structure.3 For example, a module\
-  user\_profile\_manager.py might contain functions like get\_user\_email, update\_user\_address, and validate\_user\_permissions, all of which operate on a User object.
-* **Logical Cohesion (Code Smell):** Elements are grouped because they are logically related by category, but their actual functions are different and may not be used together.3 A common anti-pattern is a\
+- **Functional Cohesion (Ideal):** This is the highest and most desirable level of cohesion. Every element within the module is essential for the performance of a single, specific task.3 For instance, a module named\
+  image_filters.py that contains only functions for applying various filters (e.g., apply_grayscale, apply_blur) to image data exhibits functional cohesion.
+- **Sequential Cohesion (Acceptable):** Elements are grouped because the output of one element serves as the input for another, forming a chain of operations.3 A module that defines a pipeline for processing data—for example, reading raw data from a file, cleaning it, and then transforming it into a structured format—demonstrates sequential cohesion.
+- **Communicational Cohesion (Acceptable):** Elements are grouped because they operate on the same data structure.3 For example, a module\
+  user_profile_manager.py might contain functions like get_user_email, update_user_address, and validate_user_permissions, all of which operate on a User object.
+- **Logical Cohesion (Code Smell):** Elements are grouped because they are logically related by category, but their actual functions are different and may not be used together.3 A common anti-pattern is a\
   utils.py module that contains a mix of unrelated helper functions for string manipulation, date formatting, and network requests. Such modules tend to become bloated and violate the Single Responsibility Principle.
-* **Coincidental Cohesion (Anti-Pattern):** This is the lowest form of cohesion, where the elements within a module have no discernible relationship to one another.3 They are grouped together arbitrarily. This type of module is difficult to understand and maintain and must be avoided.
+- **Coincidental Cohesion (Anti-Pattern):** This is the lowest form of cohesion, where the elements within a module have no discernible relationship to one another.3 They are grouped together arbitrarily. This type of module is difficult to understand and maintain and must be avoided.
 
 To illustrate, consider a class responsible for processing a student's graduation. A low-cohesion version might include methods unrelated to the core task.
 
@@ -67,7 +67,7 @@ def get\_student\_gender(self) \-\> str:
     return self.student\_data.get("gender", "unknown")
 ```
 
-The methods get\_student\_age and get\_student\_gender do not contribute to the single purpose of processing a graduation.7 They belong in a different module or class focused on student data management. A high-cohesion version would exclusively contain methods related to the graduation process.
+The methods get_student_age and get_student_gender do not contribute to the single purpose of processing a graduation.7 They belong in a different module or class focused on student data management. A high-cohesion version would exclusively contain methods related to the graduation process.
 
 ### **Low Coupling: The Principle of Independence**
 
@@ -79,23 +79,23 @@ Understanding the different forms of coupling helps in identifying and mitigatin
 
 #### **Types of Coupling**
 
-* **Data Coupling (Ideal):** Modules interact by passing only the necessary data through parameters.3 The modules do not need to know anything about each other's internal workings. This is the most desirable form of coupling as it maximizes independence.
-* **Stamp Coupling (Acceptable with Caution):** One module passes a complete data structure (e.g., a Pydantic model or a large dictionary) to another, even if the receiving module only needs a fraction of that data.3 While often a pragmatic choice for convenience, it can introduce hidden dependencies. If the structure of the data object changes for reasons unrelated to the receiving module, the receiving module might still be affected.
-* **Control Coupling (Code Smell):** One module passes a flag or command to another that controls its internal logic.3 For example, passing a boolean\
-  is\_summary\_mode to a function dictates which execution path it takes. This entangles the logic of the two modules, as the calling module must be aware of the internal branching of the called module.
-* **Common Coupling (High Risk):** Two or more modules share access to the same global data or mutable state.3 A change to this shared state by one module can have unforeseen consequences for all other modules that depend on it, making the system difficult to reason about and debug.
-* **Content Coupling (Anti-Pattern):** This is the worst and most severe form of coupling. It occurs when one module directly modifies or relies on the internal implementation details of another module.1 Examples include accessing another module's "private" variables (those prefixed with\
+- **Data Coupling (Ideal):** Modules interact by passing only the necessary data through parameters.3 The modules do not need to know anything about each other's internal workings. This is the most desirable form of coupling as it maximizes independence.
+- **Stamp Coupling (Acceptable with Caution):** One module passes a complete data structure (e.g., a Pydantic model or a large dictionary) to another, even if the receiving module only needs a fraction of that data.3 While often a pragmatic choice for convenience, it can introduce hidden dependencies. If the structure of the data object changes for reasons unrelated to the receiving module, the receiving module might still be affected.
+- **Control Coupling (Code Smell):** One module passes a flag or command to another that controls its internal logic.3 For example, passing a boolean\
+  is_summary_mode to a function dictates which execution path it takes. This entangles the logic of the two modules, as the calling module must be aware of the internal branching of the called module.
+- **Common Coupling (High Risk):** Two or more modules share access to the same global data or mutable state.3 A change to this shared state by one module can have unforeseen consequences for all other modules that depend on it, making the system difficult to reason about and debug.
+- **Content Coupling (Anti-Pattern):** This is the worst and most severe form of coupling. It occurs when one module directly modifies or relies on the internal implementation details of another module.1 Examples include accessing another module's "private" variables (those prefixed with\
   \_) or monkey-patching its functions. This violates encapsulation and creates an extremely brittle system that is nearly impossible to maintain safely.
 
 The following table provides a summary for identifying and addressing different coupling types.
 
-| Coupling Type        | Description                                                   | Python Example                                  | Maintainability Risk | Recommendation                                                                                                           |
-| :------------------- | :------------------------------------------------------------ | :---------------------------------------------- | :------------------- | :----------------------------------------------------------------------------------------------------------------------- |
-| **Data Coupling**    | Modules communicate by passing primitive data via parameters. | process\_data(user\_id: int, item\_name: str)      | Low                  | Ideal; use whenever possible.                                                                                            |
-| **Stamp Coupling**   | Modules communicate by passing a whole data structure.        | process\_user(user: UserData)                    | Low-Medium           | Acceptable, especially with Pydantic models. Prefer passing only required data if the structure is complex and volatile. |
-| **Control Coupling** | One module passes a control flag to another.                  | generate\_report(data: list, mode: str)          | Medium               | Refactor to use separate functions or the Strategy pattern to avoid passing control flags.                               |
+| Coupling Type        | Description                                                   | Python Example                                   | Maintainability Risk | Recommendation                                                                                                           |
+| :------------------- | :------------------------------------------------------------ | :----------------------------------------------- | :------------------- | :----------------------------------------------------------------------------------------------------------------------- |
+| **Data Coupling**    | Modules communicate by passing primitive data via parameters. | process_data(user_id: int, item_name: str)       | Low                  | Ideal; use whenever possible.                                                                                            |
+| **Stamp Coupling**   | Modules communicate by passing a whole data structure.        | process_user(user: UserData)                     | Low-Medium           | Acceptable, especially with Pydantic models. Prefer passing only required data if the structure is complex and volatile. |
+| **Control Coupling** | One module passes a control flag to another.                  | generate_report(data: list, mode: str)           | Medium               | Refactor to use separate functions or the Strategy pattern to avoid passing control flags.                               |
 | **Common Coupling**  | Modules share a global mutable state.                         | import config; config.SETTINGS\['mode'] = 'prod' | High                 | Avoid global mutable state. Use explicit configuration objects or dependency injection instead.                          |
-| **Content Coupling** | One module modifies the internal state of another.            | other\_module.\_internal\_variable = 10           | Extreme              | Anti-pattern; strictly forbidden. Interact only through the defined public API of a module.                              |
+| **Content Coupling** | One module modifies the internal state of another.            | other_module.\_internal_variable = 10            | Extreme              | Anti-pattern; strictly forbidden. Interact only through the defined public API of a module.                              |
 
 The refactoring of a vehicle registration application provides a clear example of reducing coupling. Initially, a single Application class is responsible for everything, including generating vehicle IDs and calculating taxes, making it highly coupled to the implementation details of these processes.4
 
@@ -103,11 +103,11 @@ Python
 
 \# High Coupling Example\
 class Application:\
-def register\_vehicle(self, brand: str):\
+def register_vehicle(self, brand: str):\
 registry = VehicleRegistry()\
 \# The Application class knows too much about how to create a vehicle.\
-vehicle\_id = registry.generate\_vehicle\_id(12)\
-license\_plate = registry.generate\_vehicle\_license(vehicle\_id)\
+vehicle_id = registry.generate_vehicle_id(12)\
+license_plate = registry.generate_vehicle_license(vehicle_id)\
 \#... more logic for price and tax calculation...
 
 A loosely coupled design abstracts these details into other classes. The Application class interacts with a simplified, high-level interface, delegating the complex work.4
@@ -116,10 +116,10 @@ Python
 
 \# Low Coupling Example\
 class Application:\
-def register\_vehicle(self, brand: str):\
+def register_vehicle(self, brand: str):\
 registry = VehicleRegistry()\
 \# The Application class only needs to know about the high-level interface.\
-vehicle = registry.create\_vehicle(brand)\
+vehicle = registry.create_vehicle(brand)\
 vehicle.print()
 
 In the improved version, the Application module is decoupled from the specifics of vehicle creation. It can be changed or tested independently of the VehicleRegistry's internal logic, demonstrating the maintainability benefits of low coupling.
@@ -138,7 +138,7 @@ The Single Responsibility Principle states that a class or module should have on
 
 Python
 
-\# srp\_violation.py\
+\# srp_violation.py\
 from pathlib import Path\
 from zipfile import ZipFile
 
@@ -159,11 +159,11 @@ def compress(self) \-\> None:
         archive.write(self.path)
 ```
 
-**Adherence Example:** To comply with SRP, the responsibilities are segregated into two distinct modules, file\_io.py and zip\_archiver.py. Each module now has only one reason to change.11
+**Adherence Example:** To comply with SRP, the responsibilities are segregated into two distinct modules, file_io.py and zip_archiver.py. Each module now has only one reason to change.11
 
 Python
 
-\# file\_io.py\
+\# file_io.py\
 from pathlib import Path
 
 class FileIO:\
@@ -179,7 +179,7 @@ def write(self, data: str, encoding: str \= "utf-8") \-\> None:
     self.path.write\_text(data, encoding)
 ```
 
-\# zip\_archiver.py\
+\# zip_archiver.py\
 from pathlib import Path\
 from zipfile import ZipFile
 
@@ -198,17 +198,17 @@ def compress(self) \-\> None:
 
 The Open/Closed Principle dictates that software entities (modules, classes, etc.) should be open for extension but closed for modification.11 This means it should be possible to add new functionality without changing existing code. This is typically achieved by programming to abstractions (e.g., Abstract Base Classes) rather than concrete implementations.
 
-**Violation Example:** A module that calculates the area of different shapes using a series of if/elif statements is closed for extension. To add a new shape, one must modify the existing calculate\_area function, which risks introducing bugs into the existing logic.11
+**Violation Example:** A module that calculates the area of different shapes using a series of if/elif statements is closed for extension. To add a new shape, one must modify the existing calculate_area function, which risks introducing bugs into the existing logic.11
 
 Python
 
-\# ocp\_violation.py\
+\# ocp_violation.py\
 from math import pi
 
 class AreaCalculator:\
 """This class violates OCP because it must be modified to add new shapes."""\
-def calculate*area(self, shape\_type: str, \*\*kwargs) -> float:\
-if shape\_type == "rectangle":\
+def calculate*area(self, shape_type: str, \*\*kwargs) -> float:\
+if shape_type == "rectangle":\
 return kwargs\["width"] \* kwargs\["height"]\
 elif shape*type == "circle":\
 return pi \* kwargs\["radius"] \*\* 2\
@@ -225,7 +225,7 @@ from abc import ABC, abstractmethod
 class Shape(ABC):\
 """Abstract base class for shapes (the abstraction)."""\
 @abstractmethod\
-def calculate\_area(self) -> float:\
+def calculate_area(self) -> float:\
 pass
 
 \# shapes/concrete.py\
@@ -264,7 +264,7 @@ The Liskov Substitution Principle asserts that subtypes must be substitutable fo
 
 Python
 
-\# lsp\_violation.py\
+\# lsp_violation.py\
 class Rectangle:\
 def \_\_init\_\_(self, width: float, height: float):\
 self.width = width\
@@ -306,19 +306,19 @@ The Interface Segregation Principle states that clients should not be forced to 
 
 Python
 
-\# isp\_violation.py\
+\# isp_violation.py\
 from abc import ABC, abstractmethod
 
 class MultiFunctionDevice(ABC):\
 @abstractmethod\
-def print\_doc(self, document: str) -> None: pass\
+def print_doc(self, document: str) -> None: pass\
 @abstractmethod\
-def fax\_doc(self, document: str) -> None: pass\
+def fax_doc(self, document: str) -> None: pass\
 @abstractmethod\
-def scan\_doc(self, document: str) -> None: pass
+def scan_doc(self, document: str) -> None: pass
 
 class OldPrinter(MultiFunctionDevice):\
-def print\_doc(self, document: str) -> None:\
+def print_doc(self, document: str) -> None:\
 print(f"Printing {document}")
 
 ```
@@ -338,25 +338,25 @@ from abc import ABC, abstractmethod
 
 class Printable(ABC):\
 @abstractmethod\
-def print\_doc(self, document: str) -> None: pass
+def print_doc(self, document: str) -> None: pass
 
 class Faxable(ABC):\
 @abstractmethod\
-def fax\_doc(self, document: str) -> None: pass
+def fax_doc(self, document: str) -> None: pass
 
 class Scannable(ABC):\
 @abstractmethod\
-def scan\_doc(self, document: str) -> None: pass
+def scan_doc(self, document: str) -> None: pass
 
-\# concrete\_devices.py\
+\# concrete_devices.py\
 from.interfaces import Printable, Faxable, Scannable
 
 class OldPrinter(Printable):\
-def print\_doc(self, document: str) -> None:\
+def print_doc(self, document: str) -> None:\
 print(f"Printing {document}")
 
 class ModernPrinter(Printable, Faxable, Scannable):\
-def print\_doc(self, document: str) -> None:\
+def print_doc(self, document: str) -> None:\
 print(f"Printing {document} in color")
 
 ```
@@ -380,16 +380,16 @@ This principle effectively "inverts" the traditional dependency flow, where high
 
 Python
 
-\# dip\_violation.py\
+\# dip_violation.py\
 class BackEnd:\
 """Low-level module for data retrieval."""\
-def get\_data\_from\_database(self) -> str:\
+def get_data_from_database(self) -> str:\
 return "Data from the database"
 
 class FrontEnd:\
 """High-level module that depends directly on the low-level module."""\
 def \_\_init\_\_(self):\
-self.back\_end = BackEnd()
+self.back_end = BackEnd()
 
 ```
 def display\_data(self) \-\> None:
@@ -401,35 +401,35 @@ def display\_data(self) \-\> None:
 
 Python
 
-\# data\_sources/interfaces.py\
+\# data_sources/interfaces.py\
 from abc import ABC, abstractmethod
 
 class DataSource(ABC):\
 """The abstraction that both high-level and low-level modules depend on."""\
 @abstractmethod\
-def get\_data(self) -> str:\
+def get_data(self) -> str:\
 pass
 
-\# data\_sources/implementations.py\
+\# data_sources/implementations.py\
 from.interfaces import DataSource
 
 class Database(DataSource):\
 """A low-level detail implementation."""\
-def get\_data(self) -> str:\
+def get_data(self) -> str:\
 return "Data from the database"
 
 class API(DataSource):\
 """Another low-level detail implementation."""\
-def get\_data(self) -> str:\
+def get_data(self) -> str:\
 return "Data from the API"
 
 \# ui/frontend.py\
-from data\_sources.interfaces import DataSource
+from data_sources.interfaces import DataSource
 
 class FrontEnd:\
 """The high-level module, now depending only on the abstraction."""\
-def \_\_init\_\_(self, data\_source: DataSource):\
-self.data\_source = data\_source
+def \_\_init\_\_(self, data_source: DataSource):\
+self.data_source = data_source
 
 ```
 def display\_data(self) \-\> None:
@@ -456,7 +456,7 @@ Python
 \# services.py\
 class EmailService:\
 """A concrete service for sending emails."""\
-def send\_email(self, recipient: str, message: str) -> None:\
+def send_email(self, recipient: str, message: str) -> None:\
 print(f"Sending email to {recipient}: {message}")
 
 \# components.py\
@@ -467,8 +467,8 @@ class UserController:\
 This component depends on an EmailService. The dependency is injected\
 via the constructor.\
 """\
-def \_\_init\_\_(self, email\_service: EmailService):\
-self.\_email\_service = email\_service
+def \_\_init\_\_(self, email_service: EmailService):\
+self.\_email_service = email_service
 
 ```
 def register\_user(self, username: str, email: str) \-\> None:
@@ -485,9 +485,9 @@ from services import EmailService
 
 \# The 'injector' or 'assembler' part of the application creates\
 \# the dependency and injects it into the component.\
-email\_provider = EmailService()\
-user\_controller = UserController(email\_service=email\_provider)\
-user\_controller.register\_user("ada\_lovelace", "ada@example.com")
+email_provider = EmailService()\
+user_controller = UserController(email_service=email_provider)\
+user_controller.register_user("ada_lovelace", "ada@example.com")
 
 This design clearly decouples UserController from the concrete EmailService class. The UserController only knows that it needs an object that behaves like an EmailService (ideally, this would be formalized with an ABC), not how to create one.10
 
@@ -536,9 +536,9 @@ from services import Logger
 
 \# The dependency is created and injected after the object is instantiated.\
 processor = TaskProcessor()\
-console\_logger = Logger()\
-processor.set\_logger(console\_logger)\
-processor.process\_task(101)
+console_logger = Logger()\
+processor.set_logger(console_logger)\
+processor.process_task(101)
 
 While flexible, setter injection can make it less obvious what an object's dependencies are and can allow an object to exist in a partially configured state. It should be used judiciously for dependencies that are genuinely optional.
 
@@ -550,19 +550,19 @@ Consider testing the UserController from the constructor injection example. With
 
 Python
 
-\# tests/test\_components.py\
+\# tests/test_components.py\
 import unittest\
 from unittest.mock import Mock\
 from components import UserController
 
 class TestUserController(unittest.TestCase):\
-def test\_register\_user\_sends\_welcome\_email(self):\
+def test_register_user_sends_welcome_email(self):\
 """\
 Verify that registering a user calls the email service's\
-send\_email method with the correct arguments.\
+send_email method with the correct arguments.\
 """\
 \# 1. Create a mock object for the dependency.\
-mock\_email\_service = Mock()
+mock_email_service = Mock()
 
 ```
     \# 2\. Inject the mock object into the component under test.
@@ -602,36 +602,36 @@ Every module that exposes a public API should define \_\_all\_\_ at the top of t
 
 Python
 
-\# string\_utils.py
+\# string_utils.py
 
 """A module for various string manipulation utilities."""
 
-\_\_all\_\_ = \['is\_palindrome', 'truncate\_string']
+\_\_all\_\_ = \['is_palindrome', 'truncate_string']
 
 import re
 
 \# Internal helper function, not part of the public API.\
-def \_count\_words(text: str) -> int:\
+def \_count_words(text: str) -> int:\
 return len(re.findall(r'\w+', text))
 
 \# Public API function.\
-def is\_palindrome(text: str) -> bool:\
+def is_palindrome(text: str) -> bool:\
 """Checks if a string is a palindrome."""\
 normalized = "".join(filter(str.isalnum, text)).lower()\
 return normalized == normalized\[::-1]
 
 \# Public API function.\
-def truncate\_string(text: str, max\_length: int) -> str:\
+def truncate_string(text: str, max_length: int) -> str:\
 """Truncates a string to a maximum length."""\
-if len(text) <= max\_length:\
+if len(text) <= max_length:\
 return text\
-return text\[:max\_length-3] + "..."
+return text\[:max_length-3] + "..."
 
 \# Another internal function, not exported.\
-def \_log\_operation(op\_name: str) -> None:\
-print(f"Operation performed: {op\_name}")
+def \_log_operation(op_name: str) -> None:\
+print(f"Operation performed: {op_name}")
 
-In this example, only is\_palindrome and truncate\_string are considered public. An attempt to use from string\_utils import \* would only import these two names.18
+In this example, only is_palindrome and truncate_string are considered public. An attempt to use from string_utils import \* would only import these two names.18
 
 ### **The Convention of Internal Use: Single Underscore (\_)**
 
@@ -641,26 +641,26 @@ This convention is not enforced by the Python interpreter (the name is still acc
 
 **Effect:**
 
-* Names with a leading underscore are not imported by a wildcard import (from module import \*).19
-* It clearly separates the stable, public interface from the volatile, internal implementation.
+- Names with a leading underscore are not imported by a wildcard import (from module import \*).19
+- It clearly separates the stable, public interface from the volatile, internal implementation.
 
 Python
 
-\# data\_processor.py
+\# data_processor.py
 
-\_\_all\_\_ = \['process\_records']
+\_\_all\_\_ = \['process_records']
 
 class \_DataRecord:\
 """Internal data structure, not for external use."""\
-def \_\_init\_\_(self, raw\_data: dict):\
-self.data = raw\_data
+def \_\_init\_\_(self, raw_data: dict):\
+self.data = raw_data
 
-def \_clean\_record(record: \_DataRecord) -> \_DataRecord:\
+def \_clean_record(record: \_DataRecord) -> \_DataRecord:\
 """Internal helper to clean a single record."""\
 \#... cleaning logic...\
 return record
 
-def process\_records(records\_data: list\[dict]) -> list\[dict]:\
+def process_records(records_data: list\[dict]) -> list\[dict]:\
 """\
 Public function to process a list of raw data records.
 
@@ -678,18 +678,18 @@ return cleaned\_records
 
 ### **Name Mangling for Inheritance: Double Underscore (\_\_)**
 
-The double leading underscore (\_\_) has a specific, and often misunderstood, purpose in Python. When used on a class attribute (e.g., \_\_my\_var), it invokes a mechanism called "name mangling".14 The interpreter automatically renames the attribute to
+The double leading underscore (\_\_) has a specific, and often misunderstood, purpose in Python. When used on a class attribute (e.g., \_\_my_var), it invokes a mechanism called "name mangling".14 The interpreter automatically renames the attribute to
 
-\_ClassName\_\_my\_var before the code is executed.19
+\_ClassName\_\_my_var before the code is executed.19
 
 Correct Use Case:\
 The sole purpose of name mangling is to avoid name clashes in inheritance hierarchies. If a base class has an attribute \_\_value, and a subclass also defines an attribute named \_\_value, name mangling ensures they do not collide because they will be renamed to \_BaseClass\_\_value and \_SubClass\_\_value, respectively.21\
 Misuse and Best Practice:\
 It is a common anti-pattern to use the double underscore to create "truly private" attributes. This is incorrect for several reasons:
 
-* It does not provide true privacy; the mangled name is still easily accessible from outside the class if you know the convention.14
-* It can make debugging more difficult because the attribute name in the code does not match its name at runtime.
-* It makes subclassing and overriding the attribute intentionally more cumbersome.
+- It does not provide true privacy; the mangled name is still easily accessible from outside the class if you know the convention.14
+- It can make debugging more difficult because the attribute name in the code does not match its name at runtime.
+- It makes subclassing and overriding the attribute intentionally more cumbersome.
 
 **Guideline:** Do not use the double leading underscore for privacy. The single leading underscore (\_) is the correct and standard convention for indicating non-public, internal-use attributes. Use \_\_ only when you have a specific need to prevent name collisions in a complex inheritance chain, which is a relatively rare scenario in modern Python design that favors composition over inheritance.
 
@@ -716,48 +716,48 @@ This process breaks the circular dependency and creates a healthier, hierarchica
 Python
 
 \# models.py (Problematic)\
-from services import generate\_unique\_slug # <-- Causes circular import
+from services import generate_unique_slug # <-- Causes circular import
 
 class Article:\
 def \_\_init\_\_(self, title: str):\
 self.title = title\
-self.slug = generate\_unique\_slug(title)
+self.slug = generate_unique_slug(title)
 
 \# services.py (Problematic)\
 from models import Article # <-- Depends on models
 
-def generate\_unique\_slug(text: str) -> str:\
+def generate_unique_slug(text: str) -> str:\
 \#... logic to create a slug...\
 return "some-slug"
 
-def get\_article\_by\_slug(slug: str) -> Article:\
+def get_article_by_slug(slug: str) -> Article:\
 \#... database logic to fetch an article...\
 return Article(title="An Article")
 
 Here, models.py imports services.py, and services.py imports models.py.
 
-**Refactored Solution:** The shared dependency, generate\_unique\_slug, is a general-purpose utility. It should be extracted to a lower-level utils.py module.
+**Refactored Solution:** The shared dependency, generate_unique_slug, is a general-purpose utility. It should be extracted to a lower-level utils.py module.
 
 Python
 
 \# utils.py (New Module)\
-def generate\_unique\_slug(text: str) -> str:\
+def generate_unique_slug(text: str) -> str:\
 \#... logic to create a slug...\
 return "some-slug"
 
 \# models.py (Refactored)\
-from utils import generate\_unique\_slug # <-- Now depends on utils
+from utils import generate_unique_slug # <-- Now depends on utils
 
 class Article:\
 def \_\_init\_\_(self, title: str):\
 self.title = title\
-self.slug = generate\_unique\_slug(title)
+self.slug = generate_unique_slug(title)
 
 \# services.py (Refactored)\
 from models import Article # <-- Still depends on models (which is fine)\
 \# No longer needs to define or import the slug function.
 
-def get\_article\_by\_slug(slug: str) -> Article:\
+def get_article_by_slug(slug: str) -> Article:\
 \#... database logic to fetch an article...\
 return Article(title="An Article")
 
@@ -773,14 +773,14 @@ The following table outlines the available strategies, distinguishing between th
 | :------------------------------ | :--------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------- |
 | **Refactor to a Shared Module** | Extract the common dependency into a new, lower-level module that both original modules can import from.                     | Resolves the underlying architectural flaw. Improves cohesion and reduces coupling. Creates a clear dependency hierarchy. | Requires code reorganization and a deeper understanding of the architecture.                                                                | **Best Practice.** This is the preferred, long-term solution for all circular dependencies.                                            |
 | **Local (In-Function) Import**  | Move the import statement from the top level of the module into the specific function or method where it is needed.          | Quick to implement. Avoids import-time errors by delaying the import until runtime.                                       | Hides the design flaw. Can make dependencies harder to track. May slightly impact performance on the first function call.                   | As a **temporary fix** when a dependency is only needed at runtime in one specific location and immediate refactoring is not possible. |
-| **typing.TYPE\_CHECKING Block**  | Place imports used only for type annotations inside an if typing.TYPE\_CHECKING: block. These imports are ignored at runtime. | Resolves circular dependencies that exist only at the type-hinting level, without affecting runtime behavior.             | Does not solve runtime circular dependencies. Can be confusing if the distinction between type-time and run-time dependencies is not clear. | To resolve cycles caused **exclusively by type hints**, where the modules do not have a circular dependency at runtime.                |
+| **typing.TYPE_CHECKING Block**  | Place imports used only for type annotations inside an if typing.TYPE_CHECKING: block. These imports are ignored at runtime. | Resolves circular dependencies that exist only at the type-hinting level, without affecting runtime behavior.             | Does not solve runtime circular dependencies. Can be confusing if the distinction between type-time and run-time dependencies is not clear. | To resolve cycles caused **exclusively by type hints**, where the modules do not have a circular dependency at runtime.                |
 
 **Example of a Local Import:**
 
 Python
 
 \# services.py (Using local import as a temporary fix)\
-def some\_service\_function():\
+def some_service_function():\
 \# Import is delayed until this function is called.\
 from models import SomeModel\
 \#... logic using SomeModel...
@@ -801,15 +801,15 @@ PEP 484 introduced type hints, which form the foundational layer of a module's c
 
 Type hints provide several key benefits 28:
 
-* **Static Analysis:** Tools like MyPy can analyze the code before runtime to catch a wide range of type-related errors.
-* **Improved Readability:** Explicit types make the code self-documenting, clarifying the intent of functions and the nature of the data they handle.29
-* **Enhanced IDE Support:** Editors can provide more intelligent autocompletion, refactoring support, and inline error checking.28
+- **Static Analysis:** Tools like MyPy can analyze the code before runtime to catch a wide range of type-related errors.
+- **Improved Readability:** Explicit types make the code self-documenting, clarifying the intent of functions and the nature of the data they handle.29
+- **Enhanced IDE Support:** Editors can provide more intelligent autocompletion, refactoring support, and inline error checking.28
 
 Python
 
 \# A function signature with strong typing.\
-def process\_user\_data(\
-user\_id: int,\
+def process_user_data(\
+user_id: int,\
 metadata: dict\[str, str | int]\
 ) -> bool:\
 """Processes user data and returns a success flag."""\
@@ -826,11 +826,11 @@ pydantic.BaseModel, modules can parse, validate, and coerce incoming data, guara
 
 When data needs to be passed from one module to another, it should be encapsulated in a Pydantic model. The receiving module's function signature should then type-hint that model, creating an explicit and validated data contract between the two modules.26
 
-**Example:** Imagine a user\_processing module that receives user data from an api\_handler module.
+**Example:** Imagine a user_processing module that receives user data from an api_handler module.
 
 Python
 
-\# data\_contracts.py\
+\# data_contracts.py\
 from pydantic import BaseModel, EmailStr, Field
 
 class UserData(BaseModel):\
@@ -838,43 +838,43 @@ class UserData(BaseModel):\
 A runtime-enforced data contract for user information.\
 This model guarantees the structure and types of the data.\
 """\
-user\_id: int = Field(gt=0, description="The unique user identifier.")\
-username: str = Field(min\_length=3, max\_length=50)\
+user_id: int = Field(gt=0, description="The unique user identifier.")\
+username: str = Field(min_length=3, max_length=50)\
 email: EmailStr\
-is\_active: bool = True
+is_active: bool = True
 
-\# user\_processing.py\
-from.data\_contracts import UserData
+\# user_processing.py\
+from.data_contracts import UserData
 
-def activate\_user(user: UserData) -> None:\
+def activate_user(user: UserData) -> None:\
 """\
 This function operates on a validated UserData object.\
 It does not need to perform any internal validation.\
 """\
-if not user.is\_active:\
-print(f"Activating user {user.username} (ID: {user.user\_id}).")\
+if not user.is_active:\
+print(f"Activating user {user.username} (ID: {user.user_id}).")\
 \#... logic to update user status in the database...\
 else:\
 print(f"User {user.username} is already active.")
 
-\# api\_handler.py\
-from.data\_contracts import UserData\
-from.user\_processing import activate\_user\
+\# api_handler.py\
+from.data_contracts import UserData\
+from.user_processing import activate_user\
 from pydantic import ValidationError
 
-def handle\_api\_request(raw\_data: dict) -> None:\
+def handle_api_request(raw_data: dict) -> None:\
 """\
 Handles an incoming API request. It parses the raw data into the\
 UserData contract before passing it to the business logic layer.\
 """\
 try:\
 \# The "Parse, Don't Validate" step.\
-user\_contract = UserData.model\_validate(raw\_data)\
-activate\_user(user=user\_contract)\
+user_contract = UserData.model_validate(raw_data)\
+activate_user(user=user_contract)\
 except ValidationError as e:\
 print(f"Invalid API data received: {e}")
 
-In this example, api\_handler is responsible for enforcing the contract. The user\_processing module receives a UserData object that is guaranteed to be valid, simplifying its internal logic.
+In this example, api_handler is responsible for enforcing the contract. The user_processing module receives a UserData object that is guaranteed to be valid, simplifying its internal logic.
 
 ### **Pydantic for Parameter Objects**
 
@@ -884,52 +884,52 @@ When a function or method requires a large number of parameters, especially if t
 
 Python
 
-def generate\_financial\_report(\
-start\_date: date,\
-end\_date: date,\
-client\_id: int,\
-report\_type: Literal\["summary", "detailed"],\
-include\_projections: bool,\
+def generate_financial_report(\
+start_date: date,\
+end_date: date,\
+client_id: int,\
+report_type: Literal\["summary", "detailed"],\
+include_projections: bool,\
 currency: str = "USD"\
 ) -> str:\
 \#... complex implementation...\
-return "report\_content"
+return "report_content"
 
 **Adherence Example:** The parameters are grouped into a ReportParams model, which serves as a single, validated parameter object.
 
 Python
 
-\# report\_contracts.py\
+\# report_contracts.py\
 from datetime import date\
 from typing import Literal\
 from pydantic import BaseModel, Field
 
 class ReportParams(BaseModel):\
 """A parameter object for financial report generation."""\
-start\_date: date\
-end\_date: date\
-client\_id: int = Field(gt=0)\
-report\_type: Literal\["summary", "detailed"]\
-include\_projections: bool\
+start_date: date\
+end_date: date\
+client_id: int = Field(gt=0)\
+report_type: Literal\["summary", "detailed"]\
+include_projections: bool\
 currency: str = "USD"
 
-\# report\_generator.py\
-from.report\_contracts import ReportParams
+\# report_generator.py\
+from.report_contracts import ReportParams
 
-def generate\_financial\_report(params: ReportParams) -> str:\
+def generate_financial_report(params: ReportParams) -> str:\
 """\
 Generates a financial report using a validated parameter object.\
 The function signature is clean and the parameters are self-documenting.\
 """\
-print(f"Generating {params.report\_type} report for client {params.client\_id}...")\
-\#... implementation uses params.start\_date, etc....\
-return "report\_content"
+print(f"Generating {params.report_type} report for client {params.client_id}...")\
+\#... implementation uses params.start_date, etc....\
+return "report_content"
 
 This approach not only simplifies the function signature but also makes the parameters reusable and easier to test.
 
 ## **Module-Level Documentation Standards**
 
-Comprehensive documentation is critical for the long-term health of a large codebase. For each module, a dual-documentation approach is required to serve two distinct audiences: the *consumer* of the module's API and the future *maintainer* of the module's code. The module docstring serves the consumer, providing API-level details, while a module-specific README.md file serves the maintainer, providing architectural context and design rationale.
+Comprehensive documentation is critical for the long-term health of a large codebase. For each module, a dual-documentation approach is required to serve two distinct audiences: the _consumer_ of the module's API and the future _maintainer_ of the module's code. The module docstring serves the consumer, providing API-level details, while a module-specific README.md file serves the maintainer, providing architectural context and design rationale.
 
 ### **The Module Docstring (Google Style)**
 
@@ -940,16 +940,16 @@ help() function and IDEs.34
 Content Requirements:\
 The module docstring must contain the following sections 35:
 
-* **One-Line Summary:** A brief, imperative sentence summarizing the module's purpose.
-* **Extended Description:** A more detailed paragraph (or paragraphs) explaining the module's responsibilities and functionality.
-* **Attributes Section:** Documentation for any module-level constants that are part of the public API.
-* **Public Object Summary:** A list of all public classes and functions exported by the module, each with a one-line summary.
+- **One-Line Summary:** A brief, imperative sentence summarizing the module's purpose.
+- **Extended Description:** A more detailed paragraph (or paragraphs) explaining the module's responsibilities and functionality.
+- **Attributes Section:** Documentation for any module-level constants that are part of the public API.
+- **Public Object Summary:** A list of all public classes and functions exported by the module, each with a one-line summary.
 
 **Example Module Docstring:**
 
 Python
 
-\# custom\_exceptions.py\
+\# custom_exceptions.py\
 """Defines custom exceptions for the data processing pipeline.
 
 This module contains a set of specialized exception classes that are used\
@@ -958,14 +958,14 @@ data validation and processing. Using these exceptions allows for more\
 granular error handling compared to using generic built-in exceptions.
 
 Attributes:\
-MAX\_RETRIES (int): The default maximum number of retries for operations\
+MAX_RETRIES (int): The default maximum number of retries for operations\
 that raise a TransientError.
 
 """
 
 \_\_all\_\_ =
 
-MAX\_RETRIES: int = 3
+MAX_RETRIES: int = 3
 
 class ValidationError(Exception):\
 """Raised when input data fails validation checks."""\
@@ -986,11 +986,11 @@ In addition to the docstring, each module (or a small, tightly-coupled group of 
 Content Requirements:\
 The module README.md must include the following sections 38:
 
-* **Purpose and Scope:** A clear, high-level explanation of why the module exists, the problem it solves within the larger system, and its boundaries of responsibility.
-* **Design Principles and Patterns:** A brief discussion of the key architectural decisions made in the module. This should mention any specific design patterns used (e.g., "This module implements the Factory pattern to create different data parsers") and explain the rationale for significant design trade-offs.
-* **Dependencies and Interactions:** A description of the module's key dependencies on other internal modules. It should explain the nature of these interactions (e.g., "This module consumes UserData contracts from the data\_contracts module and passes them to the persistence layer").
-* **Usage Example:** A concise, practical code snippet demonstrating the most common use case for the module. This serves as a quick-start guide for other developers who need to interact with the module.40
-* **Contribution Notes:** Any specific guidance for developers who will be modifying this particular module, such as notes on testing strategies, potential pitfalls, or areas planned for future refactoring.
+- **Purpose and Scope:** A clear, high-level explanation of why the module exists, the problem it solves within the larger system, and its boundaries of responsibility.
+- **Design Principles and Patterns:** A brief discussion of the key architectural decisions made in the module. This should mention any specific design patterns used (e.g., "This module implements the Factory pattern to create different data parsers") and explain the rationale for significant design trade-offs.
+- **Dependencies and Interactions:** A description of the module's key dependencies on other internal modules. It should explain the nature of these interactions (e.g., "This module consumes UserData contracts from the data_contracts module and passes them to the persistence layer").
+- **Usage Example:** A concise, practical code snippet demonstrating the most common use case for the module. This serves as a quick-start guide for other developers who need to interact with the module.40
+- **Contribution Notes:** Any specific guidance for developers who will be modifying this particular module, such as notes on testing strategies, potential pitfalls, or areas planned for future refactoring.
 
 By mandating both a docstring and a README.md, the documentation strategy ensures that the module is well-documented for both its external contract (the API) and its internal architecture, which is essential for sustainable development in a large, collaborative environment.
 

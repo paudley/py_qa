@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "tombi",
+  "description": "TOML toolkit providing linting via tombi.",
+  "languages": ["toml"],
+  "phase": "lint",
+  "runtime": {
+    "type": "python",
+    "package": "tombi",
+    "minVersion": "0.6.12",
+    "versionCommand": ["tombi", "--version"]
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_project_scanner",
+        "config": {
+          "base": ["tombi", "lint"],
+          "options": [
+            {
+              "setting": ["stdin-filename", "stdin_filename"],
+              "flag": "--stdin-filename",
+              "type": "path",
+              "literalValues": ["-"]
+            },
+            {
+              "setting": "offline",
+              "flag": "--offline",
+              "type": "flag"
+            },
+            {
+              "setting": ["no-cache", "no_cache"],
+              "flag": "--no-cache",
+              "type": "flag"
+            },
+            {
+              "setting": "verbose",
+              "flag": "-v",
+              "type": "repeatFlag"
+            },
+            {
+              "setting": "quiet",
+              "flag": "-q",
+              "type": "repeatFlag"
+            },
+            {
+              "setting": "args",
+              "type": "args"
+            }
+          ]
+        }
+      },
+      "description": "Lint TOML files using Tombi.",
+      "parser": {
+        "strategy": "parser_text",
+        "config": {
+          "transform": "pyqa.parsers.misc.parse_tombi"
+        }
+      }
+    }
+  ],
+  "extends": ["python_defaults"],
+  "fileExtensions": [".toml"],
+  "configFiles": ["tombi.toml"],
+  "documentation": {
+    "help": {
+      "path": "docs/tombi_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/tombi_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

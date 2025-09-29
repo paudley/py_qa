@@ -24,7 +24,7 @@ This section establishes the baseline code quality standards for all test code y
 
 **Requirement:** All new or modified test code must be fully and explicitly type-annotated in accordance with PEP 484. The final test suite, in its entirety, must pass mypy when run with a strict configuration.
 
-**Implementation:** You will ensure the pyproject.toml file contains a \[tool.mypy] section with a comprehensive set of strict checks enabled. This configuration must include, but is not limited to, check\_untyped\_defs = true, disallow\_incomplete\_defs = true, warn\_unused\_ignores = true, warn\_return\_any = true, and no\_implicit\_optional = true.1 The primary goal of this configuration is to eliminate the implicit use of the
+**Implementation:** You will ensure the pyproject.toml file contains a \[tool.mypy] section with a comprehensive set of strict checks enabled. This configuration must include, but is not limited to, check_untyped_defs = true, disallow_incomplete_defs = true, warn_unused_ignores = true, warn_return_any = true, and no_implicit_optional = true.1 The primary goal of this configuration is to eliminate the implicit use of the
 
 Any type, thereby maximizing the benefits of static analysis.
 
@@ -70,9 +70,9 @@ This section details the primary task of fixing the failing tests. The focus is 
 
 1. **Diagnose Order Dependencies:** The first step is to uncover and eliminate any implicit dependencies on test execution order. To do this, you will integrate the pytest-random-order plugin and run the suite with the --random-order flag. Failures that appear under this randomized execution, but not under sequential execution, are direct evidence of order dependencies.17 You must resolve these issues by making each test fully self-contained, ensuring it sets up its own state and does not rely on the artifacts of a previously run test.
 2. **Identify and Eliminate Shared State:** After resolving order dependencies, you must scrutinize the test suite for any shared resources that could create race conditions or state corruption when accessed concurrently. Common sources of shared state include:
-   * **Filesystem:** Any test that reads from or writes to a hardcoded file path is not parallel-safe. These tests must be refactored to use the built-in tmp\_path fixture. This fixture provides a unique, empty temporary directory for each test function, guaranteeing filesystem isolation.21
-   * **Database:** Tests that modify a shared database are a primary source of flakiness in parallel runs. These must be refactored to ensure complete isolation. This can be achieved by ensuring each test runs within its own database transaction that is rolled back upon completion, or by using fixtures that create and tear down a unique test database or schema for each test worker.
-   * **Global State:** Any test that relies on or modifies mutable global variables, module-level state, or class-level state is inherently unsafe for parallel execution. This pattern must be eliminated entirely. All state required by a test must be created and managed within the scope of that test, typically via fixtures.
+   - **Filesystem:** Any test that reads from or writes to a hardcoded file path is not parallel-safe. These tests must be refactored to use the built-in tmp_path fixture. This fixture provides a unique, empty temporary directory for each test function, guaranteeing filesystem isolation.21
+   - **Database:** Tests that modify a shared database are a primary source of flakiness in parallel runs. These must be refactored to ensure complete isolation. This can be achieved by ensuring each test runs within its own database transaction that is rolled back upon completion, or by using fixtures that create and tear down a unique test database or schema for each test worker.
+   - **Global State:** Any test that relies on or modifies mutable global variables, module-level state, or class-level state is inherently unsafe for parallel execution. This pattern must be eliminated entirely. All state required by a test must be created and managed within the scope of that test, typically via fixtures.
 
 ### **2.3. Refactoring for Maintainability (DRY Principle)**
 
@@ -80,8 +80,8 @@ This section details the primary task of fixing the failing tests. The focus is 
 
 **Implementation:**
 
-* **Helper Functions:** Identify any repeated patterns of logic within your tests. This could include complex object instantiation, multi-step data preparation, or recurring sequences of validation checks. Extract this logic into well-documented, fully-typed helper functions. These functions should be organized into a dedicated module, such as tests/helpers.py, to create a reusable library of testing utilities.22
-* **Shared Fixtures (conftest.py):** Identify common setup and teardown procedures that are used across multiple tests. These are ideal candidates for conversion into shared fixtures. Place these fixtures in the appropriate conftest.py file to make them available to the relevant tests. You must use fixture scopes (function, class, module, session) judiciously to optimize test suite performance.23 For example, an expensive, read-only resource like a database connection pool can be session-scoped to be created only once. In contrast, a fixture that provides a specific piece of mutable test data for a single test should be function-scoped to ensure isolation.
+- **Helper Functions:** Identify any repeated patterns of logic within your tests. This could include complex object instantiation, multi-step data preparation, or recurring sequences of validation checks. Extract this logic into well-documented, fully-typed helper functions. These functions should be organized into a dedicated module, such as tests/helpers.py, to create a reusable library of testing utilities.22
+- **Shared Fixtures (conftest.py):** Identify common setup and teardown procedures that are used across multiple tests. These are ideal candidates for conversion into shared fixtures. Place these fixtures in the appropriate conftest.py file to make them available to the relevant tests. You must use fixture scopes (function, class, module, session) judiciously to optimize test suite performance.23 For example, an expensive, read-only resource like a database connection pool can be session-scoped to be created only once. In contrast, a fixture that provides a specific piece of mutable test data for a single test should be function-scoped to ensure isolation.
 
 ## **Section 3: Implementation of Advanced pytest Tooling**
 
@@ -91,7 +91,7 @@ This section mandates the integration of specific pytest plugins to elevate the 
 
 **Requirement:** Refactor tests to report all assertion failures within a single test run, rather than stopping at the first failure.
 
-**Implementation:** You will identify test functions that perform multiple, independent checks on a single object or state. These tests must be refactored to use the pytest-check plugin. For clarity and readability, you should prefer using the explicit helper functions provided by the plugin (e.g., check.equal(), check.is\_in(), check.greater()). For more complex or custom validation logic that cannot be expressed with the built-in helpers, you may use the with check: context manager.35
+**Implementation:** You will identify test functions that perform multiple, independent checks on a single object or state. These tests must be refactored to use the pytest-check plugin. For clarity and readability, you should prefer using the explicit helper functions provided by the plugin (e.g., check.equal(), check.is_in(), check.greater()). For more complex or custom validation logic that cannot be expressed with the built-in helpers, you may use the with check: context manager.35
 
 **Context:** Standard assert statements cause a test to fail and exit immediately. This can hide other potential failures within the same test, leading to a slow, iterative process of fixing one issue, re-running the tests, and only then discovering the next. By using pytest-check, you gather a comprehensive list of all failures in a single run, providing much richer diagnostic feedback and accelerating the debugging cycle.35
 
@@ -122,10 +122,10 @@ Beyond repairing existing tests, you are tasked with strategically expanding the
 
 **Implementation:**
 
-* **Candidate Identification:** You will analyze the application's functionality to identify user-facing features, complex business logic workflows, or API endpoints that would benefit from being described in plain, unambiguous language. You will use the **Test Strategy Selection Guide** (Table 1) below to make these decisions.
-* **Structure:** New BDD tests will be organized according to best practices. You will create a tests/features/ directory to house the Gherkin .feature files and a corresponding tests/step\_defs/ directory for the Python step definition implementation files.48
-* **Gherkin Scenarios:** Within the .feature files, you will write clear, declarative scenarios using the standard Gherkin syntax (Given, When, Then). These scenarios should describe a feature from the perspective of a user or stakeholder.49
-* **Step Definitions:** You will implement the Python functions that correspond to each Gherkin step. A key aspect of this implementation is to maximize code reuse by leveraging existing fixtures from the test suite for setting up the state described in the Given steps.
+- **Candidate Identification:** You will analyze the application's functionality to identify user-facing features, complex business logic workflows, or API endpoints that would benefit from being described in plain, unambiguous language. You will use the **Test Strategy Selection Guide** (Table 1) below to make these decisions.
+- **Structure:** New BDD tests will be organized according to best practices. You will create a tests/features/ directory to house the Gherkin .feature files and a corresponding tests/step_defs/ directory for the Python step definition implementation files.48
+- **Gherkin Scenarios:** Within the .feature files, you will write clear, declarative scenarios using the standard Gherkin syntax (Given, When, Then). These scenarios should describe a feature from the perspective of a user or stakeholder.49
+- **Step Definitions:** You will implement the Python functions that correspond to each Gherkin step. A key aspect of this implementation is to maximize code reuse by leveraging existing fixtures from the test suite for setting up the state described in the Given steps.
 
 ### **4.2. Property-Based Testing with hypothesis**
 
@@ -133,9 +133,9 @@ Beyond repairing existing tests, you are tasked with strategically expanding the
 
 **Implementation:**
 
-* **Candidate Identification:** You will identify functions within the codebase that are pure or semi-pure and perform data processing, parsing, validation, or mathematical calculations. These functions are prime candidates for property-based testing. You will use the **Test Strategy Selection Guide** (Table 1) below to make these decisions.
-* **Property Definition:** For each candidate function, you will define a "property"—an invariant or a rule that should hold true for all valid inputs. For example, a property of a serialization function might be that "for any valid input object x, deserialize(serialize(x)) is equal to x".
-* **Strategies:** You will use the hypothesis.strategies module to define how to generate a wide range of valid (and sometimes invalid) input data for the function under test. You should use Hypothesis's rich library of built-in strategies (st.integers(), st.text(), st.builds(), etc.) wherever possible to cover a vast input space with minimal code.53
+- **Candidate Identification:** You will identify functions within the codebase that are pure or semi-pure and perform data processing, parsing, validation, or mathematical calculations. These functions are prime candidates for property-based testing. You will use the **Test Strategy Selection Guide** (Table 1) below to make these decisions.
+- **Property Definition:** For each candidate function, you will define a "property"—an invariant or a rule that should hold true for all valid inputs. For example, a property of a serialization function might be that "for any valid input object x, deserialize(serialize(x)) is equal to x".
+- **Strategies:** You will use the hypothesis.strategies module to define how to generate a wide range of valid (and sometimes invalid) input data for the function under test. You should use Hypothesis's rich library of built-in strategies (st.integers(), st.text(), st.builds(), etc.) wherever possible to cover a vast input space with minimal code.53
 
 Deciding when to use a standard test versus a more advanced methodology like BDD or property-based testing is crucial for building an effective and maintainable test suite. A standard test is excellent for verifying a single, known condition. BDD excels at describing and testing multi-step user behaviors. Hypothesis is unparalleled at finding unknown edge cases in data-handling logic. The following guide provides a clear heuristic framework for selecting the most appropriate testing strategy for a given scenario.
 
@@ -143,7 +143,7 @@ Deciding when to use a standard test versus a more advanced methodology like BDD
 
 | Test Type                | Primary Goal                                                                                            | Use When...                                                                                                                                                 | Example Scenario                                                                                                                       |
 | :----------------------- | :------------------------------------------------------------------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------- |
-| **Standard pytest Test** | Verify a specific, known outcome for a single unit of code.                                             | You are testing a single, well-defined input-output pair or a specific error condition.                                                                     | def test\_add\_positive\_numbers(): assert add(2, 3) == 5                                                                                 |
+| **Standard pytest Test** | Verify a specific, known outcome for a single unit of code.                                             | You are testing a single, well-defined input-output pair or a specific error condition.                                                                     | def test_add_positive_numbers(): assert add(2, 3) == 5                                                                                 |
 | **pytest-bdd**           | Document and verify application behavior from a user or stakeholder perspective.                        | The functionality represents a user story or a business rule that can be described in plain language. The test covers a multi-step interaction.             | Testing a login flow: Given a user is on the login page, When they enter valid credentials, Then they are redirected to the dashboard. |
 | **hypothesis**           | Discover edge cases and bugs by testing properties of a function across a wide range of generated data. | The function performs data processing, parsing, validation, or mathematical calculations. You want to ensure its logic is robust against unexpected inputs. | Testing a sort() function: "For any list of integers L, the output sort(L) should have the same length as L and be ordered."           |
 
@@ -164,7 +164,7 @@ This final section details the necessary configuration changes to the project's 
 
 Ini, TOML
 
-\[tool.pytest.ini\_options]\
+\[tool.pytest.ini_options]\
 \# Add common pytest command-line options to be used by default.\
 addopts =
 
@@ -179,21 +179,21 @@ markers =
 
 \[tool.mypy]\
 \# Specify the source directory for type checking.\
-mypy\_path = "src"
+mypy_path = "src"
 
 \# Enable a strict suite of type checking options for maximum safety.\
-check\_untyped\_defs = true\
-disallow\_any\_generics = true\
-disallow\_incomplete\_defs = true\
-disallow\_untyped\_defs = true\
-ignore\_missing\_imports = true # A pragmatic choice for projects with untyped 3rd-party dependencies.\
-no\_implicit\_optional = true\
-warn\_redundant\_casts = true\
-warn\_return\_any = true\
-warn\_unused\_ignores = true
+check_untyped_defs = true\
+disallow_any_generics = true\
+disallow_incomplete_defs = true\
+disallow_untyped_defs = true\
+ignore_missing_imports = true # A pragmatic choice for projects with untyped 3rd-party dependencies.\
+no_implicit_optional = true\
+warn_redundant_casts = true\
+warn_return_any = true\
+warn_unused_ignores = true
 
 \# Include error codes in output for easier debugging and suppression.\
-show\_error\_codes = true
+show_error_codes = true
 
 \# Disable messages that are often noisy or counterproductive in a pytest suite.\
 disable =

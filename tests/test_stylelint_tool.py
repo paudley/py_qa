@@ -8,8 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from pyqa.config import Config
+from pyqa.tooling.strategies import command_stylelint
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _StylelintCommand
 
 
 def _ctx(tmp_path: Path, **settings) -> ToolContext:
@@ -32,9 +32,10 @@ def test_stylelint_lint_command_includes_formatter_and_paths(tmp_path: Path) -> 
         max_warnings=5,
     )
 
+    builder = command_stylelint({"base": ["stylelint"]})
     action = ToolAction(
         name="lint",
-        command=_StylelintCommand(base=("stylelint",)),
+        command=builder,
         append_files=True,
     )
 
@@ -47,9 +48,10 @@ def test_stylelint_lint_command_includes_formatter_and_paths(tmp_path: Path) -> 
 
 def test_stylelint_fix_command_respects_fix_flag(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
+    builder = command_stylelint({"base": ["stylelint", "--fix"], "isFix": True})
     action = ToolAction(
         name="fix",
-        command=_StylelintCommand(base=("stylelint", "--fix"), is_fix=True),
+        command=builder,
         append_files=True,
         is_fix=True,
     )

@@ -1,0 +1,130 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "prettier",
+  "description": "Code formatter Prettier.",
+  "extends": ["npm_runtime"],
+  "languages": ["javascript", "typescript", "json", "css", "markdown"],
+  "phase": "format",
+  "fileExtensions": [".js", ".jsx", ".ts", ".tsx", ".json", ".css", ".md"],
+  "configFiles": [".prettierrc", ".prettierrc.json", ".prettierrc.js", "prettier.config.js"],
+  "runtime": {
+    "type": "npm",
+    "package": "prettier",
+    "versionCommand": ["prettier", "--version"]
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments passed to prettier."
+    },
+    {
+      "name": "config",
+      "type": "path",
+      "description": "Prettier configuration file to load."
+    },
+    {
+      "name": "config-precedence",
+      "type": "str",
+      "description": "How multiple configs are merged (cli-override/file-override)."
+    },
+    {
+      "name": "end-of-line",
+      "type": "str",
+      "description": "End-of-line style (lf, crlf, auto).",
+      "choices": ["lf", "crlf", "cr", "auto"]
+    },
+    {
+      "name": "ignore-path",
+      "type": "path",
+      "description": "Ignore file used during formatting."
+    },
+    {
+      "name": "loglevel",
+      "type": "str",
+      "description": "Prettier log level (debug/info/warn/error)."
+    },
+    {
+      "name": "parser",
+      "type": "str",
+      "description": "Explicit parser (e.g. typescript, babel)."
+    },
+    {
+      "name": "plugin",
+      "type": "list[str]",
+      "description": "Additional prettier plugins to load."
+    },
+    {
+      "name": "plugin-search-dir",
+      "type": "list[str]",
+      "description": "Directories used to resolve prettier plugins."
+    },
+    {
+      "name": "print-width",
+      "type": "int",
+      "description": "Preferred line length before wrapping."
+    },
+    {
+      "name": "semi",
+      "type": "bool",
+      "description": "Whether to add semicolons at statement ends."
+    },
+    {
+      "name": "single-quote",
+      "type": "bool",
+      "description": "Prefer single quotes when formatting."
+    },
+    {
+      "name": "tab-width",
+      "type": "int",
+      "description": "Number of spaces per indentation level."
+    },
+    {
+      "name": "trailing-comma",
+      "type": "str",
+      "description": "Specify trailing comma behaviour (all, es5, none).",
+      "choices": ["all", "es5", "none"]
+    },
+    {
+      "name": "use-tabs",
+      "type": "bool",
+      "description": "Indent with tabs instead of spaces."
+    }
+  ],
+  "actions": [
+    {
+      "name": "format",
+      "isFix": true,
+      "command": {
+        "strategy": "command_prettier",
+        "config": {
+          "base": ["prettier", "--write"]
+        }
+      }
+    },
+    {
+      "name": "check",
+      "ignoreExit": true,
+      "command": {
+        "strategy": "command_prettier",
+        "config": {
+          "base": ["prettier", "--check"]
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/prettier_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/prettier_cmd_help.txt",
+      "format": "text"
+    },
+    "shared": {
+      "path": "docs/SHARED_KNOBS.md",
+      "format": "markdown"
+    }
+  }
+}

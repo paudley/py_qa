@@ -1,0 +1,146 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "hadolint",
+  "description": "Dockerfile linter based on ShellCheck and best practices.",
+  "languages": ["docker"],
+  "phase": "lint",
+  "runtime": {
+    "type": "binary",
+    "install": {
+      "strategy": "installer_download_artifact",
+      "config": {
+        "version": "2.12.0",
+        "contextLabel": "install_hadolint.download",
+        "download": {
+          "name": "hadolint",
+          "cacheSubdir": "hadolint",
+          "targets": [
+            {
+              "os": ["linux"],
+              "arch": ["x86_64", "amd64"],
+              "url": "https://github.com/hadolint/hadolint/releases/download/v{version}/hadolint-Linux-x86_64",
+              "filename": "hadolint",
+              "chmod": true
+            },
+            {
+              "os": ["linux"],
+              "arch": ["arm64", "aarch64"],
+              "url": "https://github.com/hadolint/hadolint/releases/download/v{version}/hadolint-Linux-arm64",
+              "filename": "hadolint",
+              "chmod": true
+            },
+            {
+              "os": ["darwin"],
+              "arch": ["x86_64", "amd64"],
+              "url": "https://github.com/hadolint/hadolint/releases/download/v{version}/hadolint-Darwin-x86_64",
+              "filename": "hadolint",
+              "chmod": true
+            },
+            {
+              "os": ["darwin"],
+              "arch": ["arm64", "aarch64"],
+              "url": "https://github.com/hadolint/hadolint/releases/download/v{version}/hadolint-Darwin-arm64",
+              "filename": "hadolint",
+              "chmod": true
+            }
+          ]
+        }
+      }
+    }
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_download_binary",
+        "config": {
+          "version": "2.12.0",
+          "download": {
+            "name": "hadolint",
+            "cacheSubdir": "hadolint",
+            "targets": [
+              {
+                "os": ["linux"],
+                "arch": ["x86_64", "amd64"],
+                "url": "https://github.com/hadolint/hadolint/releases/download/v{version}/hadolint-Linux-x86_64",
+                "filename": "hadolint",
+                "chmod": true
+              },
+              {
+                "os": ["linux"],
+                "arch": ["arm64", "aarch64"],
+                "url": "https://github.com/hadolint/hadolint/releases/download/v{version}/hadolint-Linux-arm64",
+                "filename": "hadolint",
+                "chmod": true
+              },
+              {
+                "os": ["darwin"],
+                "arch": ["x86_64", "amd64"],
+                "url": "https://github.com/hadolint/hadolint/releases/download/v{version}/hadolint-Darwin-x86_64",
+                "filename": "hadolint",
+                "chmod": true
+              },
+              {
+                "os": ["darwin"],
+                "arch": ["arm64", "aarch64"],
+                "url": "https://github.com/hadolint/hadolint/releases/download/v{version}/hadolint-Darwin-arm64",
+                "filename": "hadolint",
+                "chmod": true
+              }
+            ]
+          },
+          "base": ["${binary}", "--format", "json"],
+          "options": [
+            {
+              "setting": "config",
+              "flag": "--config",
+              "type": "path"
+            },
+            {
+              "setting": ["failure-threshold", "failure_threshold"],
+              "flag": "--failure-threshold",
+              "type": "value"
+            },
+            {
+              "setting": "args",
+              "type": "args"
+            }
+          ]
+        }
+      },
+      "description": "Dockerfile analysis via hadolint.",
+      "parser": {
+        "strategy": "parser_json_diagnostics",
+        "config": {
+          "mappings": {
+            "file": "file",
+            "line": "line",
+            "column": "column",
+            "code": "code",
+            "message": "message",
+            "severity": {
+              "path": "level",
+              "map": {
+                "info": "notice",
+                "warning": "warning",
+                "error": "error"
+              },
+              "default": "warning"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "fileExtensions": ["Dockerfile", "dockerfile", "Containerfile"],
+  "documentation": {
+    "help": {
+      "path": "docs/hadolint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/hadolint_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

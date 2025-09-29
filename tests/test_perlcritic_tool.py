@@ -8,8 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from pyqa.config import Config
-from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _PerlCriticCommand
+from pyqa.tooling.strategies import perlcritic_command
+from pyqa.tools.base import ToolContext
 
 
 def test_perlcritic_command_build(tmp_path: Path) -> None:
@@ -21,13 +21,9 @@ def test_perlcritic_command_build(tmp_path: Path) -> None:
         settings={"severity": 3, "profile": tmp_path / ".perlcriticrc"},
     )
 
-    action = ToolAction(
-        name="lint",
-        command=_PerlCriticCommand(base=("perlcritic",)),
-        append_files=True,
-    )
-
-    cmd = action.build_command(ctx)
+    builder = perlcritic_command({"base": ["perlcritic"]})
+    cmd = list(builder.build(ctx))
+    cmd.extend(str(path) for path in ctx.files)
     assert cmd[0] == "perlcritic"
     assert "--nocolor" in cmd
     assert "--verbose" in cmd

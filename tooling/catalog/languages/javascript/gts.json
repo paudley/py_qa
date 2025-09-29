@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "gts",
+  "description": "Google TypeScript style checker.",
+  "languages": ["javascript"],
+  "phase": "lint",
+  "runtime": {
+    "type": "npm",
+    "package": "gts@5.3.1",
+    "minVersion": "5.3.1",
+    "versionCommand": ["gts", "--version"]
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_gts",
+        "config": {
+          "base": ["gts", "lint", "--", "--format", "json"],
+          "is_fix": false,
+          "isFix": false
+        }
+      },
+      "description": "Run Google's TypeScript style checks via gts.",
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.javascript.parse_eslint"
+        }
+      }
+    },
+    {
+      "name": "fix",
+      "command": {
+        "strategy": "command_gts",
+        "config": {
+          "base": ["gts", "fix"],
+          "is_fix": true,
+          "isFix": true
+        }
+      },
+      "isFix": true,
+      "description": "Apply gts formatting and fixes."
+    }
+  ],
+  "extends": ["npm_runtime"],
+  "fileExtensions": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"],
+  "documentation": {
+    "help": {
+      "path": "docs/gts_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/gts_cmd_help.txt",
+      "format": "text"
+    },
+    "shared": {
+      "path": "docs/SHARED_KNOBS.md",
+      "format": "markdown"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "command_golangci_lint",
+  "type": "command",
+  "description": "Construct golangci-lint commands with catalog-provided arguments.",
+  "implementation": "pyqa.tooling.strategies.golangci_lint_command",
+  "config": {
+    "base": {
+      "type": "array",
+      "required": true,
+      "description": "Base command and options passed to golangci-lint before user configuration."
+    }
+  }
+}

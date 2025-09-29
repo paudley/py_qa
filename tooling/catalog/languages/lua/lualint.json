@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "lualint",
+  "description": "Lua bytecode-based global usage linter.",
+  "languages": ["lua"],
+  "phase": "lint",
+  "runtime": {
+    "type": "binary"
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_lualint",
+        "config": {
+          "base": ["lua"],
+          "download": {
+            "name": "lualint",
+            "cacheSubdir": "lualint",
+            "targets": [
+              {
+                "url": "https://raw.githubusercontent.com/philips/lualint/master/lualint",
+                "filename": "lualint.lua",
+                "chmod": true
+              }
+            ]
+          }
+        }
+      },
+      "description": "Static analysis for Lua globals via lualint.",
+      "parser": {
+        "strategy": "parser_text",
+        "config": {
+          "transform": "pyqa.parsers.lua.parse_lualint"
+        }
+      }
+    }
+  ],
+  "fileExtensions": [".lua"],
+  "tags": ["requires-lua"],
+  "documentation": {
+    "help": {
+      "path": "docs/lualint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/lualint_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

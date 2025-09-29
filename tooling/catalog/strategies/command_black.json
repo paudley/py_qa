@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "command_black",
+  "type": "command",
+  "description": "Construct Black commands with catalog-provided defaults.",
+  "implementation": "pyqa.tooling.strategies.black_command",
+  "config": {
+    "base": {
+      "type": "array",
+      "required": true,
+      "description": "Base command used to invoke black."
+    },
+    "mode": {
+      "type": "string",
+      "description": "Indicates the action name (format/check)."
+    }
+  }
+}

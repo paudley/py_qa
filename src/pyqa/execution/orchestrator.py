@@ -41,6 +41,16 @@ from .worker import run_command
 
 FetchEvent = Literal["start", "completed", "error"]
 
+_PHASE_ORDER: tuple[str, ...] = (
+    "format",
+    "lint",
+    "analysis",
+    "security",
+    "test",
+    "coverage",
+    "utility",
+)
+
 
 _ANALYSIS_ENGINE = AnnotationEngine()
 FetchCallback = Callable[[FetchEvent, str, str, int, int, str | None], None]
@@ -231,11 +241,17 @@ class Orchestrator:
         )
         system_preferred = not cfg.execution.use_local_linters
         use_local_override = cfg.execution.use_local_linters
-        tool_actions: list[tuple[Tool, ToolAction]] = [
-            (tool, action) for tool in self._registry.tools() for action in tool.actions
-        ]
+        ordered_names = self._order_tools([tool.name for tool in self._registry.tools()])
+        tool_actions: list[tuple[Tool, ToolAction]] = []
+        for name in ordered_names:
+            tool = self._registry.try_get(name)
+            if tool is None:
+                continue
+            for action in tool.actions:
+                tool_actions.append((tool, action))
         total = len(tool_actions)
         results: list[tuple[str, str, PreparedCommand | None, str | None]] = []
+        installed_tools: set[str] = set()
         for index, (tool, action) in enumerate(tool_actions, start=1):
             if callback:
                 callback("start", tool.name, action.name, index, total, None)
@@ -246,6 +262,7 @@ class Orchestrator:
                 files=tuple(),
                 settings=settings_view,
             )
+            self._apply_installers(tool, context, installed_tools)
             base_cmd = list(action.build_command(context))
             try:
                 prepared = self._cmd_preparer.prepare(
@@ -324,6 +341,7 @@ class Orchestrator:
         tool_files = self._filter_files_for_tool(tool.file_extensions, matched_files)
         settings_view = MappingProxyType(dict(cfg.tool_settings.get(tool.name, {})))
         context = ToolContext(cfg=cfg, root=root, files=tuple(tool_files), settings=settings_view)
+        self._apply_installers(tool, context, state.installed_tools)
         if self._hooks.before_tool:
             self._hooks.before_tool(tool.name)
 
@@ -438,6 +456,18 @@ class Orchestrator:
         if cfg.execution.check_only and action.is_fix:
             return False
         return True
+
+    def _apply_installers(
+        self,
+        tool: Tool,
+        context: ToolContext,
+        installed: set[str],
+    ) -> None:
+        if not tool.installers or tool.name in installed:
+            return
+        for installer in tool.installers:
+            installer(context)
+        installed.add(tool.name)
 
     def _update_tool_version(
         self,
@@ -621,7 +651,7 @@ class Orchestrator:
     def _select_tools(self, cfg: Config, files: Sequence[Path], root: Path) -> Sequence[str]:
         exec_cfg = cfg.execution
         if exec_cfg.only:
-            return list(dict.fromkeys(exec_cfg.only))
+            return self._order_tools(dict.fromkeys(exec_cfg.only))
         languages = list(dict.fromkeys(exec_cfg.languages)) if exec_cfg.languages else []
         if not languages:
             languages = sorted(detect_languages(root, files))
@@ -630,8 +660,92 @@ class Orchestrator:
             for lang in languages:
                 tool_names.extend(tool.name for tool in self._registry.tools_for_language(lang))
             if tool_names:
-                return list(dict.fromkeys(tool_names))
-        return [tool.name for tool in self._registry.tools() if tool.default_enabled]
+                return self._order_tools(dict.fromkeys(tool_names))
+        default_tools = [tool.name for tool in self._registry.tools() if tool.default_enabled]
+        return self._order_tools(dict.fromkeys(default_tools))
+
+    def _order_tools(self, tool_names: Mapping[str, None] | Sequence[str]) -> list[str]:
+        if isinstance(tool_names, Mapping):
+            ordered_input = list(tool_names.keys())
+        else:
+            ordered_input = list(dict.fromkeys(tool_names))
+        tools: dict[str, Tool] = {}
+        for name in ordered_input:
+            tool = self._registry.try_get(name)
+            if tool is not None:
+                tools[name] = tool
+        filtered = [name for name in ordered_input if name in tools]
+        if not filtered:
+            return []
+
+        phase_groups: dict[str, list[str]] = {}
+        unknown_phases: list[str] = []
+        for name in filtered:
+            tool = tools[name]
+            phase = getattr(tool, "phase", "lint")
+            phase_groups.setdefault(phase, []).append(name)
+            if phase not in _PHASE_ORDER and phase not in unknown_phases:
+                unknown_phases.append(phase)
+
+        fallback_index = {name: index for index, name in enumerate(filtered)}
+        ordered: list[str] = []
+
+        for phase in _PHASE_ORDER:
+            names = phase_groups.get(phase)
+            if not names:
+                continue
+            ordered.extend(self._order_phase(names, tools, fallback_index))
+
+        for phase in sorted(unknown_phases):
+            names = phase_groups.get(phase)
+            if names:
+                ordered.extend(self._order_phase(names, tools, fallback_index))
+
+        remaining = [name for name in filtered if name not in ordered]
+        ordered.extend(remaining)
+        return ordered
+
+    @staticmethod
+    def _order_phase(
+        names: Sequence[str],
+        tools: Mapping[str, Tool],
+        fallback_index: Mapping[str, int],
+    ) -> list[str]:
+        if len(names) <= 1:
+            return list(names)
+
+        dependencies: dict[str, set[str]] = {name: set() for name in names}
+        for name in names:
+            tool = tools[name]
+            for dep in getattr(tool, "after", ()):  # tools that must precede this one
+                if dep in dependencies:
+                    dependencies[name].add(dep)
+            for succ in getattr(tool, "before", ()):  # tools that must follow this one
+                if succ in dependencies:
+                    dependencies[succ].add(name)
+
+        remaining = {name: set(deps) for name, deps in dependencies.items()}
+        ready = sorted(
+            [name for name, deps in remaining.items() if not deps],
+            key=lambda item: fallback_index.get(item, 0),
+        )
+        ordered: list[str] = []
+
+        while ready:
+            current = ready.pop(0)
+            ordered.append(current)
+            remaining.pop(current, None)
+            for other in list(remaining.keys()):
+                deps = remaining[other]
+                if current in deps:
+                    deps.remove(current)
+                    if not deps and other not in ready:
+                        ready.append(other)
+            ready.sort(key=lambda item: fallback_index.get(item, 0))
+
+        if remaining:
+            return list(names)
+        return ordered
 
     @staticmethod
     def _filter_files_for_tool(extensions: Sequence[str], files: Sequence[Path]) -> list[Path]:
@@ -756,3 +870,4 @@ class _ExecutionState:
     order: int = 0
     bail_triggered: bool = False
     file_metrics: dict[str, FileMetrics] = field(default_factory=dict)
+    installed_tools: set[str] = field(default_factory=set)

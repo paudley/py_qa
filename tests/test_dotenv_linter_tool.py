@@ -8,8 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from pyqa.config import Config
+from pyqa.tooling.strategies import dotenv_linter_command
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _DotenvLinterCommand
 
 
 def test_dotenv_linter_command_build(tmp_path: Path) -> None:
@@ -27,9 +27,10 @@ def test_dotenv_linter_command_build(tmp_path: Path) -> None:
         },
     )
 
+    builder = dotenv_linter_command({"base": ["dotenv-linter"]})
     action = ToolAction(
         name="lint",
-        command=_DotenvLinterCommand(base=("dotenv-linter",)),
+        command=builder,
         append_files=True,
     )
 

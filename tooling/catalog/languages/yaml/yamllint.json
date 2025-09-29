@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "yamllint",
+  "description": "Lint YAML files using yamllint.",
+  "languages": ["yaml"],
+  "phase": "lint",
+  "fileExtensions": [".yml", ".yaml"],
+  "runtime": {
+    "type": "python",
+    "package": "yamllint",
+    "versionCommand": ["yamllint", "--version"]
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_yamllint",
+        "config": {
+          "base": ["yamllint"]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.config.parse_yamllint"
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/yamllint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/yamllint_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

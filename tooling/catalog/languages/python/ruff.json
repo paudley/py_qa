@@ -1,0 +1,154 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "ruff",
+  "description": "Python linter powered by Ruff.",
+  "extends": ["python_defaults"],
+  "languages": ["python"],
+  "phase": "lint",
+  "fileExtensions": [".py", ".pyi"],
+  "configFiles": ["pyproject.toml", "ruff.toml"],
+  "runtime": {
+    "type": "python",
+    "package": "ruff",
+    "minVersion": "0.6.8",
+    "versionCommand": ["ruff", "--version"]
+  },
+  "diagnostics": {
+    "dedupe": {
+      "duplicateHints": "B014,B025,B033,PIE794,PIE796,PYI016,PYI062,PT014,SIM101,PLE0241,PLE1132,PLE1310,PLR0804"
+    }
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to the ruff invocation."
+    },
+    {
+      "name": "config",
+      "type": "path",
+      "description": "Specific ruff configuration file to use."
+    },
+    {
+      "name": "exclude",
+      "type": "list[str]",
+      "description": "Paths or globs that ruff should exclude."
+    },
+    {
+      "name": "extend-exclude",
+      "type": "list[str]",
+      "description": "Additional exclusion patterns applied after defaults."
+    },
+    {
+      "name": "extend-ignore",
+      "type": "list[str]",
+      "description": "Extend the default ignored codes for the project."
+    },
+    {
+      "name": "extend-select",
+      "type": "list[str]",
+      "description": "Extend the default selection with additional rule codes."
+    },
+    {
+      "name": "fix",
+      "type": "bool",
+      "description": "Enable --fix when running the lint action."
+    },
+    {
+      "name": "ignore",
+      "type": "list[str]",
+      "description": "Ignore the listed ruff rule codes."
+    },
+    {
+      "name": "line-length",
+      "type": "int",
+      "description": "Override the maximum line length."
+    },
+    {
+      "name": "per-file-ignores",
+      "type": "list[str]",
+      "description": "List of pattern:codes entries for per-file ignores."
+    },
+    {
+      "name": "preview",
+      "type": "bool",
+      "description": "Enable preview / unstable ruff rules."
+    },
+    {
+      "name": "respect-gitignore",
+      "type": "bool",
+      "description": "Whether to honour .gitignore patterns during linting."
+    },
+    {
+      "name": "select",
+      "type": "list[str]",
+      "description": "Restrict linting to the provided ruff rule codes."
+    },
+    {
+      "name": "target-version",
+      "type": "str",
+      "description": "Python version passed to ruff (e.g. py311).",
+      "choices": ["py37", "py38", "py39", "py310", "py311", "py312", "py313"]
+    },
+    {
+      "name": "unsafe-fixes",
+      "type": "bool",
+      "description": "Allow fix actions that may alter runtime semantics."
+    }
+  ],
+  "actions": [
+    {
+      "name": "lint",
+      "ignoreExit": true,
+      "command": {
+        "strategy": "command_ruff",
+        "config": {
+          "base": ["ruff", "check", "--force-exclude", "--output-format", "json"],
+          "mode": "lint"
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.python.parse_ruff"
+        }
+      }
+    },
+    {
+      "name": "fix",
+      "isFix": true,
+      "command": {
+        "strategy": "command_ruff",
+        "config": {
+          "base": ["ruff", "check", "--fix", "--force-exclude"],
+          "mode": "fix"
+        }
+      }
+    }
+  ],
+  "suppressions": {
+    "tests": [
+      "^ruff, (?:.+/)?tests?/.*:.*S101.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*D103.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*PT018.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*ANN003.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*PLR2004.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*ARG001.*$"
+    ],
+    "duplicates": ["pylint"]
+  },
+  "documentation": {
+    "help": {
+      "path": "docs/ruff_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/ruff_cmd_help.txt",
+      "format": "text"
+    },
+    "shared": {
+      "path": "docs/SHARED_KNOBS.md",
+      "format": "markdown"
+    }
+  }
+}

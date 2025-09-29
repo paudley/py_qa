@@ -8,8 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from pyqa.config import Config
-from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _CheckmakeCommand
+from pyqa.tooling.strategies import checkmake_command
+from pyqa.tools.base import ToolContext
 
 
 def test_checkmake_command_build(tmp_path: Path) -> None:
@@ -24,13 +24,9 @@ def test_checkmake_command_build(tmp_path: Path) -> None:
         },
     )
 
-    action = ToolAction(
-        name="lint",
-        command=_CheckmakeCommand(base=("checkmake", "lint")),
-        append_files=True,
-    )
-
-    command = action.build_command(ctx)
+    builder = checkmake_command({"base": ["checkmake", "lint"]})
+    command = list(builder.build(ctx))
+    command.extend(str(path) for path in ctx.files)
     assert command[0] == "checkmake"
     assert "--format" in command and "json" in command
     assert "--config" in command

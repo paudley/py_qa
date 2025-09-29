@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "command_dotenv_linter",
+  "type": "command",
+  "description": "Construct dotenv-linter commands with default quiet/no-color behaviour and path resolution.",
+  "implementation": "pyqa.tooling.strategies.dotenv_linter_command",
+  "config": {
+    "base": {
+      "type": "array",
+      "description": "Base command arguments; defaults to ['dotenv-linter']."
+    }
+  }
+}

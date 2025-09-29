@@ -14,7 +14,6 @@ from ..models import Diagnostic, RunResult
 
 def build_refactor_navigator(result: RunResult, engine: AnnotationEngine) -> None:
     """Populate ``result.analysis['refactor_navigator']`` with hotspot data."""
-
     hotspots: dict[tuple[str, str], dict[str, object]] = defaultdict(  # type: ignore[var-annotated]
         lambda: {
             "file": "",

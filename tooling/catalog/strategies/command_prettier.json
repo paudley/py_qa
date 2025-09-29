@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "command_prettier",
+  "type": "command",
+  "description": "Construct Prettier commands with catalog-provided defaults.",
+  "implementation": "pyqa.tooling.strategies.prettier_command",
+  "config": {
+    "base": {
+      "type": "array",
+      "required": true,
+      "description": "Base command used to invoke Prettier."
+    }
+  }
+}

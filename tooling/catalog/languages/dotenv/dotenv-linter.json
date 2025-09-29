@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "dotenv-linter",
+  "description": "Rust-based linter for dotenv files.",
+  "languages": ["dotenv"],
+  "phase": "lint",
+  "runtime": {
+    "type": "rust",
+    "package": "dotenv-linter",
+    "minVersion": "3.3.0",
+    "versionCommand": ["dotenv-linter", "--version"]
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_dotenv_linter",
+        "config": {}
+      },
+      "description": "Lint .env files using dotenv-linter.",
+      "parser": {
+        "strategy": "parser_text",
+        "config": {
+          "transform": "pyqa.parsers.config.parse_dotenv_linter"
+        }
+      }
+    }
+  ],
+  "fileExtensions": [".env", ".env.example", ".env.template", "env"],
+  "tags": ["requires-cargo"],
+  "documentation": {
+    "help": {
+      "path": "docs/dotenv-linter_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/dotenv-linter_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

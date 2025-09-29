@@ -8,8 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from pyqa.config import Config
-from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _CpplintCommand
+from pyqa.tooling.strategies import cpplint_command
+from pyqa.tools.base import ToolContext
 
 
 def test_cpplint_command_build(tmp_path: Path) -> None:
@@ -32,13 +32,9 @@ def test_cpplint_command_build(tmp_path: Path) -> None:
         },
     )
 
-    action = ToolAction(
-        name="lint",
-        command=_CpplintCommand(base=("cpplint", "--output=emacs")),
-        append_files=True,
-    )
-
-    command = action.build_command(ctx)
+    builder = cpplint_command({"base": ["cpplint", "--output=emacs"]})
+    command = list(builder.build(ctx))
+    command.extend(str(path) for path in ctx.files)
     assert command[0] == "cpplint"
     assert "--output=emacs" in command
     assert "--linelength=140" in command

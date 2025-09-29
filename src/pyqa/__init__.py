@@ -18,7 +18,7 @@ from .config_loader import ConfigLoader, generate_config_schema, load_config
 from .discovery import build_default_discovery
 from .execution.orchestrator import Orchestrator, OrchestratorHooks
 from .security import SecurityScanner
-from .tools.builtins import register_builtin_tools
+from .tools.builtins import initialize_registry
 from .tools.registry import DEFAULT_REGISTRY
 
 __all__ = [
@@ -48,4 +48,4 @@ def __getattr__(name: str) -> str:
 
 
 if len(DEFAULT_REGISTRY) == 0:
-    register_builtin_tools(DEFAULT_REGISTRY)
+    initialize_registry()

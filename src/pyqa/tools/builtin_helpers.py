@@ -10,6 +10,7 @@ import stat
 import tarfile
 import tempfile
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
 from typing import Final, Protocol, cast
@@ -19,10 +20,8 @@ from ..severity import Severity
 from .base import ToolContext
 
 __all__ = [
-    "ACTIONLINT_VERSION_DEFAULT",
     "CARGO_AVAILABLE",
     "CPANM_AVAILABLE",
-    "HADOLINT_VERSION_DEFAULT",
     "LUAROCKS_AVAILABLE",
     "LUA_AVAILABLE",
     "_CARGO_AVAILABLE",
@@ -30,20 +29,13 @@ __all__ = [
     "_LUAROCKS_AVAILABLE",
     "_LUA_AVAILABLE",
     "_as_bool",
-    "_ensure_actionlint",
-    "_ensure_hadolint",
-    "_ensure_lualint",
     "_parse_gofmt_check",
     "_resolve_path",
     "_setting",
     "_settings_list",
-    "ensure_actionlint",
-    "ensure_hadolint",
-    "ensure_lualint",
+    "download_tool_artifact",
 ]
 
-ACTIONLINT_VERSION_DEFAULT: Final[str] = "1.7.1"
-HADOLINT_VERSION_DEFAULT: Final[str] = "2.12.0"
 LUAROCKS_AVAILABLE: Final[bool] = shutil.which("luarocks") is not None
 LUA_AVAILABLE: Final[bool] = shutil.which("lua") is not None
 CARGO_AVAILABLE: Final[bool] = shutil.which("cargo") is not None
@@ -123,132 +115,185 @@ def _as_bool(value: object | None) -> bool | None:
     return bool(value)
 
 
-def _ensure_actionlint(version: str, cache_root: Path) -> Path:
-    """Download the requested actionlint release if needed and return its binary path."""
-    base_dir = cache_root / "actionlint" / version
-    binary = base_dir / "actionlint"
-    if binary.exists():
-        return binary
+@dataclass(frozen=True)
+class _DownloadTarget:
+    os: tuple[str, ...] | None
+    arch: tuple[str, ...] | None
+    url: str
+    archive_format: str | None
+    member: str | None
+    filename: str | None
+    chmod: bool
 
+
+def download_tool_artifact(
+    spec: Mapping[str, object],
+    *,
+    version: str | None,
+    cache_root: Path,
+    context: str,
+) -> Path:
+    """Download a tool artifact described by *spec* if missing and return its path."""
+
+    name = str(spec.get("name", "tool")).strip() or "tool"
+    cache_dir = str(spec.get("cacheSubdir", name)).strip() or name
+    targets_value = spec.get("targets")
+    if not isinstance(targets_value, Sequence) or not targets_value:
+        raise RuntimeError(f"{context}: download specification must include targets")
+
+    targets = [_normalize_download_target(target, context=context) for target in targets_value]
+    target = _select_download_target(targets, context=context)
+
+    base_dir = cache_root / cache_dir
+    if version:
+        base_dir = base_dir / version
     base_dir.mkdir(parents=True, exist_ok=True)
 
-    system = platform.system().lower()
-    machine = platform.machine().lower()
-    if system == "linux":
-        if machine in {"x86_64", "amd64"}:
-            platform_tag = "linux_amd64"
-        elif machine in {"aarch64", "arm64"}:
-            platform_tag = "linux_arm64"
-        else:
-            msg = f"Unsupported Linux architecture '{machine}' for actionlint"
-            raise RuntimeError(msg)
-    elif system == "darwin":
-        if machine in {"x86_64", "amd64"}:
-            platform_tag = "darwin_amd64"
-        elif machine in {"arm64", "aarch64"}:
-            platform_tag = "darwin_arm64"
-        else:
-            msg = f"Unsupported macOS architecture '{machine}' for actionlint"
-            raise RuntimeError(msg)
-    else:
-        msg = f"actionlint is not supported on platform '{system}'"
-        raise RuntimeError(msg)
+    filename = target.filename or target.member or _filename_from_url(target.url)
+    destination = base_dir / filename
+    if destination.exists():
+        return destination
 
-    filename = f"actionlint_{version}_{platform_tag}.tar.gz"
-    url = f"https://github.com/rhysd/actionlint/releases/download/v{version}/{filename}"
-
-    response = _REQUESTS.get(url, timeout=30)
+    variables = _DownloadFormatProxy(version=version)
+    resolved_url = target.url.format_map(variables)
+    response = _REQUESTS.get(resolved_url, timeout=int(spec.get("timeout", 60)))
     response.raise_for_status()
 
-    with tempfile.NamedTemporaryFile() as tmp:
-        tmp.write(response.content)
-        tmp.flush()
-        with tarfile.open(tmp.name, "r:gz") as archive:
-            for member in archive.getmembers():
-                if member.isfile() and member.name.endswith("actionlint"):
-                    archive.extract(member, path=base_dir)
-                    extracted = base_dir / member.name
-                    extracted.chmod(
-                        extracted.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH,
-                    )
-                    if extracted != binary:
-                        extracted.rename(binary)
-                    break
+    if target.archive_format is None:
+        destination.write_bytes(response.content)
+    elif target.archive_format == "tar.gz":
+        _extract_tar_member(response.content, target, destination, context=context)
+    else:
+        raise RuntimeError(f"{context}: unsupported archive format '{target.archive_format}'")
+
+    if target.chmod:
+        destination.chmod(destination.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    return destination
+
+
+def _normalize_download_target(data: object, *, context: str) -> _DownloadTarget:
+    if not isinstance(data, Mapping):
+        raise RuntimeError(f"{context}: download target entries must be objects")
+
+    url_value = data.get("url")
+    if not isinstance(url_value, str) or not url_value:
+        raise RuntimeError(f"{context}: download target requires a non-empty 'url'")
+
+    os_value = data.get("os") or data.get("oses")
+    os_list = _normalize_string_sequence(os_value) if os_value is not None else None
+    arch_value = data.get("arch") or data.get("architectures")
+    arch_list = _normalize_string_sequence(arch_value) if arch_value is not None else None
+
+    archive_value = data.get("archive")
+    archive_format = None
+    archive_member = None
+    if archive_value is not None:
+        if not isinstance(archive_value, Mapping):
+            raise RuntimeError(f"{context}: archive specification must be an object")
+        fmt = archive_value.get("format")
+        if not isinstance(fmt, str) or not fmt:
+            raise RuntimeError(f"{context}: archive specification requires a 'format'")
+        archive_format = fmt.lower()
+        member = archive_value.get("member")
+        if member is not None and not isinstance(member, str):
+            raise RuntimeError(f"{context}: archive member must be a string if provided")
+        archive_member = member
+
+    filename_value = data.get("filename")
+    if filename_value is not None and not isinstance(filename_value, str):
+        raise RuntimeError(f"{context}: filename must be a string when provided")
+
+    chmod_value = data.get("chmod")
+    chmod = True if chmod_value is None else bool(chmod_value)
+
+    return _DownloadTarget(
+        os=tuple(value.lower() for value in os_list) if os_list else None,
+        arch=tuple(value.lower() for value in arch_list) if arch_list else None,
+        url=url_value,
+        archive_format=archive_format,
+        member=archive_member,
+        filename=filename_value,
+        chmod=chmod,
+    )
+
+
+def _normalize_string_sequence(value: object) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, Sequence):
+        result = []
+        for item in value:
+            if not isinstance(item, str):
+                raise RuntimeError("Download target entries must be strings")
+            result.append(item)
+        return tuple(result)
+    raise RuntimeError("Download target sequences must be arrays of strings")
+
+
+def _select_download_target(targets: Sequence[_DownloadTarget], *, context: str) -> _DownloadTarget:
+    system = platform.system().lower()
+    machine = _normalize_architecture(platform.machine())
+
+    for target in targets:
+        if target.os is not None and system not in target.os:
+            continue
+        if target.arch is not None and machine not in target.arch:
+            continue
+        return target
+
+    raise RuntimeError(f"{context}: no download target available for {system}/{machine}")
+
+
+def _normalize_architecture(machine: str) -> str:
+    normalized = machine.lower()
+    if normalized in {"x86_64", "amd64"}:
+        return "x86_64"
+    if normalized in {"aarch64", "arm64"}:
+        return "arm64"
+    return normalized
+
+
+def _filename_from_url(url: str) -> str:
+    return url.rstrip("/").split("/")[-1]
+
+
+class _DownloadFormatProxy(dict):
+    """Dictionary proxy used to provide default values for format placeholders."""
+
+    def __init__(self, *, version: str | None) -> None:
+        super().__init__()
+        if version is not None:
+            self["version"] = version
+
+    def __missing__(self, key: str) -> str:
+        return ""
+
+
+def _extract_tar_member(
+    content: bytes,
+    target: _DownloadTarget,
+    destination: Path,
+    *,
+    context: str,
+) -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir) / "archive.tar.gz"
+        tmp_path.write_bytes(content)
+        with tarfile.open(tmp_path, "r:gz") as archive:
+            member_path = target.member
+            if member_path is not None:
+                member = archive.getmember(member_path)
+                archive.extract(member, path=tmpdir)
+                extracted = Path(tmpdir) / member.name
             else:
-                raise RuntimeError("Failed to locate actionlint binary in archive")
+                member = next((item for item in archive.getmembers() if item.isfile()), None)
+                if member is None:
+                    raise RuntimeError(f"{context}: archive did not contain any files")
+                archive.extract(member, path=tmpdir)
+                extracted = Path(tmpdir) / member.name
 
-    return binary
-
-
-def _ensure_hadolint(version: str, cache_root: Path) -> Path:
-    """Download the requested hadolint release when missing."""
-    base_dir = cache_root / "hadolint" / version
-    binary = base_dir / "hadolint"
-    if binary.exists():
-        return binary
-
-    base_dir.mkdir(parents=True, exist_ok=True)
-
-    system = platform.system().lower()
-    machine = platform.machine().lower()
-    if system == "linux":
-        if machine in {"x86_64", "amd64"}:
-            asset = "hadolint-Linux-x86_64"
-        elif machine in {"aarch64", "arm64"}:
-            asset = "hadolint-Linux-arm64"
-        else:
-            msg = f"Unsupported Linux architecture '{machine}' for hadolint"
-            raise RuntimeError(msg)
-    elif system == "darwin":
-        if machine in {"x86_64", "amd64"}:
-            asset = "hadolint-Darwin-x86_64"
-        elif machine in {"arm64", "aarch64"}:
-            asset = "hadolint-Darwin-arm64"
-        else:
-            msg = f"Unsupported macOS architecture '{machine}' for hadolint"
-            raise RuntimeError(msg)
-    else:
-        msg = f"hadolint is not supported on platform '{system}'"
-        raise RuntimeError(msg)
-
-    url = f"https://github.com/hadolint/hadolint/releases/download/v{version}/{asset}"
-    response = _REQUESTS.get(url, timeout=60)
-    response.raise_for_status()
-    binary.write_bytes(response.content)
-    binary.chmod(binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    return binary
-
-
-def _ensure_lualint(cache_root: Path) -> Path:
-    """Download the standalone lualint script if missing."""
-    base_dir = cache_root / "lualint"
-    script = base_dir / "lualint.lua"
-    if script.exists():
-        return script
-
-    base_dir.mkdir(parents=True, exist_ok=True)
-
-    url = "https://raw.githubusercontent.com/philips/lualint/master/lualint"
-    response = _REQUESTS.get(url, timeout=30)
-    response.raise_for_status()
-    script.write_bytes(response.content)
-    script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    return script
-
-
-def ensure_actionlint(version: str, cache_root: Path) -> Path:
-    """Public helper for installing actionlint."""
-    return _ensure_actionlint(version, cache_root)
-
-
-def ensure_hadolint(version: str, cache_root: Path) -> Path:
-    """Public helper for installing hadolint."""
-    return _ensure_hadolint(version, cache_root)
-
-
-def ensure_lualint(cache_root: Path) -> Path:
-    """Public helper for writing the lualint shim."""
-    return _ensure_lualint(cache_root)
+        destination.write_bytes(extracted.read_bytes())
 
 
 def _parse_gofmt_check(stdout: str, _context: ToolContext) -> list[RawDiagnostic]:

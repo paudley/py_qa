@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "command_lualint",
+  "type": "command",
+  "implementation": "pyqa.tooling.strategies.lualint_command",
+  "config": {
+    "base": {
+      "type": "array",
+      "description": "Base command prefix (typically ['lua']).",
+      "required": true
+    },
+    "download": {
+      "type": "object",
+      "description": "Download specification describing how to fetch the lualint script.",
+      "required": true
+    }
+  }
+}

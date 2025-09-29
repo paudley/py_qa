@@ -168,16 +168,32 @@ def config_export_tools(
         metavar="PATH",
         help="Destination file for the tool schema JSON.",
     ),
+    check: bool = typer.Option(
+        False,
+        "--check",
+        help="Exit with status 1 if the target file is missing or out of date.",
+    ),
 ) -> None:
     """Write the tool settings schema to disk."""
     out_path = out.resolve()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
     payload: dict[str, Any] = {
         "_license": "SPDX-License-Identifier: MIT",
         "_copyright": "Copyright (c) 2025 Blackcat Informatics® Inc.",
     }
     payload.update(tool_setting_schema_as_dict())
     text = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if check:
+        if not out_path.exists():
+            typer.echo(f"{out_path} is missing", err=True)
+            raise typer.Exit(code=1)
+        existing = out_path.read_text(encoding="utf-8")
+        if existing != text:
+            typer.echo(f"{out_path} is out of date", err=True)
+            raise typer.Exit(code=1)
+        typer.echo(str(out_path))
+        return
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(text, encoding="utf-8")
     typer.echo(str(out_path))
 

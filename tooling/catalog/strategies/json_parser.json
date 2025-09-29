@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "parser_json",
+  "type": "parser",
+  "description": "Wrap a JSON transform callable in the standard JsonParser adapter.",
+  "implementation": "pyqa.tooling.strategies.json_parser",
+  "config": {
+    "transform": {
+      "type": "string",
+      "required": true,
+      "description": "Fully qualified transform function that accepts JSON payloads."
+    }
+  }
+}

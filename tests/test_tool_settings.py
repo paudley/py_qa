@@ -5,22 +5,28 @@
 from __future__ import annotations
 
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tools.base import Tool, ToolContext
-from pyqa.tools.builtins import _builtin_tools
+from pyqa.tools.builtin_registry import initialize_registry
 from pyqa.tools.registry import ToolRegistry
 
 
 def _tool(name: str) -> Tool:
-    registry = ToolRegistry()
-    for tool in _builtin_tools():
-        registry.register(tool)
+    registry = _catalog_registry()
     result = registry.try_get(name)
     if result is None:
         raise AssertionError(f"Tool {name} missing")
     return result
+
+
+@lru_cache(maxsize=1)
+def _catalog_registry() -> ToolRegistry:
+    registry = ToolRegistry()
+    initialize_registry(registry=registry)
+    return registry
 
 
 def test_ruff_settings_inject_flags(tmp_path: Path) -> None:

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Callable, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
@@ -164,6 +164,21 @@ class ToolAction(BaseModel):
         return OutputFilter(patterns=tuple(patterns)).apply(text)
 
 
+class ToolDocumentationEntry(BaseModel):
+    """Documentation snippet captured for help surfaces."""
+
+    format: str = "text"
+    content: str
+
+
+class ToolDocumentation(BaseModel):
+    """Grouped documentation entries for a tool."""
+
+    help: ToolDocumentationEntry | None = None
+    command: ToolDocumentationEntry | None = None
+    shared: ToolDocumentationEntry | None = None
+
+
 class Tool(BaseModel):
     """Description of a lint tool composed of multiple actions."""
 
@@ -171,10 +186,22 @@ class Tool(BaseModel):
 
     name: str
     actions: tuple[ToolAction, ...]
+    phase: Literal[
+        "lint",
+        "format",
+        "analysis",
+        "security",
+        "test",
+        "coverage",
+        "utility",
+    ] = "lint"
+    before: tuple[str, ...] = Field(default_factory=tuple)
+    after: tuple[str, ...] = Field(default_factory=tuple)
     languages: tuple[str, ...] = Field(default_factory=tuple)
     file_extensions: tuple[str, ...] = Field(default_factory=tuple)
     config_files: tuple[str, ...] = Field(default_factory=tuple)
     description: str = ""
+    tags: tuple[str, ...] = Field(default_factory=tuple)
     auto_install: bool = False
     default_enabled: bool = True
     runtime: Literal["python", "npm", "binary", "go", "lua", "perl", "rust"] = "python"
@@ -182,6 +209,11 @@ class Tool(BaseModel):
     min_version: str | None = None
     prefer_local: bool = False
     version_command: tuple[str, ...] | None = None
+    suppressions_tests: tuple[str, ...] = Field(default_factory=tuple)
+    suppressions_general: tuple[str, ...] = Field(default_factory=tuple)
+    suppressions_duplicates: tuple[str, ...] = Field(default_factory=tuple)
+    installers: tuple[Callable[["ToolContext"], None], ...] = Field(default_factory=tuple)
+    documentation: ToolDocumentation | None = None
 
     _actions_by_name: dict[str, ToolAction] = PrivateAttr(default_factory=dict)
 
@@ -255,6 +287,17 @@ class Tool(BaseModel):
             return (value,)
         raise TypeError("expected a sequence of strings")
 
+    @field_validator("before", "after", mode="before")
+    @classmethod
+    def _coerce_ordering(cls, value: object) -> tuple[str, ...]:
+        if value is None:
+            return ()
+        if isinstance(value, (list, tuple, set)):
+            return tuple(str(item) for item in value)
+        if isinstance(value, str):
+            return (value,)
+        raise TypeError("expected a sequence of strings")
+
     @field_validator("version_command", mode="before")
     @classmethod
     def _coerce_version_cmd(cls, value: object) -> tuple[str, ...] | None:
@@ -265,6 +308,41 @@ class Tool(BaseModel):
         if isinstance(value, str):
             return (value,)
         raise TypeError("version_command must be a sequence of strings or None")
+
+    @field_validator(
+        "suppressions_tests",
+        "suppressions_general",
+        "suppressions_duplicates",
+        mode="before",
+    )
+    @classmethod
+    def _coerce_suppressions(cls, value: object) -> tuple[str, ...]:
+        if value is None:
+            return ()
+        if isinstance(value, (list, tuple, set)):
+            return tuple(str(item) for item in value)
+        if isinstance(value, str):
+            return (value,)
+        raise TypeError("suppression entries must be strings")
+
+    @field_validator("installers", mode="before")
+    @classmethod
+    def _coerce_installers(
+        cls,
+        value: object,
+    ) -> tuple[Callable[["ToolContext"], None], ...]:
+        if value is None:
+            return ()
+        if isinstance(value, tuple):
+            return value
+        if isinstance(value, list):
+            installers: list[Callable[["ToolContext"], None]] = []
+            for item in value:
+                if not callable(item):
+                    raise TypeError("installers must contain callables")
+                installers.append(item)
+            return tuple(installers)
+        raise TypeError("installers must be a sequence of callables")
 
     def is_applicable(
         self,

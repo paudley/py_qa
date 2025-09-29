@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "command_selene",
+  "type": "command",
+  "description": "Construct Selene commands with catalog-provided defaults.",
+  "implementation": "pyqa.tooling.strategies.selene_command",
+  "config": {
+    "base": {
+      "type": "array",
+      "required": true,
+      "description": "Base command used to invoke Selene."
+    }
+  }
+}

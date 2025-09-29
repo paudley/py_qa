@@ -65,7 +65,7 @@ def test_write_json_report(tmp_path: Path) -> None:
             "size": 12,
             "complexity": 4,
             "diagnostics": [],
-        }
+        },
     ]
     dest = tmp_path / "report.json"
     write_json_report(result, dest)
@@ -508,7 +508,12 @@ def typed_func(arg1, arg2):
         captured["entries"] = entries
         if not entries:
             return []
-        return ["", "## Custom Integration Advice", "", *[f"* {entry.category}: {entry.body}" for entry in entries[:2]]]
+        return [
+            "",
+            "## Custom Integration Advice",
+            "",
+            *[f"* {entry.category}: {entry.body}" for entry in entries[:2]],
+        ]
 
     write_pr_summary(
         result,
@@ -1211,7 +1216,7 @@ def test_render_advice_panel_covers_runtime_and_tests(tmp_path: Path, capsys) ->
             "issue_tags": {"complexity": 2, "typing": 1},
             "size": 50,
             "complexity": 9,
-        }
+        },
     ]
     config = OutputConfig(color=False, emoji=False, advice=True, show_stats=False)
     render(result, config)
@@ -1236,7 +1241,7 @@ def test_advice_builder_delegates_to_generate_advice() -> None:
             "ruff",
             "ANN001",
             "Missing type annotation for function argument foo",
-        )
+        ),
     ]
 
     class DummyAnnotationEngine:
@@ -1248,7 +1253,7 @@ def test_advice_builder_delegates_to_generate_advice() -> None:
             return ()
 
     dummy = DummyAnnotationEngine()
-    engine = cast(AnnotationEngine, dummy)
+    engine = cast("AnnotationEngine", dummy)
     builder = AdviceBuilder(annotation_engine=engine)
 
     expected = generate_advice(entries, engine)

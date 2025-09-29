@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "command_phplint",
+  "type": "command",
+  "implementation": "pyqa.tooling.strategies.phplint_command"
+}

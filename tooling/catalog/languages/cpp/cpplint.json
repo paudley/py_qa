@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "cpplint",
+  "description": "Google style C/C++ linter.",
+  "languages": ["cpp"],
+  "phase": "lint",
+  "runtime": {
+    "type": "python",
+    "package": "cpplint",
+    "minVersion": "2.0.2",
+    "versionCommand": ["cpplint", "--version"]
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_cpplint",
+        "config": {
+          "base": ["cpplint", "--output=emacs"]
+        }
+      },
+      "description": "Lint C and C++ sources with cpplint.",
+      "parser": {
+        "strategy": "parser_text",
+        "config": {
+          "transform": "pyqa.parsers.misc.parse_cpplint"
+        }
+      }
+    }
+  ],
+  "extends": ["python_defaults"],
+  "fileExtensions": [".c", ".cc", ".cpp", ".cxx", ".c++", ".cu", ".cuh", ".h", ".hh", ".hpp", ".h++", ".hxx"],
+  "configFiles": ["CPPLINT.cfg"],
+  "documentation": {
+    "help": {
+      "path": "docs/cpplint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/cpplint_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

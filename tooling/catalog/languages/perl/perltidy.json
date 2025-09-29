@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "perltidy",
+  "description": "Perl formatter using perltidy.",
+  "languages": ["perl"],
+  "phase": "lint",
+  "runtime": {
+    "type": "perl",
+    "package": "Perl::Tidy",
+    "minVersion": "20240112",
+    "versionCommand": ["perltidy", "--version"]
+  },
+  "actions": [
+    {
+      "name": "format",
+      "command": {
+        "strategy": "command_perltidy",
+        "config": {
+          "base": ["perltidy"],
+          "is_fix": true,
+          "isFix": true
+        }
+      },
+      "isFix": true,
+      "description": "Format Perl code using perltidy."
+    },
+    {
+      "name": "check",
+      "command": {
+        "strategy": "command_perltidy",
+        "config": {
+          "base": ["perltidy"],
+          "is_fix": false,
+          "isFix": false
+        }
+      },
+      "description": "Verify Perl formatting without modifying files."
+    }
+  ],
+  "fileExtensions": [".pl", ".pm", ".t", ".phtml"],
+  "tags": ["requires-cpanm"],
+  "documentation": {
+    "help": {
+      "path": "docs/perltidy_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/perltidy_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

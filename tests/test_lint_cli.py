@@ -30,7 +30,7 @@ def test_lint_warns_when_py_qa_path_outside_workspace(tmp_path: Path, monkeypatc
 
     monkeypatch.chdir(project_root)
 
-    def fake_run_tool_info(tool_name, root, *, cfg=None, console=None):
+    def fake_run_tool_info(tool_name, root, *, cfg=None, console=None, catalog_snapshot=None):
         assert tool_name == "ruff"
         return 0
 
@@ -84,7 +84,47 @@ def test_lint_fetch_all_tools_flag(monkeypatch, tmp_path: Path) -> None:
     assert "Tool Preparation" in result.stdout
     assert "demo" in result.stdout
     assert "lint" in result.stdout
+    assert "Phase" in result.stdout
     assert "ready" in result.stdout
+
+
+def test_lint_validate_schema_flag(monkeypatch) -> None:
+    runner = CliRunner()
+
+    project_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(project_root)
+
+    result = runner.invoke(
+        app,
+        [
+            "lint",
+            "--validate-schema",
+            "--no-color",
+            "--no-emoji",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Catalog validation succeeded" in result.stdout
+
+
+def test_lint_validate_schema_conflicts(monkeypatch) -> None:
+    runner = CliRunner()
+    project_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(project_root)
+
+    result = runner.invoke(
+        app,
+        [
+            "lint",
+            "--validate-schema",
+            "--doctor",
+        ],
+    )
+
+    assert result.exit_code != 0
+    combined_output = (result.stdout or "") + (result.stderr or "")
+    assert "cannot be combined" in combined_output
 
 
 def test_lint_no_stats_flag(monkeypatch, tmp_path: Path) -> None:
@@ -133,7 +173,7 @@ def test_concise_mode_renders_progress_status(monkeypatch, tmp_path: Path) -> No
     progress_instances: list[_FakeProgress] = []
 
     class _FakeProgress:
-        def __init__(self, *args, **kwargs) -> None:  # noqa: D401 - test double
+        def __init__(self, *args, **kwargs) -> None:
             progress_instances.append(self)
             self.records: list[tuple] = []
             self._tasks: dict[int, dict[str, object]] = {}
@@ -187,7 +227,7 @@ def test_concise_mode_renders_progress_status(monkeypatch, tmp_path: Path) -> No
             task["completed"] = int(task["completed"]) + advance
             self.records.append(("advance", task["completed"]))
 
-        def get_task(self, task_id: int):  # noqa: ANN001
+        def get_task(self, task_id: int):
             task = self._tasks[task_id]
             from types import SimpleNamespace
 

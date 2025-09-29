@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "pyupgrade",
+  "description": "Automated Python syntax upgrades via pyupgrade.",
+  "languages": ["python"],
+  "phase": "lint",
+  "runtime": {
+    "type": "python",
+    "package": "pyupgrade",
+    "minVersion": "3.19.1",
+    "versionCommand": ["python", "-c", "import importlib.metadata as im; print(im.version('pyupgrade'))"]
+  },
+  "actions": [
+    {
+      "name": "fix",
+      "command": {
+        "strategy": "command_pyupgrade",
+        "config": {
+          "base": ["pyupgrade"]
+        }
+      },
+      "isFix": true,
+      "description": "Modernize Python syntax using pyupgrade."
+    }
+  ],
+  "extends": ["python_defaults"],
+  "fileExtensions": [".py", ".pyi"],
+  "documentation": {
+    "help": {
+      "path": "docs/pyupgrade_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/pyupgrade_cmd_help.txt",
+      "format": "text"
+    },
+    "shared": {
+      "path": "docs/SHARED_KNOBS.md",
+      "format": "markdown"
+    }
+  }
+}

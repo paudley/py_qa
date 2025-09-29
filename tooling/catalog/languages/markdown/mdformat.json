@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "mdformat",
+  "description": "Markdown formatter.",
+  "languages": ["markdown"],
+  "phase": "lint",
+  "runtime": {
+    "type": "python",
+    "package": "mdformat",
+    "minVersion": "0.7.22",
+    "versionCommand": ["mdformat", "--version"]
+  },
+  "actions": [
+    {
+      "name": "format",
+      "command": {
+        "strategy": "command_mdformat",
+        "config": {
+          "base": ["mdformat"]
+        }
+      },
+      "isFix": true,
+      "description": "Format Markdown files using mdformat."
+    },
+    {
+      "name": "check",
+      "command": {
+        "strategy": "command_mdformat",
+        "config": {
+          "base": ["mdformat", "--check"]
+        }
+      },
+      "ignoreExit": true,
+      "description": "Check Markdown formatting without changes."
+    }
+  ],
+  "extends": ["python_defaults"],
+  "fileExtensions": [".md", ".markdown", ".mdx"],
+  "documentation": {
+    "help": {
+      "path": "docs/mdformat_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/mdformat_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

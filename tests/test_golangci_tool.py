@@ -8,8 +8,28 @@ from __future__ import annotations
 from pathlib import Path
 
 from pyqa.config import Config
+from pyqa.tooling import ToolCatalogLoader
+from pyqa.tooling.strategies import golangci_lint_command
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _GolangciLintCommand
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_CATALOG_ROOT = _PROJECT_ROOT / "tooling" / "catalog"
+
+
+def _golangci_command_config() -> dict[str, object]:
+    loader = ToolCatalogLoader(catalog_root=_CATALOG_ROOT)
+    snapshot = loader.load_snapshot()
+    for definition in snapshot.tools:
+        if definition.name != "golangci-lint":
+            continue
+        for action in definition.actions:
+            if action.name != "lint":
+                continue
+            return dict(action.command.reference.config)
+    raise AssertionError("golangci-lint command configuration missing from catalog")
+
+
+_GOLANGCI_COMMAND = golangci_lint_command(_golangci_command_config())
 
 
 def test_golangci_command_includes_enable_all(tmp_path: Path) -> None:
@@ -23,7 +43,7 @@ def test_golangci_command_includes_enable_all(tmp_path: Path) -> None:
 
     action = ToolAction(
         name="lint",
-        command=_GolangciLintCommand(base=("golangci-lint", "run", "--out-format", "json")),
+        command=_GOLANGCI_COMMAND,
         append_files=False,
     )
 
@@ -43,7 +63,7 @@ def test_golangci_respects_disable_enable_all_flag(tmp_path: Path) -> None:
 
     action = ToolAction(
         name="lint",
-        command=_GolangciLintCommand(base=("golangci-lint", "run", "--out-format", "json")),
+        command=_GOLANGCI_COMMAND,
         append_files=False,
     )
 

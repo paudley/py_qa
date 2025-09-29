@@ -97,7 +97,6 @@ class AnnotationEngine:
 
     def message_signature(self, message: str) -> tuple[str, ...]:
         """Return a semantic signature extracted from ``message``."""
-
         return self._analyse_message(message).signature
 
     @lru_cache(maxsize=2048)

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "phplint",
+  "description": "PHP syntax linter via phplint.",
+  "extends": ["npm_runtime"],
+  "languages": ["php"],
+  "phase": "lint",
+  "fileExtensions": [".php", ".phtml"],
+  "runtime": {
+    "type": "npm",
+    "package": "phplint",
+    "versionCommand": ["phplint", "--version"]
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_phplint",
+        "config": {
+          "base": ["phplint"]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.misc.parse_phplint"
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/phplint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/phplint_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

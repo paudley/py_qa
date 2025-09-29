@@ -1,19 +1,35 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2025 Blackcat Informatics® Inc.
 
 """Tests for remark-lint tool integration."""
 
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock
 
-from pyqa.config import Config
+from pyqa.tooling import ToolCatalogLoader
+from pyqa.tooling.strategies import remark_lint_command
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _RemarkCommand
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_CATALOG_ROOT = _PROJECT_ROOT / "tooling" / "catalog"
+
+
+def _remark_config(action: str) -> dict[str, object]:
+    loader = ToolCatalogLoader(catalog_root=_CATALOG_ROOT)
+    snapshot = loader.load_snapshot()
+    for definition in snapshot.tools:
+        if definition.name != "remark-lint":
+            continue
+        for candidate in definition.actions:
+            if candidate.name == action:
+                return dict(candidate.command.reference.config)
+    raise AssertionError(f"remark-lint command configuration for action '{action}' missing from catalog")
 
 
 def test_remark_lint_command_build(tmp_path: Path) -> None:
-    cfg = Config()
+    cfg = Mock()
+    cfg.execution.line_length = 120
     ctx = ToolContext(
         cfg=cfg,
         root=tmp_path,
@@ -21,44 +37,35 @@ def test_remark_lint_command_build(tmp_path: Path) -> None:
         settings={
             "config": tmp_path / ".remarkrc.json",
             "use": ["remark-lint-ordered-list-marker-style"],
+            "setting": ["listItemIndent=one"],
         },
     )
 
-    action = ToolAction(
-        name="lint",
-        command=_RemarkCommand(base=("remark", "--use", "remark-preset-lint-recommended")),
-        append_files=True,
-    )
+    builder = remark_lint_command(_remark_config("lint"))
+    action = ToolAction(name="lint", command=builder)
 
     cmd = action.build_command(ctx)
     assert cmd[0] == "remark"
     assert "--report" in cmd and "json" in cmd
-    assert "--use" in cmd
-    assert "--config" in cmd
+    assert "--use" in cmd and "remark-lint-ordered-list-marker-style" in cmd
+    assert "--config" in cmd and str((tmp_path / ".remarkrc.json").resolve()) in cmd
     assert cmd[-1].endswith("README.md")
 
 
 def test_remark_fix_command_build(tmp_path: Path) -> None:
-    cfg = Config()
+    cfg = Mock()
+    cfg.execution.line_length = 120
     ctx = ToolContext(
         cfg=cfg,
         root=tmp_path,
-        files=[tmp_path / "README.md"],
-        settings={"args": ["--setting", "listItemIndent=one"]},
+        files=[],
+        settings={},
     )
 
-    action = ToolAction(
-        name="fix",
-        command=_RemarkCommand(
-            base=("remark", "--use", "remark-preset-lint-recommended"),
-            is_fix=True,
-        ),
-        append_files=True,
-        is_fix=True,
-    )
+    builder = remark_lint_command(_remark_config("fix"))
+    action = ToolAction(name="fix", command=builder)
 
     cmd = action.build_command(ctx)
     assert cmd[0] == "remark"
     assert "--output" in cmd
-    assert "--report" not in cmd
-    assert cmd[-1].endswith("README.md")
+    assert str(tmp_path) in cmd

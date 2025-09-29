@@ -10,6 +10,7 @@ from pyqa.config import Config
 from pyqa.execution.orchestrator import Orchestrator
 from pyqa.models import RawDiagnostic
 from pyqa.testing import flatten_test_suppressions
+from pyqa.tool_env.models import PreparedCommand
 from pyqa.tools.base import DeferredCommand, Tool, ToolAction, ToolContext
 from pyqa.tools.registry import ToolRegistry
 
@@ -38,6 +39,31 @@ class SettingsCommand:
             args_list = [str(args)]
         cmd.extend(args_list)
         return cmd
+
+
+class StubPreparer:
+    """Stub command preparer capturing tool/action ordering."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def prepare(
+        self,
+        *,
+        tool: Tool,
+        base_cmd: Sequence[str],
+        root: Path,
+        cache_dir: Path,
+        system_preferred: bool,
+        use_local_override: bool,
+    ) -> PreparedCommand:
+        self.calls.append(tool.name)
+        return PreparedCommand.from_parts(
+            cmd=base_cmd,
+            env={},
+            version="1",
+            source="system",
+        )
 
 
 def test_orchestrator_runs_registered_tool(tmp_path: Path) -> None:
@@ -240,3 +266,125 @@ def test_orchestrator_filters_suppressed_diagnostics(tmp_path: Path) -> None:
     outcome = result.outcomes[0]
     assert outcome.stdout == ""
     assert outcome.diagnostics == []
+
+
+def test_fetch_all_tools_respects_phase_order(tmp_path: Path) -> None:
+    registry = ToolRegistry()
+
+    format_tool = Tool(
+        name="format-tool",
+        phase="format",
+        actions=(
+            ToolAction(
+                name="format",
+                command=DeferredCommand(("fmt",)),
+            ),
+        ),
+        runtime="binary",
+    )
+    lint_tool = Tool(
+        name="lint-tool",
+        phase="lint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=DeferredCommand(("lint",)),
+            ),
+        ),
+        runtime="binary",
+    )
+    format_b = Tool(
+        name="format-b",
+        phase="format",
+        before=("format-tool",),
+        actions=(
+            ToolAction(
+                name="format",
+                command=DeferredCommand(("fmt-b",)),
+            ),
+        ),
+        runtime="binary",
+    )
+    analysis_tool = Tool(
+        name="analysis-tool",
+        phase="analysis",
+        after=("format-tool",),
+        actions=(
+            ToolAction(
+                name="analyze",
+                command=DeferredCommand(("analyze",)),
+            ),
+        ),
+        runtime="binary",
+    )
+
+    registry.register(format_tool)
+    registry.register(lint_tool)
+    registry.register(format_b)
+    registry.register(analysis_tool)
+
+    preparer = StubPreparer()
+    orchestrator = Orchestrator(
+        registry=registry,
+        discovery=FakeDiscovery([]),
+        cmd_preparer=preparer,
+    )
+
+    cfg = Config()
+    cfg.execution.only = [
+        "format-tool",
+        "analysis-tool",
+        "lint-tool",
+        "format-b",
+    ]
+
+    orchestrator.fetch_all_tools(cfg, root=tmp_path)
+
+    assert preparer.calls == [
+        "format-b",
+        "format-tool",
+        "lint-tool",
+        "analysis-tool",
+    ]
+
+
+def test_installers_run_once(tmp_path: Path) -> None:
+    calls: list[Path] = []
+
+    def installer(context: ToolContext) -> None:
+        calls.append(context.root)
+
+    registry = ToolRegistry()
+    registry.register(
+        Tool(
+            name="demo",
+            actions=(
+                ToolAction(
+                    name="lint",
+                    command=DeferredCommand(("demo",)),
+                ),
+            ),
+            runtime="binary",
+            installers=(installer,),
+        ),
+    )
+
+    orchestrator = Orchestrator(
+        registry=registry,
+        discovery=FakeDiscovery([]),
+    )
+
+    cfg = Config()
+    orchestrator.fetch_all_tools(cfg, root=tmp_path)
+    assert len(calls) == 1
+
+    def runner(cmd, **_kwargs):
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    orchestrator_runtime = Orchestrator(
+        registry=registry,
+        discovery=FakeDiscovery([]),
+        runner=runner,
+    )
+    orchestrator_runtime.run(cfg, root=tmp_path)
+    assert len(calls) == 2

@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "perlcritic",
+  "description": "Perl static analysis via Perl::Critic.",
+  "languages": ["perl"],
+  "phase": "lint",
+  "runtime": {
+    "type": "perl",
+    "package": "Perl::Critic",
+    "minVersion": "1.151",
+    "versionCommand": ["perlcritic", "--version"]
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_perlcritic",
+        "config": {
+          "base": ["perlcritic"]
+        }
+      },
+      "description": "Run Perl::Critic static analysis.",
+      "parser": {
+        "strategy": "parser_text",
+        "config": {
+          "transform": "pyqa.parsers.misc.parse_perlcritic"
+        }
+      }
+    }
+  ],
+  "fileExtensions": [".pl", ".pm", ".t", ".phtml"],
+  "tags": ["requires-cpanm"],
+  "documentation": {
+    "help": {
+      "path": "docs/perlcritic_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/perlcritic_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

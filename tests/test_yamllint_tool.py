@@ -1,50 +1,48 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2025 Blackcat Informatics® Inc.
 
-"""Tests for yamllint tool integration."""
+"""Tests for yamllint strategy integration."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from pyqa.config import Config
+from pyqa.tooling import ToolCatalogLoader
+from pyqa.tooling.strategies import yamllint_command
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _YamllintCommand
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_CATALOG_ROOT = _PROJECT_ROOT / "tooling" / "catalog"
 
 
-def _ctx(tmp_path: Path, **settings) -> ToolContext:
+def _yamllint_config() -> dict[str, object]:
+    loader = ToolCatalogLoader(catalog_root=_CATALOG_ROOT)
+    snapshot = loader.load_snapshot()
+    for definition in snapshot.tools:
+        if definition.name == "yamllint":
+            action = definition.actions[0]
+            return dict(action.command.reference.config)
+    raise AssertionError("yamllint command configuration missing from catalog")
+
+
+def test_yamllint_command_build(tmp_path: Path) -> None:
     cfg = Config()
-    return ToolContext(
+    ctx = ToolContext(
         cfg=cfg,
         root=tmp_path,
-        files=[tmp_path / "configs" / "app.yaml"],
-        settings=settings,
+        files=[tmp_path / "config.yaml"],
+        settings={
+            "config-file": tmp_path / "yamllint.yaml",
+            "strict": True,
+            "args": ["config.yaml"],
+        },
     )
 
-
-def test_yamllint_command_includes_json_format(tmp_path: Path) -> None:
-    ctx = _ctx(tmp_path, **{"config-file": tmp_path / ".yamllint"})
-    action = ToolAction(
-        name="lint",
-        command=_YamllintCommand(base=("yamllint",)),
-        append_files=True,
-    )
+    builder = yamllint_command(_yamllint_config())
+    action = ToolAction(name="lint", command=builder, append_files=True)
 
     command = action.build_command(ctx)
     assert command[0] == "yamllint"
-    assert "--format" in command and "parsable" in command
-    assert "--config-file" in command
-    assert command[-1].endswith("app.yaml")
-
-
-def test_yamllint_allows_strict_flag(tmp_path: Path) -> None:
-    ctx = _ctx(tmp_path, strict=True, args=["--no-warnings"])
-    action = ToolAction(
-        name="lint",
-        command=_YamllintCommand(base=("yamllint",)),
-        append_files=True,
-    )
-
-    command = action.build_command(ctx)
+    assert "--config-file" in command and str((tmp_path / "yamllint.yaml").resolve()) in command
     assert "--strict" in command
-    assert "--no-warnings" in command
+    assert command[-1].endswith("config.yaml")

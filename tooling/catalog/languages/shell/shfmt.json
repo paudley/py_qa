@@ -1,0 +1,119 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "shfmt",
+  "description": "Shell script formatter.",
+  "extends": ["go_runtime"],
+  "languages": ["shell"],
+  "phase": "format",
+  "fileExtensions": [".sh", ".bash", ".zsh"],
+  "runtime": {
+    "type": "go",
+    "package": "mvdan.cc/sh/v3/cmd/shfmt@v3.9.0",
+    "minVersion": "3.9.0",
+    "versionCommand": ["shfmt", "--version"]
+  },
+  "actions": [
+    {
+      "name": "format",
+      "isFix": true,
+      "command": {
+        "strategy": "command_project_scanner",
+        "config": {
+          "base": ["shfmt"],
+          "options": [
+            {
+              "setting": ["write"],
+              "flag": "-w",
+              "negateFlag": "-d",
+              "type": "flag",
+              "default": true
+            },
+            {
+              "setting": ["indent", "spaces"],
+              "flag": "-i",
+              "type": "value"
+            },
+            {
+              "setting": "language",
+              "flag": "-ln",
+              "type": "value"
+            },
+            {
+              "setting": ["indent-case", "indent_case"],
+              "flag": "-ci",
+              "type": "flag"
+            },
+            {
+              "setting": "simplify",
+              "flag": "-s",
+              "type": "flag"
+            },
+            {
+              "setting": "args",
+              "type": "args"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "check",
+      "ignoreExit": true,
+      "command": {
+        "strategy": "command_project_scanner",
+        "config": {
+          "base": ["shfmt"],
+          "options": [
+            {
+              "setting": ["write"],
+              "flag": "-w",
+              "negateFlag": "-d",
+              "type": "flag",
+              "default": false
+            },
+            {
+              "setting": ["indent", "spaces"],
+              "flag": "-i",
+              "type": "value"
+            },
+            {
+              "setting": "language",
+              "flag": "-ln",
+              "type": "value"
+            },
+            {
+              "setting": ["indent-case", "indent_case"],
+              "flag": "-ci",
+              "type": "flag"
+            },
+            {
+              "setting": "simplify",
+              "flag": "-s",
+              "type": "flag"
+            },
+            {
+              "setting": "args",
+              "type": "args"
+            }
+          ]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.misc.parse_shfmt"
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/shfmt_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/shfmt_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

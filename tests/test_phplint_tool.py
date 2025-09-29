@@ -8,8 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from pyqa.config import Config
-from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import _PhplintCommand
+from pyqa.tooling.strategies import phplint_command
+from pyqa.tools.base import ToolContext
 
 
 def test_phplint_command_build(tmp_path: Path) -> None:
@@ -25,13 +25,9 @@ def test_phplint_command_build(tmp_path: Path) -> None:
         },
     )
 
-    action = ToolAction(
-        name="lint",
-        command=_PhplintCommand(base=("phplint",)),
-        append_files=True,
-    )
-
-    command = action.build_command(ctx)
+    builder = phplint_command({"base": ["phplint"]})
+    command = list(builder.build(ctx))
+    command.extend(str(path) for path in ctx.files)
     assert command[0] == "phplint"
     assert "--no-ansi" in command
     assert "--no-progress" in command

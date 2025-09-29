@@ -1,0 +1,148 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "isort",
+  "description": "Import sorter for Python projects.",
+  "extends": ["python_defaults"],
+  "languages": ["python"],
+  "phase": "format",
+  "fileExtensions": [".py"],
+  "runtime": {
+    "type": "python",
+    "package": "isort",
+    "minVersion": "6.0.1",
+    "versionCommand": ["isort", "--version"]
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to isort."
+    },
+    {
+      "name": "color",
+      "type": "bool",
+      "description": "Enable coloured output."
+    },
+    {
+      "name": "combine-as",
+      "type": "bool",
+      "description": "Combine multiple as imports into a single import."
+    },
+    {
+      "name": "combine-star",
+      "type": "bool",
+      "description": "Combine star imports from the same module."
+    },
+    {
+      "name": "conda-env",
+      "type": "path",
+      "description": "Conda environment directory passed to isort."
+    },
+    {
+      "name": "extend-skip",
+      "type": "list[str]",
+      "description": "Additional skip patterns appended to defaults."
+    },
+    {
+      "name": "extend-skip-glob",
+      "type": "list[str]",
+      "description": "Extra glob patterns appended after defaults."
+    },
+    {
+      "name": "filter-files",
+      "type": "bool",
+      "description": "Filter provided files to those supported by isort before execution."
+    },
+    {
+      "name": "float-to-top",
+      "type": "bool",
+      "description": "Move from-style imports to the top of the file."
+    },
+    {
+      "name": "line-length",
+      "type": "int",
+      "description": "Override import wrap line length."
+    },
+    {
+      "name": "multi-line",
+      "type": "str",
+      "description": "Multi-line output mode.",
+      "choices": [
+        "GRID",
+        "VERTICAL",
+        "VERTICAL_HANGING_INDENT",
+        "VERTICAL_GRID",
+        "VERTICAL_GRID_GROUPED",
+        "VERTICAL_GRID_GROUPED_NO_COMMA",
+        "VERTICAL_GRID_NO_COMMA",
+        "HANGING_INDENT"
+      ]
+    },
+    {
+      "name": "profile",
+      "type": "str",
+      "description": "Profile to load (e.g. black)."
+    },
+    {
+      "name": "settings-path",
+      "type": "path",
+      "description": "Explicit isort settings / config file path."
+    },
+    {
+      "name": "skip",
+      "type": "list[str]",
+      "description": "Specific files or directories to skip."
+    },
+    {
+      "name": "skip-glob",
+      "type": "list[str]",
+      "description": "File glob patterns excluded from processing."
+    },
+    {
+      "name": "src",
+      "type": "list[str]",
+      "description": "Additional source roots for module resolution."
+    },
+    {
+      "name": "virtual-env",
+      "type": "path",
+      "description": "Virtual environment directory passed to isort."
+    }
+  ],
+  "actions": [
+    {
+      "name": "sort",
+      "isFix": true,
+      "command": {
+        "strategy": "command_isort",
+        "config": {
+          "base": ["isort"]
+        }
+      }
+    },
+    {
+      "name": "check",
+      "ignoreExit": true,
+      "command": {
+        "strategy": "command_isort",
+        "config": {
+          "base": ["isort", "--check-only"]
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/isort_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/isort_cmd_help.txt",
+      "format": "text"
+    },
+    "shared": {
+      "path": "docs/SHARED_KNOBS.md",
+      "format": "markdown"
+    }
+  }
+}
