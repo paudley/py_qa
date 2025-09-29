@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from collections.abc import Iterable, Sequence
 
 
 @dataclass(slots=True)
@@ -15,7 +15,6 @@ class CatalogScanner:
 
     def tool_documents(self) -> tuple[Path, ...]:
         """Return sorted tool definition document paths."""
-
         docs_root = self.catalog_root / "docs"
         strategies_root = self.catalog_root / "strategies"
         paths: list[Path] = []
@@ -33,7 +32,6 @@ class CatalogScanner:
 
     def strategy_documents(self) -> tuple[Path, ...]:
         """Return sorted strategy definition document paths."""
-
         strategies_root = self.catalog_root / "strategies"
         if not strategies_root.exists():
             return ()
@@ -42,7 +40,6 @@ class CatalogScanner:
 
     def fragment_documents(self) -> tuple[Path, ...]:
         """Return sorted catalog fragment document paths."""
-
         strategies_root = self.catalog_root / "strategies"
         fragments: list[Path] = []
         for json_path in self.catalog_root.rglob("*.json"):
@@ -57,7 +54,6 @@ class CatalogScanner:
 
     def documentation_files(self) -> tuple[Path, ...]:
         """Return supporting documentation file paths."""
-
         docs_root = self.catalog_root / "docs"
         if not docs_root.exists():
             return ()
@@ -65,7 +61,6 @@ class CatalogScanner:
 
     def catalog_files(self) -> tuple[Path, ...]:
         """Return all catalog file paths contributing to checksums."""
-
         paths: list[Path] = []
         paths.extend(self.tool_documents())
         paths.extend(self.fragment_documents())

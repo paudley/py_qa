@@ -52,12 +52,12 @@
           "base": ["perlcritic", "--nocolor", "--verbose", "%f:%l:%c:%m (%p)"],
           "appendFiles": false,
           "options": [
-            {"setting": "severity", "type": "value", "flag": "--severity"},
-            {"setting": "theme", "type": "value", "flag": "--theme"},
-            {"setting": ["profile", "configuration"], "type": "path", "flag": "--profile"},
-            {"setting": "include", "type": "args", "flag": "--include"},
-            {"setting": "exclude", "type": "args", "flag": "--exclude"},
-            {"setting": "args", "type": "args"}
+            { "setting": "severity", "type": "value", "flag": "--severity" },
+            { "setting": "theme", "type": "value", "flag": "--theme" },
+            { "setting": ["profile", "configuration"], "type": "path", "flag": "--profile" },
+            { "setting": "include", "type": "args", "flag": "--include" },
+            { "setting": "exclude", "type": "args", "flag": "--exclude" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },

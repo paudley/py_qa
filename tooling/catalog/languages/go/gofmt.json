@@ -23,9 +23,7 @@
         "config": {
           "base": ["gofmt", "-w"],
           "appendFiles": false,
-          "options": [
-            {"setting": "args", "type": "args"}
-          ]
+          "options": [{ "setting": "args", "type": "args" }]
         }
       },
       "isFix": true,
@@ -38,9 +36,7 @@
         "config": {
           "base": ["gofmt", "-l"],
           "appendFiles": false,
-          "options": [
-            {"setting": "args", "type": "args"}
-          ]
+          "options": [{ "setting": "args", "type": "args" }]
         }
       },
       "description": "List Go files requiring gofmt.",

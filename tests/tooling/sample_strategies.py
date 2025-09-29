@@ -13,8 +13,8 @@ def command_builder(config: Mapping[str, Sequence[str]]) -> tuple[str, ...]:
 
     Returns:
         tuple[str, ...]: Tuple of command arguments defaulting to an empty tuple.
-    """
 
+    """
     args = tuple(config.get("args", ()))
     return tuple(str(token) for token in args)
 
@@ -27,6 +27,6 @@ def parser_factory(config: Mapping[str, str]) -> str:
 
     Returns:
         str: Parser identifier when provided, otherwise ``"default-parser"``.
-    """
 
+    """
     return config.get("id", "default-parser")

@@ -25,9 +25,7 @@
         "config": {
           "base": ["mdformat"],
           "appendFiles": false,
-          "options": [
-            {"setting": "args", "type": "args"}
-          ]
+          "options": [{ "setting": "args", "type": "args" }]
         }
       },
       "isFix": true,
@@ -40,9 +38,7 @@
         "config": {
           "base": ["mdformat", "--check"],
           "appendFiles": false,
-          "options": [
-            {"setting": "args", "type": "args"}
-          ]
+          "options": [{ "setting": "args", "type": "args" }]
         }
       },
       "ignoreExit": true,

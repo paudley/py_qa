@@ -127,7 +127,9 @@ class PerlRuntime(RuntimeHandler):
     def _perl_env(root: Path) -> dict[str, str]:
         path_value = os.environ.get("PATH", "")
         combined = (
-            f"{tool_constants.PERL_BIN_DIR}{os.pathsep}{path_value}" if path_value else str(tool_constants.PERL_BIN_DIR)
+            f"{tool_constants.PERL_BIN_DIR}{os.pathsep}{path_value}"
+            if path_value
+            else str(tool_constants.PERL_BIN_DIR)
         )
         return {
             "PATH": combined,

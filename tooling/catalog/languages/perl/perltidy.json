@@ -32,8 +32,8 @@
           "base": ["perltidy", "-b", "-bext=\"\"", "-q"],
           "appendFiles": false,
           "options": [
-            {"setting": ["profile", "configuration"], "type": "path", "flag": "--profile"},
-            {"setting": "args", "type": "args"}
+            { "setting": ["profile", "configuration"], "type": "path", "flag": "--profile" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },
@@ -48,8 +48,8 @@
           "base": ["perltidy", "--check-only", "-q"],
           "appendFiles": false,
           "options": [
-            {"setting": ["profile", "configuration"], "type": "path", "flag": "--profile"},
-            {"setting": "args", "type": "args"}
+            { "setting": ["profile", "configuration"], "type": "path", "flag": "--profile" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },

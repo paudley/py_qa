@@ -98,7 +98,8 @@ class TomlConfigSource:
             return {}
         if path in stack:
             raise ConfigError(
-                "Circular include detected: " + " -> ".join(str(entry) for entry in stack + (path,)),
+                "Circular include detected: "
+                + " -> ".join(str(entry) for entry in stack + (path,)),
             )
         resolved = path.resolve()
         stat = resolved.stat()
@@ -556,21 +557,31 @@ class _ExecutionSection(_SectionMerger):
     def merge(self, current: ExecutionConfig, raw: Any) -> tuple[ExecutionConfig, dict[str, Any]]:
         data = self._ensure_mapping(raw, self.section)
         cache_dir_value = data.get("cache_dir", current.cache_dir)
-        cache_dir = self._resolver.resolve(cache_dir_value) if cache_dir_value is not None else current.cache_dir
+        cache_dir = (
+            self._resolver.resolve(cache_dir_value)
+            if cache_dir_value is not None
+            else current.cache_dir
+        )
 
         jobs = data.get("jobs", current.jobs)
         bail = data.get("bail", current.bail)
         if bail:
             jobs = 1
 
-        only = list(_coerce_iterable(data["only"], "execution.only")) if "only" in data else list(current.only)
+        only = (
+            list(_coerce_iterable(data["only"], "execution.only"))
+            if "only" in data
+            else list(current.only)
+        )
         languages = (
             list(_coerce_iterable(data["languages"], "execution.languages"))
             if "languages" in data
             else list(current.languages)
         )
         enable = (
-            list(_coerce_iterable(data["enable"], "execution.enable")) if "enable" in data else list(current.enable)
+            list(_coerce_iterable(data["enable"], "execution.enable"))
+            if "enable" in data
+            else list(current.enable)
         )
 
         updated = _model_replace(

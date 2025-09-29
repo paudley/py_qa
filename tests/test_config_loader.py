@@ -140,7 +140,9 @@ report_out = "reports/output.json"
 
     assert cfg.execution.jobs == 4
     assert not cfg.execution.cache_enabled
-    assert (project_root / "build").resolve() in {path.resolve() for path in cfg.file_discovery.excludes}
+    assert (project_root / "build").resolve() in {
+        path.resolve() for path in cfg.file_discovery.excludes
+    }
     assert cfg.output.report_out == (project_root / "reports/output.json").resolve()
 
 

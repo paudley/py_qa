@@ -213,7 +213,9 @@ def _config_to_mapping(result: ConfigLoadResult) -> Mapping[str, Any]:
 def _summarise_updates(updates: list[FieldUpdate]) -> list[str]:
     rendered: list[str] = []
     for update in updates:
-        field_path = update.field if update.section == "root" else f"{update.section}.{update.field}"
+        field_path = (
+            update.field if update.section == "root" else f"{update.section}.{update.field}"
+        )
         info = _summarise_value(field_path, update.value)
         rendered.append(f"- {field_path} <- {update.source} -> {info}")
     return rendered

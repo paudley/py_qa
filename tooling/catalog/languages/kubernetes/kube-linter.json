@@ -73,16 +73,32 @@
           "base": ["kube-linter", "lint", "--format", "json"],
           "appendFiles": false,
           "options": [
-            {"setting": "config", "type": "path", "flag": "--config"},
-            {"setting": "fail-if-no-objects-found", "type": "flag", "flag": "--fail-if-no-objects-found"},
-            {"setting": "fail-on-invalid-resource", "type": "flag", "flag": "--fail-on-invalid-resource"},
-            {"setting": "verbose", "type": "flag", "flag": "--verbose"},
-            {"setting": "add-all-built-in", "type": "flag", "flag": "--add-all-built-in"},
-            {"setting": "do-not-auto-add-defaults", "type": "flag", "flag": "--do-not-auto-add-defaults"},
-            {"setting": "include", "type": "args", "flag": "--include"},
-            {"setting": "exclude", "type": "args", "flag": "--exclude"},
-            {"setting": ["ignore-paths", "ignore_paths"], "type": "path", "flag": "--ignore-paths"},
-            {"setting": "args", "type": "args"}
+            { "setting": "config", "type": "path", "flag": "--config" },
+            {
+              "setting": "fail-if-no-objects-found",
+              "type": "flag",
+              "flag": "--fail-if-no-objects-found"
+            },
+            {
+              "setting": "fail-on-invalid-resource",
+              "type": "flag",
+              "flag": "--fail-on-invalid-resource"
+            },
+            { "setting": "verbose", "type": "flag", "flag": "--verbose" },
+            { "setting": "add-all-built-in", "type": "flag", "flag": "--add-all-built-in" },
+            {
+              "setting": "do-not-auto-add-defaults",
+              "type": "flag",
+              "flag": "--do-not-auto-add-defaults"
+            },
+            { "setting": "include", "type": "args", "flag": "--include" },
+            { "setting": "exclude", "type": "args", "flag": "--exclude" },
+            {
+              "setting": ["ignore-paths", "ignore_paths"],
+              "type": "path",
+              "flag": "--ignore-paths"
+            },
+            { "setting": "args", "type": "args" }
           ]
         }
       },

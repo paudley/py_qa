@@ -30,11 +30,11 @@
           ],
           "appendFiles": false,
           "options": [
-            {"setting": "config", "type": "path", "flag": "--config"},
-            {"setting": "use", "type": "args", "flag": "--use"},
-            {"setting": "ignore-path", "type": "path", "flag": "--ignore-path"},
-            {"setting": "setting", "type": "args", "flag": "--setting"},
-            {"setting": "args", "type": "args"}
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "use", "type": "args", "flag": "--use" },
+            { "setting": "ignore-path", "type": "path", "flag": "--ignore-path" },
+            { "setting": "setting", "type": "args", "flag": "--setting" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },
@@ -51,19 +51,20 @@
       "command": {
         "strategy": "command_option_map",
         "config": {
-          "base": [
-            "remark",
-            "--use",
-            "remark-preset-lint-recommended"
-          ],
+          "base": ["remark", "--use", "remark-preset-lint-recommended"],
           "appendFiles": false,
           "options": [
-            {"setting": "config", "type": "path", "flag": "--config"},
-            {"setting": "use", "type": "args", "flag": "--use"},
-            {"setting": "ignore-path", "type": "path", "flag": "--ignore-path"},
-            {"setting": "setting", "type": "args", "flag": "--setting"},
-            {"setting": "output", "type": "value", "flag": "--output", "defaultFrom": "tool.root"},
-            {"setting": "args", "type": "args"}
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "use", "type": "args", "flag": "--use" },
+            { "setting": "ignore-path", "type": "path", "flag": "--ignore-path" },
+            { "setting": "setting", "type": "args", "flag": "--setting" },
+            {
+              "setting": "output",
+              "type": "value",
+              "flag": "--output",
+              "defaultFrom": "tool.root"
+            },
+            { "setting": "args", "type": "args" }
           ]
         }
       }

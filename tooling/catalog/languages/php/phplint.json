@@ -43,10 +43,10 @@
           "base": ["phplint", "--no-ansi", "--no-progress"],
           "appendFiles": false,
           "options": [
-            {"setting": ["configuration", "config"], "type": "path", "flag": "--configuration"},
-            {"setting": "exclude", "type": "path", "flag": "--exclude"},
-            {"setting": "include", "type": "path", "flag": "--include"},
-            {"setting": "args", "type": "args"}
+            { "setting": ["configuration", "config"], "type": "path", "flag": "--configuration" },
+            { "setting": "exclude", "type": "path", "flag": "--exclude" },
+            { "setting": "include", "type": "path", "flag": "--include" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },

@@ -78,6 +78,7 @@ dependencies = [
     "uv>=0.8.17",
     "vulture>=2.14",
     "bandit>=1.8.6",
+    "yamllint>=1.37.1",
 ]
 
 [project.scripts]

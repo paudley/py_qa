@@ -71,16 +71,25 @@
           "base": ["selene"],
           "appendFiles": false,
           "options": [
-            {"setting": "display-style", "type": "value", "flag": "--display-style", "default": "Json2"},
-            {"setting": "color", "type": "value", "flag": "--color", "default": "Never"},
-            {"setting": "config", "type": "path", "flag": "--config"},
-            {"setting": "pattern", "type": "args", "flag": "--pattern"},
-            {"setting": ["num-threads", "num_threads"], "type": "value", "flag": "--num-threads"},
-            {"setting": ["allow-warnings", "allow_warnings"], "type": "flag", "flag": "--allow-warnings"},
-            {"setting": ["no-exclude", "no_exclude"], "type": "flag", "flag": "--no-exclude"},
-            {"setting": "quiet", "type": "flag", "flag": "--quiet"},
-            {"setting": ["no-summary", "no_summary"], "type": "flag", "flag": "--no-summary"},
-            {"setting": "args", "type": "args"}
+            {
+              "setting": "display-style",
+              "type": "value",
+              "flag": "--display-style",
+              "default": "Json2"
+            },
+            { "setting": "color", "type": "value", "flag": "--color", "default": "Never" },
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "pattern", "type": "args", "flag": "--pattern" },
+            { "setting": ["num-threads", "num_threads"], "type": "value", "flag": "--num-threads" },
+            {
+              "setting": ["allow-warnings", "allow_warnings"],
+              "type": "flag",
+              "flag": "--allow-warnings"
+            },
+            { "setting": ["no-exclude", "no_exclude"], "type": "flag", "flag": "--no-exclude" },
+            { "setting": "quiet", "type": "flag", "flag": "--quiet" },
+            { "setting": ["no-summary", "no_summary"], "type": "flag", "flag": "--no-summary" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },

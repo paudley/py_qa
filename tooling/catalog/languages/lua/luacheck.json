@@ -86,19 +86,68 @@
           "base": ["luacheck", "--formatter", "plain", "--codes", "--ranges", "--no-color"],
           "appendFiles": false,
           "options": [
-            {"setting": "config", "type": "path", "flag": "--config"},
-            {"setting": ["max-line-length", "max_line_length"], "type": "value", "flag": "--max-line-length", "defaultFrom": "execution.line_length"},
-            {"setting": ["max-code-line-length", "max_code_line_length", "max-line-length", "max_line_length"], "type": "value", "flag": "--max-code-line-length", "defaultFrom": "execution.line_length"},
-            {"setting": ["max-string-line-length", "max_string_line_length", "max-line-length", "max_line_length"], "type": "value", "flag": "--max-string-line-length", "defaultFrom": "execution.line_length"},
-            {"setting": ["max-comment-line-length", "max_comment_line_length", "max-line-length", "max_line_length"], "type": "value", "flag": "--max-comment-line-length", "defaultFrom": "execution.line_length"},
-            {"setting": ["max-cyclomatic-complexity", "max_cyclomatic_complexity"], "type": "value", "flag": "--max-cyclomatic-complexity", "defaultFrom": "complexity.max_complexity"},
-            {"setting": "std", "type": "value", "flag": "--std"},
-            {"setting": "globals", "type": "args", "flag": "--globals", "joinWith": ","},
-            {"setting": ["read-globals", "read_globals"], "type": "args", "flag": "--read-globals", "joinWith": ","},
-            {"setting": "ignore", "type": "args", "flag": "--ignore", "joinWith": ","},
-            {"setting": ["exclude-files", "exclude_files"], "type": "path", "flag": "--exclude-files"},
-            {"setting": "quiet", "type": "flag", "flag": "--quiet"},
-            {"setting": "args", "type": "args"}
+            { "setting": "config", "type": "path", "flag": "--config" },
+            {
+              "setting": ["max-line-length", "max_line_length"],
+              "type": "value",
+              "flag": "--max-line-length",
+              "defaultFrom": "execution.line_length"
+            },
+            {
+              "setting": [
+                "max-code-line-length",
+                "max_code_line_length",
+                "max-line-length",
+                "max_line_length"
+              ],
+              "type": "value",
+              "flag": "--max-code-line-length",
+              "defaultFrom": "execution.line_length"
+            },
+            {
+              "setting": [
+                "max-string-line-length",
+                "max_string_line_length",
+                "max-line-length",
+                "max_line_length"
+              ],
+              "type": "value",
+              "flag": "--max-string-line-length",
+              "defaultFrom": "execution.line_length"
+            },
+            {
+              "setting": [
+                "max-comment-line-length",
+                "max_comment_line_length",
+                "max-line-length",
+                "max_line_length"
+              ],
+              "type": "value",
+              "flag": "--max-comment-line-length",
+              "defaultFrom": "execution.line_length"
+            },
+            {
+              "setting": ["max-cyclomatic-complexity", "max_cyclomatic_complexity"],
+              "type": "value",
+              "flag": "--max-cyclomatic-complexity",
+              "defaultFrom": "complexity.max_complexity"
+            },
+            { "setting": "std", "type": "value", "flag": "--std" },
+            { "setting": "globals", "type": "args", "flag": "--globals", "joinWith": "," },
+            {
+              "setting": ["read-globals", "read_globals"],
+              "type": "args",
+              "flag": "--read-globals",
+              "joinWith": ","
+            },
+            { "setting": "ignore", "type": "args", "flag": "--ignore", "joinWith": "," },
+            {
+              "setting": ["exclude-files", "exclude_files"],
+              "type": "path",
+              "flag": "--exclude-files"
+            },
+            { "setting": "quiet", "type": "flag", "flag": "--quiet" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },

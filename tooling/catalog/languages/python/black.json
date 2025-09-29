@@ -66,14 +66,37 @@
           "base": ["black"],
           "appendFiles": false,
           "options": [
-            {"setting": "config", "type": "path", "flag": "--config"},
-            {"setting": "line-length", "type": "value", "flag": "--line-length", "defaultFrom": "execution.line_length"},
-            {"setting": "target-version", "type": "args", "flag": "--target-version", "defaultFrom": "python.target_version_tag"},
-            {"setting": "preview", "type": "flag", "flag": "--preview", "negateFlag": "--no-preview"},
-            {"setting": "skip-string-normalization", "type": "flag", "flag": "--skip-string-normalization"},
-            {"setting": "skip-magic-trailing-comma", "type": "flag", "flag": "--skip-magic-trailing-comma"},
-            {"setting": "workers", "type": "value", "flag": "-j"},
-            {"setting": "args", "type": "args"}
+            { "setting": "config", "type": "path", "flag": "--config" },
+            {
+              "setting": "line-length",
+              "type": "value",
+              "flag": "--line-length",
+              "defaultFrom": "execution.line_length"
+            },
+            {
+              "setting": "target-version",
+              "type": "args",
+              "flag": "--target-version",
+              "defaultFrom": "python.target_version_tag"
+            },
+            {
+              "setting": "preview",
+              "type": "flag",
+              "flag": "--preview",
+              "negateFlag": "--no-preview"
+            },
+            {
+              "setting": "skip-string-normalization",
+              "type": "flag",
+              "flag": "--skip-string-normalization"
+            },
+            {
+              "setting": "skip-magic-trailing-comma",
+              "type": "flag",
+              "flag": "--skip-magic-trailing-comma"
+            },
+            { "setting": "workers", "type": "value", "flag": "-j" },
+            { "setting": "args", "type": "args" }
           ]
         }
       }
@@ -87,14 +110,37 @@
           "base": ["black", "--check"],
           "appendFiles": false,
           "options": [
-            {"setting": "config", "type": "path", "flag": "--config"},
-            {"setting": "line-length", "type": "value", "flag": "--line-length", "defaultFrom": "execution.line_length"},
-            {"setting": "target-version", "type": "args", "flag": "--target-version", "defaultFrom": "python.target_version_tag"},
-            {"setting": "preview", "type": "flag", "flag": "--preview", "negateFlag": "--no-preview"},
-            {"setting": "skip-string-normalization", "type": "flag", "flag": "--skip-string-normalization"},
-            {"setting": "skip-magic-trailing-comma", "type": "flag", "flag": "--skip-magic-trailing-comma"},
-            {"setting": "workers", "type": "value", "flag": "-j"},
-            {"setting": "args", "type": "args"}
+            { "setting": "config", "type": "path", "flag": "--config" },
+            {
+              "setting": "line-length",
+              "type": "value",
+              "flag": "--line-length",
+              "defaultFrom": "execution.line_length"
+            },
+            {
+              "setting": "target-version",
+              "type": "args",
+              "flag": "--target-version",
+              "defaultFrom": "python.target_version_tag"
+            },
+            {
+              "setting": "preview",
+              "type": "flag",
+              "flag": "--preview",
+              "negateFlag": "--no-preview"
+            },
+            {
+              "setting": "skip-string-normalization",
+              "type": "flag",
+              "flag": "--skip-string-normalization"
+            },
+            {
+              "setting": "skip-magic-trailing-comma",
+              "type": "flag",
+              "flag": "--skip-magic-trailing-comma"
+            },
+            { "setting": "workers", "type": "value", "flag": "-j" },
+            { "setting": "args", "type": "args" }
           ]
         }
       }

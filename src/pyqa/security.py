@@ -384,7 +384,9 @@ def _filter_entropy(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
 
 def _filter_comments(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
     return [
-        (idx, line) for idx, line in matches if not line.lstrip().startswith("#") and not line.lstrip().startswith("//")
+        (idx, line)
+        for idx, line in matches
+        if not line.lstrip().startswith("#") and not line.lstrip().startswith("//")
     ]
 
 

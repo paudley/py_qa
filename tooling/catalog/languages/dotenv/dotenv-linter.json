@@ -46,11 +46,11 @@
           "base": ["dotenv-linter", "--no-color", "--quiet"],
           "appendFiles": false,
           "options": [
-            {"setting": "exclude", "type": "path", "flag": "--exclude"},
-            {"setting": "skip", "type": "args", "flag": "--skip"},
-            {"setting": "schema", "type": "path", "flag": "--schema"},
-            {"setting": "recursive", "type": "flag", "flag": "--recursive"},
-            {"setting": "args", "type": "args"}
+            { "setting": "exclude", "type": "path", "flag": "--exclude" },
+            { "setting": "skip", "type": "args", "flag": "--skip" },
+            { "setting": "schema", "type": "path", "flag": "--schema" },
+            { "setting": "recursive", "type": "flag", "flag": "--recursive" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },

@@ -106,21 +106,61 @@
           "base": ["ruff", "check", "--force-exclude", "--output-format", "json"],
           "appendFiles": false,
           "options": [
-            {"setting": "config", "type": "path", "flag": "--config"},
-            {"setting": "select", "type": "args", "flag": "--select", "joinWith": ","},
-            {"setting": "ignore", "type": "args", "flag": "--ignore", "joinWith": ","},
-            {"setting": "extend-select", "type": "args", "flag": "--extend-select", "joinWith": ","},
-            {"setting": "extend-ignore", "type": "args", "flag": "--extend-ignore", "joinWith": ","},
-            {"setting": "line-length", "type": "value", "flag": "--line-length", "defaultFrom": "execution.line_length"},
-            {"setting": "target-version", "type": "args", "flag": "--target-version", "defaultFrom": "python.target_version_tag"},
-            {"setting": "per-file-ignores", "type": "args", "flag": "--per-file-ignores", "joinWith": ";"},
-            {"setting": "exclude", "type": "args", "flag": "--exclude", "joinWith": ","},
-            {"setting": "extend-exclude", "type": "args", "flag": "--extend-exclude", "joinWith": ","},
-            {"setting": "respect-gitignore", "type": "flag", "flag": "--respect-gitignore", "negateFlag": "--no-respect-gitignore"},
-            {"setting": "preview", "type": "flag", "flag": "--preview", "negateFlag": "--no-preview"},
-            {"setting": "unsafe-fixes", "type": "flag", "flag": "--unsafe-fixes"},
-            {"setting": "fix", "type": "flag", "flag": "--fix"},
-            {"setting": "args", "type": "args"}
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "select", "type": "args", "flag": "--select", "joinWith": "," },
+            { "setting": "ignore", "type": "args", "flag": "--ignore", "joinWith": "," },
+            {
+              "setting": "extend-select",
+              "type": "args",
+              "flag": "--extend-select",
+              "joinWith": ","
+            },
+            {
+              "setting": "extend-ignore",
+              "type": "args",
+              "flag": "--extend-ignore",
+              "joinWith": ","
+            },
+            {
+              "setting": "line-length",
+              "type": "value",
+              "flag": "--line-length",
+              "defaultFrom": "execution.line_length"
+            },
+            {
+              "setting": "target-version",
+              "type": "args",
+              "flag": "--target-version",
+              "defaultFrom": "python.target_version_tag"
+            },
+            {
+              "setting": "per-file-ignores",
+              "type": "args",
+              "flag": "--per-file-ignores",
+              "joinWith": ";"
+            },
+            { "setting": "exclude", "type": "args", "flag": "--exclude", "joinWith": "," },
+            {
+              "setting": "extend-exclude",
+              "type": "args",
+              "flag": "--extend-exclude",
+              "joinWith": ","
+            },
+            {
+              "setting": "respect-gitignore",
+              "type": "flag",
+              "flag": "--respect-gitignore",
+              "negateFlag": "--no-respect-gitignore"
+            },
+            {
+              "setting": "preview",
+              "type": "flag",
+              "flag": "--preview",
+              "negateFlag": "--no-preview"
+            },
+            { "setting": "unsafe-fixes", "type": "flag", "flag": "--unsafe-fixes" },
+            { "setting": "fix", "type": "flag", "flag": "--fix" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },
@@ -140,20 +180,60 @@
           "base": ["ruff", "check", "--fix", "--force-exclude"],
           "appendFiles": false,
           "options": [
-            {"setting": "config", "type": "path", "flag": "--config"},
-            {"setting": "select", "type": "args", "flag": "--select", "joinWith": ","},
-            {"setting": "ignore", "type": "args", "flag": "--ignore", "joinWith": ","},
-            {"setting": "extend-select", "type": "args", "flag": "--extend-select", "joinWith": ","},
-            {"setting": "extend-ignore", "type": "args", "flag": "--extend-ignore", "joinWith": ","},
-            {"setting": "line-length", "type": "value", "flag": "--line-length", "defaultFrom": "execution.line_length"},
-            {"setting": "target-version", "type": "args", "flag": "--target-version", "defaultFrom": "python.target_version_tag"},
-            {"setting": "per-file-ignores", "type": "args", "flag": "--per-file-ignores", "joinWith": ";"},
-            {"setting": "exclude", "type": "args", "flag": "--exclude", "joinWith": ","},
-            {"setting": "extend-exclude", "type": "args", "flag": "--extend-exclude", "joinWith": ","},
-            {"setting": "respect-gitignore", "type": "flag", "flag": "--respect-gitignore", "negateFlag": "--no-respect-gitignore"},
-            {"setting": "preview", "type": "flag", "flag": "--preview", "negateFlag": "--no-preview"},
-            {"setting": "unsafe-fixes", "type": "flag", "flag": "--unsafe-fixes"},
-            {"setting": "args", "type": "args"}
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "select", "type": "args", "flag": "--select", "joinWith": "," },
+            { "setting": "ignore", "type": "args", "flag": "--ignore", "joinWith": "," },
+            {
+              "setting": "extend-select",
+              "type": "args",
+              "flag": "--extend-select",
+              "joinWith": ","
+            },
+            {
+              "setting": "extend-ignore",
+              "type": "args",
+              "flag": "--extend-ignore",
+              "joinWith": ","
+            },
+            {
+              "setting": "line-length",
+              "type": "value",
+              "flag": "--line-length",
+              "defaultFrom": "execution.line_length"
+            },
+            {
+              "setting": "target-version",
+              "type": "args",
+              "flag": "--target-version",
+              "defaultFrom": "python.target_version_tag"
+            },
+            {
+              "setting": "per-file-ignores",
+              "type": "args",
+              "flag": "--per-file-ignores",
+              "joinWith": ";"
+            },
+            { "setting": "exclude", "type": "args", "flag": "--exclude", "joinWith": "," },
+            {
+              "setting": "extend-exclude",
+              "type": "args",
+              "flag": "--extend-exclude",
+              "joinWith": ","
+            },
+            {
+              "setting": "respect-gitignore",
+              "type": "flag",
+              "flag": "--respect-gitignore",
+              "negateFlag": "--no-respect-gitignore"
+            },
+            {
+              "setting": "preview",
+              "type": "flag",
+              "flag": "--preview",
+              "negateFlag": "--no-preview"
+            },
+            { "setting": "unsafe-fixes", "type": "flag", "flag": "--unsafe-fixes" },
+            { "setting": "args", "type": "args" }
           ]
         }
       }

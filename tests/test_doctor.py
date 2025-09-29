@@ -60,7 +60,6 @@ def test_run_doctor_catalog_initializes_registry(monkeypatch, tmp_path: Path) ->
                 runtime="binary",
             ),
         )
-        return None
 
     monkeypatch.setattr("pyqa.cli.doctor.initialize_registry", fake_initialize_registry)
 

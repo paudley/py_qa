@@ -5,9 +5,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from collections.abc import Mapping as MappingABC
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -15,7 +14,14 @@ from ..models import RawDiagnostic
 from ..tools.base import Parser, ToolContext
 
 JsonTransform = Callable[[Any, ToolContext], Sequence[RawDiagnostic]]
-TextTransform = Callable[[str, ToolContext], Sequence[RawDiagnostic]]
+TextTransform = Callable[[Sequence[str], ToolContext], Sequence[RawDiagnostic]]
+
+
+def _ensure_lines(value: Sequence[str]) -> list[str]:
+    """Normalise string-based output into a list of lines."""
+    if isinstance(value, str):
+        return value.splitlines()
+    return [str(item) for item in value]
 
 
 def _load_json_stream(stdout: str) -> Any:
@@ -69,13 +75,14 @@ class JsonParser(Parser):
 
     def parse(
         self,
-        stdout: str,
-        stderr: str,
+        stdout: Sequence[str],
+        stderr: Sequence[str],
         *,
         context: ToolContext,
     ) -> Sequence[RawDiagnostic]:
         del stderr  # retain signature compatibility without using the value
-        payload = _load_json_stream(stdout)
+        stdout_text = "\n".join(_ensure_lines(stdout))
+        payload = _load_json_stream(stdout_text)
         return self.transform(payload, context)
 
 
@@ -87,13 +94,14 @@ class TextParser(Parser):
 
     def parse(
         self,
-        stdout: str,
-        stderr: str,
+        stdout: Sequence[str],
+        stderr: Sequence[str],
         *,
         context: ToolContext,
     ) -> Sequence[RawDiagnostic]:
         del stderr
-        return self.transform(stdout, context)
+        lines = _ensure_lines(stdout)
+        return self.transform(lines, context)
 
 
 __all__ = [
@@ -104,5 +112,6 @@ __all__ = [
     "_coerce_dict_sequence",
     "_coerce_object_mapping",
     "_coerce_optional_str",
+    "_ensure_lines",
     "_load_json_stream",
 ]

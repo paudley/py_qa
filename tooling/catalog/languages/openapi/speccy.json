@@ -5,7 +5,14 @@
   "extends": ["npm_runtime"],
   "languages": ["openapi"],
   "phase": "lint",
-  "fileExtensions": ["openapi.yaml", "openapi.yml", "swagger.yaml", "swagger.yml", "speccy.yaml", "speccy.yml"],
+  "fileExtensions": [
+    "openapi.yaml",
+    "openapi.yml",
+    "swagger.yaml",
+    "swagger.yml",
+    "speccy.yaml",
+    "speccy.yml"
+  ],
   "runtime": {
     "type": "npm",
     "package": "speccy",
@@ -37,9 +44,9 @@
           "base": ["speccy", "lint", "--reporter", "json"],
           "appendFiles": false,
           "options": [
-            {"setting": "ruleset", "type": "path", "flag": "--ruleset"},
-            {"setting": "skip", "type": "args", "flag": "--skip"},
-            {"setting": "args", "type": "args"}
+            { "setting": "ruleset", "type": "path", "flag": "--ruleset" },
+            { "setting": "skip", "type": "args", "flag": "--skip" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },

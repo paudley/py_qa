@@ -24,7 +24,9 @@ def _prettier_command_config(action: str) -> dict[str, object]:
         for candidate in definition.actions:
             if candidate.name == action:
                 return dict(candidate.command.reference.config)
-    raise AssertionError(f"prettier command configuration for action '{action}' missing from catalog")
+    raise AssertionError(
+        f"prettier command configuration for action '{action}' missing from catalog",
+    )
 
 
 def test_prettier_format_command_build(tmp_path: Path) -> None:

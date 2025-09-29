@@ -43,10 +43,10 @@
           "base": ["yamllint", "--format", "parsable"],
           "appendFiles": false,
           "options": [
-            {"setting": ["config-file", "config_file"], "type": "path", "flag": "--config-file"},
-            {"setting": ["config-data", "config_data"], "type": "value", "flag": "--config-data"},
-            {"setting": "strict", "type": "flag", "flag": "--strict"},
-            {"setting": "args", "type": "args"}
+            { "setting": ["config-file", "config_file"], "type": "path", "flag": "--config-file" },
+            { "setting": ["config-data", "config_data"], "type": "value", "flag": "--config-data" },
+            { "setting": "strict", "type": "flag", "flag": "--strict" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },

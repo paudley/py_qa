@@ -8,7 +8,11 @@
     "type": "python",
     "package": "pyupgrade",
     "minVersion": "3.19.1",
-    "versionCommand": ["python", "-c", "import importlib.metadata as im; print(im.version('pyupgrade'))"]
+    "versionCommand": [
+      "python",
+      "-c",
+      "import importlib.metadata as im; print(im.version('pyupgrade'))"
+    ]
   },
   "options": [
     {
@@ -72,14 +76,18 @@
               "transform": "pyupgrade_flag",
               "defaultFrom": "python.target_version"
             },
-            {"setting": "keep-mock", "type": "flag", "flag": "--keep-mock"},
-            {"setting": "keep-runtime-typing", "type": "flag", "flag": "--keep-runtime-typing"},
-            {"setting": "keep-percent-format", "type": "flag", "flag": "--keep-percent-format"},
-            {"setting": "keep-annotations", "type": "flag", "flag": "--keep-annotations"},
-            {"setting": "keep-logging-format", "type": "flag", "flag": "--keep-logging-format"},
-            {"setting": "exit-zero-even-if-changed", "type": "flag", "flag": "--exit-zero-even-if-changed"},
-            {"setting": "no-verify", "type": "flag", "flag": "--no-verify"},
-            {"setting": "args", "type": "args"}
+            { "setting": "keep-mock", "type": "flag", "flag": "--keep-mock" },
+            { "setting": "keep-runtime-typing", "type": "flag", "flag": "--keep-runtime-typing" },
+            { "setting": "keep-percent-format", "type": "flag", "flag": "--keep-percent-format" },
+            { "setting": "keep-annotations", "type": "flag", "flag": "--keep-annotations" },
+            { "setting": "keep-logging-format", "type": "flag", "flag": "--keep-logging-format" },
+            {
+              "setting": "exit-zero-even-if-changed",
+              "type": "flag",
+              "flag": "--exit-zero-even-if-changed"
+            },
+            { "setting": "no-verify", "type": "flag", "flag": "--no-verify" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },

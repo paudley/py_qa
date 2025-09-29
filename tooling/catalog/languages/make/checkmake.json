@@ -37,9 +37,9 @@
           "base": ["checkmake", "lint", "--format", "json"],
           "appendFiles": false,
           "options": [
-            {"setting": "config", "type": "path", "flag": "--config"},
-            {"setting": "ignore", "type": "args", "flag": "--ignore"},
-            {"setting": "args", "type": "args"}
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "ignore", "type": "args", "flag": "--ignore" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },

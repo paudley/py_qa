@@ -14,11 +14,11 @@ from ..severity import Severity
 from ..tools.base import ToolContext
 
 
-def parse_shfmt(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_shfmt(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse shfmt diff output."""
     results: list[RawDiagnostic] = []
     current_file: str | None = None
-    for raw_line in stdout.splitlines():
+    for raw_line in stdout:
         line = raw_line.strip()
         if line.startswith("diff -u"):
             parts = line.split()
@@ -52,10 +52,10 @@ PHPLINT_PATTERN = re.compile(
 )
 
 
-def parse_phplint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_phplint(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse phplint textual output."""
     results: list[RawDiagnostic] = []
-    for raw_line in stdout.splitlines():
+    for raw_line in stdout:
         line = raw_line.strip()
         if not line:
             continue
@@ -85,10 +85,10 @@ PERLCRITIC_PATTERN = re.compile(
 )
 
 
-def parse_perlcritic(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_perlcritic(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse perlcritic textual output using custom verbose template."""
     results: list[RawDiagnostic] = []
-    for raw_line in stdout.splitlines():
+    for raw_line in stdout:
         line = raw_line.strip()
         if not line:
             continue
@@ -160,12 +160,16 @@ _CPPLINT_PATTERN = re.compile(
 )
 
 
-def parse_cpplint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_cpplint(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse cpplint text diagnostics."""
     results: list[RawDiagnostic] = []
-    for line in stdout.splitlines():
+    for line in stdout:
         stripped = line.strip()
-        if not stripped or stripped.startswith("Done processing") or stripped.startswith("Total errors"):
+        if (
+            not stripped
+            or stripped.startswith("Done processing")
+            or stripped.startswith("Total errors")
+        ):
             continue
         match = _CPPLINT_PATTERN.match(stripped)
         if not match:
@@ -205,9 +209,9 @@ TOMBI_SEVERITY_MAP: Final[dict[str, Severity]] = {
 }
 
 
-def parse_tombi(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_tombi(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse tombi lint textual diagnostics."""
-    cleaned = _ANSI_ESCAPE_RE.sub("", stdout)
+    cleaned = _ANSI_ESCAPE_RE.sub("", "\n".join(stdout))
     results: list[RawDiagnostic] = []
     for header, body in _split_tombi_blocks(cleaned.splitlines()):
         diagnostic = _build_tombi_diagnostic(header, body)
@@ -307,7 +311,9 @@ def parse_golangci_lint(payload: Any, _context: ToolContext) -> Sequence[RawDiag
 
 def parse_cargo_clippy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse Cargo clippy JSON payloads."""
-    records = payload if isinstance(payload, list) else [payload] if isinstance(payload, dict) else []
+    records = (
+        payload if isinstance(payload, list) else [payload] if isinstance(payload, dict) else []
+    )
     results: list[RawDiagnostic] = []
     for record in records:
         if not isinstance(record, dict):

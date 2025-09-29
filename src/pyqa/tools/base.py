@@ -4,10 +4,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol
-from collections.abc import Callable
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
@@ -57,8 +56,8 @@ class Parser(Protocol):
 
     def parse(
         self,
-        stdout: str,
-        stderr: str,
+        stdout: Sequence[str],
+        stderr: Sequence[str],
         *,
         context: ToolContext,
     ) -> Sequence[RawDiagnostic | Diagnostic]:

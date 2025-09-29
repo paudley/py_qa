@@ -32,8 +32,8 @@
           "base": ["dockerfilelint", "--output", "json"],
           "appendFiles": false,
           "options": [
-            {"setting": "config", "type": "path", "flag": "--config"},
-            {"setting": "args", "type": "args"}
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },

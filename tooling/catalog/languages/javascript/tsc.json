@@ -56,11 +56,17 @@
           "base": ["tsc", "--noEmit"],
           "appendFiles": false,
           "options": [
-            {"setting": "project", "type": "path", "flag": "--project"},
-            {"setting": "pretty", "type": "value", "flag": "--pretty", "default": false, "transform": "bool_to_str"},
-            {"setting": "incremental", "type": "flag", "flag": "--incremental"},
-            {"setting": "watch", "type": "flag", "flag": "--watch"},
-            {"setting": "skip-lib-check", "type": "flag", "flag": "--skipLibCheck"},
+            { "setting": "project", "type": "path", "flag": "--project" },
+            {
+              "setting": "pretty",
+              "type": "value",
+              "flag": "--pretty",
+              "default": false,
+              "transform": "bool_to_str"
+            },
+            { "setting": "incremental", "type": "flag", "flag": "--incremental" },
+            { "setting": "watch", "type": "flag", "flag": "--watch" },
+            { "setting": "skip-lib-check", "type": "flag", "flag": "--skipLibCheck" },
             {
               "setting": "strict",
               "type": "flag",
@@ -68,7 +74,7 @@
               "defaultFrom": "strictness.type_checking",
               "transform": "strictness_is_strict"
             },
-            {"setting": "args", "type": "args"}
+            { "setting": "args", "type": "args" }
           ]
         }
       },

@@ -25,7 +25,9 @@ def _perltidy_config(action: str) -> dict[str, object]:
         for candidate in definition.actions:
             if candidate.name == action:
                 return dict(candidate.command.reference.config)
-    raise AssertionError(f"perltidy command configuration for action '{action}' missing from catalog")
+    raise AssertionError(
+        f"perltidy command configuration for action '{action}' missing from catalog",
+    )
 
 
 def test_perltidy_format_command(tmp_path: Path) -> None:

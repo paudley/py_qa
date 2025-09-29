@@ -115,8 +115,8 @@ def test_orchestrator_runs_registered_tool(tmp_path: Path) -> None:
     outcome = result.outcomes[0]
     assert outcome.tool == "dummy"
     assert outcome.returncode == 0
-    assert outcome.stdout == "output"
-    assert not outcome.stderr
+    assert outcome.stdout == ["output"]
+    assert outcome.stderr == []
 
 
 def test_orchestrator_uses_cache(tmp_path: Path) -> None:
@@ -168,7 +168,7 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
     result = orchestrator_cached.run(cfg, root=tmp_path)
 
     assert len(result.outcomes) == 1
-    assert result.outcomes[0].stdout == "output"
+    assert result.outcomes[0].stdout == ["output"]
 
     cfg.tool_settings["dummy"] = {"args": ["--different"]}
     calls_after: list[list[str]] = []
@@ -184,7 +184,7 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
     )
     result_settings = orchestrator_settings.run(cfg, root=tmp_path)
     assert len(calls_after) == 1
-    assert result_settings.outcomes[0].stdout == "updated"
+    assert result_settings.outcomes[0].stdout == ["updated"]
 
 
 def test_orchestrator_filters_suppressed_diagnostics(tmp_path: Path) -> None:
@@ -198,8 +198,8 @@ def test_orchestrator_filters_suppressed_diagnostics(tmp_path: Path) -> None:
 
         def parse(
             self,
-            stdout: str,
-            stderr: str,
+            stdout: Sequence[str],
+            stderr: Sequence[str],
             *,
             context: ToolContext,
         ) -> Sequence[RawDiagnostic]:
@@ -264,7 +264,7 @@ def test_orchestrator_filters_suppressed_diagnostics(tmp_path: Path) -> None:
 
     assert len(result.outcomes) == 1
     outcome = result.outcomes[0]
-    assert outcome.stdout == ""
+    assert outcome.stdout == []
     assert outcome.diagnostics == []
 
 

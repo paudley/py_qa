@@ -20,7 +20,7 @@ def parse_actionlint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnos
     for item in items:
         if not isinstance(item, dict):
             continue
-        path = item.get("path")
+        path = _coerce_optional_str(item.get("filepath") or item.get("path"))
         message = str(item.get("message", "")).strip()
         severity = str(item.get("severity", "error")).lower()
         code = item.get("kind")
@@ -99,7 +99,9 @@ def parse_dockerfilelint(payload: Any, _context: ToolContext) -> Sequence[RawDia
                 continue
             title = str(issue.get("title", "")).strip()
             description = str(issue.get("description", "")).strip()
-            message = title if description == "" else f"{title}: {description}" if title else description
+            message = (
+                title if description == "" else f"{title}: {description}" if title else description
+            )
             if not message:
                 continue
             results.append(

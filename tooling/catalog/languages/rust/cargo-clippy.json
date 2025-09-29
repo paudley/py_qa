@@ -25,9 +25,7 @@
         "config": {
           "base": ["cargo", "clippy", "--message-format=json"],
           "appendFiles": false,
-          "options": [
-            {"setting": "args", "type": "args"}
-          ]
+          "options": [{ "setting": "args", "type": "args" }]
         }
       },
       "appendFiles": false,

@@ -112,7 +112,9 @@ def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
         )
         message_display = _highlight_for_output(message, color=cfg.color)
         code_display = _format_code_value(code, cfg.color)
-        print(f"{tint_tool(tool_name)}, {spacer}{location_display}, {code_display}, {message_display}")
+        print(
+            f"{tint_tool(tool_name)}, {spacer}{location_display}, {code_display}, {message_display}",
+        )
 
     diagnostics_count = len(entries)
     files_count = len(result.files)
@@ -209,7 +211,12 @@ def _apply_highlighting_text(message: str, base_style: str | None = None) -> Tex
     return text
 
 
-def _highlight_for_output(message: str, *, color: bool, extra_spans: Sequence[MessageSpan] | None = None) -> str:
+def _highlight_for_output(
+    message: str,
+    *,
+    color: bool,
+    extra_spans: Sequence[MessageSpan] | None = None,
+) -> str:
     clean = message.replace("`", "")
     if not color:
         clean, _ = _strip_literal_quotes(clean)
@@ -317,6 +324,10 @@ def _group_similar_messages(
     return merged
 
 
+def _join_output(lines: Sequence[str]) -> str:
+    return "\n".join(lines)
+
+
 def _render_quiet(result: RunResult, cfg: OutputConfig) -> None:
     failed = [outcome for outcome in result.outcomes if not outcome.ok]
     if not failed:
@@ -325,7 +336,7 @@ def _render_quiet(result: RunResult, cfg: OutputConfig) -> None:
     for outcome in failed:
         print(f"{outcome.tool}:{outcome.action} failed rc={outcome.returncode}")
         if outcome.stderr:
-            print(outcome.stderr.rstrip())
+            print(_join_output(outcome.stderr).rstrip())
         if outcome.diagnostics:
             _dump_diagnostics(outcome.diagnostics, cfg)
 
@@ -334,14 +345,18 @@ def _render_pretty(result: RunResult, cfg: OutputConfig) -> None:
     root_display = colorize(str(Path(result.root).resolve()), "blue", cfg.color)
     print(f"Root: {root_display}")
     for outcome in result.outcomes:
-        status = colorize("PASS", "green", cfg.color) if outcome.ok else colorize("FAIL", "red", cfg.color)
+        status = (
+            colorize("PASS", "green", cfg.color)
+            if outcome.ok
+            else colorize("FAIL", "red", cfg.color)
+        )
         print(f"\n{outcome.tool}:{outcome.action} — {status}")
         if outcome.stdout:
             print(colorize("stdout:", "cyan", cfg.color))
-            print(outcome.stdout.rstrip())
+            print(_join_output(outcome.stdout).rstrip())
         if outcome.stderr:
             print(colorize("stderr:", "yellow", cfg.color))
-            print(outcome.stderr.rstrip())
+            print(_join_output(outcome.stderr).rstrip())
         if outcome.diagnostics:
             print(colorize("diagnostics:", "bold", cfg.color))
             _dump_diagnostics(outcome.diagnostics, cfg)
@@ -353,9 +368,9 @@ def _render_pretty(result: RunResult, cfg: OutputConfig) -> None:
 
 def _render_raw(result: RunResult) -> None:
     for outcome in result.outcomes:
-        print(outcome.stdout.rstrip())
+        print(_join_output(outcome.stdout).rstrip())
         if outcome.stderr:
-            print(outcome.stderr.rstrip())
+            print(_join_output(outcome.stderr).rstrip())
 
 
 def _normalize_concise_path(path_str: str | None, root: Path) -> str:
@@ -463,7 +478,8 @@ def _emit_stats_line(result: RunResult, cfg: OutputConfig, diagnostics_count: in
     metrics = _gather_metrics(result)
     loc_count = sum(metric.line_count for metric in metrics.values())
     suppression_counts = {
-        label: sum(metric.suppressions.get(label, 0) for metric in metrics.values()) for label in SUPPRESSION_LABELS
+        label: sum(metric.suppressions.get(label, 0) for metric in metrics.values())
+        for label in SUPPRESSION_LABELS
     }
     files_count = len(result.files)
     total_suppressions = sum(suppression_counts.values())

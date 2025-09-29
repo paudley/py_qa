@@ -29,7 +29,6 @@ _DUPLICATE_HINT_KEY: Final[str] = "duplicateHints"
 @lru_cache(maxsize=1)
 def _cached_tool_options() -> dict[str, tuple[CatalogOption, ...]]:
     """Return cached catalog-defined option metadata keyed by tool name."""
-
     snapshot = _snapshot_or_error()
     options: dict[str, tuple[CatalogOption, ...]] = {}
     for definition in snapshot.tools:
@@ -54,8 +53,8 @@ def catalog_general_suppressions() -> dict[str, tuple[str, ...]]:
     Returns:
         dict[str, tuple[str, ...]]: Mapping of tool names to suppression
         patterns declared in the catalog.
-    """
 
+    """
     snapshot = _snapshot_or_error()
     suppressions: dict[str, tuple[str, ...]] = {}
     for definition in snapshot.tools:
@@ -74,8 +73,8 @@ def catalog_test_suppressions() -> dict[str, dict[str, tuple[str, ...]]]:
         dict[str, dict[str, tuple[str, ...]]]: Nested mapping keyed first by
         language (lower-case) then by tool name containing suppression
         patterns.
-    """
 
+    """
     snapshot = _snapshot_or_error()
     mapping: dict[str, dict[str, tuple[str, ...]]] = {}
     for definition in snapshot.tools:
@@ -97,8 +96,8 @@ def catalog_duplicate_tools() -> dict[str, tuple[str, ...]]:
     Returns:
         dict[str, tuple[str, ...]]: Mapping of tool names to duplicate tool
         names as declared in catalog metadata.
-    """
 
+    """
     snapshot = _snapshot_or_error()
     duplicates: dict[str, tuple[str, ...]] = {}
     for definition in snapshot.tools:
@@ -115,8 +114,8 @@ def catalog_duplicate_hint_codes() -> dict[str, tuple[str, ...]]:
     Returns:
         dict[str, tuple[str, ...]]: Mapping of tool identifiers to the set of
         diagnostic codes that should generate duplicate advice.
-    """
 
+    """
     snapshot = _snapshot_or_error()
     hints: dict[str, tuple[str, ...]] = {}
     for definition in snapshot.tools:
@@ -138,8 +137,8 @@ def catalog_duplicate_preference() -> tuple[str, ...]:
     Returns:
         tuple[str, ...]: Sequence of tool names ranked by preference for
         retaining diagnostics when duplicates are detected.
-    """
 
+    """
     snapshot = _snapshot_or_error()
     phase_priority = {
         "format": 0,
@@ -162,7 +161,7 @@ def catalog_duplicate_preference() -> tuple[str, ...]:
             phase_priority.get(item[2], len(phase_priority)),
             -len(item[1]),
             item[0],
-        )
+        ),
     )
     ordered: list[str] = []
     for tool, _, _ in ranked:
@@ -177,14 +176,13 @@ def catalog_tool_options() -> dict[str, tuple[CatalogOption, ...]]:
     Returns:
         dict[str, tuple[CatalogOption, ...]]: Mapping where the key is the tool
         identifier and the value is a tuple of catalog option descriptors.
-    """
 
+    """
     return _cached_tool_options().copy()
 
 
 def clear_catalog_metadata_cache() -> None:
     """Clear cached catalog metadata to force a reload on next access."""
-
     _load_snapshot.cache_clear()
     _cached_tool_options.cache_clear()
 
@@ -196,8 +194,8 @@ def _load_snapshot() -> CatalogSnapshot | None:
     Returns:
         CatalogSnapshot | None: Materialised snapshot when the catalog is
         present and valid; otherwise ``None``.
-    """
 
+    """
     catalog_root, schema_root = _catalog_paths()
     if not catalog_root.exists():
         return None
@@ -221,8 +219,8 @@ def _snapshot_or_error() -> CatalogSnapshot:
 
     Raises:
         RuntimeError: If the catalog metadata cannot be loaded.
-    """
 
+    """
     snapshot = _load_snapshot()
     if snapshot is None:
         raise RuntimeError("Catalog metadata is unavailable; ensure tooling/catalog exists.")
@@ -234,8 +232,8 @@ def _catalog_paths() -> tuple[Path, Path]:
 
     Returns:
         tuple[Path, Path]: Paths to the catalog and schema directories.
-    """
 
+    """
     base = Path(__file__).resolve()
     project_root = base.parents[3]
     catalog_root = project_root / "tooling" / "catalog"
@@ -252,8 +250,8 @@ def _dedupe_preserving_order(values: Iterable[str]) -> list[str]:
     Returns:
         list[str]: Values with duplicates removed while retaining the first
         occurrence order.
-    """
 
+    """
     seen: set[str] = set()
     result: list[str] = []
     for value in values:
@@ -270,7 +268,7 @@ __all__ = [
     "catalog_duplicate_preference",
     "catalog_duplicate_tools",
     "catalog_general_suppressions",
-    "catalog_tool_options",
     "catalog_test_suppressions",
+    "catalog_tool_options",
     "clear_catalog_metadata_cache",
 ]

@@ -61,19 +61,23 @@
         "config": {
           "base": ["stylelint", "--formatter", "json"],
           "options": [
-            {"setting": "config", "type": "path", "flag": "--config"},
-            {"setting": "ignore-path", "type": "path", "flag": "--ignore-path"},
-            {"setting": "custom-syntax", "type": "value", "flag": "--custom-syntax"},
-            {"setting": "allow-empty-input", "type": "flag", "flag": "--allow-empty-input"},
-            {"setting": "disable-default-ignores", "type": "flag", "flag": "--disable-default-ignores"},
-            {"setting": "quiet", "type": "flag", "flag": "--quiet"},
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "ignore-path", "type": "path", "flag": "--ignore-path" },
+            { "setting": "custom-syntax", "type": "value", "flag": "--custom-syntax" },
+            { "setting": "allow-empty-input", "type": "flag", "flag": "--allow-empty-input" },
+            {
+              "setting": "disable-default-ignores",
+              "type": "flag",
+              "flag": "--disable-default-ignores"
+            },
+            { "setting": "quiet", "type": "flag", "flag": "--quiet" },
             {
               "setting": "max-warnings",
               "type": "value",
               "flag": "--max-warnings",
               "defaultFrom": "severity.max_warnings"
             },
-            {"setting": "args", "type": "args"}
+            { "setting": "args", "type": "args" }
           ]
         }
       },
@@ -92,19 +96,23 @@
         "config": {
           "base": ["stylelint", "--fix"],
           "options": [
-            {"setting": "config", "type": "path", "flag": "--config"},
-            {"setting": "ignore-path", "type": "path", "flag": "--ignore-path"},
-            {"setting": "custom-syntax", "type": "value", "flag": "--custom-syntax"},
-            {"setting": "allow-empty-input", "type": "flag", "flag": "--allow-empty-input"},
-            {"setting": "disable-default-ignores", "type": "flag", "flag": "--disable-default-ignores"},
-            {"setting": "quiet", "type": "flag", "flag": "--quiet"},
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "ignore-path", "type": "path", "flag": "--ignore-path" },
+            { "setting": "custom-syntax", "type": "value", "flag": "--custom-syntax" },
+            { "setting": "allow-empty-input", "type": "flag", "flag": "--allow-empty-input" },
+            {
+              "setting": "disable-default-ignores",
+              "type": "flag",
+              "flag": "--disable-default-ignores"
+            },
+            { "setting": "quiet", "type": "flag", "flag": "--quiet" },
             {
               "setting": "max-warnings",
               "type": "value",
               "flag": "--max-warnings",
               "defaultFrom": "severity.max_warnings"
             },
-            {"setting": "args", "type": "args"}
+            { "setting": "args", "type": "args" }
           ]
         }
       }

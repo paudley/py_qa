@@ -490,7 +490,9 @@ class Config(BaseModel):
             self.dedupe.dedupe_prefer = prefer_list
 
         mypy_settings = settings.setdefault("mypy", {})
-        baseline_mypy = _expected_mypy_profile(baseline.type_checking) if baseline is not None else {}
+        baseline_mypy = (
+            _expected_mypy_profile(baseline.type_checking) if baseline is not None else {}
+        )
 
         def set_mypy(key: str, value: object | None) -> None:
             existing = mypy_settings.get(key, UNSET)
@@ -504,7 +506,11 @@ class Config(BaseModel):
                 mypy_settings.pop(key, None)
                 return
             if override:
-                if existing is not UNSET and baseline_value is not NO_BASELINE and existing != baseline_value:
+                if (
+                    existing is not UNSET
+                    and baseline_value is not NO_BASELINE
+                    and existing != baseline_value
+                ):
                     return
                 mypy_settings[key] = value
             else:
@@ -524,7 +530,6 @@ class Config(BaseModel):
         set_mypy("check-untyped-defs", None)
         set_mypy("no-implicit-reexport", None)
         set_mypy("ignore-missing-imports", None)
-
 
 
 __all__ = [

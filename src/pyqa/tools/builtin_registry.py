@@ -12,7 +12,14 @@ from typing import Any
 
 from ..tooling import CatalogIntegrityError, CatalogSnapshot, ToolCatalogLoader
 from ..tooling.loader import StrategyDefinition
-from .base import DeferredCommand, Tool, ToolAction, ToolContext, ToolDocumentation, ToolDocumentationEntry
+from .base import (
+    DeferredCommand,
+    Tool,
+    ToolAction,
+    ToolContext,
+    ToolDocumentation,
+    ToolDocumentationEntry,
+)
 from .builtin_helpers import (
     CARGO_AVAILABLE,
     CPANM_AVAILABLE,
@@ -41,7 +48,6 @@ def register_catalog_tools(
     schema_root: Path | None = None,
 ) -> CatalogSnapshot:
     """Register catalog-backed tools with the provided *registry*."""
-
     target = registry if registry is not None else DEFAULT_REGISTRY
     loader = ToolCatalogLoader(
         catalog_root=_resolve_catalog_root(catalog_root),
@@ -63,7 +69,6 @@ def initialize_registry(
     schema_root: Path | None = None,
 ) -> CatalogSnapshot:
     """Initialise *registry* from the catalog and return the resulting snapshot."""
-
     target = registry if registry is not None else DEFAULT_REGISTRY
     return register_catalog_tools(
         target,
@@ -119,7 +124,7 @@ def _materialize_tool(
     )
 
     tool = Tool(
-        name=getattr(definition, "name"),
+        name=definition.name,
         actions=actions,
         phase=getattr(definition, "phase", "lint"),
         before=getattr(definition, "before", ()),
@@ -181,7 +186,7 @@ def _materialize_action(
     filters = tuple(getattr(action, "filters", ()))
 
     return ToolAction(
-        name=getattr(action, "name"),
+        name=action.name,
         command=command_builder,
         is_fix=getattr(action, "is_fix", False),
         append_files=getattr(action, "append_files", True),
@@ -204,7 +209,9 @@ def _instantiate_command(
     if strategy_definition is None:
         raise CatalogIntegrityError(f"{context}: unknown command strategy '{reference.strategy}'")
     if strategy_definition.strategy_type != "command":
-        raise CatalogIntegrityError(f"{context}: strategy '{reference.strategy}' is not a command strategy")
+        raise CatalogIntegrityError(
+            f"{context}: strategy '{reference.strategy}' is not a command strategy",
+        )
     factory = _resolve_strategy_callable(strategy_definition)
     config = _as_plain_json(reference.config)
     instance = _call_strategy_factory(factory, config)
@@ -221,7 +228,9 @@ def _instantiate_parser(
     if strategy_definition is None:
         raise CatalogIntegrityError(f"{context}: unknown parser strategy '{reference.strategy}'")
     if strategy_definition.strategy_type != "parser":
-        raise CatalogIntegrityError(f"{context}: strategy '{reference.strategy}' is not a parser strategy")
+        raise CatalogIntegrityError(
+            f"{context}: strategy '{reference.strategy}' is not a parser strategy",
+        )
     factory = _resolve_strategy_callable(strategy_definition)
     config = _as_plain_json(reference.config)
     parser = _call_strategy_factory(factory, config)
@@ -240,12 +249,16 @@ def _instantiate_installer(
     if strategy_definition is None:
         raise CatalogIntegrityError(f"{context}: unknown installer strategy '{reference.strategy}'")
     if strategy_definition.strategy_type != "installer":
-        raise CatalogIntegrityError(f"{context}: strategy '{reference.strategy}' is not an installer strategy")
+        raise CatalogIntegrityError(
+            f"{context}: strategy '{reference.strategy}' is not an installer strategy",
+        )
     factory = _resolve_strategy_callable(strategy_definition)
     config = _as_plain_json(getattr(reference, "config", {}))
     installer = _call_strategy_factory(factory, config)
     if not callable(installer):
-        raise CatalogIntegrityError(f"{context}: installer strategy '{reference.strategy}' did not return a callable")
+        raise CatalogIntegrityError(
+            f"{context}: installer strategy '{reference.strategy}' did not return a callable",
+        )
     return installer
 
 
@@ -289,11 +302,13 @@ def _call_strategy_factory(factory: Callable[..., Any], config: Mapping[str, Any
 
 
 def _ensure_command_builder(instance: Any, *, context: str) -> Any:
-    if hasattr(instance, "build") and callable(getattr(instance, "build")):
+    if hasattr(instance, "build") and callable(instance.build):
         return instance
     if isinstance(instance, Sequence) and not isinstance(instance, (str, bytes, bytearray)):
         return DeferredCommand(tuple(str(part) for part in instance))
-    raise CatalogIntegrityError(f"{context}: command strategy did not return a valid command builder")
+    raise CatalogIntegrityError(
+        f"{context}: command strategy did not return a valid command builder",
+    )
 
 
 def _as_plain_json(value: Any) -> Any:
@@ -307,9 +322,9 @@ def _as_plain_json(value: Any) -> Any:
 
 
 __all__ = [
+    "clear_catalog_cache",
     "initialize_registry",
     "register_catalog_tools",
-    "clear_catalog_cache",
 ]
 
 
@@ -319,7 +334,6 @@ def clear_catalog_cache() -> None:
     This helper exists primarily to support test isolation; production callers
     should not need to purge the cache explicitly.
     """
-
     _CATALOG_CACHE.clear()
 
 
@@ -333,8 +347,8 @@ def _load_catalog_from_cache(loader: ToolCatalogLoader) -> _CatalogCacheEntry:
     Returns:
         _CatalogCacheEntry: Cached payload containing the catalog snapshot and
         materialised :class:`Tool` instances.
-    """
 
+    """
     cache_key = _catalog_cache_key(loader.catalog_root, loader.schema_root)
     cached = _CATALOG_CACHE.get(cache_key)
     if cached is not None:
@@ -359,8 +373,8 @@ def _catalog_cache_key(catalog_root: Path, schema_root: Path | None) -> tuple[Pa
 
     Returns:
         tuple[Path, Path]: Tuple combining resolved catalog and schema paths.
-    """
 
+    """
     resolved_catalog = catalog_root.resolve()
     if schema_root is None:
         resolved_schema = (resolved_catalog.parent / "schema").resolve()

@@ -134,9 +134,9 @@
           "base": ["mypy", "--output", "json"],
           "appendFiles": false,
           "options": [
-            {"setting": ["config", "config-file"], "type": "path", "flag": "--config-file"},
-            {"setting": "exclude-gitignore", "type": "flag", "flag": "--exclude-gitignore"},
-            {"setting": "sqlite-cache", "type": "flag", "flag": "--sqlite-cache"},
+            { "setting": ["config", "config-file"], "type": "path", "flag": "--config-file" },
+            { "setting": "exclude-gitignore", "type": "flag", "flag": "--exclude-gitignore" },
+            { "setting": "sqlite-cache", "type": "flag", "flag": "--sqlite-cache" },
             {
               "setting": "strict",
               "type": "flag",
@@ -151,9 +151,9 @@
               "defaultFrom": "strictness.type_checking",
               "transform": "strictness_is_lenient"
             },
-            {"setting": "namespace-packages", "type": "flag", "flag": "--namespace-packages"},
-            {"setting": "warn-unused-configs", "type": "flag", "flag": "--warn-unused-configs"},
-            {"setting": "warn-return-any", "type": "flag", "flag": "--warn-return-any"},
+            { "setting": "namespace-packages", "type": "flag", "flag": "--namespace-packages" },
+            { "setting": "warn-unused-configs", "type": "flag", "flag": "--warn-unused-configs" },
+            { "setting": "warn-return-any", "type": "flag", "flag": "--warn-return-any" },
             {
               "setting": "warn-redundant-casts",
               "type": "flag",
@@ -203,13 +203,22 @@
               "defaultFrom": "strictness.type_checking",
               "transform": "strictness_is_strict"
             },
-            {"setting": "show-error-codes", "type": "flag", "flag": "--show-error-codes"},
-            {"setting": "show-column-numbers", "type": "flag", "flag": "--show-column-numbers"},
-            {"setting": ["python-version", "python_version"], "type": "value", "flag": "--python-version", "defaultFrom": "python.target_version"},
-            {"setting": ["python-executable", "python_executable"], "type": "path", "flag": "--python-executable"},
-            {"setting": "plugins", "type": "args", "flag": "--plugin"},
-            {"setting": ["cache-dir", "cache_dir"], "type": "path", "flag": "--cache-dir"},
-            {"setting": "args", "type": "args"}
+            { "setting": "show-error-codes", "type": "flag", "flag": "--show-error-codes" },
+            { "setting": "show-column-numbers", "type": "flag", "flag": "--show-column-numbers" },
+            {
+              "setting": ["python-version", "python_version"],
+              "type": "value",
+              "flag": "--python-version",
+              "defaultFrom": "python.target_version"
+            },
+            {
+              "setting": ["python-executable", "python_executable"],
+              "type": "path",
+              "flag": "--python-executable"
+            },
+            { "setting": "plugins", "type": "args", "flag": "--plugin" },
+            { "setting": ["cache-dir", "cache_dir"], "type": "path", "flag": "--cache-dir" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },
@@ -222,7 +231,10 @@
     }
   ],
   "suppressions": {
-    "tests": ["^mypy, (?:.+/)?tests?/.*:.*no-untyped-def.*$", "^mypy, (?:.+/)?tests?/.*:.*attr-defined.*$"]
+    "tests": [
+      "^mypy, (?:.+/)?tests?/.*:.*no-untyped-def.*$",
+      "^mypy, (?:.+/)?tests?/.*:.*attr-defined.*$"
+    ]
   },
   "documentation": {
     "help": {

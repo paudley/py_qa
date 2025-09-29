@@ -102,7 +102,7 @@ def test_parse_mypy() -> None:
 def test_parse_actionlint() -> None:
     parser = JsonParser(parse_actionlint)
     stdout = """
-    [{"path": ".github/workflows/ci.yml", "line": 12, "column": 4, "message": "failure", "severity": "error", "kind": "shellcheck"}]
+    [{"filepath": ".github/workflows/ci.yml", "line": 12, "column": 4, "message": "failure", "severity": "error", "kind": "shellcheck"}]
     """
     diags = parser.parse(stdout, "", context=_ctx())
     assert len(diags) == 1
@@ -200,7 +200,7 @@ def test_parser_json_diagnostics_bandit() -> None:
                 },
                 "tool": {"value": "bandit"},
             },
-        }
+        },
     )
     stdout = """
     {"results": [{"filename": "pkg/app.py", "line_number": 5, "issue_text": "risk", "issue_severity": "HIGH", "test_id": "B101"}]}
@@ -439,7 +439,9 @@ def test_parse_tombi() -> None:
 
 def test_parse_perlcritic() -> None:
     parser = TextParser(parse_perlcritic)
-    stdout = "lib/Foo.pm:12:8:ProhibitUnusedVariables: MyVar is never used (ProhibitUnusedVariables)\n"
+    stdout = (
+        "lib/Foo.pm:12:8:ProhibitUnusedVariables: MyVar is never used (ProhibitUnusedVariables)\n"
+    )
     diags = parser.parse(stdout, "", context=_ctx())
     assert len(diags) == 1
     diag = diags[0]
@@ -499,8 +501,8 @@ def test_parser_json_diagnostics() -> None:
                     "map": {"info": "notice", "warning": "warning", "error": "error"},
                     "default": "warning",
                 },
-            }
-        }
+            },
+        },
     )
     stdout = """
     [{"line": 3, "column": 1, "level": "error", "code": "DL3007", "message": "Using latest is prone to errors", "file": "Dockerfile"}]
@@ -530,7 +532,7 @@ def test_parser_json_diagnostics_with_path_and_defaults() -> None:
                 "severity": {"path": "level", "map": {"warning": "warning"}, "default": "notice"},
                 "tool": {"value": "custom"},
             },
-        }
+        },
     )
 
     stdout = """

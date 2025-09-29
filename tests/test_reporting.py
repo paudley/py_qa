@@ -120,7 +120,10 @@ def test_write_pr_summary_with_filter_and_template(tmp_path: Path) -> None:
 def test_write_pr_summary_can_include_advice(tmp_path: Path) -> None:
     module_path = tmp_path / "src" / "pkg" / "module.py"
     module_path.parent.mkdir(parents=True, exist_ok=True)
-    module_path.write_text("""def build_widget(foo, bar):\n    return foo + bar\n""", encoding="utf-8")
+    module_path.write_text(
+        """def build_widget(foo, bar):\n    return foo + bar\n""",
+        encoding="utf-8",
+    )
 
     diagnostics = [
         _advice_diag(
@@ -171,7 +174,10 @@ def test_write_pr_summary_can_include_advice(tmp_path: Path) -> None:
 def test_write_pr_summary_allows_advice_template_override(tmp_path: Path) -> None:
     module_path = tmp_path / "src" / "pkg" / "module.py"
     module_path.parent.mkdir(parents=True, exist_ok=True)
-    module_path.write_text("""def build_widget(foo, bar):\n    return foo + bar\n""", encoding="utf-8")
+    module_path.write_text(
+        """def build_widget(foo, bar):\n    return foo + bar\n""",
+        encoding="utf-8",
+    )
 
     diagnostics = [
         _advice_diag(
@@ -351,7 +357,10 @@ def test_write_pr_summary_supports_custom_advice_builder(tmp_path: Path) -> None
 def test_write_pr_summary_custom_builder_respects_severity(tmp_path: Path) -> None:
     module_path = tmp_path / "src" / "pkg" / "module.py"
     module_path.parent.mkdir(parents=True, exist_ok=True)
-    module_path.write_text("def build(foo, bar, baz):\n    return foo + bar + baz\n", encoding="utf-8")
+    module_path.write_text(
+        "def build(foo, bar, baz):\n    return foo + bar + baz\n",
+        encoding="utf-8",
+    )
 
     diagnostics = [
         _advice_diag(
@@ -556,7 +565,9 @@ def test_render_concise_shows_diagnostics_for_failures(tmp_path: Path, capsys) -
         "ruff, src/app.py:10, F401, bad things",
         "ruff, src/app.py:20, W000, meh",
     ]
-    assert output_lines[-1] == ("Failed — 2 diagnostic(s) across 1 file(s); 1 failing action(s) out of 1")
+    assert output_lines[-1] == (
+        "Failed — 2 diagnostic(s) across 1 file(s); 1 failing action(s) out of 1"
+    )
 
 
 def test_render_concise_omits_stats_when_disabled(tmp_path: Path, capsys) -> None:
@@ -570,7 +581,9 @@ def test_render_concise_omits_stats_when_disabled(tmp_path: Path, capsys) -> Non
         "ruff, src/app.py:10, F401, bad things",
         "ruff, src/app.py:20, W000, meh",
     ]
-    assert output_lines[-1] == ("Failed — 2 diagnostic(s) across 1 file(s); 1 failing action(s) out of 1")
+    assert output_lines[-1] == (
+        "Failed — 2 diagnostic(s) across 1 file(s); 1 failing action(s) out of 1"
+    )
 
 
 def test_render_concise_fallbacks_to_stderr(tmp_path: Path, capsys) -> None:
@@ -592,10 +605,14 @@ def test_render_concise_fallbacks_to_stderr(tmp_path: Path, capsys) -> None:
     render(result, config)
     output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
     panel_lines = [
-        line for line in output_lines if line.startswith("╭") or line.startswith("│") or line.startswith("╰")
+        line
+        for line in output_lines
+        if line.startswith("╭") or line.startswith("│") or line.startswith("╰")
     ]
     assert panel_lines
-    assert output_lines[-1] == ("Failed — 0 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1")
+    assert output_lines[-1] == (
+        "Failed — 0 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1"
+    )
 
 
 def test_render_concise_trims_code_prefix(tmp_path: Path, capsys) -> None:
@@ -817,7 +834,9 @@ def test_render_concise_sorted_and_deduped(tmp_path: Path, capsys) -> None:
         "bandit, a.py:5, B001, warn a",
         "ruff, b.py:2:resolve_b, F001, issue b",
     ]
-    assert output_lines[-1] == ("Failed — 3 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1")
+    assert output_lines[-1] == (
+        "Failed — 3 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1"
+    )
 
 
 def test_render_concise_normalizes_paths(tmp_path: Path, capsys) -> None:
@@ -857,8 +876,12 @@ def test_render_concise_normalizes_paths(tmp_path: Path, capsys) -> None:
         -1,
     )
     assert panel_start != -1
-    assert output_lines[0] == ("mypy, src/pkg/module.py:7:resolve_value, attr-defined, absolute issue")
-    assert output_lines[-1] == ("Failed — 1 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1")
+    assert output_lines[0] == (
+        "mypy, src/pkg/module.py:7:resolve_value, attr-defined, absolute issue"
+    )
+    assert output_lines[-1] == (
+        "Failed — 1 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1"
+    )
 
 
 def test_render_concise_sanitizes_function_field(tmp_path: Path, capsys) -> None:
@@ -899,8 +922,12 @@ def test_render_concise_sanitizes_function_field(tmp_path: Path, capsys) -> None
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
     output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
-    assert output_lines[0] == ("pyright, pkg/mod.py:4, reportGeneralTypeIssues, multiline function noise")
-    assert output_lines[1] == ("pyright, pkg/mod.py:9:Module.resolve, reportUndefinedVariable, legit")
+    assert output_lines[0] == (
+        "pyright, pkg/mod.py:4, reportGeneralTypeIssues, multiline function noise"
+    )
+    assert output_lines[1] == (
+        "pyright, pkg/mod.py:9:Module.resolve, reportUndefinedVariable, legit"
+    )
 
 
 def test_render_concise_merges_argument_annotations(tmp_path: Path, capsys) -> None:
@@ -1109,7 +1136,9 @@ def test_render_advice_summarises_annotations_and_magic(tmp_path: Path, capsys) 
     config = OutputConfig(color=False, emoji=False, advice=True, show_stats=False)
     render(result, config)
     output = capsys.readouterr().out
-    type_lines = [line for line in output.splitlines() if "Types: introduce explicit annotations" in line]
+    type_lines = [
+        line for line in output.splitlines() if "Types: introduce explicit annotations" in line
+    ]
     assert len(type_lines) == 1
     builder = AdviceBuilder()
     advice_entries = generate_advice(

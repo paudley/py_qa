@@ -11,4 +11,4 @@ class CatalogIntegrityError(RuntimeError):
     """Raised when a catalog document passes schema validation but fails semantic checks."""
 
 
-__all__ = ["CatalogValidationError", "CatalogIntegrityError"]
+__all__ = ["CatalogIntegrityError", "CatalogValidationError"]

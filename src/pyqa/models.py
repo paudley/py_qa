@@ -9,7 +9,7 @@ from pathlib import Path
 from re import Pattern
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 from .metrics import FileMetrics
 from .severity import Severity
@@ -34,7 +34,9 @@ class OutputFilter(BaseModel):
         if not text or not self._compiled:
             return text
         return "\n".join(
-            line for line in text.splitlines() if not any(pattern.search(line) for pattern in self._compiled)
+            line
+            for line in text.splitlines()
+            if not any(pattern.search(line) for pattern in self._compiled)
         )
 
 
@@ -81,9 +83,22 @@ class ToolOutcome(BaseModel):
     tool: str
     action: str
     returncode: int
-    stdout: str
-    stderr: str
+    stdout: list[str] = Field(default_factory=list)
+    stderr: list[str] = Field(default_factory=list)
     diagnostics: list[Diagnostic] = Field(default_factory=list)
+
+    @field_validator("stdout", "stderr", mode="before")
+    @classmethod
+    def _coerce_output(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [str(item) for item in value]
+        if isinstance(value, tuple):
+            return [str(item) for item in value]
+        if isinstance(value, str):
+            return value.splitlines()
+        return [str(value)]
 
     def is_ok(self) -> bool:
         """Return ``True`` when the tool exited successfully."""

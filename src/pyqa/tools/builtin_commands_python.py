@@ -51,7 +51,6 @@ _OPTIONAL_PYLINT_PLUGINS: dict[str, str] = {
 
 def _python_target_version(ctx: ToolContext) -> str:
     """Return the configured Python version or fall back to the interpreter."""
-
     version = getattr(ctx.cfg.execution, "python_version", None)
     if version:
         return str(version)
@@ -61,7 +60,6 @@ def _python_target_version(ctx: ToolContext) -> str:
 
 def _python_version_components(version: str) -> tuple[int, int]:
     """Extract major/minor components from a Python version string."""
-
     match = re.search(r"(\d{1,2})(?:[._-]?(\d{1,2}))?", version)
     if not match:
         return sys.version_info.major, sys.version_info.minor
@@ -72,21 +70,18 @@ def _python_version_components(version: str) -> tuple[int, int]:
 
 def _python_version_tag(version: str) -> str:
     """Convert *version* into ruff/black style ``pyXY`` tag."""
-
     major, minor = _python_version_components(version)
     return f"py{major}{minor}"
 
 
 def _python_version_number(version: str) -> str:
     """Convert *version* into isort style ``XY`` number without separator."""
-
     major, minor = _python_version_components(version)
     return f"{major}{minor}"
 
 
 def _pyupgrade_flag_from_version(version: str) -> str:
     """Map a Python version specifier to pyupgrade's ``--pyXY-plus`` flag."""
-
     normalized = version.lower().lstrip("py").rstrip("+")
     if not normalized:
         normalized = f"{sys.version_info.major}.{sys.version_info.minor}"
@@ -103,7 +98,6 @@ def _pyupgrade_flag_from_version(version: str) -> str:
 
 def _discover_pylint_plugins(root: Path) -> tuple[str, ...]:
     """Return default pylint plugins, discovering optional extras when present."""
-
     discovered: set[str] = set()
 
     def _loadable(module: str) -> bool:

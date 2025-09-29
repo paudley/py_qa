@@ -39,8 +39,8 @@ def serialize_outcome(outcome: ToolOutcome) -> dict[str, object]:
         "tool": outcome.tool,
         "action": outcome.action,
         "returncode": outcome.returncode,
-        "stdout": outcome.stdout,
-        "stderr": outcome.stderr,
+        "stdout": list(outcome.stdout),
+        "stderr": list(outcome.stderr),
         "diagnostics": [serialize_diagnostic(diag) for diag in outcome.diagnostics],
     }
 
@@ -67,14 +67,31 @@ def deserialize_outcome(data: Mapping[str, Any]) -> ToolOutcome:
             ),
         )
 
+    stdout_value = data.get("stdout", [])
+    stderr_value = data.get("stderr", [])
+    stdout_list = _coerce_output_sequence(stdout_value)
+    stderr_list = _coerce_output_sequence(stderr_value)
+
     return ToolOutcome(
         tool=str(data.get("tool", "")),
         action=str(data.get("action", "")),
         returncode=safe_int(data.get("returncode")),
-        stdout=str(data.get("stdout", "")),
-        stderr=str(data.get("stderr", "")),
+        stdout=stdout_list,
+        stderr=stderr_list,
         diagnostics=diagnostics,
     )
+
+
+def _coerce_output_sequence(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if isinstance(value, tuple):
+        return [str(item) for item in value]
+    if isinstance(value, str):
+        return value.splitlines()
+    return [str(value)]
 
 
 def safe_int(value: object, default: int = 0) -> int:

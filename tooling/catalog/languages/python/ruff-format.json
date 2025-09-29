@@ -70,15 +70,40 @@
           "base": ["ruff", "format", "--force-exclude"],
           "appendFiles": false,
           "options": [
-            {"setting": "config", "type": "path", "flag": "--config"},
-            {"setting": "line-length", "type": "value", "flag": "--line-length", "defaultFrom": "execution.line_length"},
-            {"setting": "target-version", "type": "args", "flag": "--target-version", "defaultFrom": "python.target_version_tag"},
-            {"setting": "exclude", "type": "args", "flag": "--exclude", "joinWith": ","},
-            {"setting": "extend-exclude", "type": "args", "flag": "--extend-exclude", "joinWith": ","},
-            {"setting": "respect-gitignore", "type": "flag", "flag": "--respect-gitignore", "negateFlag": "--no-respect-gitignore"},
-            {"setting": "preview", "type": "flag", "flag": "--preview", "negateFlag": "--no-preview"},
-            {"setting": "stdin-filename", "type": "value", "flag": "--stdin-filename"},
-            {"setting": "args", "type": "args"}
+            { "setting": "config", "type": "path", "flag": "--config" },
+            {
+              "setting": "line-length",
+              "type": "value",
+              "flag": "--line-length",
+              "defaultFrom": "execution.line_length"
+            },
+            {
+              "setting": "target-version",
+              "type": "args",
+              "flag": "--target-version",
+              "defaultFrom": "python.target_version_tag"
+            },
+            { "setting": "exclude", "type": "args", "flag": "--exclude", "joinWith": "," },
+            {
+              "setting": "extend-exclude",
+              "type": "args",
+              "flag": "--extend-exclude",
+              "joinWith": ","
+            },
+            {
+              "setting": "respect-gitignore",
+              "type": "flag",
+              "flag": "--respect-gitignore",
+              "negateFlag": "--no-respect-gitignore"
+            },
+            {
+              "setting": "preview",
+              "type": "flag",
+              "flag": "--preview",
+              "negateFlag": "--no-preview"
+            },
+            { "setting": "stdin-filename", "type": "value", "flag": "--stdin-filename" },
+            { "setting": "args", "type": "args" }
           ]
         }
       }

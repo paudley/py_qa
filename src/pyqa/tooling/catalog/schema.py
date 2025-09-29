@@ -21,7 +21,6 @@ class SchemaRepository:
     @classmethod
     def load(cls, *, catalog_root: Path, schema_root: Path | None = None) -> SchemaRepository:
         """Load schema validators from disk."""
-
         resolved_root = schema_root or (catalog_root.parent / "schema")
         tool_schema_path = resolved_root / "tool_definition.schema.json"
         strategy_schema_path = resolved_root / "strategy_definition.schema.json"

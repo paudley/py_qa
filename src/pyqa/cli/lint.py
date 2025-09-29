@@ -30,9 +30,9 @@ from ..models import RunResult
 from ..reporting.emitters import write_json_report, write_pr_summary, write_sarif_report
 from ..reporting.formatters import render
 from ..tool_env.models import PreparedCommand
+from ..tooling.catalog.errors import CatalogIntegrityError, CatalogValidationError
 from ..tools.builtin_registry import initialize_registry
 from ..tools.registry import DEFAULT_REGISTRY
-from ..tooling.catalog.errors import CatalogIntegrityError, CatalogValidationError
 from ..workspace import is_py_qa_workspace
 from .config_builder import build_config
 from .doctor import run_doctor
@@ -431,7 +431,11 @@ def lint_command(
             results = orchestrator.fetch_all_tools(config, root=root)
         tool_lookup = {tool.name: tool for tool in DEFAULT_REGISTRY.tools()}
         phase_rank = {
-            name: PHASE_SORT_ORDER.index(tool.phase) if tool.phase in PHASE_SORT_ORDER else len(PHASE_SORT_ORDER)
+            name: (
+                PHASE_SORT_ORDER.index(tool.phase)
+                if tool.phase in PHASE_SORT_ORDER
+                else len(PHASE_SORT_ORDER)
+            )
             for name, tool in tool_lookup.items()
         }
         results.sort(
@@ -482,7 +486,11 @@ def lint_command(
                 )
         raise typer.Exit(code=0)
     progress_enabled = (
-        config.output.output == "concise" and not quiet and not config.output.quiet and config.output.color and is_tty()
+        config.output.output == "concise"
+        and not quiet
+        and not config.output.quiet
+        and config.output.color
+        and is_tty()
     )
 
     extra_phases = 2  # post-processing + rendering
@@ -540,7 +548,11 @@ def lint_command(
             if progress is None or progress_task_id is None:
                 return
             nonlocal progress_completed
-            status = "[green]ok[/]" if outcome.ok and config.output.color else ("ok" if outcome.ok else "issues")
+            status = (
+                "[green]ok[/]"
+                if outcome.ok and config.output.color
+                else ("ok" if outcome.ok else "issues")
+            )
             if not outcome.ok and config.output.color:
                 status = "[red]issues[/]"
             label = f"{outcome.tool}:{outcome.action}"
@@ -612,23 +624,23 @@ def lint_command(
     def _finalise_progress(success: bool) -> Text | None:
         if progress is None or progress_task_id is None:
             return None
-        summary = "Linting complete" if success else "Linting halted"
         status_text = (
             "[green]done[/]"
             if success and config.output.color
-            else ("[red]issues detected[/]" if config.output.color else ("done" if success else "issues detected"))
+            else (
+                "[red]issues detected[/]"
+                if config.output.color
+                else ("done" if success else "issues detected")
+            )
         )
         with progress_lock:
             total = max(progress_total, progress_completed)
             progress.update(
                 progress_task_id,
                 total=total,
-                description=summary,
                 current_status=status_text,
             )
-        if config.output.color:
-            return Text(summary, style="green" if success else "red")
-        return Text(summary)
+        return None
 
     final_summary: Text | None = None
     if progress is not None:

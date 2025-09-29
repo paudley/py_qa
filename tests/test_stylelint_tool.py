@@ -25,7 +25,9 @@ def _stylelint_config(action: str) -> dict[str, object]:
         for candidate in definition.actions:
             if candidate.name == action:
                 return dict(candidate.command.reference.config)
-    raise AssertionError(f"stylelint command configuration for action '{action}' missing from catalog")
+    raise AssertionError(
+        f"stylelint command configuration for action '{action}' missing from catalog",
+    )
 
 
 def _ctx(tmp_path: Path, **settings) -> ToolContext:

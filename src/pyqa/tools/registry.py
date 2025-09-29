@@ -4,8 +4,8 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 import heapq
+from collections import defaultdict
 from collections.abc import Iterable, Iterator, Mapping
 
 from .base import Tool
@@ -42,7 +42,6 @@ class ToolRegistry(Mapping[str, Tool]):
 
     def reset(self) -> None:
         """Remove all tools from the registry."""
-
         self._tools.clear()
         self._by_language.clear()
         self._ordered = ()

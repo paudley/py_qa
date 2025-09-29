@@ -22,14 +22,13 @@ def _write_json(path: Path, payload: JSONValue) -> None:
     Args:
         path: Destination file path.
         payload: JSON-serializable payload to write.
-    """
 
+    """
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def test_loader_reads_tool_and_strategy_catalog(tmp_path: Path, schema_root: Path) -> None:
     """Loader should parse well-formed tool and strategy definitions."""
-
     catalog_root = tmp_path / "catalog"
     strategies_dir = catalog_root / "strategies"
     strategies_dir.mkdir(parents=True)
@@ -46,7 +45,7 @@ def test_loader_reads_tool_and_strategy_catalog(tmp_path: Path, schema_root: Pat
                 "args": {
                     "type": "array",
                     "description": "Command arguments appended during execution.",
-                }
+                },
             },
         },
     )
@@ -62,7 +61,7 @@ def test_loader_reads_tool_and_strategy_catalog(tmp_path: Path, schema_root: Pat
                 "id": {
                     "type": "string",
                     "description": "Optional identifier for testing purposes.",
-                }
+                },
             },
         },
     )
@@ -93,7 +92,7 @@ def test_loader_reads_tool_and_strategy_catalog(tmp_path: Path, schema_root: Pat
                         "strategy": "sample_parser",
                         "config": {"id": "lint"},
                     },
-                }
+                },
             ],
         },
     )
@@ -110,12 +109,14 @@ def test_loader_reads_tool_and_strategy_catalog(tmp_path: Path, schema_root: Pat
     assert suppressions.tests == ("tests/**",)
     assert suppressions.general == (".github/**",)
     assert len(strategy_defs) == 2
-    assert {definition.identifier for definition in strategy_defs} == {"sample_command", "sample_parser"}
+    assert {definition.identifier for definition in strategy_defs} == {
+        "sample_command",
+        "sample_parser",
+    }
 
 
 def test_loader_rejects_mismatched_schema_versions(tmp_path: Path, schema_root: Path) -> None:
     """Loader should raise when encountering unsupported schema versions."""
-
     catalog_root = tmp_path / "catalog"
     catalog_root.mkdir()
     _write_json(
@@ -130,7 +131,7 @@ def test_loader_rejects_mismatched_schema_versions(tmp_path: Path, schema_root: 
                 {
                     "name": "lint",
                     "command": {"strategy": "noop"},
-                }
+                },
             ],
         },
     )
@@ -143,7 +144,6 @@ def test_loader_rejects_mismatched_schema_versions(tmp_path: Path, schema_root: 
 
 def test_loader_validates_strategy_imports(tmp_path: Path, schema_root: Path) -> None:
     """Loader should surface errors for unresolvable strategy implementations."""
-
     catalog_root = tmp_path / "catalog"
     strategies_dir = catalog_root / "strategies"
     strategies_dir.mkdir(parents=True)
@@ -166,7 +166,6 @@ def test_loader_validates_strategy_imports(tmp_path: Path, schema_root: Path) ->
 
 def test_loader_rejects_schema_mismatches(tmp_path: Path, schema_root: Path) -> None:
     """Loader should report validation errors when schema rules are violated."""
-
     catalog_root = tmp_path / "catalog"
     catalog_root.mkdir()
     _write_json(
@@ -188,7 +187,6 @@ def test_loader_rejects_schema_mismatches(tmp_path: Path, schema_root: Path) -> 
 
 def test_loader_merges_fragments(tmp_path: Path, schema_root: Path) -> None:
     """Fragment data should merge into tool definitions with overrides applied."""
-
     catalog_root = tmp_path / "catalog"
     strategies_dir = catalog_root / "strategies"
     strategies_dir.mkdir(parents=True)
@@ -216,7 +214,7 @@ def test_loader_merges_fragments(tmp_path: Path, schema_root: Path) -> None:
                 {
                     "name": "lint",
                     "command": {"strategy": "noop_command"},
-                }
+                },
             ],
         },
     )
@@ -250,7 +248,6 @@ def test_loader_merges_fragments(tmp_path: Path, schema_root: Path) -> None:
 
 def test_loader_errors_on_unknown_fragment(tmp_path: Path, schema_root: Path) -> None:
     """Referencing a missing fragment should raise an integrity error."""
-
     catalog_root = tmp_path / "catalog"
     catalog_root.mkdir()
     _write_json(
@@ -266,7 +263,7 @@ def test_loader_errors_on_unknown_fragment(tmp_path: Path, schema_root: Path) ->
                 {
                     "name": "lint",
                     "command": {"strategy": "noop"},
-                }
+                },
             ],
         },
     )
@@ -279,7 +276,6 @@ def test_loader_errors_on_unknown_fragment(tmp_path: Path, schema_root: Path) ->
 
 def test_loader_generates_checksum_and_fragments(tmp_path: Path, schema_root: Path) -> None:
     """Snapshot loading should include fragments and provide deterministic checksum."""
-
     catalog_root = tmp_path / "catalog"
     strategies_dir = catalog_root / "strategies"
     strategies_dir.mkdir(parents=True)
@@ -312,7 +308,7 @@ def test_loader_generates_checksum_and_fragments(tmp_path: Path, schema_root: Pa
                 {
                     "name": "lint",
                     "command": {"strategy": "noop_command"},
-                }
+                },
             ],
         },
     )
@@ -346,7 +342,6 @@ def test_loader_generates_checksum_and_fragments(tmp_path: Path, schema_root: Pa
 
 def test_loader_validates_entire_catalog(schema_root: Path) -> None:
     """Real catalog should load without validation errors."""
-
     catalog_root = Path(__file__).resolve().parents[1] / "tooling" / "catalog"
     loader = ToolCatalogLoader(catalog_root=catalog_root, schema_root=schema_root)
     snapshot = loader.load_snapshot()

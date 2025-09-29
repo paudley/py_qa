@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import importlib
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, NamedTuple, cast
-from .catalog.types import JSONValue
-from collections.abc import Iterator
 
 from ..models import RawDiagnostic
 from ..parsers.base import JsonParser, TextParser
@@ -27,6 +25,7 @@ from ..tools.builtin_helpers import (
     _settings_list,
     download_tool_artifact,
 )
+from .catalog.types import JSONValue
 from .loader import CatalogIntegrityError
 
 __all__ = [
@@ -42,19 +41,20 @@ __all__ = [
 
 def install_download_artifact(config: Mapping[str, JSONValue]) -> Callable[[ToolContext], None]:
     """Return a catalog-driven installer for download artifacts."""
-
-    plain_config = cast(JSONValue, _as_plain_json(config))
+    plain_config = cast("JSONValue", _as_plain_json(config))
     if not isinstance(plain_config, Mapping):
         raise CatalogIntegrityError("install_download_artifact: configuration must be an object")
 
     download_config = plain_config.get("download")
     if not isinstance(download_config, Mapping):
         raise CatalogIntegrityError("install_download_artifact: 'download' must be an object")
-    download_mapping = cast(Mapping[str, JSONValue], download_config)
+    download_mapping = cast("Mapping[str, JSONValue]", download_config)
 
     version_value = plain_config.get("version")
     if version_value is not None and not isinstance(version_value, str):
-        raise CatalogIntegrityError("install_download_artifact: 'version' must be a string when provided")
+        raise CatalogIntegrityError(
+            "install_download_artifact: 'version' must be a string when provided",
+        )
 
     context_label = plain_config.get("contextLabel")
     if context_label is None:
@@ -62,7 +62,9 @@ def install_download_artifact(config: Mapping[str, JSONValue]) -> Callable[[Tool
     elif isinstance(context_label, str) and context_label.strip():
         context_value = context_label
     else:
-        raise CatalogIntegrityError("install_download_artifact: 'contextLabel' must be a non-empty string")
+        raise CatalogIntegrityError(
+            "install_download_artifact: 'contextLabel' must be a non-empty string",
+        )
 
     def installer(ctx: ToolContext) -> None:
         cache_root = ctx.root / ".lint-cache"
@@ -87,7 +89,9 @@ def _load_attribute(path: str, *, context: str) -> Any:
     try:
         return getattr(module, attribute)
     except AttributeError as exc:
-        raise CatalogIntegrityError(f"{context}: module '{module_path}' has no attribute '{attribute}'") from exc
+        raise CatalogIntegrityError(
+            f"{context}: module '{module_path}' has no attribute '{attribute}'",
+        ) from exc
 
 
 def _require_string_sequence(
@@ -128,7 +132,6 @@ class _OptionMapping:
 
     def apply(self, ctx: ToolContext, command: list[str]) -> None:
         """Append CLI fragments derived from the configured option."""
-
         value = self._resolve_value(ctx)
         if value is None:
             return
@@ -161,7 +164,7 @@ class _OptionMapping:
         if self.option_type == "path":
             values: Sequence[JSONValue]
             if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-                values = cast(Sequence[JSONValue], value)
+                values = cast("Sequence[JSONValue]", value)
             else:
                 values = (value,)
             for entry in values:
@@ -214,7 +217,7 @@ class _OptionMapping:
     def _resolve_value(self, ctx: ToolContext) -> JSONValue | None:
         value: JSONValue | None = None
         for name in self.settings:
-            candidate = cast(JSONValue | None, _setting(ctx.settings, name))
+            candidate = cast("JSONValue | None", _setting(ctx.settings, name))
             if candidate is not None:
                 value = candidate
                 break
@@ -281,7 +284,7 @@ def _resolve_default_reference(token: str, ctx: ToolContext) -> JSONValue | None
         return str(ctx.root)
     if token.startswith("tool_setting."):
         setting_name = token.split(".", 1)[1]
-        return cast(JSONValue | None, _setting(ctx.settings, setting_name))
+        return cast("JSONValue | None", _setting(ctx.settings, setting_name))
     return None
 
 
@@ -313,8 +316,8 @@ def json_parser(config: Mapping[str, Any]) -> JsonParser:
 
     Raises:
         CatalogIntegrityError: If the transform cannot be imported or is not callable.
-    """
 
+    """
     transform_path = _require_str(config, "transform", context="json_parser")
     transform = _load_attribute(transform_path, context="json_parser.transform")
     if not callable(transform):
@@ -333,8 +336,8 @@ def text_parser(config: Mapping[str, Any]) -> TextParser:
 
     Raises:
         CatalogIntegrityError: If the transform cannot be imported or is not callable.
-    """
 
+    """
     transform_path = _require_str(config, "transform", context="text_parser")
     transform = _load_attribute(transform_path, context="text_parser.transform")
     if not callable(transform):
@@ -364,8 +367,8 @@ def parser_json_diagnostics(config: Mapping[str, Any]) -> JsonParser:
     Raises:
         CatalogIntegrityError: If the configuration does not match the expected
             structure.
-    """
 
+    """
     plain_config = _as_plain_json(config)
     if not isinstance(plain_config, Mapping):
         raise CatalogIntegrityError("parser_json_diagnostics: configuration must be an object")
@@ -382,9 +385,13 @@ def parser_json_diagnostics(config: Mapping[str, Any]) -> JsonParser:
         if normalized_input_format in {"jsonlines", "ndjson"}:
             normalized_input_format = "json-lines"
         if normalized_input_format not in {"json", "json-lines"}:
-            raise CatalogIntegrityError("parser_json_diagnostics: 'inputFormat' must be one of 'json' or 'json-lines'")
+            raise CatalogIntegrityError(
+                "parser_json_diagnostics: 'inputFormat' must be one of 'json' or 'json-lines'",
+            )
     else:
-        raise CatalogIntegrityError("parser_json_diagnostics: 'inputFormat' must be a string when provided")
+        raise CatalogIntegrityError(
+            "parser_json_diagnostics: 'inputFormat' must be a string when provided",
+        )
 
     mappings = plain_config.get("mappings")
     if not isinstance(mappings, Mapping):
@@ -419,7 +426,6 @@ class _FieldSpec:
 
     def resolve(self, entry: Mapping[str, Any]) -> Any | None:
         """Return the resolved field value for *entry* applying defaults/maps."""
-
         if self.has_value:
             return self.value
         value = _extract_path(entry, self.path) if self.path is not None else None
@@ -437,7 +443,6 @@ class _FieldSpec:
 
     def _apply_remap(self, value: Any) -> Any | None:
         """Return remapped value when a mapping entry matches ``value``."""
-
         if isinstance(value, str):
             key = value.casefold()
             return self.remap.get(key, self.remap.get(value))
@@ -456,13 +461,14 @@ class _JsonDiagnosticExtractor:
 
     def __post_init__(self) -> None:
         """Normalise configuration into efficient lookup structures."""
-
         self._field_specs = self._build_field_specs(self.mapping_config)
         mandatory_fields = {"message"}
         missing = mandatory_fields - self._field_specs.keys()
         if missing:
             names = ", ".join(sorted(missing))
-            raise CatalogIntegrityError(f"parser_json_diagnostics: missing required field mapping(s): {names}")
+            raise CatalogIntegrityError(
+                f"parser_json_diagnostics: missing required field mapping(s): {names}",
+            )
 
     def transform(self, payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
         """Convert JSON payload into ``RawDiagnostic`` entries.
@@ -473,8 +479,8 @@ class _JsonDiagnosticExtractor:
 
         Returns:
             Sequence[RawDiagnostic]: Diagnostics extracted from the payload.
-        """
 
+        """
         del context
         items = list(self._iterate_items(payload))
         diagnostics: list[RawDiagnostic] = []
@@ -488,7 +494,6 @@ class _JsonDiagnosticExtractor:
 
     def _iterate_items(self, payload: Any) -> Iterator[Any]:
         """Yield items addressed by ``item_path`` from *payload*."""
-
         if self.item_path is None or not self.item_path.strip():
             if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)):
                 yield from payload
@@ -506,7 +511,6 @@ class _JsonDiagnosticExtractor:
 
     def _build_diagnostic(self, entry: Mapping[str, Any]) -> RawDiagnostic | None:
         """Return a ``RawDiagnostic`` constructed from *entry*."""
-
         values: dict[str, Any] = {}
         for name, spec in self._field_specs.items():
             values[name] = spec.resolve(entry)
@@ -530,7 +534,6 @@ class _JsonDiagnosticExtractor:
 
     def _build_field_specs(self, config: Mapping[str, Any]) -> Mapping[str, _FieldSpec]:
         """Normalize mapping configuration into ``_FieldSpec`` instances."""
-
         allowed_fields = {
             "file",
             "line",
@@ -545,13 +548,14 @@ class _JsonDiagnosticExtractor:
         specs: dict[str, _FieldSpec] = {}
         for field_name, raw_spec in config.items():
             if field_name not in allowed_fields:
-                raise CatalogIntegrityError(f"parser_json_diagnostics: unsupported field '{field_name}' in mappings")
+                raise CatalogIntegrityError(
+                    f"parser_json_diagnostics: unsupported field '{field_name}' in mappings",
+                )
             specs[field_name] = self._build_field_spec(field_name, raw_spec)
         return specs
 
     def _build_field_spec(self, name: str, raw_spec: Any) -> _FieldSpec:
         """Create a field specification for a single diagnostic attribute."""
-
         if isinstance(raw_spec, str):
             path_tokens = _tokenize_path(raw_spec, allow_wildcards=False)
             return _FieldSpec(
@@ -566,7 +570,7 @@ class _JsonDiagnosticExtractor:
 
         if not isinstance(raw_spec, Mapping):
             raise CatalogIntegrityError(
-                f"parser_json_diagnostics: mapping for field '{name}' must be a string or object"
+                f"parser_json_diagnostics: mapping for field '{name}' must be a string or object",
             )
 
         path_value = raw_spec.get("path")
@@ -576,7 +580,7 @@ class _JsonDiagnosticExtractor:
             path_tokens = _tokenize_path(path_value, allow_wildcards=False)
         else:
             raise CatalogIntegrityError(
-                f"parser_json_diagnostics: field '{name}' has non-string 'path' configuration"
+                f"parser_json_diagnostics: field '{name}' has non-string 'path' configuration",
             )
 
         const_value = raw_spec.get("value")
@@ -590,12 +594,12 @@ class _JsonDiagnosticExtractor:
         if map_value is not None:
             if not isinstance(map_value, Mapping):
                 raise CatalogIntegrityError(
-                    f"parser_json_diagnostics: field '{name}' has non-object 'map' configuration"
+                    f"parser_json_diagnostics: field '{name}' has non-object 'map' configuration",
                 )
             for key, mapped_value in map_value.items():
                 if not isinstance(key, str):
                     raise CatalogIntegrityError(
-                        f"parser_json_diagnostics: field '{name}' mapping keys must be strings"
+                        f"parser_json_diagnostics: field '{name}' mapping keys must be strings",
                     )
                 remap[key.casefold()] = mapped_value
                 remap[key] = mapped_value
@@ -642,14 +646,17 @@ def command_option_map(config: Mapping[str, Any]) -> CommandBuilder:
     Raises:
         CatalogIntegrityError: If required configuration fields are missing or
             invalid.
-    """
 
+    """
     base_args = _require_string_sequence(config, "base", context="command_option_map")
     append_files = bool(config.get("appendFiles", True))
     options_config = config.get("options", ())
     mappings: list[_OptionMapping] = []
     if options_config is not None:
-        if not isinstance(options_config, Sequence) or isinstance(options_config, (str, bytes, bytearray)):
+        if not isinstance(options_config, Sequence) or isinstance(
+            options_config,
+            (str, bytes, bytearray),
+        ):
             raise CatalogIntegrityError("command_option_map: 'options' must be an array of objects")
         for index, entry in enumerate(options_config):
             context = f"command_option_map.options[{index}]"
@@ -667,8 +674,12 @@ def _parse_option_mapping(entry: Mapping[str, Any], *, context: str) -> _OptionM
     setting_value = entry.get("setting")
     if isinstance(setting_value, str):
         names = (setting_value,)
-    elif isinstance(setting_value, Sequence) and not isinstance(setting_value, (str, bytes, bytearray)):
-        names = tuple(str(name) for name in setting_value if name is not None)
+    elif isinstance(setting_value, Sequence) and not isinstance(
+        setting_value,
+        (str, bytes, bytearray),
+    ):
+        collected_names = [str(name) for name in setting_value if name is not None]
+        names = tuple(collected_names)
     else:
         raise CatalogIntegrityError(f"{context}: 'setting' must be a string or array of strings")
     if not names:
@@ -717,7 +728,9 @@ def _parse_option_mapping(entry: Mapping[str, Any], *, context: str) -> _OptionM
     ):
         literal_values = tuple(str(item) for item in literal_values_value if item is not None)
     else:
-        raise CatalogIntegrityError(f"{context}: 'literalValues' must be a string or array of strings")
+        raise CatalogIntegrityError(
+            f"{context}: 'literalValues' must be a string or array of strings",
+        )
 
     default_value = entry.get("default")
     default_from_value = entry.get("defaultFrom")
@@ -735,7 +748,7 @@ def _parse_option_mapping(entry: Mapping[str, Any], *, context: str) -> _OptionM
         join_separator=join_separator,
         negate_flag=negate_flag,
         literal_values=literal_values,
-        default=cast(JSONValue | None, default_value),
+        default=cast("JSONValue | None", default_value),
         default_from=default_from_value,
         transform=transform_value,
     )
@@ -743,7 +756,6 @@ def _parse_option_mapping(entry: Mapping[str, Any], *, context: str) -> _OptionM
 
 def _coerce_int(value: Any | None) -> int | None:
     """Return an ``int`` when *value* can be losslessly coerced."""
-
     if value is None:
         return None
     if isinstance(value, bool):
@@ -758,7 +770,6 @@ def _coerce_int(value: Any | None) -> int | None:
 
 def _coerce_str(value: Any | None) -> str | None:
     """Return a ``str`` representation of *value* when not ``None``."""
-
     if value is None:
         return None
     if isinstance(value, str):
@@ -768,7 +779,6 @@ def _coerce_str(value: Any | None) -> str | None:
 
 def _coerce_severity(value: Any | None) -> str | None:
     """Return severity coerced to a ``str`` where applicable."""
-
     if value is None:
         return None
     if isinstance(value, str):
@@ -778,7 +788,6 @@ def _coerce_severity(value: Any | None) -> str | None:
 
 def _descend(nodes: Iterable[Any], token: _PathComponent) -> Iterator[Any]:
     """Yield nodes after applying a path ``token`` to *nodes*."""
-
     if token.kind == "key":
         key = token.value
         for node in nodes:
@@ -799,7 +808,6 @@ def _descend(nodes: Iterable[Any], token: _PathComponent) -> Iterator[Any]:
 
 def _extract_path(entry: Mapping[str, Any], path: tuple[_PathComponent, ...] | None) -> Any | None:
     """Resolve *path* against *entry* returning the final value."""
-
     if not path:
         return entry
     current: Any = entry
@@ -825,7 +833,6 @@ def _extract_path(entry: Mapping[str, Any], path: tuple[_PathComponent, ...] | N
 
 def _tokenize_path(path: str, *, allow_wildcards: bool) -> tuple[_PathComponent, ...]:
     """Tokenise dotted/array path expressions into components."""
-
     trimmed = path.strip()
     if not trimmed:
         return ()
@@ -844,12 +851,14 @@ def _tokenize_path(path: str, *, allow_wildcards: bool) -> tuple[_PathComponent,
             _flush_buffer_as_key(buffer, tokens)
             closing = trimmed.find("]", index)
             if closing == -1:
-                raise CatalogIntegrityError(f"parser_json_diagnostics: unmatched '[' in path '{path}'")
+                raise CatalogIntegrityError(
+                    f"parser_json_diagnostics: unmatched '[' in path '{path}'",
+                )
             segment = trimmed[index + 1 : closing].strip()
             if segment in {"", "*"}:
                 if not allow_wildcards:
                     raise CatalogIntegrityError(
-                        f"parser_json_diagnostics: wildcards are not permitted in field paths ('{path}')"
+                        f"parser_json_diagnostics: wildcards are not permitted in field paths ('{path}')",
                     )
                 tokens.append(_PathComponent("wildcard", None))
             else:
@@ -876,7 +885,6 @@ def _tokenize_path(path: str, *, allow_wildcards: bool) -> tuple[_PathComponent,
 
 def _flush_buffer_as_key(buffer: list[str], tokens: list[_PathComponent]) -> None:
     """Append buffered characters as a key token when non-empty."""
-
     if not buffer:
         return
     key = "".join(buffer).strip()
@@ -908,8 +916,8 @@ class _CommandOption:
         Args:
             ctx: Tool execution context containing user settings.
             command: Mutable command list to augment with option-derived values.
-        """
 
+        """
         raw_value = _setting(ctx.settings, self.primary, *self.aliases)
         if raw_value is None and self.default is not None:
             raw_value = self.default
@@ -995,7 +1003,6 @@ class _TargetSelector:
 
     def select(self, ctx: ToolContext, *, excluded: set[Path]) -> list[str]:
         """Return target arguments resolved from the tool context."""
-
         matched: list[Path] = []
         for path in ctx.files:
             if not isinstance(path, Path):
@@ -1042,8 +1049,8 @@ class _DownloadBinaryStrategy(CommandBuilder):
 
         Returns:
             Sequence[str]: Fully rendered command arguments.
-        """
 
+        """
         cache_root = ctx.root / ".lint-cache"
         binary = _download_artifact_for_tool(
             self.download,
@@ -1074,8 +1081,8 @@ def command_download_binary(config: Mapping[str, Any]) -> CommandBuilder:
     Raises:
         CatalogIntegrityError: If the configuration is missing required fields or
             contains invalid values.
-    """
 
+    """
     plain_config = _as_plain_json(config)
     if not isinstance(plain_config, Mapping):
         raise CatalogIntegrityError("command_download_binary: configuration must be an object")
@@ -1086,7 +1093,9 @@ def command_download_binary(config: Mapping[str, Any]) -> CommandBuilder:
 
     version_value = plain_config.get("version")
     if version_value is not None and not isinstance(version_value, str):
-        raise CatalogIntegrityError("command_download_binary: 'version' must be a string when provided")
+        raise CatalogIntegrityError(
+            "command_download_binary: 'version' must be a string when provided",
+        )
 
     placeholder_value = plain_config.get("binaryPlaceholder")
     if placeholder_value is None:
@@ -1094,7 +1103,9 @@ def command_download_binary(config: Mapping[str, Any]) -> CommandBuilder:
     elif isinstance(placeholder_value, str) and placeholder_value.strip():
         placeholder = placeholder_value
     else:
-        raise CatalogIntegrityError("command_download_binary: 'binaryPlaceholder' must be a non-empty string")
+        raise CatalogIntegrityError(
+            "command_download_binary: 'binaryPlaceholder' must be a non-empty string",
+        )
 
     base_config = plain_config.get("base")
     if base_config is None:
@@ -1110,15 +1121,23 @@ def command_download_binary(config: Mapping[str, Any]) -> CommandBuilder:
     options_config = plain_config.get("options")
     option_specs: list[_CommandOption] = []
     if options_config is not None:
-        if not isinstance(options_config, Sequence) or isinstance(options_config, (str, bytes, bytearray)):
-            raise CatalogIntegrityError("command_download_binary: 'options' must be an array of objects")
+        if not isinstance(options_config, Sequence) or isinstance(
+            options_config,
+            (str, bytes, bytearray),
+        ):
+            raise CatalogIntegrityError(
+                "command_download_binary: 'options' must be an array of objects",
+            )
         for index, entry in enumerate(options_config):
             option_specs.append(_parse_command_option(entry, index=index))
 
     target_selector_config = plain_config.get("targets")
     target_selector = None
     if target_selector_config is not None:
-        target_selector = _parse_target_selector(target_selector_config, context="command_download_binary.targets")
+        target_selector = _parse_target_selector(
+            target_selector_config,
+            context="command_download_binary.targets",
+        )
 
     return _DownloadBinaryStrategy(
         version=version_value,
@@ -1142,8 +1161,8 @@ def _parse_command_option(entry: Any, *, index: int) -> _CommandOption:
 
     Raises:
         CatalogIntegrityError: If the option definition is malformed.
-    """
 
+    """
     context = f"command_download_binary.options[{index}]"
     if not isinstance(entry, Mapping):
         raise CatalogIntegrityError(f"{context}: option must be an object")
@@ -1151,7 +1170,10 @@ def _parse_command_option(entry: Any, *, index: int) -> _CommandOption:
     setting_value = entry.get("setting")
     if isinstance(setting_value, str):
         names = (setting_value,)
-    elif isinstance(setting_value, Sequence) and not isinstance(setting_value, (str, bytes, bytearray)):
+    elif isinstance(setting_value, Sequence) and not isinstance(
+        setting_value,
+        (str, bytes, bytearray),
+    ):
         names = tuple(str(name) for name in setting_value if name is not None)
     else:
         raise CatalogIntegrityError(f"{context}: 'setting' must be a string or array of strings")
@@ -1195,10 +1217,16 @@ def _parse_command_option(entry: Any, *, index: int) -> _CommandOption:
     literal_values_value = entry.get("literalValues", ())
     if isinstance(literal_values_value, str):
         literal_values = (literal_values_value,)
-    elif isinstance(literal_values_value, Sequence) and not isinstance(literal_values_value, (str, bytes, bytearray)):
-        literal_values = tuple(str(item) for item in literal_values_value if item is not None)
+    elif isinstance(literal_values_value, Sequence) and not isinstance(
+        literal_values_value,
+        (str, bytes, bytearray),
+    ):
+        literal_values_list = [str(item) for item in literal_values_value if item is not None]
+        literal_values = tuple(literal_values_list)
     else:
-        raise CatalogIntegrityError(f"{context}: 'literalValues' must be a string or array of strings")
+        raise CatalogIntegrityError(
+            f"{context}: 'literalValues' must be a string or array of strings",
+        )
 
     default_value = entry.get("default")
     default_from_value = entry.get("defaultFrom")
@@ -1212,7 +1240,7 @@ def _parse_command_option(entry: Any, *, index: int) -> _CommandOption:
     return _CommandOption(
         primary=names[0],
         aliases=tuple(names[1:]),
-        kind=cast(Literal["value", "path", "args", "flag", "repeatFlag"], normalized_type),
+        kind=cast("Literal['value', 'path', 'args', 'flag', 'repeatFlag']", normalized_type),
         flag=flag_value,
         join_separator=join_separator,
         negate_flag=negate_flag,
@@ -1236,16 +1264,24 @@ def _parse_target_selector(entry: Any, *, context: str) -> _TargetSelector:
     suffixes_value = entry.get("suffixes", ())
     if isinstance(suffixes_value, str):
         suffixes = (suffixes_value,)
-    elif isinstance(suffixes_value, Sequence) and not isinstance(suffixes_value, (str, bytes, bytearray)):
-        suffixes = tuple(str(item) for item in suffixes_value if item is not None)
+    elif isinstance(suffixes_value, Sequence) and not isinstance(
+        suffixes_value,
+        (str, bytes, bytearray),
+    ):
+        suffixes_list = [str(item) for item in suffixes_value if item is not None]
+        suffixes = tuple(suffixes_list)
     else:
         raise CatalogIntegrityError(f"{context}: 'suffixes' must be a string or array of strings")
 
     contains_value = entry.get("contains", ())
     if isinstance(contains_value, str):
         contains = (contains_value,)
-    elif isinstance(contains_value, Sequence) and not isinstance(contains_value, (str, bytes, bytearray)):
-        contains = tuple(str(item) for item in contains_value if item is not None)
+    elif isinstance(contains_value, Sequence) and not isinstance(
+        contains_value,
+        (str, bytes, bytearray),
+    ):
+        contains_list = [str(item) for item in contains_value if item is not None]
+        contains = tuple(contains_list)
     else:
         raise CatalogIntegrityError(f"{context}: 'contains' must be a string or array of strings")
 
@@ -1255,7 +1291,9 @@ def _parse_target_selector(entry: Any, *, context: str) -> _TargetSelector:
     elif isinstance(fallback_value, str) and fallback_value.strip():
         fallback_directory = fallback_value
     else:
-        raise CatalogIntegrityError(f"{context}: 'fallbackDirectory' must be a non-empty string if provided")
+        raise CatalogIntegrityError(
+            f"{context}: 'fallbackDirectory' must be a non-empty string if provided",
+        )
 
     default_to_root_value = entry.get("defaultToRoot", False)
     if isinstance(default_to_root_value, bool):
@@ -1359,7 +1397,9 @@ class _ProjectScannerStrategy(CommandBuilder):
         if self.exclude_flag and excluded_paths:
             exclude_args = _compile_exclude_arguments(excluded_paths, root)
             if exclude_args:
-                command.extend([self.exclude_flag, self.exclude_separator.join(sorted(exclude_args))])
+                command.extend(
+                    [self.exclude_flag, self.exclude_separator.join(sorted(exclude_args))],
+                )
 
         for option in self.options:
             option.apply(ctx=ctx, command=command)
@@ -1376,7 +1416,6 @@ class _ProjectScannerStrategy(CommandBuilder):
 
 def command_project_scanner(config: Mapping[str, Any]) -> CommandBuilder:
     """Return a project-aware scanner command builder driven by catalog data."""
-
     plain_config = _as_plain_json(config)
     if not isinstance(plain_config, Mapping):
         raise CatalogIntegrityError("command_project_scanner: configuration must be an object")
@@ -1386,28 +1425,40 @@ def command_project_scanner(config: Mapping[str, Any]) -> CommandBuilder:
         raise CatalogIntegrityError("command_project_scanner: 'base' must be an array of arguments")
     base_args = tuple(str(part) for part in base_config)
     if not base_args:
-        raise CatalogIntegrityError("command_project_scanner: 'base' must contain at least one argument")
+        raise CatalogIntegrityError(
+            "command_project_scanner: 'base' must contain at least one argument",
+        )
 
     options_config = plain_config.get("options")
     option_specs: list[_CommandOption] = []
     if options_config is not None:
-        if not isinstance(options_config, Sequence) or isinstance(options_config, (str, bytes, bytearray)):
-            raise CatalogIntegrityError("command_project_scanner: 'options' must be an array of objects")
+        if not isinstance(options_config, Sequence) or isinstance(
+            options_config,
+            (str, bytes, bytearray),
+        ):
+            raise CatalogIntegrityError(
+                "command_project_scanner: 'options' must be an array of objects",
+            )
         for index, entry in enumerate(options_config):
             option_specs.append(_parse_command_option(entry, index=index))
 
     exclude_config = plain_config.get("exclude", {})
     if not isinstance(exclude_config, Mapping):
-        raise CatalogIntegrityError("command_project_scanner: 'exclude' must be an object when provided")
+        raise CatalogIntegrityError(
+            "command_project_scanner: 'exclude' must be an object when provided",
+        )
     exclude_settings_value = exclude_config.get("settings", ())
     if isinstance(exclude_settings_value, str):
         exclude_settings = (exclude_settings_value,)
     elif isinstance(exclude_settings_value, Sequence) and not isinstance(
-        exclude_settings_value, (str, bytes, bytearray)
+        exclude_settings_value,
+        (str, bytes, bytearray),
     ):
         exclude_settings = tuple(str(item) for item in exclude_settings_value if item is not None)
     else:
-        raise CatalogIntegrityError("command_project_scanner: exclude.settings must be string or array of strings")
+        raise CatalogIntegrityError(
+            "command_project_scanner: exclude.settings must be string or array of strings",
+        )
 
     include_discovery_excludes = bool(exclude_config.get("includeDiscovery", False))
     exclude_flag_value = exclude_config.get("flag")
@@ -1416,11 +1467,15 @@ def command_project_scanner(config: Mapping[str, Any]) -> CommandBuilder:
     elif isinstance(exclude_flag_value, str):
         exclude_flag = exclude_flag_value
     else:
-        raise CatalogIntegrityError("command_project_scanner: exclude.flag must be a string when provided")
+        raise CatalogIntegrityError(
+            "command_project_scanner: exclude.flag must be a string when provided",
+        )
 
     separator_value = exclude_config.get("separator", ",")
     if not isinstance(separator_value, str) or not separator_value:
-        raise CatalogIntegrityError("command_project_scanner: exclude.separator must be a non-empty string")
+        raise CatalogIntegrityError(
+            "command_project_scanner: exclude.separator must be a non-empty string",
+        )
 
     targets_config = plain_config.get("targets")
     target_plan = None
@@ -1445,10 +1500,15 @@ def _parse_project_target_plan(entry: Any) -> _ProjectTargetPlan:
     settings_value = entry.get("settings", ())
     if isinstance(settings_value, str):
         settings = (settings_value,)
-    elif isinstance(settings_value, Sequence) and not isinstance(settings_value, (str, bytes, bytearray)):
+    elif isinstance(settings_value, Sequence) and not isinstance(
+        settings_value,
+        (str, bytes, bytearray),
+    ):
         settings = tuple(str(item) for item in settings_value if item is not None)
     else:
-        raise CatalogIntegrityError("command_project_scanner.targets.settings must be string or array of strings")
+        raise CatalogIntegrityError(
+            "command_project_scanner.targets.settings must be string or array of strings",
+        )
 
     include_roots = bool(entry.get("includeDiscoveryRoots", False))
     include_explicit = bool(entry.get("includeDiscoveryExplicit", False))
@@ -1456,10 +1516,15 @@ def _parse_project_target_plan(entry: Any) -> _ProjectTargetPlan:
     fallback_value = entry.get("fallback", ())
     if isinstance(fallback_value, str):
         fallback_paths = (fallback_value,)
-    elif isinstance(fallback_value, Sequence) and not isinstance(fallback_value, (str, bytes, bytearray)):
+    elif isinstance(fallback_value, Sequence) and not isinstance(
+        fallback_value,
+        (str, bytes, bytearray),
+    ):
         fallback_paths = tuple(str(item) for item in fallback_value if item is not None)
     else:
-        raise CatalogIntegrityError("command_project_scanner.targets.fallback must be string or array of strings")
+        raise CatalogIntegrityError(
+            "command_project_scanner.targets.fallback must be string or array of strings",
+        )
 
     default_to_root = bool(entry.get("defaultToRoot", False))
     filter_excluded = bool(entry.get("filterExcluded", True))
@@ -1470,7 +1535,9 @@ def _parse_project_target_plan(entry: Any) -> _ProjectTargetPlan:
     elif isinstance(prefix_value, str):
         prefix = prefix_value
     else:
-        raise CatalogIntegrityError("command_project_scanner.targets.prefix must be a string when provided")
+        raise CatalogIntegrityError(
+            "command_project_scanner.targets.prefix must be a string when provided",
+        )
 
     return _ProjectTargetPlan(
         settings=settings,
@@ -1517,7 +1584,12 @@ def _download_artifact_for_tool(
     plain_config = _as_plain_json(download_config)
     if not isinstance(plain_config, Mapping):
         raise CatalogIntegrityError(f"{context}: download configuration must be a mapping")
-    return download_tool_artifact(plain_config, version=version, cache_root=cache_root, context=context)
+    return download_tool_artifact(
+        plain_config,
+        version=version,
+        cache_root=cache_root,
+        context=context,
+    )
 
 
 def _as_plain_json(value: Any) -> Any:

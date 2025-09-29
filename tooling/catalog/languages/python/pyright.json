@@ -74,16 +74,29 @@
         "config": {
           "base": ["pyright", "--outputjson"],
           "options": [
-            {"setting": ["project", "config"], "type": "path", "flag": "--project"},
-            {"setting": ["venv-path", "venv_path"], "type": "path", "flag": "--venv-path"},
-            {"setting": "pythonpath", "type": "path", "flag": "--pythonpath"},
-            {"setting": ["typeshed-path", "typeshed_path"], "type": "path", "flag": "--typeshed-path"},
-            {"setting": "python-platform", "type": "value", "flag": "--pythonplatform"},
-            {"setting": ["python-version", "python_version"], "type": "value", "flag": "--pythonversion", "defaultFrom": "python.target_version"},
-            {"setting": "lib", "type": "flag", "flag": "--lib"},
-            {"setting": "verifytypes", "type": "value", "flag": "--verifytypes"},
-            {"setting": ["ignoreexternal", "ignore-external"], "type": "flag", "flag": "--ignoreexternal"},
-            {"setting": "args", "type": "args"}
+            { "setting": ["project", "config"], "type": "path", "flag": "--project" },
+            { "setting": ["venv-path", "venv_path"], "type": "path", "flag": "--venv-path" },
+            { "setting": "pythonpath", "type": "path", "flag": "--pythonpath" },
+            {
+              "setting": ["typeshed-path", "typeshed_path"],
+              "type": "path",
+              "flag": "--typeshed-path"
+            },
+            { "setting": "python-platform", "type": "value", "flag": "--pythonplatform" },
+            {
+              "setting": ["python-version", "python_version"],
+              "type": "value",
+              "flag": "--pythonversion",
+              "defaultFrom": "python.target_version"
+            },
+            { "setting": "lib", "type": "flag", "flag": "--lib" },
+            { "setting": "verifytypes", "type": "value", "flag": "--verifytypes" },
+            {
+              "setting": ["ignoreexternal", "ignore-external"],
+              "type": "flag",
+              "flag": "--ignoreexternal"
+            },
+            { "setting": "args", "type": "args" }
           ]
         }
       },

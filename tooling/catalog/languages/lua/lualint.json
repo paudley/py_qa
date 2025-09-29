@@ -43,9 +43,9 @@
           },
           "base": ["lua", "${binary}"],
           "options": [
-            {"setting": "relaxed", "type": "flag", "flag": "-r"},
-            {"setting": "strict", "type": "flag", "flag": "-s"},
-            {"setting": "args", "type": "args"}
+            { "setting": "relaxed", "type": "flag", "flag": "-r" },
+            { "setting": "strict", "type": "flag", "flag": "-s" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },

@@ -101,21 +101,36 @@
           "base": ["prettier", "--write"],
           "appendFiles": false,
           "options": [
-            {"setting": "config", "type": "path", "flag": "--config"},
-            {"setting": "parser", "type": "value", "flag": "--parser"},
-            {"setting": "ignore-path", "type": "path", "flag": "--ignore-path"},
-            {"setting": "plugin-search-dir", "type": "path", "flag": "--plugin-search-dir"},
-            {"setting": "plugin", "type": "args", "flag": "--plugin"},
-            {"setting": "loglevel", "type": "value", "flag": "--log-level"},
-            {"setting": "config-precedence", "type": "value", "flag": "--config-precedence"},
-            {"setting": "single-quote", "type": "flag", "flag": "--single-quote", "negateFlag": "--no-single-quote"},
-            {"setting": "tab-width", "type": "value", "flag": "--tab-width"},
-            {"setting": "use-tabs", "type": "flag", "flag": "--use-tabs", "negateFlag": "--no-use-tabs"},
-            {"setting": "print-width", "type": "value", "flag": "--print-width", "defaultFrom": "execution.line_length"},
-            {"setting": "semi", "type": "flag", "flag": "--semi", "negateFlag": "--no-semi"},
-            {"setting": "trailing-comma", "type": "value", "flag": "--trailing-comma"},
-            {"setting": "end-of-line", "type": "value", "flag": "--end-of-line"},
-            {"setting": "args", "type": "args"}
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "parser", "type": "value", "flag": "--parser" },
+            { "setting": "ignore-path", "type": "path", "flag": "--ignore-path" },
+            { "setting": "plugin-search-dir", "type": "path", "flag": "--plugin-search-dir" },
+            { "setting": "plugin", "type": "args", "flag": "--plugin" },
+            { "setting": "loglevel", "type": "value", "flag": "--log-level" },
+            { "setting": "config-precedence", "type": "value", "flag": "--config-precedence" },
+            {
+              "setting": "single-quote",
+              "type": "flag",
+              "flag": "--single-quote",
+              "negateFlag": "--no-single-quote"
+            },
+            { "setting": "tab-width", "type": "value", "flag": "--tab-width" },
+            {
+              "setting": "use-tabs",
+              "type": "flag",
+              "flag": "--use-tabs",
+              "negateFlag": "--no-use-tabs"
+            },
+            {
+              "setting": "print-width",
+              "type": "value",
+              "flag": "--print-width",
+              "defaultFrom": "execution.line_length"
+            },
+            { "setting": "semi", "type": "flag", "flag": "--semi", "negateFlag": "--no-semi" },
+            { "setting": "trailing-comma", "type": "value", "flag": "--trailing-comma" },
+            { "setting": "end-of-line", "type": "value", "flag": "--end-of-line" },
+            { "setting": "args", "type": "args" }
           ]
         }
       }
@@ -129,21 +144,36 @@
           "base": ["prettier", "--check"],
           "appendFiles": false,
           "options": [
-            {"setting": "config", "type": "path", "flag": "--config"},
-            {"setting": "parser", "type": "value", "flag": "--parser"},
-            {"setting": "ignore-path", "type": "path", "flag": "--ignore-path"},
-            {"setting": "plugin-search-dir", "type": "path", "flag": "--plugin-search-dir"},
-            {"setting": "plugin", "type": "args", "flag": "--plugin"},
-            {"setting": "loglevel", "type": "value", "flag": "--log-level"},
-            {"setting": "config-precedence", "type": "value", "flag": "--config-precedence"},
-            {"setting": "single-quote", "type": "flag", "flag": "--single-quote", "negateFlag": "--no-single-quote"},
-            {"setting": "tab-width", "type": "value", "flag": "--tab-width"},
-            {"setting": "use-tabs", "type": "flag", "flag": "--use-tabs", "negateFlag": "--no-use-tabs"},
-            {"setting": "print-width", "type": "value", "flag": "--print-width", "defaultFrom": "execution.line_length"},
-            {"setting": "semi", "type": "flag", "flag": "--semi", "negateFlag": "--no-semi"},
-            {"setting": "trailing-comma", "type": "value", "flag": "--trailing-comma"},
-            {"setting": "end-of-line", "type": "value", "flag": "--end-of-line"},
-            {"setting": "args", "type": "args"}
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "parser", "type": "value", "flag": "--parser" },
+            { "setting": "ignore-path", "type": "path", "flag": "--ignore-path" },
+            { "setting": "plugin-search-dir", "type": "path", "flag": "--plugin-search-dir" },
+            { "setting": "plugin", "type": "args", "flag": "--plugin" },
+            { "setting": "loglevel", "type": "value", "flag": "--log-level" },
+            { "setting": "config-precedence", "type": "value", "flag": "--config-precedence" },
+            {
+              "setting": "single-quote",
+              "type": "flag",
+              "flag": "--single-quote",
+              "negateFlag": "--no-single-quote"
+            },
+            { "setting": "tab-width", "type": "value", "flag": "--tab-width" },
+            {
+              "setting": "use-tabs",
+              "type": "flag",
+              "flag": "--use-tabs",
+              "negateFlag": "--no-use-tabs"
+            },
+            {
+              "setting": "print-width",
+              "type": "value",
+              "flag": "--print-width",
+              "defaultFrom": "execution.line_length"
+            },
+            { "setting": "semi", "type": "flag", "flag": "--semi", "negateFlag": "--no-semi" },
+            { "setting": "trailing-comma", "type": "value", "flag": "--trailing-comma" },
+            { "setting": "end-of-line", "type": "value", "flag": "--end-of-line" },
+            { "setting": "args", "type": "args" }
           ]
         }
       }

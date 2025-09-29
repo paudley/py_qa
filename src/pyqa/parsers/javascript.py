@@ -88,10 +88,10 @@ def parse_stylelint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnost
     return results
 
 
-def parse_tsc(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_tsc(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse TypeScript compiler text diagnostics."""
     results: list[RawDiagnostic] = []
-    for line in stdout.splitlines():
+    for line in stdout:
         match = _TSC_PATTERN.match(line.strip())
         if not match:
             continue

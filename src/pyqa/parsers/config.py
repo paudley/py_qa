@@ -61,10 +61,10 @@ def parse_sqlfluff(payload: Any, _context: ToolContext) -> Sequence[RawDiagnosti
     return results
 
 
-def parse_yamllint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_yamllint(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse yamllint parsable text output."""
     results: list[RawDiagnostic] = []
-    for raw_line in stdout.splitlines():
+    for raw_line in stdout:
         line = raw_line.strip()
         if not line:
             continue
@@ -97,10 +97,10 @@ def parse_yamllint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic
     return results
 
 
-def parse_dotenv_linter(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_dotenv_linter(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse dotenv-linter text output."""
     results: list[RawDiagnostic] = []
-    for raw_line in stdout.splitlines():
+    for raw_line in stdout:
         line = raw_line.strip()
         if (
             not line
@@ -257,7 +257,9 @@ def _speccy_message(issue: Mapping[str, Any]) -> str:
 
 
 def _speccy_severity(issue: Mapping[str, Any], default_label: str) -> Severity:
-    label = (issue.get("type") or issue.get("severity") or default_label or "warning").strip().lower()
+    label = (
+        (issue.get("type") or issue.get("severity") or default_label or "warning").strip().lower()
+    )
     return SPECCY_SEVERITY_MAP.get(label, Severity.WARNING)
 
 

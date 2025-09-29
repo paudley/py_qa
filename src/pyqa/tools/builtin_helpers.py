@@ -134,7 +134,6 @@ def download_tool_artifact(
     context: str,
 ) -> Path:
     """Download a tool artifact described by *spec* if missing and return its path."""
-
     name = str(spec.get("name", "tool")).strip() or "tool"
     cache_dir = str(spec.get("cacheSubdir", name)).strip() or name
     targets_value = spec.get("targets")
@@ -296,10 +295,10 @@ def _extract_tar_member(
         destination.write_bytes(extracted.read_bytes())
 
 
-def _parse_gofmt_check(stdout: str, _context: ToolContext) -> list[RawDiagnostic]:
+def _parse_gofmt_check(stdout: Sequence[str], _context: ToolContext) -> list[RawDiagnostic]:
     """Convert gofmt --list output into diagnostics describing unformatted files."""
     diagnostics: list[RawDiagnostic] = []
-    for line in stdout.splitlines():
+    for line in stdout:
         path = line.strip()
         if not path:
             continue

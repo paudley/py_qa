@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 from typing import Literal, TypeAlias, cast
-from collections.abc import Mapping, Sequence
 
 from .errors import CatalogIntegrityError
 from .types import STRATEGY_SCHEMA_VERSION, TOOL_SCHEMA_VERSION, JSONValue
@@ -42,12 +42,15 @@ class StrategyReference:
 
         Raises:
             CatalogIntegrityError: If required keys are missing or invalid.
-        """
 
+        """
         strategy_value = expect_string(data.get("strategy"), key="strategy", context=context)
         config_data = data.get("config")
         config_mapping = (
-            freeze_json_mapping(cast(Mapping[str, JSONValue], config_data), context=f"{context}.config")
+            freeze_json_mapping(
+                cast("Mapping[str, JSONValue]", config_data),
+                context=f"{context}.config",
+            )
             if isinstance(config_data, Mapping)
             else MappingProxyType({})
         )
@@ -70,8 +73,8 @@ class CommandDefinition:
 
         Returns:
             CommandDefinition: Frozen command definition.
-        """
 
+        """
         return CommandDefinition(reference=StrategyReference.from_mapping(data, context=context))
 
 
@@ -91,8 +94,8 @@ class ParserDefinition:
 
         Returns:
             ParserDefinition: Frozen parser definition.
-        """
 
+        """
         return ParserDefinition(reference=StrategyReference.from_mapping(data, context=context))
 
 
@@ -116,12 +119,15 @@ class RuntimeInstallDefinition:
 
         Raises:
             CatalogIntegrityError: If the strategy identifier is missing or invalid.
-        """
 
+        """
         strategy_value = expect_string(data.get("strategy"), key="strategy", context=context)
         config_data = data.get("config")
         config_mapping = (
-            freeze_json_mapping(cast(Mapping[str, JSONValue], config_data), context=f"{context}.config")
+            freeze_json_mapping(
+                cast("Mapping[str, JSONValue]", config_data),
+                context=f"{context}.config",
+            )
             if isinstance(config_data, Mapping)
             else MappingProxyType({})
         )
@@ -156,24 +162,37 @@ class RuntimeDefinition:
 
         Raises:
             CatalogIntegrityError: If any required runtime fields are missing or invalid.
-        """
 
+        """
         kind_value = expect_string(data.get("type"), key="type", context=context)
         package_value = optional_string(data.get("package"), key="package", context=context)
-        min_version_value = optional_string(data.get("minVersion"), key="minVersion", context=context)
-        max_version_value = optional_string(data.get("maxVersion"), key="maxVersion", context=context)
-        version_command_value = string_array(data.get("versionCommand"), key="versionCommand", context=context)
+        min_version_value = optional_string(
+            data.get("minVersion"),
+            key="minVersion",
+            context=context,
+        )
+        max_version_value = optional_string(
+            data.get("maxVersion"),
+            key="maxVersion",
+            context=context,
+        )
+        version_command_value = string_array(
+            data.get("versionCommand"),
+            key="versionCommand",
+            context=context,
+        )
         binaries_value = string_mapping(data.get("binaries"), key="binaries", context=context)
         install_data = data.get("install")
         install_value = (
             RuntimeInstallDefinition.from_mapping(
-                cast(Mapping[str, JSONValue], install_data), context=f"{context}.install"
+                cast("Mapping[str, JSONValue]", install_data),
+                context=f"{context}.install",
             )
             if isinstance(install_data, Mapping)
             else None
         )
         return RuntimeDefinition(
-            kind=cast(RuntimeType, kind_value),
+            kind=cast("RuntimeType", kind_value),
             package=package_value,
             min_version=min_version_value,
             max_version=max_version_value,
@@ -200,10 +219,14 @@ class DiagnosticsDefinition:
 
         Returns:
             DiagnosticsDefinition: Frozen diagnostics configuration.
-        """
 
+        """
         dedupe_value = string_mapping(data.get("dedupe"), key="dedupe", context=context)
-        severity_value = string_mapping(data.get("severityMapping"), key="severityMapping", context=context)
+        severity_value = string_mapping(
+            data.get("severityMapping"),
+            key="severityMapping",
+            context=context,
+        )
         return DiagnosticsDefinition(dedupe=dedupe_value, severity_mapping=severity_value)
 
 
@@ -225,8 +248,8 @@ class SuppressionsDefinition:
 
         Returns:
             SuppressionsDefinition: Frozen suppression configuration.
-        """
 
+        """
         tests_value = string_array(data.get("tests"), key="tests", context=context)
         general_value = string_array(data.get("general"), key="general", context=context)
         duplicates_value = string_array(data.get("duplicates"), key="duplicates", context=context)
@@ -271,12 +294,21 @@ class CliOptionMetadata:
 
         Returns:
             CliOptionMetadata: Frozen CLI metadata configuration.
-        """
 
+        """
         flag_value = optional_string(data.get("flag"), key="flag", context=context)
         short_flag_value = optional_string(data.get("shortFlag"), key="shortFlag", context=context)
-        multiple_value = optional_bool(data.get("multiple"), key="multiple", context=context, default=False)
-        return CliOptionMetadata(flag=flag_value, short_flag=short_flag_value, multiple=multiple_value)
+        multiple_value = optional_bool(
+            data.get("multiple"),
+            key="multiple",
+            context=context,
+            default=False,
+        )
+        return CliOptionMetadata(
+            flag=flag_value,
+            short_flag=short_flag_value,
+            multiple=multiple_value,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -304,15 +336,22 @@ class OptionDefinition:
 
         Raises:
             CatalogIntegrityError: If required option fields are missing or invalid.
-        """
 
+        """
         name_value = expect_string(data.get("name"), key="name", context=context)
         option_type_value = expect_string(data.get("type"), key="type", context=context)
-        description_value = optional_string(data.get("description"), key="description", context=context)
+        description_value = optional_string(
+            data.get("description"),
+            key="description",
+            context=context,
+        )
         default_value = data.get("default")
         cli_data = data.get("cli")
         cli_value = (
-            CliOptionMetadata.from_mapping(cast(Mapping[str, JSONValue], cli_data), context=f"{context}.cli")
+            CliOptionMetadata.from_mapping(
+                cast("Mapping[str, JSONValue]", cli_data),
+                context=f"{context}.cli",
+            )
             if isinstance(cli_data, Mapping)
             else None
         )
@@ -320,7 +359,7 @@ class OptionDefinition:
         aliases_value = string_array(data.get("aliases"), key="aliases", context=context)
         return OptionDefinition(
             name=name_value,
-            option_type=cast(OptionType, option_type_value),
+            option_type=cast("OptionType", option_type_value),
             description=description_value,
             default=default_value,
             cli=cli_value,
@@ -354,7 +393,10 @@ class OptionDocumentationBundle:
     def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> OptionDocumentationBundle:
         groups_data = data.get("groups")
         groups_value: tuple[OptionGroupDefinition, ...] = ()
-        if isinstance(groups_data, Sequence) and not isinstance(groups_data, (str, bytes, bytearray)):
+        if isinstance(groups_data, Sequence) and not isinstance(
+            groups_data,
+            (str, bytes, bytearray),
+        ):
             group_items: list[OptionGroupDefinition] = []
             for index, element in enumerate(groups_data):
                 element_mapping = expect_mapping(element, key=f"groups[{index}]", context=context)
@@ -362,7 +404,7 @@ class OptionDocumentationBundle:
                     OptionGroupDefinition.from_mapping(
                         element_mapping,
                         context=f"{context}.groups[{index}]",
-                    )
+                    ),
                 )
             groups_value = tuple(group_items)
         entries_value = _options_array(data.get("entries"), key="entries", context=context)
@@ -385,7 +427,6 @@ class DocumentationEntry:
         source: Path,
     ) -> DocumentationEntry:
         """Create documentation entry metadata from JSON data."""
-
         format_value = optional_string(data.get("format"), key="format", context=context) or "text"
         text_value = data.get("text")
         if isinstance(text_value, str):
@@ -398,13 +439,19 @@ class DocumentationEntry:
                 if not doc_path.exists():
                     doc_path = (source.parent / path_value).resolve()
             if not doc_path.is_file():
-                raise CatalogIntegrityError(f"{context}: documentation path '{path_value}' not found")
+                raise CatalogIntegrityError(
+                    f"{context}: documentation path '{path_value}' not found",
+                )
             try:
                 content = doc_path.read_text(encoding="utf-8")
             except OSError as exc:
-                raise CatalogIntegrityError(f"{context}: unable to read documentation '{doc_path}'") from exc
+                raise CatalogIntegrityError(
+                    f"{context}: unable to read documentation '{doc_path}'",
+                ) from exc
             return DocumentationEntry(format=format_value, content=content)
-        raise CatalogIntegrityError(f"{context}: documentation entry must define either 'text' or 'path'")
+        raise CatalogIntegrityError(
+            f"{context}: documentation entry must define either 'text' or 'path'",
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -424,7 +471,6 @@ class DocumentationBundle:
         source: Path,
     ) -> DocumentationBundle:
         """Create a ``DocumentationBundle`` from JSON data."""
-
         help_entry = _documentation_entry(
             data.get("help"),
             context=f"{context}.help",
@@ -444,7 +490,9 @@ class DocumentationBundle:
             source=source,
         )
         if help_entry is None and command_entry is None and shared_entry is None:
-            raise CatalogIntegrityError(f"{context}: documentation block must include at least one entry")
+            raise CatalogIntegrityError(
+                f"{context}: documentation block must include at least one entry",
+            )
         return DocumentationBundle(help=help_entry, command=command_entry, shared=shared_entry)
 
 
@@ -460,7 +508,7 @@ def _documentation_entry(
     if not isinstance(value, Mapping):
         raise CatalogIntegrityError(f"{context}: documentation entry must be an object")
     return DocumentationEntry.from_mapping(
-        cast(Mapping[str, JSONValue], value),
+        cast("Mapping[str, JSONValue]", value),
         context=context,
         catalog_root=catalog_root,
         source=source,
@@ -495,21 +543,42 @@ class ActionDefinition:
 
         Raises:
             CatalogIntegrityError: If required action fields are missing or invalid.
-        """
 
+        """
         name_value = expect_string(data.get("name"), key="name", context=context)
-        description_value = optional_string(data.get("description"), key="description", context=context)
-        append_files_value = optional_bool(data.get("appendFiles"), key="appendFiles", context=context, default=True)
+        description_value = optional_string(
+            data.get("description"),
+            key="description",
+            context=context,
+        )
+        append_files_value = optional_bool(
+            data.get("appendFiles"),
+            key="appendFiles",
+            context=context,
+            default=True,
+        )
         is_fix_value = optional_bool(data.get("isFix"), key="isFix", context=context, default=False)
-        ignore_exit_value = optional_bool(data.get("ignoreExit"), key="ignoreExit", context=context, default=False)
-        timeout_value = optional_number(data.get("timeoutSeconds"), key="timeoutSeconds", context=context)
+        ignore_exit_value = optional_bool(
+            data.get("ignoreExit"),
+            key="ignoreExit",
+            context=context,
+            default=False,
+        )
+        timeout_value = optional_number(
+            data.get("timeoutSeconds"),
+            key="timeoutSeconds",
+            context=context,
+        )
         env_value = string_mapping(data.get("env"), key="env", context=context)
         filters_value = string_array(data.get("filters"), key="filters", context=context)
         command_data = expect_mapping(data.get("command"), key="command", context=context)
         command_value = CommandDefinition.from_mapping(command_data, context=f"{context}.command")
         parser_data = data.get("parser")
         parser_value = (
-            ParserDefinition.from_mapping(cast(Mapping[str, JSONValue], parser_data), context=f"{context}.parser")
+            ParserDefinition.from_mapping(
+                cast("Mapping[str, JSONValue]", parser_data),
+                context=f"{context}.parser",
+            )
             if isinstance(parser_data, Mapping)
             else None
         )
@@ -596,38 +665,66 @@ class ToolDefinition:
 
         Raises:
             CatalogIntegrityError: If the schema version or required fields are invalid.
-        """
 
+        """
         context = str(source)
-        schema_version_value = expect_string(data.get("schemaVersion"), key="schemaVersion", context=context)
+        schema_version_value = expect_string(
+            data.get("schemaVersion"),
+            key="schemaVersion",
+            context=context,
+        )
         if schema_version_value != TOOL_SCHEMA_VERSION:
             raise CatalogIntegrityError(
-                f"{context}: schemaVersion '{schema_version_value}' is not supported; expected '{TOOL_SCHEMA_VERSION}'"
+                f"{context}: schemaVersion '{schema_version_value}' is not supported; expected '{TOOL_SCHEMA_VERSION}'",
             )
         name_value = expect_string(data.get("name"), key="name", context=context)
         aliases_value = string_array(data.get("aliases"), key="aliases", context=context)
-        description_value = expect_string(data.get("description"), key="description", context=context)
+        description_value = expect_string(
+            data.get("description"),
+            key="description",
+            context=context,
+        )
         languages_value = string_array(data.get("languages"), key="languages", context=context)
         tags_value = string_array(data.get("tags"), key="tags", context=context)
         default_enabled_value = optional_bool(
-            data.get("defaultEnabled"), key="defaultEnabled", context=context, default=True
+            data.get("defaultEnabled"),
+            key="defaultEnabled",
+            context=context,
+            default=True,
         )
-        auto_install_value = optional_bool(data.get("autoInstall"), key="autoInstall", context=context, default=False)
+        auto_install_value = optional_bool(
+            data.get("autoInstall"),
+            key="autoInstall",
+            context=context,
+            default=False,
+        )
         phase_value = expect_string(data.get("phase"), key="phase", context=context)
         before_value = string_array(data.get("before"), key="before", context=context)
         after_value = string_array(data.get("after"), key="after", context=context)
-        file_extensions_value = string_array(data.get("fileExtensions"), key="fileExtensions", context=context)
-        config_files_value = string_array(data.get("configFiles"), key="configFiles", context=context)
+        file_extensions_value = string_array(
+            data.get("fileExtensions"),
+            key="fileExtensions",
+            context=context,
+        )
+        config_files_value = string_array(
+            data.get("configFiles"),
+            key="configFiles",
+            context=context,
+        )
         runtime_data = data.get("runtime")
         runtime_value = (
-            RuntimeDefinition.from_mapping(cast(Mapping[str, JSONValue], runtime_data), context=f"{context}.runtime")
+            RuntimeDefinition.from_mapping(
+                cast("Mapping[str, JSONValue]", runtime_data),
+                context=f"{context}.runtime",
+            )
             if isinstance(runtime_data, Mapping)
             else None
         )
         diagnostics_data = data.get("diagnostics")
         diagnostics_value = (
             DiagnosticsDefinition.from_mapping(
-                cast(Mapping[str, JSONValue], diagnostics_data), context=f"{context}.diagnostics"
+                cast("Mapping[str, JSONValue]", diagnostics_data),
+                context=f"{context}.diagnostics",
             )
             if isinstance(diagnostics_data, Mapping)
             else None
@@ -635,7 +732,8 @@ class ToolDefinition:
         suppressions_data = data.get("suppressions")
         suppressions_value = (
             SuppressionsDefinition.from_mapping(
-                cast(Mapping[str, JSONValue], suppressions_data), context=f"{context}.suppressions"
+                cast("Mapping[str, JSONValue]", suppressions_data),
+                context=f"{context}.suppressions",
             )
             if isinstance(suppressions_data, Mapping)
             else None
@@ -643,7 +741,7 @@ class ToolDefinition:
         documentation_data = data.get("documentation")
         documentation_value = (
             DocumentationBundle.from_mapping(
-                cast(Mapping[str, JSONValue], documentation_data),
+                cast("Mapping[str, JSONValue]", documentation_data),
                 context=f"{context}.documentation",
                 catalog_root=catalog_root,
                 source=source,
@@ -653,7 +751,10 @@ class ToolDefinition:
         )
         options_value = _options_array(data.get("options"), key="options", context=context)
         actions_value = _actions_array(data.get("actions"), key="actions", context=context)
-        diagnostics_bundle = DiagnosticsBundle(diagnostics=diagnostics_value, suppressions=suppressions_value)
+        diagnostics_bundle = DiagnosticsBundle(
+            diagnostics=diagnostics_value,
+            suppressions=suppressions_value,
+        )
         return ToolDefinition(
             schema_version=schema_version_value,
             name=name_value,
@@ -701,13 +802,22 @@ class StrategyConfigField:
 
         Raises:
             CatalogIntegrityError: If required field metadata is missing or invalid.
-        """
 
+        """
         type_value = expect_string(data.get("type"), key="type", context=context)
-        required_value = optional_bool(data.get("required"), key="required", context=context, default=False)
-        description_value = optional_string(data.get("description"), key="description", context=context)
+        required_value = optional_bool(
+            data.get("required"),
+            key="required",
+            context=context,
+            default=False,
+        )
+        description_value = optional_string(
+            data.get("description"),
+            key="description",
+            context=context,
+        )
         return StrategyConfigField(
-            value_type=cast(OptionType, type_value),
+            value_type=cast("OptionType", type_value),
             required=required_value,
             description=description_value,
         )
@@ -739,25 +849,37 @@ class StrategyDefinition:
 
         Raises:
             CatalogIntegrityError: If the schema version or required fields are invalid.
-        """
 
+        """
         context = str(source)
-        schema_version_value = expect_string(data.get("schemaVersion"), key="schemaVersion", context=context)
+        schema_version_value = expect_string(
+            data.get("schemaVersion"),
+            key="schemaVersion",
+            context=context,
+        )
         if schema_version_value != STRATEGY_SCHEMA_VERSION:
             raise CatalogIntegrityError(
-                f"{context}: schemaVersion '{schema_version_value}' is not supported; expected '{STRATEGY_SCHEMA_VERSION}'"
+                f"{context}: schemaVersion '{schema_version_value}' is not supported; expected '{STRATEGY_SCHEMA_VERSION}'",
             )
         identifier_value = expect_string(data.get("id"), key="id", context=context)
         strategy_type_value = expect_string(data.get("type"), key="type", context=context)
-        description_value = optional_string(data.get("description"), key="description", context=context)
-        implementation_value = expect_string(data.get("implementation"), key="implementation", context=context)
+        description_value = optional_string(
+            data.get("description"),
+            key="description",
+            context=context,
+        )
+        implementation_value = expect_string(
+            data.get("implementation"),
+            key="implementation",
+            context=context,
+        )
         entry_value = optional_string(data.get("entry"), key="entry", context=context)
         config_data = data.get("config")
         config_value = _strategy_config_mapping(config_data, context=f"{context}.config")
         return StrategyDefinition(
             schema_version=schema_version_value,
             identifier=identifier_value,
-            strategy_type=cast(StrategyType, strategy_type_value),
+            strategy_type=cast("StrategyType", strategy_type_value),
             description=description_value,
             implementation=implementation_value,
             entry=entry_value,
@@ -766,9 +888,13 @@ class StrategyDefinition:
         )
 
 
-def _options_array(value: JSONValue | None, *, key: str, context: str) -> tuple[OptionDefinition, ...]:
+def _options_array(
+    value: JSONValue | None,
+    *,
+    key: str,
+    context: str,
+) -> tuple[OptionDefinition, ...]:
     """Return a tuple of option definitions."""
-
     if value is None:
         return ()
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
@@ -780,14 +906,18 @@ def _options_array(value: JSONValue | None, *, key: str, context: str) -> tuple[
             OptionDefinition.from_mapping(
                 element_mapping,
                 context=f"{context}.{key}[{index}]",
-            )
+            ),
         )
     return tuple(options)
 
 
-def _actions_array(value: JSONValue | None, *, key: str, context: str) -> tuple[ActionDefinition, ...]:
+def _actions_array(
+    value: JSONValue | None,
+    *,
+    key: str,
+    context: str,
+) -> tuple[ActionDefinition, ...]:
     """Return a tuple of action definitions."""
-
     if value is None:
         return ()
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
@@ -799,16 +929,19 @@ def _actions_array(value: JSONValue | None, *, key: str, context: str) -> tuple[
             ActionDefinition.from_mapping(
                 element_mapping,
                 context=f"{context}.{key}[{index}]",
-            )
+            ),
         )
     if not actions:
         raise CatalogIntegrityError(f"{context}: '{key}' must contain at least one action")
     return tuple(actions)
 
 
-def _strategy_config_mapping(value: JSONValue | None, *, context: str) -> Mapping[str, StrategyConfigField]:
+def _strategy_config_mapping(
+    value: JSONValue | None,
+    *,
+    context: str,
+) -> Mapping[str, StrategyConfigField]:
     """Return an immutable mapping of strategy configuration descriptors."""
-
     if value is None:
         return MappingProxyType({})
     if not isinstance(value, Mapping):

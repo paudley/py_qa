@@ -22,7 +22,6 @@ def _write_json(path: Path, payload: object) -> None:
 
 def test_initialize_registry_catalog(tmp_path: Path, schema_root: Path) -> None:
     """Catalog-backed registration should populate tools from JSON definitions."""
-
     clear_catalog_cache()
     catalog_root = tmp_path / "catalog"
     strategies_dir = catalog_root / "strategies"
@@ -52,7 +51,7 @@ def test_initialize_registry_catalog(tmp_path: Path, schema_root: Path) -> None:
                         "strategy": "sample_command",
                         "config": {"args": ["echo", "hi"]},
                     },
-                }
+                },
             ],
         },
     )
@@ -75,7 +74,6 @@ def test_initialize_registry_catalog(tmp_path: Path, schema_root: Path) -> None:
 
 def test_initialize_registry_real_catalog(schema_root: Path, tmp_path: Path) -> None:
     """The real catalog should register known tools like Ruff, Black, and Mypy."""
-
     clear_catalog_cache()
     catalog_root = Path(__file__).resolve().parents[1] / "tooling" / "catalog"
     registry = ToolRegistry()
@@ -176,7 +174,6 @@ def test_register_catalog_tools_reuses_cached_snapshot(
     monkeypatch,
 ) -> None:
     """Repeated catalog registration should reuse the cached snapshot."""
-
     clear_catalog_cache()
     catalog_root = tmp_path / "catalog"
     strategies_dir = catalog_root / "strategies"
@@ -206,7 +203,7 @@ def test_register_catalog_tools_reuses_cached_snapshot(
                         "strategy": "sample_command",
                         "config": {"args": ["echo", "hi"]},
                     },
-                }
+                },
             ],
         },
     )
@@ -251,7 +248,6 @@ def test_register_catalog_tools_refreshes_cache_on_change(
     monkeypatch,
 ) -> None:
     """Cache should invalidate when catalog content changes on disk."""
-
     clear_catalog_cache()
     catalog_root = tmp_path / "catalog"
     strategies_dir = catalog_root / "strategies"
@@ -283,7 +279,7 @@ def test_register_catalog_tools_refreshes_cache_on_change(
                         "strategy": "sample_command",
                         "config": {"args": ["echo", "one"]},
                     },
-                }
+                },
             ],
         },
     )
@@ -310,7 +306,7 @@ def test_register_catalog_tools_refreshes_cache_on_change(
                         "strategy": "sample_command",
                         "config": {"args": ["echo", "two"]},
                     },
-                }
+                },
             ],
         },
     )
@@ -332,5 +328,9 @@ def test_register_catalog_tools_refreshes_cache_on_change(
     )
 
     assert load_calls == 1
-    command = registry.get("sample-tool").actions[0].build_command(ToolContext(cfg=Config(), root=tmp_path))
+    command = (
+        registry.get("sample-tool")
+        .actions[0]
+        .build_command(ToolContext(cfg=Config(), root=tmp_path))
+    )
     assert command[-2:] == ["echo", "two"]

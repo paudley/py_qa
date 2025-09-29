@@ -23,9 +23,7 @@
         "config": {
           "base": ["cargo", "fmt"],
           "appendFiles": false,
-          "options": [
-            {"setting": "args", "type": "args"}
-          ]
+          "options": [{ "setting": "args", "type": "args" }]
         }
       },
       "isFix": true,
@@ -39,9 +37,7 @@
         "config": {
           "base": ["cargo", "fmt", "--check"],
           "appendFiles": false,
-          "options": [
-            {"setting": "args", "type": "args"}
-          ]
+          "options": [{ "setting": "args", "type": "args" }]
         }
       },
       "appendFiles": false,

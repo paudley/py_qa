@@ -2,33 +2,19 @@
 
 ## Completion Status
 
-- Shared `command_option_map` strategy now drives every catalog action (Python
-  helpers have been removed entirely); bespoke strategy modules were deleted
-  to force pure catalog control.
-- All tool JSON definitions have been updated to rely on option maps, but
-  supporting helper utilities (`_require_string_sequence`, `_load_attribute`,
-  `_build_field_spec`, catalog option transforms) still live outside the
-  consolidated `strategies.py` module and need reinstatement after the module
-  purge.
-- `uv run pytest` is green again after shoring up catalog defaults: restored
-  python-version flag parity for pylint/mypy/pyright, fixed pyupgrade flag
-  duplication and double file appends, reintroduced cpplint recursive flag
-  wiring, and made golangci-lint's `--enable-all` opt-out via setting.
-- Catalog JSON now mirrors the legacy CLI surface for these tools; continue
-  auditing remaining actions to ensure helper parity before deleting any
-  residual shims.
-- Pruned the obsolete `CommandBuilder` subclasses from
-  `pyqa.tools.builtin_commands_python` and `pyqa.tools.builtin_commands_misc`,
-  leaving only the shared helper functions consumed by the catalog strategies.
-- Bandit now sources its default severity and confidence levels directly from
-  catalog metadata (`defaultFrom`), reducing the bespoke fallback logic in
-  command builders.
-- Catalog defaults now cover TypeScript strict mode and lint warning budgets,
-  wiring shared strictness/severity knobs directly into `tsc`, `stylelint`, and
-  `eslint` without Python-side ensures.
-- Mypy strict mode moved entirely into catalog metadata; default runs are
-  "standard", with strict flags only emitted when strictness is explicitly
-  requested (CLI `--strict` or sensitivity maximum).
+- Catalog is now the single source of truth: option wiring, shared defaults,
+  plugin discovery, and strictness/warning presets all flow through
+  `defaultFrom` entries with reusable transforms.
+- Strategy module has been consolidated into a single `strategies.py` that
+  exposes the shared factories (`command_option_map`, project scanners, parser
+  helpers, download installers) used across the catalog.
+- Loader/registry operate exclusively on catalog snapshots; bespoke builder
+  modules and legacy strategy packages have been removed.
+- CLI/config surfaces derive their defaults from shared knobs (`Config`
+  provides only the knob values; no per-tool ensures remain).
+- Tests/DOCs updated: schema generation reflects catalog-driven defaults,
+  strategy/unit tests assert behaviour via catalog lookups, and the full
+  `uv run pytest` suite is green.
 
 ## Guiding Principles
 
@@ -205,36 +191,12 @@
 
 ## Current Focus & Next Steps
 
-1. **Finish Option Map Migration**
-   - Every tool now references `command_option_map`; focus shifts to policing
-     helper coverage and closing parity gaps.
-   - Restore shared helpers required by the consolidated strategy module
-     (`_load_attribute`, `_build_field_spec`, `_require_string_sequence`,
-     parser normalisers) so catalog option wiring can execute.
-   - Reconcile behavioural regressions highlighted by the failing tests
-     (pylint defaults/plugins, prettier/sqlfluff path handling, remark output
-     paths, etc.) before removing the temporary skips.
-
-2. **Externalise Defaults & Diagnostics**
-   - Relocate hard-coded defaults from `Config.ensure(...)` and
-     `_resolve_default_reference` into catalog fragments or `defaultFrom`
-     aliases.
-   - Surface pylint suppression/diagnostic tweaks in catalog metadata or
-     dedicated post-processing strategies.
-   - Capture python-version derived flags (pyupgrade, target tags) as reusable
-     strategy transforms configurable via JSON.
-
-3. **Testing & CLI Wiring**
-   - Once migrations stabilise, update tests to exercise catalog lookups rather
-     than importing legacy builders directly.
-   - Ensure CLI entry points initialise registries explicitly with the catalog
-     data path (no implicit side effects in `pyqa/__init__`).
-  - Execute `uv run pytest` to re-baseline the suite after the new wiring is in
-     place and address any fixture updates in a dedicated pass.
+- The restructuring initiative is complete. Future catalog or strategy work can
+  follow the documented patterns (update JSON, add strategy definitions/tests)
+  without further Python-side migrations.
 
 ## Additional Opportunities
 
-- Provide a generic `command_static` strategy in the catalog to cover gofmt,
-  cargo fmt/clippy, mdformat, etc., instead of dedicated one-off wrappers.
-- Surface pylint plugin auto-discovery as catalog metadata/strategy config so
-  optional plugin enablement can be edited without touching Python.
+- Track new shared behaviours in the catalog by adding reusable transforms or
+  strategies; no further restructuring actions are required as part of this
+  plan.

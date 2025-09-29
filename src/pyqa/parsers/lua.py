@@ -14,10 +14,10 @@ from ..tools.base import ToolContext
 LUALINT_PATTERN = re.compile(r"^(?P<file>[^:]+):(?P<line>\d+):\s*(?:\*\*\*\s*)?(?P<message>.+)$")
 
 
-def parse_lualint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_lualint(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse lualint text output."""
     results: list[RawDiagnostic] = []
-    for raw_line in stdout.splitlines():
+    for raw_line in stdout:
         line = raw_line.strip()
         if not line or line.startswith("Usage"):
             continue
@@ -43,10 +43,10 @@ LUACHECK_PATTERN = re.compile(
 )
 
 
-def parse_luacheck(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_luacheck(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse luacheck plain formatter output."""
     results: list[RawDiagnostic] = []
-    for raw_line in stdout.splitlines():
+    for raw_line in stdout:
         line = raw_line.strip()
         if not line or line.startswith("Total:"):
             continue

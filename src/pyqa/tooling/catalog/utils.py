@@ -11,7 +11,6 @@ from .types import JSONValue
 
 def expect_string(value: object | None, *, key: str, context: str) -> str:
     """Return *value* as a string or raise :class:`CatalogIntegrityError`."""
-
     if not isinstance(value, str):
         raise CatalogIntegrityError(f"{context}: expected '{key}' to be a string")
     return value
@@ -19,7 +18,6 @@ def expect_string(value: object | None, *, key: str, context: str) -> str:
 
 def optional_string(value: object | None, *, key: str, context: str) -> str | None:
     """Return *value* as an optional string with validation."""
-
     if value is None:
         return None
     if not isinstance(value, str):
@@ -35,7 +33,6 @@ def optional_bool(
     default: bool | None = None,
 ) -> bool:
     """Return *value* as a boolean with optional default handling."""
-
     if value is None:
         if default is None:
             raise CatalogIntegrityError(f"{context}: expected '{key}' to be a boolean")
@@ -47,7 +44,6 @@ def optional_bool(
 
 def string_array(value: object | None, *, key: str, context: str) -> tuple[str, ...]:
     """Return *value* as a tuple of strings with validation."""
-
     if value is None:
         return ()
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
@@ -62,7 +58,6 @@ def string_array(value: object | None, *, key: str, context: str) -> tuple[str, 
 
 def expect_mapping(value: object | None, *, key: str, context: str) -> Mapping[str, JSONValue]:
     """Return *value* as a mapping of JSON values or raise an integrity error."""
-
     if not isinstance(value, Mapping):
         raise CatalogIntegrityError(f"{context}: expected '{key}' to be an object")
     return value
@@ -70,7 +65,6 @@ def expect_mapping(value: object | None, *, key: str, context: str) -> Mapping[s
 
 def freeze_json_mapping(value: Mapping[str, JSONValue], *, context: str) -> Mapping[str, JSONValue]:
     """Return an immutable mapping with recursively frozen JSON values."""
-
     frozen: dict[str, JSONValue] = {}
     for key, item in value.items():
         if not isinstance(key, str):
@@ -81,7 +75,6 @@ def freeze_json_mapping(value: Mapping[str, JSONValue], *, context: str) -> Mapp
 
 def freeze_json_value(value: JSONValue, *, context: str) -> JSONValue:
     """Return an immutable JSON value."""
-
     if isinstance(value, Mapping):
         return freeze_json_mapping(value, context=context)
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
@@ -93,7 +86,6 @@ def freeze_json_value(value: JSONValue, *, context: str) -> JSONValue:
 
 def optional_number(value: object | None, *, key: str, context: str) -> float | None:
     """Return *value* as an optional float."""
-
     if value is None:
         return None
     if isinstance(value, (int, float)):
@@ -103,7 +95,6 @@ def optional_number(value: object | None, *, key: str, context: str) -> float | 
 
 def string_mapping(value: object | None, *, key: str, context: str) -> Mapping[str, str]:
     """Return *value* as a mapping of strings."""
-
     if value is None:
         return {}
     if not isinstance(value, Mapping):
@@ -117,13 +108,13 @@ def string_mapping(value: object | None, *, key: str, context: str) -> Mapping[s
 
 
 __all__ = [
-    "expect_string",
-    "optional_string",
-    "optional_bool",
-    "optional_number",
-    "string_array",
-    "string_mapping",
     "expect_mapping",
+    "expect_string",
     "freeze_json_mapping",
     "freeze_json_value",
+    "optional_bool",
+    "optional_number",
+    "optional_string",
+    "string_array",
+    "string_mapping",
 ]

@@ -19,12 +19,17 @@
           "base": ["sqlfluff", "lint", "--format", "json"],
           "appendFiles": false,
           "options": [
-            {"setting": ["config", "config_path"], "type": "path", "flag": "--config"},
-            {"setting": "dialect", "type": "value", "flag": "--dialect", "defaultFrom": "execution.sql_dialect"},
-            {"setting": "templater", "type": "value", "flag": "--templater"},
-            {"setting": "rules", "type": "args", "flag": "--rules"},
-            {"setting": "processes", "type": "value", "flag": "--processes"},
-            {"setting": "args", "type": "args"}
+            { "setting": ["config", "config_path"], "type": "path", "flag": "--config" },
+            {
+              "setting": "dialect",
+              "type": "value",
+              "flag": "--dialect",
+              "defaultFrom": "execution.sql_dialect"
+            },
+            { "setting": "templater", "type": "value", "flag": "--templater" },
+            { "setting": "rules", "type": "args", "flag": "--rules" },
+            { "setting": "processes", "type": "value", "flag": "--processes" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },
@@ -44,12 +49,17 @@
           "base": ["sqlfluff", "fix", "--force"],
           "appendFiles": false,
           "options": [
-            {"setting": ["config", "config_path"], "type": "path", "flag": "--config"},
-            {"setting": "dialect", "type": "value", "flag": "--dialect", "defaultFrom": "execution.sql_dialect"},
-            {"setting": "templater", "type": "value", "flag": "--templater"},
-            {"setting": "rules", "type": "args", "flag": "--rules"},
-            {"setting": "processes", "type": "value", "flag": "--processes"},
-            {"setting": "args", "type": "args"}
+            { "setting": ["config", "config_path"], "type": "path", "flag": "--config" },
+            {
+              "setting": "dialect",
+              "type": "value",
+              "flag": "--dialect",
+              "defaultFrom": "execution.sql_dialect"
+            },
+            { "setting": "templater", "type": "value", "flag": "--templater" },
+            { "setting": "rules", "type": "args", "flag": "--rules" },
+            { "setting": "processes", "type": "value", "flag": "--processes" },
+            { "setting": "args", "type": "args" }
           ]
         }
       },

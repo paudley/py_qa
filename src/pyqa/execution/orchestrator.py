@@ -237,7 +237,9 @@ class Orchestrator:
         """Prepare every tool action to warm caches without executing them."""
         root_path = self._prepare_runtime(root)
         cache_dir = (
-            cfg.execution.cache_dir if cfg.execution.cache_dir.is_absolute() else root_path / cfg.execution.cache_dir
+            cfg.execution.cache_dir
+            if cfg.execution.cache_dir.is_absolute()
+            else root_path / cfg.execution.cache_dir
         )
         system_preferred = not cfg.execution.use_local_linters
         use_local_override = cfg.execution.use_local_linters
@@ -304,7 +306,10 @@ class Orchestrator:
 
     def _discover_files(self, cfg: Config, root: Path) -> list[Path]:
         matched_files = self._discovery.run(cfg.file_discovery, root)
-        limits = [entry if entry.is_absolute() else (root / entry) for entry in cfg.file_discovery.limit_to]
+        limits = [
+            entry if entry.is_absolute() else (root / entry)
+            for entry in cfg.file_discovery.limit_to
+        ]
         limits = [limit.resolve() for limit in limits]
         if limits:
             matched_files = [path for path in matched_files if self._is_within_limits(path, limits)]
@@ -315,7 +320,11 @@ class Orchestrator:
         return matched_files
 
     def _initialize_cache(self, cfg: Config, root: Path) -> _CacheContext:
-        cache_dir = cfg.execution.cache_dir if cfg.execution.cache_dir.is_absolute() else root / cfg.execution.cache_dir
+        cache_dir = (
+            cfg.execution.cache_dir
+            if cfg.execution.cache_dir.is_absolute()
+            else root / cfg.execution.cache_dir
+        )
         if not cfg.execution.cache_enabled:
             return _CacheContext(cache=None, token=None, cache_dir=cache_dir, versions={})
         cache = ResultCache(cache_dir)
@@ -585,11 +594,13 @@ class Orchestrator:
             env.update({key: str(value) for key, value in extra_env.items()})
         cp = self._runner(list(cmd), cwd=root, env=env, timeout=action.timeout_s)
         extra_filters = context.cfg.output.tool_filters.get(tool_name, [])
-        stdout = action.filter_stdout(cp.stdout, extra_filters)
-        stderr = action.filter_stderr(cp.stderr, extra_filters)
+        stdout_text = action.filter_stdout(cp.stdout, extra_filters)
+        stderr_text = action.filter_stderr(cp.stderr, extra_filters)
+        stdout_lines = stdout_text.splitlines()
+        stderr_lines = stderr_text.splitlines()
         parsed: Sequence = ()
         if action.parser:
-            parsed = action.parser.parse(stdout, stderr, context=context)
+            parsed = action.parser.parse(stdout_lines, stderr_lines, context=context)
         diagnostics = normalize_diagnostics(
             parsed,
             tool_name=tool_name,
@@ -611,8 +622,8 @@ class Orchestrator:
             tool=tool_name,
             action=action.name,
             returncode=adjusted_returncode,
-            stdout=stdout,
-            stderr=stderr,
+            stdout=stdout_lines,
+            stderr=stderr_lines,
             diagnostics=diagnostics,
         )
 
@@ -631,7 +642,9 @@ class Orchestrator:
         from_cache: bool,
     ) -> None:
         metrics_map = (
-            dict(file_metrics) if file_metrics is not None else self._collect_metrics_for_files(state, context.files)
+            dict(file_metrics)
+            if file_metrics is not None
+            else self._collect_metrics_for_files(state, context.files)
         )
         self._update_state_metrics(state, metrics_map)
         state.outcomes[order] = outcome
@@ -750,19 +763,22 @@ class Orchestrator:
     @staticmethod
     def _filter_files_for_tool(extensions: Sequence[str], files: Sequence[Path]) -> list[Path]:
         if not extensions:
-            return list(files)
+            normalised = {path if path.is_absolute() else path.resolve() for path in files}
+            return sorted(normalised, key=lambda item: str(item))
+
         patterns = {ext.lower() for ext in extensions}
-        filtered: list[Path] = []
+        filtered: set[Path] = set()
         for path in files:
-            name = path.name.lower()
+            resolved = path if path.is_absolute() else path.resolve()
+            name = resolved.name.lower()
             if name in patterns:
-                filtered.append(path)
+                filtered.add(resolved)
                 continue
-            suffix = path.suffix.lower()
+            suffix = resolved.suffix.lower()
             if suffix and suffix in patterns:
-                filtered.append(path)
+                filtered.add(resolved)
                 continue
-        return filtered
+        return sorted(filtered, key=lambda item: str(item))
 
     @staticmethod
     def _cache_token(cfg: Config) -> str:

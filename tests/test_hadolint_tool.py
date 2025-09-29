@@ -5,8 +5,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from collections.abc import Mapping
+from pathlib import Path
 
 import pytest
 

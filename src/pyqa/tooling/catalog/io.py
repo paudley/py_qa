@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from collections.abc import Mapping
+from pathlib import Path
 
 from .errors import CatalogIntegrityError
 from .types import JSONValue
@@ -12,7 +12,6 @@ from .types import JSONValue
 
 def load_schema(path: Path) -> Mapping[str, JSONValue]:
     """Return a JSON schema from *path* ensuring it is a JSON object."""
-
     if not path.exists():
         raise FileNotFoundError(path)
     with path.open("r", encoding="utf-8") as stream:
@@ -27,7 +26,6 @@ def load_schema(path: Path) -> Mapping[str, JSONValue]:
 
 def load_document(path: Path) -> JSONValue:
     """Return a JSON document from *path*."""
-
     if not path.exists():
         raise FileNotFoundError(path)
     with path.open("r", encoding="utf-8") as stream:

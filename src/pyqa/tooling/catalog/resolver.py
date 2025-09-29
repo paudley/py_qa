@@ -30,8 +30,8 @@ def resolve_tool_mapping(
 
     Raises:
         CatalogIntegrityError: If the tool references unknown fragments or repeats identifiers.
-    """
 
+    """
     extends_value = mapping.get("extends")
     merged: Mapping[str, JSONValue] = MappingProxyType({})
     if extends_value is not None:
@@ -39,11 +39,15 @@ def resolve_tool_mapping(
         seen: set[str] = set()
         for identifier in fragment_names:
             if identifier in seen:
-                raise CatalogIntegrityError(f"{context}: fragment '{identifier}' referenced multiple times in extends")
+                raise CatalogIntegrityError(
+                    f"{context}: fragment '{identifier}' referenced multiple times in extends",
+                )
             seen.add(identifier)
             fragment = fragments.get(identifier)
             if fragment is None:
-                raise CatalogIntegrityError(f"{context}: unknown fragment '{identifier}' referenced in extends")
+                raise CatalogIntegrityError(
+                    f"{context}: unknown fragment '{identifier}' referenced in extends",
+                )
             merged = merge_json_objects(
                 merged,
                 fragment.data,
@@ -69,16 +73,16 @@ def merge_json_objects(
 
     Returns:
         Mapping[str, JSONValue]: Frozen mapping representing the merged result.
-    """
 
+    """
     merged: dict[str, JSONValue] = {}
     for key, value in base.items():
         merged[key] = freeze_json_value(value, context=f"{context}.{key}")
     for key, value in overlay.items():
         if key in merged and isinstance(merged[key], Mapping) and isinstance(value, Mapping):
             merged[key] = merge_json_objects(
-                cast(Mapping[str, JSONValue], merged[key]),
-                cast(Mapping[str, JSONValue], value),
+                cast("Mapping[str, JSONValue]", merged[key]),
+                cast("Mapping[str, JSONValue]", value),
                 context=f"{context}.{key}",
             )
         else:
@@ -93,14 +97,13 @@ def merge_json_objects(
 
 def to_plain_json(value: JSONValue) -> JSONValue:
     """Convert frozen JSON structures into mutable equivalents for schema validation."""
-
     if isinstance(value, Mapping):
-        return {key: to_plain_json(cast(JSONValue, item)) for key, item in value.items()}
+        return {key: to_plain_json(cast("JSONValue", item)) for key, item in value.items()}
     if isinstance(value, tuple):
-        return [to_plain_json(cast(JSONValue, item)) for item in value]
+        return [to_plain_json(cast("JSONValue", item)) for item in value]
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return [to_plain_json(cast(JSONValue, item)) for item in value]
+        return [to_plain_json(cast("JSONValue", item)) for item in value]
     return value
 
 
-__all__ = ["resolve_tool_mapping", "merge_json_objects", "to_plain_json"]
+__all__ = ["merge_json_objects", "resolve_tool_mapping", "to_plain_json"]
