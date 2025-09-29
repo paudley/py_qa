@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "command_option_map",
+  "type": "command",
+  "description": "Map catalog-defined option metadata to CLI arguments.",
+  "implementation": "pyqa.tooling.strategies.command_option_map",
+  "config": {
+    "base": {
+      "type": "array",
+      "required": true,
+      "description": "Base command invocation prior to option expansion."
+    },
+    "appendFiles": {
+      "type": "boolean",
+      "description": "Whether to append discovered files to the command."
+    },
+    "options": {
+      "type": "array",
+      "description": "Declarative option mappings resolved at runtime.",
+      "items": {
+        "type": "object"
+      }
+    }
+  }
+}

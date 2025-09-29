@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
-from typing import Any
+from typing import cast
 
 from ..loader import CatalogIntegrityError
 from ..tools.base import CommandBuilder, ToolContext
 from ..tools.builtin_helpers import _as_bool, _resolve_path, _setting, _settings_list
 from .common import _normalize_sequence, _require_string_sequence
+from ..catalog.types import JSONValue
 
 
 class _GolangciLintStrategy(CommandBuilder):
@@ -432,4 +432,11 @@ __all__ = [
     "checkmake_command",
     "cpplint_command",
     "dockerfilelint_command",
-    "dot_env_linter_command"? -- wait, actual function is dotenv_linter_command;
+    "dotenv_linter_command",
+    "golangci_lint_command",
+    "perlcritic_command",
+    "perltidy_command",
+    "phplint_command",
+    "speccy_command",
+    "yamllint_command",
+]

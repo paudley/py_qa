@@ -6,7 +6,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
+from collections.abc import Callable
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
@@ -212,7 +213,7 @@ class Tool(BaseModel):
     suppressions_tests: tuple[str, ...] = Field(default_factory=tuple)
     suppressions_general: tuple[str, ...] = Field(default_factory=tuple)
     suppressions_duplicates: tuple[str, ...] = Field(default_factory=tuple)
-    installers: tuple[Callable[["ToolContext"], None], ...] = Field(default_factory=tuple)
+    installers: tuple[Callable[[ToolContext], None], ...] = Field(default_factory=tuple)
     documentation: ToolDocumentation | None = None
 
     _actions_by_name: dict[str, ToolAction] = PrivateAttr(default_factory=dict)
@@ -330,13 +331,13 @@ class Tool(BaseModel):
     def _coerce_installers(
         cls,
         value: object,
-    ) -> tuple[Callable[["ToolContext"], None], ...]:
+    ) -> tuple[Callable[[ToolContext], None], ...]:
         if value is None:
             return ()
         if isinstance(value, tuple):
             return value
         if isinstance(value, list):
-            installers: list[Callable[["ToolContext"], None]] = []
+            installers: list[Callable[[ToolContext], None]] = []
             for item in value:
                 if not callable(item):
                     raise TypeError("installers must contain callables")

@@ -54,7 +54,7 @@ Python
 
 \# Violation of SRP\
 class Order:\
-def \_\_init\_\_(self, order_id: str, items: list\[dict]):\
+def \_\_init\_\_(self, order_id: str, items: list[dict]):\
 self.order_id = order_id\
 self.items = items\
 self.total_price = 0.0
@@ -104,7 +104,7 @@ quantity: int
 
 class Order:\
 """Data class responsible only for holding order information."""\
-def \_\_init\_\_(self, order_id: str, items: list\[OrderItem]):\
+def \_\_init\_\_(self, order_id: str, items: list[OrderItem]):\
 self.order_id = order_id\
 self.items = items\
 self.total_price: float | None = None # Price is calculated externally
@@ -113,14 +113,14 @@ class OrderCalculator:\
 """Responsible solely for order-related calculations."""\
 @staticmethod\
 def calculate_total(order: Order) -> float:\
-price = sum(item\['price'] \* item\['quantity'] for item in order.items)\
+price = sum(item['price'] * item['quantity'] for item in order.items)\
 order.total_price = price\
 return price
 
 class OrderPersistence:\
 """Responsible solely for saving and retrieving orders from a database."""\
 def save(self, order: Order) -> None:\
-print(f"Saving order {order.order_id} with total ${order.total_price:.2f} to the database...")\
+print(f"Saving order {order.order_id} with total \${order.total_price:.2f} to the database...")\
 \# Database logic would go here
 
 class InvoiceGenerator:\
@@ -207,13 +207,13 @@ pass
 class StudentDiscount(Discount):\
 """A concrete discount strategy for students."""\
 def apply(self, total: float) -> float:\
-return total \* 0.8 # 20% discount
+return total * 0.8 # 20% discount
 
 class BulkDiscount(Discount):\
 """A concrete discount strategy for bulk orders."""\
 def apply(self, total: float) -> float:\
 if total >= 100:\
-return total \* 0.9 # 10% discount\
+return total * 0.9 # 10% discount\
 return total
 
 class Order:\
@@ -232,7 +232,7 @@ def get\_final\_price(self) \-\> float:
 \# To add a new discount, we create a new class without modifying Order.\
 class HolidayDiscount(Discount):\
 def apply(self, total: float) -> float:\
-return total \* 0.95 # 5% holiday discount
+return total * 0.95 # 5% holiday discount
 
 With this design, the Order class is closed for modification but open for extension. New discount types can be added simply by creating new subclasses of Discount, promoting maintainability and seamless feature introduction.9
 
@@ -248,7 +248,7 @@ Python
 from abc import ABC, abstractmethod
 
 \# Define a generic type alias for exportable items\
-type ExportableItem = dict\[str, str | int]
+type ExportableItem = dict[str, str | int]
 
 class Exporter(ABC):\
 """A generic abstract exporter, open for extension."""\
@@ -431,7 +431,7 @@ def fax\_document(self, document):
 
 class SimplePrinter(IMachine):\
 def print_document(self, document):\
-print(f"Printing {document}...")
+print(f"Printing \{document}...")
 
 ```
 def scan\_document(self, document):
@@ -473,12 +473,12 @@ pass
 class SimplePrinter(IPrinter):\
 """Implements only the interface it needs."""\
 def print_document(self, document):\
-print(f"Printing {document}...")
+print(f"Printing \{document}...")
 
 class MultiFunctionDevice(IPrinter, IScanner, IFax):\
 """A device that can perform multiple roles."""\
 def print_document(self, document):\
-print(f"Printing {document} from MFD...")
+print(f"Printing \{document} from MFD...")
 
 ```
 def scan\_document(self, document):
@@ -505,7 +505,7 @@ Therefore, ISP can be understood as the application of the Single Responsibility
 The Dependency Inversion Principle (DIP) is arguably the most critical for creating decoupled, modular architectures. It is defined by two key rules 1:
 
 1. High-level modules should not depend on low-level modules. Both should depend on abstractions.
-2. Abstractions should not depend on details. Details should depend on abstractions.
+1. Abstractions should not depend on details. Details should depend on abstractions.
 
 This principle fundamentally inverts the traditional, top-down flow of dependency in software design. Instead of high-level policy modules (e.g., business logic) depending directly on low-level implementation modules (e.g., database access, API clients), the low-level modules are made to conform to an abstraction that is defined and owned by the high-level modules.24
 
@@ -529,7 +529,7 @@ Python
 class EmailClient:\
 """A low-level module for sending emails."""\
 def send_email(self, recipient: str, message: str):\
-print(f"Sending email to {recipient}: {message}")
+print(f"Sending email to \{recipient}: \{message}")
 
 class NotificationService:\
 """A high-level module containing business logic."""\
@@ -547,8 +547,8 @@ def send\_notification(self, user\_email: str, message: str):
 To adhere to DIP, the dependency is inverted.
 
 1. **Define an Abstraction:** The high-level NotificationService defines an interface, IMessageClient, that meets its needs for sending messages.
-2. **Depend on the Abstraction:** The NotificationService is refactored to depend on the IMessageClient interface, not a concrete class. The specific client is now passed in from an external source (this is Dependency Injection, covered in the next chapter).
-3. **Implement the Abstraction:** The low-level modules (EmailClient and a new SmsClient) are modified to implement the IMessageClient interface.
+1. **Depend on the Abstraction:** The NotificationService is refactored to depend on the IMessageClient interface, not a concrete class. The specific client is now passed in from an external source (this is Dependency Injection, covered in the next chapter).
+1. **Implement the Abstraction:** The low-level modules (EmailClient and a new SmsClient) are modified to implement the IMessageClient interface.
 
 Python
 
@@ -574,11 +574,11 @@ def send\_notification(self, user: str, message: str):
 \# 3. Low-level details conform to the abstraction.\
 class EmailClient(IMessageClient):\
 def send(self, recipient: str, message: str) -> None:\
-print(f"Sending email to {recipient}: {message}")
+print(f"Sending email to \{recipient}: \{message}")
 
 class SmsClient(IMessageClient):\
 def send(self, recipient: str, message: str) -> None:\
-print(f"Sending SMS to {recipient}: {message}")
+print(f"Sending SMS to \{recipient}: \{message}")
 
 \# The system can now be configured with different low-level modules\
 \# without changing the NotificationService.\
@@ -667,7 +667,7 @@ def send\_notification(self, user: str, message: str):
 class EmailClient(IMessageClient):\
 def \_\_init\_\_(self, api_key: str):\
 self.api_key = api_key\
-print(f"EmailClient initialized with API key:...{api_key\[-4:]}")
+print(f"EmailClient initialized with API key:...{api_key[-4:]}")
 
 ```
 def send(self, recipient: str, message: str) \-\> None:
@@ -677,7 +677,7 @@ def send(self, recipient: str, message: str) \-\> None:
 class SmsClient(IMessageClient):\
 def \_\_init\_\_(self, account_sid: str):\
 self.account_sid = account_sid\
-print(f"SmsClient initialized with Account SID:...{account_sid\[-4:]}")
+print(f"SmsClient initialized with Account SID:...{account_sid[-4:]}")
 
 ```
 def send(self, recipient: str, message: str) \-\> None:
@@ -723,7 +723,7 @@ notification\_service \= providers.Factory(
 \# --- Main Application Logic ---
 
 @inject\
-def main(service: NotificationService = Provide\[AppContainer.notification_service]):\
+def main(service: NotificationService = Provide[AppContainer.notification_service]):\
 """Main function with dependencies injected by the container."""\
 service.send_notification("user@example.com", "Your order has shipped!")
 
@@ -781,36 +781,36 @@ Applying the SOLID principles, facilitated by modern language features and imple
 #### **Works cited**
 
 1. What is SOLID? Principles for Better Software Design - freeCodeCamp, accessed September 3, 2025, <https://www.freecodecamp.org/news/solid-principles-for-better-software-design/>
-2. SOLID Design Principles Explained: Building Better Software Architecture - DigitalOcean, accessed September 3, 2025, <https://www.digitalocean.com/community/conceptual-articles/s-o-l-i-d-the-first-five-principles-of-object-oriented-design>
-3. SOLID - Wikipedia, accessed September 3, 2025, <https://en.wikipedia.org/wiki/SOLID>
-4. Single Responsibility Principle in Python | by shailesh jadhav - nonstopio, accessed September 3, 2025, <https://blog.nonstopio.com/single-responsibility-principle-in-python-429dc93c7fd5>
-5. The Single Responsibility Principle (SRP) | SOLID Principles in Python, accessed September 3, 2025, <https://yakhyo.github.io/solid-python/solid_python/srp/>
-6. SOLID Principles explained in Python with examples. · GitHub, accessed September 3, 2025, <https://gist.github.com/dmmeteo/f630fa04c7a79d3c132b9e9e5d037bfd>
-7. The SOLID Principles of Object-Oriented Programming Explained in Plain English, accessed September 3, 2025, <https://www.freecodecamp.org/news/solid-principles-explained-in-plain-english/>
-8. Open–closed principle - Wikipedia, accessed September 3, 2025, <https://en.wikipedia.org/wiki/Open%E2%80%93closed_principle>
-9. Open/Closed Principle with Python | by Amar Shukla | Medium, accessed September 3, 2025, <https://medium.com/@amarshukla/open-closed-principle-with-python-f13e1b6b41a4>
-10. Python Open Closed Principle Design Pattern - Clean Code Studio, accessed September 3, 2025, <https://www.cleancode.studio/python/design-patterns-in-python/python-open-closed-principle-design-pattern>
-11. Open closed principle implementation python - Stack Overflow, accessed September 3, 2025, <https://stackoverflow.com/questions/75814531/open-closed-principle-implementation-python>
-12. Python 3.12 Preview: Static Typing Improvements – Real Python, accessed September 3, 2025, <https://realpython.com/python312-typing/>
-13. What's New In Python 3.12 — Python 3.13.7 documentation, accessed September 3, 2025, <https://docs.python.org/3/whatsnew/3.12.html>
-14. The Liskov Substitution Principle (LSP) | SOLID Principles in Python, accessed September 3, 2025, <https://yakhyo.github.io/solid-python/solid_python/lsp/>
-15. Python Liskov Substitution Principle, accessed September 3, 2025, <https://www.pythontutorial.net/python-oop/python-liskov-substitution-principle/>
-16. Liskov Substitution Principle in Python | by shailesh jadhav - nonstopio, accessed September 3, 2025, <https://blog.nonstopio.com/liskov-substitution-principle-in-python-b68d62924f7b>
-17. Liskov substitution principle in Python - Ropali's Blog, accessed September 3, 2025, <https://ropali.hashnode.dev/liskovs-substitution-principle-explained-using-python>
-18. What's New in Python 3.12 - Type Hint Improvements - Andy Pearce, accessed September 3, 2025, <https://www.andy-pearce.com/blog/posts/2023/Dec/whats-new-in-python-312-type-hint-improvements/>
-19. Interface Segregation Principle (ISP) with Python | by Amar Shukla - Medium, accessed September 3, 2025, <https://medium.com/@amarshukla/interface-segregation-principle-isp-with-python-9e64734c0ab9>
-20. Interface Segregation Principle in Python | by shailesh jadhav - nonstopio, accessed September 3, 2025, <https://blog.nonstopio.com/interface-segregation-principle-in-python-cf45771c9f33>
-21. Python Interface Segregation Principle - Python Tutorial, accessed September 3, 2025, <https://www.pythontutorial.net/python-oop/python-interface-segregation-principle/>
-22. Interface Segregation Principle (ISP) | SOLID Principles in Python, accessed September 3, 2025, <https://yakhyo.github.io/solid-python/solid_python/isp/>
-23. Python Dependency Inversion Principle - Python Tutorial, accessed September 3, 2025, <https://www.pythontutorial.net/python-oop/python-dependency-inversion-principle/>
-24. From Dependency Inversion to Dependency Injection in Python ..., accessed September 3, 2025, <https://dev.to/markoulis/from-dependency-inversion-to-dependency-injection-in-python-2h70>
-25. Dependency Inversion Principle (SOLID) - GeeksforGeeks, accessed September 3, 2025, <https://www.geeksforgeeks.org/system-design/dependecy-inversion-principle-solid/>
-26. SOLID Principles: Improve Object-Oriented Design in Python, accessed September 3, 2025, <https://realpython.com/solid-principles-python/>
-27. Dependency Injection in Python: A Complete Guide to Cleaner, Scalable Code - Medium, accessed September 3, 2025, <https://medium.com/@rohanmistry231/dependency-injection-in-python-a-complete-guide-to-cleaner-scalable-code-9c6b38d1b924>
-28. Python Dependency Injection: How to Do It Safely - Xygeni, accessed September 3, 2025, <https://xygeni.io/blog/python-dependency-injection-how-to-do-it-safely/>
-29. Dependency injection in Python | Snyk, accessed September 3, 2025, <https://snyk.io/blog/dependency-injection-python/>
-30. injector · PyPI, accessed September 3, 2025, <https://pypi.org/project/injector/>
-31. dependency-injector · PyPI, accessed September 3, 2025, <https://pypi.org/project/dependency-injector/>
-32. Dependency Injector — Dependency injection framework for Python — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/>
-33. Injector Library and Exploring Dependency Injection in Python | by Luke Garzia | Medium, accessed September 3, 2025, <https://medium.com/@garzia.luke/injector-library-and-exploring-dependency-injection-in-python-4ce10560cd24>
-34. ets-labs/python-dependency-injector: Dependency injection framework for Python - GitHub, accessed September 3, 2025, <https://github.com/ets-labs/python-dependency-injector>
+1. SOLID Design Principles Explained: Building Better Software Architecture - DigitalOcean, accessed September 3, 2025, <https://www.digitalocean.com/community/conceptual-articles/s-o-l-i-d-the-first-five-principles-of-object-oriented-design>
+1. SOLID - Wikipedia, accessed September 3, 2025, <https://en.wikipedia.org/wiki/SOLID>
+1. Single Responsibility Principle in Python | by shailesh jadhav - nonstopio, accessed September 3, 2025, <https://blog.nonstopio.com/single-responsibility-principle-in-python-429dc93c7fd5>
+1. The Single Responsibility Principle (SRP) | SOLID Principles in Python, accessed September 3, 2025, <https://yakhyo.github.io/solid-python/solid_python/srp/>
+1. SOLID Principles explained in Python with examples. · GitHub, accessed September 3, 2025, <https://gist.github.com/dmmeteo/f630fa04c7a79d3c132b9e9e5d037bfd>
+1. The SOLID Principles of Object-Oriented Programming Explained in Plain English, accessed September 3, 2025, <https://www.freecodecamp.org/news/solid-principles-explained-in-plain-english/>
+1. Open–closed principle - Wikipedia, accessed September 3, 2025, <https://en.wikipedia.org/wiki/Open%E2%80%93closed_principle>
+1. Open/Closed Principle with Python | by Amar Shukla | Medium, accessed September 3, 2025, <https://medium.com/@amarshukla/open-closed-principle-with-python-f13e1b6b41a4>
+1. Python Open Closed Principle Design Pattern - Clean Code Studio, accessed September 3, 2025, <https://www.cleancode.studio/python/design-patterns-in-python/python-open-closed-principle-design-pattern>
+1. Open closed principle implementation python - Stack Overflow, accessed September 3, 2025, <https://stackoverflow.com/questions/75814531/open-closed-principle-implementation-python>
+1. Python 3.12 Preview: Static Typing Improvements – Real Python, accessed September 3, 2025, <https://realpython.com/python312-typing/>
+1. What's New In Python 3.12 — Python 3.13.7 documentation, accessed September 3, 2025, <https://docs.python.org/3/whatsnew/3.12.html>
+1. The Liskov Substitution Principle (LSP) | SOLID Principles in Python, accessed September 3, 2025, <https://yakhyo.github.io/solid-python/solid_python/lsp/>
+1. Python Liskov Substitution Principle, accessed September 3, 2025, <https://www.pythontutorial.net/python-oop/python-liskov-substitution-principle/>
+1. Liskov Substitution Principle in Python | by shailesh jadhav - nonstopio, accessed September 3, 2025, <https://blog.nonstopio.com/liskov-substitution-principle-in-python-b68d62924f7b>
+1. Liskov substitution principle in Python - Ropali's Blog, accessed September 3, 2025, <https://ropali.hashnode.dev/liskovs-substitution-principle-explained-using-python>
+1. What's New in Python 3.12 - Type Hint Improvements - Andy Pearce, accessed September 3, 2025, <https://www.andy-pearce.com/blog/posts/2023/Dec/whats-new-in-python-312-type-hint-improvements/>
+1. Interface Segregation Principle (ISP) with Python | by Amar Shukla - Medium, accessed September 3, 2025, <https://medium.com/@amarshukla/interface-segregation-principle-isp-with-python-9e64734c0ab9>
+1. Interface Segregation Principle in Python | by shailesh jadhav - nonstopio, accessed September 3, 2025, <https://blog.nonstopio.com/interface-segregation-principle-in-python-cf45771c9f33>
+1. Python Interface Segregation Principle - Python Tutorial, accessed September 3, 2025, <https://www.pythontutorial.net/python-oop/python-interface-segregation-principle/>
+1. Interface Segregation Principle (ISP) | SOLID Principles in Python, accessed September 3, 2025, <https://yakhyo.github.io/solid-python/solid_python/isp/>
+1. Python Dependency Inversion Principle - Python Tutorial, accessed September 3, 2025, <https://www.pythontutorial.net/python-oop/python-dependency-inversion-principle/>
+1. From Dependency Inversion to Dependency Injection in Python ..., accessed September 3, 2025, <https://dev.to/markoulis/from-dependency-inversion-to-dependency-injection-in-python-2h70>
+1. Dependency Inversion Principle (SOLID) - GeeksforGeeks, accessed September 3, 2025, <https://www.geeksforgeeks.org/system-design/dependecy-inversion-principle-solid/>
+1. SOLID Principles: Improve Object-Oriented Design in Python, accessed September 3, 2025, <https://realpython.com/solid-principles-python/>
+1. Dependency Injection in Python: A Complete Guide to Cleaner, Scalable Code - Medium, accessed September 3, 2025, <https://medium.com/@rohanmistry231/dependency-injection-in-python-a-complete-guide-to-cleaner-scalable-code-9c6b38d1b924>
+1. Python Dependency Injection: How to Do It Safely - Xygeni, accessed September 3, 2025, <https://xygeni.io/blog/python-dependency-injection-how-to-do-it-safely/>
+1. Dependency injection in Python | Snyk, accessed September 3, 2025, <https://snyk.io/blog/dependency-injection-python/>
+1. injector · PyPI, accessed September 3, 2025, <https://pypi.org/project/injector/>
+1. dependency-injector · PyPI, accessed September 3, 2025, <https://pypi.org/project/dependency-injector/>
+1. Dependency Injector — Dependency injection framework for Python — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/>
+1. Injector Library and Exploring Dependency Injection in Python | by Luke Garzia | Medium, accessed September 3, 2025, <https://medium.com/@garzia.luke/injector-library-and-exploring-dependency-injection-in-python-4ce10560cd24>
+1. ets-labs/python-dependency-injector: Dependency injection framework for Python - GitHub, accessed September 3, 2025, <https://github.com/ets-labs/python-dependency-injector>

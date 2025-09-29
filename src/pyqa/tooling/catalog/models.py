@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal, Mapping, Sequence, TypeAlias, cast
+from typing import Literal, TypeAlias, cast
+from collections.abc import Mapping, Sequence
 
 from .errors import CatalogIntegrityError
 from .types import STRATEGY_SCHEMA_VERSION, TOOL_SCHEMA_VERSION, JSONValue
@@ -29,7 +30,7 @@ class StrategyReference:
     config: Mapping[str, JSONValue]
 
     @staticmethod
-    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> "StrategyReference":
+    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> StrategyReference:
         """Create a ``StrategyReference`` instance from JSON data.
 
         Args:
@@ -60,7 +61,7 @@ class CommandDefinition:
     reference: StrategyReference
 
     @staticmethod
-    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> "CommandDefinition":
+    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> CommandDefinition:
         """Create a ``CommandDefinition`` from JSON data.
 
         Args:
@@ -81,7 +82,7 @@ class ParserDefinition:
     reference: StrategyReference
 
     @staticmethod
-    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> "ParserDefinition":
+    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> ParserDefinition:
         """Create a ``ParserDefinition`` from JSON data.
 
         Args:
@@ -103,7 +104,7 @@ class RuntimeInstallDefinition:
     config: Mapping[str, JSONValue]
 
     @staticmethod
-    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> "RuntimeInstallDefinition":
+    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> RuntimeInstallDefinition:
         """Create an install definition from JSON data.
 
         Args:
@@ -143,7 +144,7 @@ class RuntimeDefinition:
     install: RuntimeInstallDefinition | None
 
     @staticmethod
-    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> "RuntimeDefinition":
+    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> RuntimeDefinition:
         """Create a ``RuntimeDefinition`` from JSON data.
 
         Args:
@@ -190,7 +191,7 @@ class DiagnosticsDefinition:
     severity_mapping: Mapping[str, str]
 
     @staticmethod
-    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> "DiagnosticsDefinition":
+    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> DiagnosticsDefinition:
         """Create a ``DiagnosticsDefinition`` from JSON data.
 
         Args:
@@ -215,7 +216,7 @@ class SuppressionsDefinition:
     duplicates: tuple[str, ...]
 
     @staticmethod
-    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> "SuppressionsDefinition":
+    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> SuppressionsDefinition:
         """Create a ``SuppressionsDefinition`` from JSON data.
 
         Args:
@@ -261,7 +262,7 @@ class CliOptionMetadata:
     multiple: bool
 
     @staticmethod
-    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> "CliOptionMetadata":
+    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> CliOptionMetadata:
         """Create CLI metadata from JSON data.
 
         Args:
@@ -291,7 +292,7 @@ class OptionDefinition:
     aliases: tuple[str, ...]
 
     @staticmethod
-    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> "OptionDefinition":
+    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> OptionDefinition:
         """Create an ``OptionDefinition`` from JSON data.
 
         Args:
@@ -336,7 +337,7 @@ class OptionGroupDefinition:
     options: tuple[OptionDefinition, ...]
 
     @staticmethod
-    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> "OptionGroupDefinition":
+    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> OptionGroupDefinition:
         title_value = expect_string(data.get("title"), key="title", context=context)
         options_value = _options_array(data.get("options"), key="options", context=context)
         return OptionGroupDefinition(title=title_value, options=options_value)
@@ -350,7 +351,7 @@ class OptionDocumentationBundle:
     entries: tuple[OptionDefinition, ...]
 
     @staticmethod
-    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> "OptionDocumentationBundle":
+    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> OptionDocumentationBundle:
         groups_data = data.get("groups")
         groups_value: tuple[OptionGroupDefinition, ...] = ()
         if isinstance(groups_data, Sequence) and not isinstance(groups_data, (str, bytes, bytearray)):
@@ -382,7 +383,7 @@ class DocumentationEntry:
         context: str,
         catalog_root: Path,
         source: Path,
-    ) -> "DocumentationEntry":
+    ) -> DocumentationEntry:
         """Create documentation entry metadata from JSON data."""
 
         format_value = optional_string(data.get("format"), key="format", context=context) or "text"
@@ -421,7 +422,7 @@ class DocumentationBundle:
         context: str,
         catalog_root: Path,
         source: Path,
-    ) -> "DocumentationBundle":
+    ) -> DocumentationBundle:
         """Create a ``DocumentationBundle`` from JSON data."""
 
         help_entry = _documentation_entry(
@@ -482,7 +483,7 @@ class ActionDefinition:
     parser: ParserDefinition | None
 
     @staticmethod
-    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> "ActionDefinition":
+    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> ActionDefinition:
         """Create an ``ActionDefinition`` from JSON data.
 
         Args:
@@ -583,7 +584,7 @@ class ToolDefinition:
         *,
         source: Path,
         catalog_root: Path,
-    ) -> "ToolDefinition":
+    ) -> ToolDefinition:
         """Create a ``ToolDefinition`` from JSON data.
 
         Args:
@@ -688,7 +689,7 @@ class StrategyConfigField:
     description: str | None
 
     @staticmethod
-    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> "StrategyConfigField":
+    def from_mapping(data: Mapping[str, JSONValue], *, context: str) -> StrategyConfigField:
         """Create a configuration field descriptor from JSON data.
 
         Args:
@@ -726,7 +727,7 @@ class StrategyDefinition:
     source: Path
 
     @staticmethod
-    def from_mapping(data: Mapping[str, JSONValue], *, source: Path) -> "StrategyDefinition":
+    def from_mapping(data: Mapping[str, JSONValue], *, source: Path) -> StrategyDefinition:
         """Create a ``StrategyDefinition`` from JSON data.
 
         Args:

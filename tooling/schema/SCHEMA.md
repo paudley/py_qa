@@ -77,9 +77,9 @@ entry includes:
 
 1. `ToolCatalogLoader` loads strategy definitions first and validates every JSON
    document against `strategy_definition.schema.json`.
-2. Tool definitions and fragments are loaded next, validated against
+1. Tool definitions and fragments are loaded next, validated against
    `tool_definition.schema.json`, and merged with `_shared` fragments.
-3. A snapshot containing the checksum and validated data structures is produced
+1. A snapshot containing the checksum and validated data structures is produced
    for use by the registry.
 
 Authors can run `uv run pytest tests/test_tooling_loader.py` to exercise schema

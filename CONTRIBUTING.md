@@ -36,13 +36,13 @@ Enhancement ideas are also tracked via [issues](https://github.com/paudley/py_qa
 ### Pull Requests
 
 1. Fork the repo and create a feature branch off `main`
-2. Follow the setup instructions in the README (`uv sync --group dev` etc.)
-3. Make your changes adhering to the style guidelines and Code of Conduct
-4. Add or update tests where relevant
-5. Run `uv run pytest` (or the focused test suite relevant to your change)
-6. Regenerate `ref_docs/tool-schema.json` when tool settings change (`uv run pyqa config export-tools ref_docs/tool-schema.json`)
-7. Update docs if behaviour changes
-8. Submit your pull request with a clear description and references to issues when applicable
+1. Follow the setup instructions in the README (`uv sync --group dev` etc.)
+1. Make your changes adhering to the style guidelines and Code of Conduct
+1. Add or update tests where relevant
+1. Run `uv run pytest` (or the focused test suite relevant to your change)
+1. Regenerate `ref_docs/tool-schema.json` when tool settings change (`uv run pyqa config export-tools ref_docs/tool-schema.json`)
+1. Update docs if behaviour changes
+1. Submit your pull request with a clear description and references to issues when applicable
 
 ## Development Setup
 
@@ -73,10 +73,10 @@ uv sync --group dev
 
 Before requesting review, make sure you:
 
-- \[ ] ran `uv run pytest` (or the subset relevant to your change)
-- \[ ] regenerated `ref_docs/tool-schema.json` if tool settings changed
-- \[ ] updated README.md or other docs (including catalog docs) if workflow/behaviour changed
-- \[ ] confirmed CI checks (`uv run pyqa check-quality`) pass locally when possible
+- \[ \] ran `uv run pytest` (or the subset relevant to your change)
+- \[ \] regenerated `ref_docs/tool-schema.json` if tool settings changed
+- \[ \] updated README.md or other docs (including catalog docs) if workflow/behaviour changed
+- \[ \] confirmed CI checks (`uv run pyqa check-quality`) pass locally when possible
 
 ## Commit Messages
 

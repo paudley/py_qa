@@ -30,9 +30,9 @@ from ..models import RunResult
 from ..reporting.emitters import write_json_report, write_pr_summary, write_sarif_report
 from ..reporting.formatters import render
 from ..tool_env.models import PreparedCommand
-from ..tooling.loader import CatalogIntegrityError, CatalogValidationError, ToolCatalogLoader
 from ..tools.builtin_registry import initialize_registry
 from ..tools.registry import DEFAULT_REGISTRY
+from ..tooling.catalog.errors import CatalogIntegrityError, CatalogValidationError
 from ..workspace import is_py_qa_workspace
 from .config_builder import build_config
 from .doctor import run_doctor
@@ -209,6 +209,11 @@ def lint_command(
         "--advice",
         help="Provide SOLID-aligned refactoring suggestions alongside diagnostics.",
     ),
+    validate_schema: bool = typer.Option(
+        False,
+        "--validate-schema",
+        help="Validate catalog definitions against bundled schemas and exit.",
+    ),
 ) -> None:
     """Entry point for the ``pyqa lint`` CLI command."""
     if doctor and tool_info:
@@ -217,6 +222,12 @@ def lint_command(
         raise typer.BadParameter("--doctor and --fetch-all-tools cannot be combined")
     if tool_info and fetch_all_tools:
         raise typer.BadParameter("--tool-info and --fetch-all-tools cannot be combined")
+    if validate_schema and doctor:
+        raise typer.BadParameter("--validate-schema and --doctor cannot be combined")
+    if validate_schema and tool_info:
+        raise typer.BadParameter("--validate-schema and --tool-info cannot be combined")
+    if validate_schema and fetch_all_tools:
+        raise typer.BadParameter("--validate-schema and --fetch-all-tools cannot be combined")
 
     if fix_only and check_only:
         raise typer.BadParameter("--fix-only and --check-only are mutually exclusive")
@@ -251,6 +262,15 @@ def lint_command(
     if doctor:
         exit_code = run_doctor(root)
         raise typer.Exit(code=exit_code)
+
+    if validate_schema:
+        try:
+            initialize_registry(registry=DEFAULT_REGISTRY)
+        except (CatalogValidationError, CatalogIntegrityError) as exc:
+            typer.echo(f"Catalog validation failed: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        typer.echo("Catalog validation succeeded")
+        raise typer.Exit(code=0)
 
     effective_jobs = jobs if jobs is not None else default_parallel_jobs()
 

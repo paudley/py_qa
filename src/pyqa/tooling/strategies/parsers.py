@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
-from typing import Any, Iterator, Literal, NamedTuple
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import Any, Literal, NamedTuple
 
 from ..loader import CatalogIntegrityError
 from ..models import RawDiagnostic
 from ..parsers.base import JsonParser, TextParser
+from ..tools.base import ToolContext
 from .common import _as_plain_json, _load_attribute, _require_str
 
 
@@ -368,8 +369,7 @@ def _descend(nodes: Iterable[Any], token: _PathComponent) -> Iterator[Any]:
     elif token.kind == "wildcard":
         for node in nodes:
             if isinstance(node, Sequence) and not isinstance(node, (str, bytes, bytearray)):
-                for item in node:
-                    yield item
+                yield from node
 
 
 def _extract_path(entry: Mapping[str, Any], path: tuple[_PathComponent, ...] | None) -> Any | None:

@@ -64,20 +64,20 @@ This repository provides a comprehensive suite of quality assurance, linting, te
    git submodule add https://github.com/paudley/qa-py.git qa-py
    ```
 
-2. **Install Git Hooks**: Run the installation script to set up the automated quality checks.
+1. **Install Git Hooks**: Run the installation script to set up the automated quality checks.
 
    ```bash
    ./py-qa/install-hooks
    ```
 
-3. **Bootstrap the Environment**: Install the managed dependencies into `.venv` using `uv`.
+1. **Bootstrap the Environment**: Install the managed dependencies into `.venv` using `uv`.
 
    ```bash
    cd py-qa
    uv sync --group dev
    ```
 
-4. **Run a Full Lint Check**: Invoke the Typer CLI to lint your project.
+1. **Run a Full Lint Check**: Invoke the Typer CLI to lint your project.
 
    ```bash
    ./py-qa/lint

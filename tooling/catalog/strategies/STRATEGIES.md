@@ -75,12 +75,12 @@ optional `version`/`contextLabel` overrides.
 
 1. Implement the corresponding factory in `pyqa.tooling.strategies` and export it
    via `__all__`.
-2. Create a JSON descriptor in this directory using the structure above.
-3. Describe any configuration keys in the `config` object to help authors and to
+1. Create a JSON descriptor in this directory using the structure above.
+1. Describe any configuration keys in the `config` object to help authors and to
    support validation tooling.
-4. Update `tooling/schema/strategy_definition.schema.json` if new concepts are
+1. Update `tooling/schema/strategy_definition.schema.json` if new concepts are
    introduced that should be enforced globally.
-5. Add tests that exercise the new strategy (e.g. under `tests/`), referencing it
+1. Add tests that exercise the new strategy (e.g. under `tests/`), referencing it
    through the catalog to ensure end-to-end coverage.
 
 ## Tips for Catalog Authors

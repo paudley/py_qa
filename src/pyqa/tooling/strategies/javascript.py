@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
-from typing import Any
+from typing import cast
 
 from ..loader import CatalogIntegrityError
 from ..tools.base import CommandBuilder, ToolContext
 from ..tools.builtin_helpers import _as_bool, _resolve_path, _setting, _settings_list
-from .common import _normalize_sequence, _require_str, _require_string_sequence
+from .common import _normalize_sequence, _require_string_sequence
+from ..catalog.types import JSONValue
 
 
 class _EslintStrategy(CommandBuilder):
@@ -103,7 +103,7 @@ class _EslintStrategy(CommandBuilder):
         return tuple(cmd)
 
 
-def eslint_command(config: Mapping[str, Any]) -> CommandBuilder:
+def eslint_command(config: Mapping[str, JSONValue]) -> CommandBuilder:
     """Return a command builder configured for ESLint."""
 
     base_args = _require_string_sequence(config, "base", context="command_eslint")
@@ -198,7 +198,7 @@ class _PrettierStrategy(CommandBuilder):
         return tuple(cmd)
 
 
-def prettier_command(config: Mapping[str, Any]) -> CommandBuilder:
+def prettier_command(config: Mapping[str, JSONValue]) -> CommandBuilder:
     """Return a command builder configured for Prettier."""
 
     base_args = _require_string_sequence(config, "base", context="command_prettier")

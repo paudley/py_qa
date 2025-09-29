@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Mapping
+from collections.abc import Mapping
 
 from .catalog_metadata import CatalogOption, catalog_tool_options
 

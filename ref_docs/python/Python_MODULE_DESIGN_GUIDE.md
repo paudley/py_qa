@@ -89,13 +89,13 @@ Understanding the different forms of coupling helps in identifying and mitigatin
 
 The following table provides a summary for identifying and addressing different coupling types.
 
-| Coupling Type        | Description                                                   | Python Example                                   | Maintainability Risk | Recommendation                                                                                                           |
-| :------------------- | :------------------------------------------------------------ | :----------------------------------------------- | :------------------- | :----------------------------------------------------------------------------------------------------------------------- |
-| **Data Coupling**    | Modules communicate by passing primitive data via parameters. | process_data(user_id: int, item_name: str)       | Low                  | Ideal; use whenever possible.                                                                                            |
-| **Stamp Coupling**   | Modules communicate by passing a whole data structure.        | process_user(user: UserData)                     | Low-Medium           | Acceptable, especially with Pydantic models. Prefer passing only required data if the structure is complex and volatile. |
-| **Control Coupling** | One module passes a control flag to another.                  | generate_report(data: list, mode: str)           | Medium               | Refactor to use separate functions or the Strategy pattern to avoid passing control flags.                               |
-| **Common Coupling**  | Modules share a global mutable state.                         | import config; config.SETTINGS\['mode'] = 'prod' | High                 | Avoid global mutable state. Use explicit configuration objects or dependency injection instead.                          |
-| **Content Coupling** | One module modifies the internal state of another.            | other_module.\_internal_variable = 10            | Extreme              | Anti-pattern; strictly forbidden. Interact only through the defined public API of a module.                              |
+| Coupling Type        | Description                                                   | Python Example                                  | Maintainability Risk | Recommendation                                                                                                           |
+| :------------------- | :------------------------------------------------------------ | :---------------------------------------------- | :------------------- | :----------------------------------------------------------------------------------------------------------------------- |
+| **Data Coupling**    | Modules communicate by passing primitive data via parameters. | process_data(user_id: int, item_name: str)      | Low                  | Ideal; use whenever possible.                                                                                            |
+| **Stamp Coupling**   | Modules communicate by passing a whole data structure.        | process_user(user: UserData)                    | Low-Medium           | Acceptable, especially with Pydantic models. Prefer passing only required data if the structure is complex and volatile. |
+| **Control Coupling** | One module passes a control flag to another.                  | generate_report(data: list, mode: str)          | Medium               | Refactor to use separate functions or the Strategy pattern to avoid passing control flags.                               |
+| **Common Coupling**  | Modules share a global mutable state.                         | import config; config.SETTINGS['mode'] = 'prod' | High                 | Avoid global mutable state. Use explicit configuration objects or dependency injection instead.                          |
+| **Content Coupling** | One module modifies the internal state of another.            | other_module.\_internal_variable = 10           | Extreme              | Anti-pattern; strictly forbidden. Interact only through the defined public API of a module.                              |
 
 The refactoring of a vehicle registration application provides a clear example of reducing coupling. Initially, a single Application class is responsible for everything, including generating vehicle IDs and calculating taxes, making it highly coupled to the implementation details of these processes.4
 
@@ -108,7 +108,7 @@ registry = VehicleRegistry()\
 \# The Application class knows too much about how to create a vehicle.\
 vehicle_id = registry.generate_vehicle_id(12)\
 license_plate = registry.generate_vehicle_license(vehicle_id)\
-\#... more logic for price and tax calculation...
+#... more logic for price and tax calculation...
 
 A loosely coupled design abstracts these details into other classes. The Application class interacts with a simplified, high-level interface, delegating the complex work.4
 
@@ -209,9 +209,9 @@ class AreaCalculator:\
 """This class violates OCP because it must be modified to add new shapes."""\
 def calculate*area(self, shape_type: str, \*\*kwargs) -> float:\
 if shape_type == "rectangle":\
-return kwargs\["width"] \* kwargs\["height"]\
+return kwargs["width"] * kwargs["height"]\
 elif shape*type == "circle":\
-return pi \* kwargs\["radius"] \*\* 2\
+return pi * kwargs["radius"] \*\* 2\
 \# To add a triangle, this function must be modified.\
 return 0.0
 
@@ -319,7 +319,7 @@ def scan_doc(self, document: str) -> None: pass
 
 class OldPrinter(MultiFunctionDevice):\
 def print_doc(self, document: str) -> None:\
-print(f"Printing {document}")
+print(f"Printing \{document}")
 
 ```
 def fax\_doc(self, document: str) \-\> None:
@@ -353,11 +353,11 @@ from.interfaces import Printable, Faxable, Scannable
 
 class OldPrinter(Printable):\
 def print_doc(self, document: str) -> None:\
-print(f"Printing {document}")
+print(f"Printing \{document}")
 
 class ModernPrinter(Printable, Faxable, Scannable):\
 def print_doc(self, document: str) -> None:\
-print(f"Printing {document} in color")
+print(f"Printing \{document} in color")
 
 ```
 def fax\_doc(self, document: str) \-\> None:
@@ -372,7 +372,7 @@ def scan\_doc(self, document: str) \-\> None:
 The Dependency Inversion Principle is a cornerstone of decoupled architecture. It consists of two parts:
 
 1. High-level modules should not depend on low-level modules. Both should depend on abstractions.
-2. Abstractions should not depend on details. Details should depend on abstractions.11
+1. Abstractions should not depend on details. Details should depend on abstractions.11
 
 This principle effectively "inverts" the traditional dependency flow, where high-level policy code would typically depend directly on low-level utility code.
 
@@ -457,7 +457,7 @@ Python
 class EmailService:\
 """A concrete service for sending emails."""\
 def send_email(self, recipient: str, message: str) -> None:\
-print(f"Sending email to {recipient}: {message}")
+print(f"Sending email to \{recipient}: \{message}")
 
 \# components.py\
 from.services import EmailService
@@ -501,7 +501,7 @@ Python
 class Logger:\
 """A service for logging messages."""\
 def log(self, message: str) -> None:\
-print(f"\[LOG]: {message}")
+print(f"\[LOG\]: \{message}")
 
 \# components.py\
 from typing import Optional\
@@ -513,7 +513,7 @@ This component has an optional dependency on a Logger, which can be\
 injected via a setter method.\
 """\
 def \_\_init\_\_(self):\
-self.\_logger: Optional\[Logger] = None
+self.\_logger: Optional[Logger] = None
 
 ```
 def set\_logger(self, logger: Logger) \-\> None:
@@ -606,32 +606,32 @@ Python
 
 """A module for various string manipulation utilities."""
 
-\_\_all\_\_ = \['is_palindrome', 'truncate_string']
+\_\_all\_\_ = ['is_palindrome', 'truncate_string']
 
 import re
 
 \# Internal helper function, not part of the public API.\
 def \_count_words(text: str) -> int:\
-return len(re.findall(r'\w+', text))
+return len(re.findall(r'\\w+', text))
 
 \# Public API function.\
 def is_palindrome(text: str) -> bool:\
 """Checks if a string is a palindrome."""\
 normalized = "".join(filter(str.isalnum, text)).lower()\
-return normalized == normalized\[::-1]
+return normalized == normalized[::-1]
 
 \# Public API function.\
 def truncate_string(text: str, max_length: int) -> str:\
 """Truncates a string to a maximum length."""\
-if len(text) <= max_length:\
+if len(text) \<= max_length:\
 return text\
-return text\[:max_length-3] + "..."
+return text[:max_length-3] + "..."
 
 \# Another internal function, not exported.\
 def \_log_operation(op_name: str) -> None:\
-print(f"Operation performed: {op_name}")
+print(f"Operation performed: \{op_name}")
 
-In this example, only is_palindrome and truncate_string are considered public. An attempt to use from string_utils import \* would only import these two names.18
+In this example, only is_palindrome and truncate_string are considered public. An attempt to use from string_utils import * would only import these two names.18
 
 ### **The Convention of Internal Use: Single Underscore (\_)**
 
@@ -648,7 +648,7 @@ Python
 
 \# data_processor.py
 
-\_\_all\_\_ = \['process_records']
+\_\_all\_\_ = ['process_records']
 
 class \_DataRecord:\
 """Internal data structure, not for external use."""\
@@ -657,10 +657,10 @@ self.data = raw_data
 
 def \_clean_record(record: \_DataRecord) -> \_DataRecord:\
 """Internal helper to clean a single record."""\
-\#... cleaning logic...\
+#... cleaning logic...\
 return record
 
-def process_records(records_data: list\[dict]) -> list\[dict]:\
+def process_records(records_data: list[dict]) -> list\[dict\]:\
 """\
 Public function to process a list of raw data records.
 
@@ -706,8 +706,8 @@ The most robust and correct solution to a circular import is to refactor the cod
 This refactoring almost always involves the following steps 22:
 
 1. **Identify the Shared Dependency:** Determine the specific class, function, or constant that both modules are trying to access from each other.
-2. **Extract to a New Module:** Move this shared dependency into a new, lower-level module (often named common.py, base.py, or interfaces.py).
-3. **Update Imports:** Modify the original two modules to import the shared dependency from the new module.
+1. **Extract to a New Module:** Move this shared dependency into a new, lower-level module (often named common.py, base.py, or interfaces.py).
+1. **Update Imports:** Modify the original two modules to import the shared dependency from the new module.
 
 This process breaks the circular dependency and creates a healthier, hierarchical dependency graph where both original modules depend on the new, lower-level module, but not on each other. This is a direct application of the Dependency Inversion Principle, where the new module serves as an abstraction that both higher-level modules can depend on.
 
@@ -716,7 +716,7 @@ This process breaks the circular dependency and creates a healthier, hierarchica
 Python
 
 \# models.py (Problematic)\
-from services import generate_unique_slug # <-- Causes circular import
+from services import generate_unique_slug # \<-- Causes circular import
 
 class Article:\
 def \_\_init\_\_(self, title: str):\
@@ -724,14 +724,14 @@ self.title = title\
 self.slug = generate_unique_slug(title)
 
 \# services.py (Problematic)\
-from models import Article # <-- Depends on models
+from models import Article # \<-- Depends on models
 
 def generate_unique_slug(text: str) -> str:\
-\#... logic to create a slug...\
+#... logic to create a slug...\
 return "some-slug"
 
 def get_article_by_slug(slug: str) -> Article:\
-\#... database logic to fetch an article...\
+#... database logic to fetch an article...\
 return Article(title="An Article")
 
 Here, models.py imports services.py, and services.py imports models.py.
@@ -742,11 +742,11 @@ Python
 
 \# utils.py (New Module)\
 def generate_unique_slug(text: str) -> str:\
-\#... logic to create a slug...\
+#... logic to create a slug...\
 return "some-slug"
 
 \# models.py (Refactored)\
-from utils import generate_unique_slug # <-- Now depends on utils
+from utils import generate_unique_slug # \<-- Now depends on utils
 
 class Article:\
 def \_\_init\_\_(self, title: str):\
@@ -754,11 +754,11 @@ self.title = title\
 self.slug = generate_unique_slug(title)
 
 \# services.py (Refactored)\
-from models import Article # <-- Still depends on models (which is fine)\
+from models import Article # \<-- Still depends on models (which is fine)\
 \# No longer needs to define or import the slug function.
 
 def get_article_by_slug(slug: str) -> Article:\
-\#... database logic to fetch an article...\
+#... database logic to fetch an article...\
 return Article(title="An Article")
 
 The dependency graph is now services.py -> models.py -> utils.py, which is a clean, unidirectional flow.
@@ -783,7 +783,7 @@ Python
 def some_service_function():\
 \# Import is delayed until this function is called.\
 from models import SomeModel\
-\#... logic using SomeModel...
+#... logic using SomeModel...
 
 This approach breaks the import-time cycle but should be used with caution, as it obscures the module's true dependencies and fails to address the underlying tight coupling.22
 
@@ -810,10 +810,10 @@ Python
 \# A function signature with strong typing.\
 def process_user_data(\
 user_id: int,\
-metadata: dict\[str, str | int]\
+metadata: dict[str, str | int]\
 ) -> bool:\
 """Processes user data and returns a success flag."""\
-\#... implementation...\
+#... implementation...\
 return True
 
 While essential, standard type hints are not enforced by the Python runtime; they are merely annotations.30
@@ -853,7 +853,7 @@ It does not need to perform any internal validation.\
 """\
 if not user.is_active:\
 print(f"Activating user {user.username} (ID: {user.user_id}).")\
-\#... logic to update user status in the database...\
+#... logic to update user status in the database...\
 else:\
 print(f"User {user.username} is already active.")
 
@@ -872,7 +872,7 @@ try:\
 user_contract = UserData.model_validate(raw_data)\
 activate_user(user=user_contract)\
 except ValidationError as e:\
-print(f"Invalid API data received: {e}")
+print(f"Invalid API data received: \{e}")
 
 In this example, api_handler is responsible for enforcing the contract. The user_processing module receives a UserData object that is guaranteed to be valid, simplifying its internal logic.
 
@@ -888,11 +888,11 @@ def generate_financial_report(\
 start_date: date,\
 end_date: date,\
 client_id: int,\
-report_type: Literal\["summary", "detailed"],\
+report_type: Literal["summary", "detailed"],\
 include_projections: bool,\
 currency: str = "USD"\
 ) -> str:\
-\#... complex implementation...\
+#... complex implementation...\
 return "report_content"
 
 **Adherence Example:** The parameters are grouped into a ReportParams model, which serves as a single, validated parameter object.
@@ -909,7 +909,7 @@ class ReportParams(BaseModel):\
 start_date: date\
 end_date: date\
 client_id: int = Field(gt=0)\
-report_type: Literal\["summary", "detailed"]\
+report_type: Literal["summary", "detailed"]\
 include_projections: bool\
 currency: str = "USD"
 
@@ -922,7 +922,7 @@ Generates a financial report using a validated parameter object.\
 The function signature is clean and the parameters are self-documenting.\
 """\
 print(f"Generating {params.report_type} report for client {params.client_id}...")\
-\#... implementation uses params.start_date, etc....\
+#... implementation uses params.start_date, etc....\
 return "report_content"
 
 This approach not only simplifies the function signature but also makes the parameters reusable and easier to test.
@@ -997,42 +997,42 @@ By mandating both a docstring and a README.md, the documentation strategy ensure
 #### **Works cited**
 
 1. Python and content coupling - Reddit, accessed September 5, 2025, <https://www.reddit.com/r/Python/comments/2wgpud/python_and_content_coupling/>
-2. How Design Principles Help You Write Better Python Code - Amsterdam Tech, accessed September 5, 2025, <https://amsterdam.tech/how-design-principles-help-you-write-better-python-code/>
-3. Coupling and Cohesion - Software Engineering - GeeksforGeeks, accessed September 5, 2025, <https://www.geeksforgeeks.org/software-engineering/software-engineering-coupling-and-cohesion/>
-4. Cohesion vs Coupling - Important Python topics, accessed September 5, 2025, <https://pythonexpert.hashnode.dev/cohesion-and-coupling-in-python>
-5. SOLID Design Principles Explained: Building Better Software Architecture - DigitalOcean, accessed September 5, 2025, <https://www.digitalocean.com/community/conceptual-articles/s-o-l-i-d-the-first-five-principles-of-object-oriented-design>
-6. SOLID Principles explained in Python with examples. - GitHub Gist, accessed September 5, 2025, <https://gist.github.com/dmmeteo/f630fa04c7a79d3c132b9e9e5d037bfd>
-7. Design Principles: High Cohesion and Low Coupling | by Paul Chuang - Medium, accessed September 5, 2025, <https://paul-d-chuang.medium.com/design-principles-high-cohesion-and-low-coupling-fc15c05b6a2c>
-8. What does 'low in coupling and high in cohesion' mean - Stack Overflow, accessed September 5, 2025, <https://stackoverflow.com/questions/14000762/what-does-low-in-coupling-and-high-in-cohesion-mean>
-9. Dependency Injection in Python Programming - Custom Software Development - NG Logic, accessed September 5, 2025, <https://nglogic.com/dependency-injection-python/>
-10. Dependency Injection in Python: A Complete Guide to Cleaner ..., accessed September 5, 2025, <https://medium.com/@rohanmistry231/dependency-injection-in-python-a-complete-guide-to-cleaner-scalable-code-9c6b38d1b924>
-11. SOLID Principles: Improve Object-Oriented Design in Python – Real ..., accessed September 5, 2025, <https://realpython.com/solid-principles-python/>
-12. Dependency Injector Design Pattern — Python - Code Like A Girl, accessed September 5, 2025, <https://code.likeagirl.io/dependancy-injector-design-pattern-python-ec9f7ebe3e4a>
-13. Dependency injection in Python | Snyk, accessed September 5, 2025, <https://snyk.io/blog/dependency-injection-python/>
-14. Python Private Methods Explained | DataCamp, accessed September 5, 2025, <https://www.datacamp.com/tutorial/python-private-methods-explained>
-15. Documenting the public interface - public 6.0.1 documentation, accessed September 5, 2025, <https://public.readthedocs.io/en/latest/using.html>
-16. Demystifying \_\_all\_\_ in Python: A Closer Look at Module Exports | by Akshat Gadodia, accessed September 5, 2025, <https://medium.com/@akshatgadodia/demystifying-all-in-python-a-closer-look-at-module-exports-f4d818a12bb6>
-17. How to use \_\_all\_\_ in Python packages | LabEx, accessed September 5, 2025, <https://labex.io/tutorials/python-how-to-use-all-in-python-packages-450976>
-18. Understanding \_\_all\_\_ in Python Modules with Examples - eSparkBiz, accessed September 5, 2025, <https://www.esparkinfo.com/qanda/python/what-does-all-mean-in-python>
-19. python - What is the meaning of single and double underscore before an object name?, accessed September 5, 2025, <https://stackoverflow.com/questions/1301346/what-is-the-meaning-of-single-and-double-underscore-before-an-object-name>
-20. When should I prefix class private attributes/methods with single underscore instead of double underscore? : r/learnpython - Reddit, accessed September 5, 2025, <https://www.reddit.com/r/learnpython/comments/12mybox/when_should_i_prefix_class_private/>
-21. Private Methods - Single or Double Underscore : r/learnpython - Reddit, accessed September 5, 2025, <https://www.reddit.com/r/learnpython/comments/18j1ws2/private_methods_single_or_double_underscore/>
-22. Python Circular Import: Causes, Fixes, and Best Practices | DataCamp, accessed September 5, 2025, <https://www.datacamp.com/tutorial/python-circular-import>
-23. Python Circular Import Error Solved - Built In, accessed September 5, 2025, <https://builtin.com/articles/python-circular-import>
-24. How to Fix a Circular Import in Python - Rollbar, accessed September 5, 2025, <https://rollbar.com/blog/how-to-fix-circular-import-in-python/>
-25. Models - Pydantic, accessed September 5, 2025, <https://docs.pydantic.dev/latest/concepts/models/>
-26. Data Validation and Versioned Data Contracts with Pydantic - Data Gluons, accessed September 5, 2025, <https://www.datagluons.io/blog/pydantic-data-contract-manager>
-27. PEP 484 – Type Hints | peps.python.org, accessed September 5, 2025, <https://peps.python.org/pep-0484/>
-28. Python Types Intro - FastAPI, accessed September 5, 2025, <https://fastapi.tiangolo.com/python-types/>
-29. What the hell is going on with type hinting these days : r/Python - Reddit, accessed September 5, 2025, <https://www.reddit.com/r/Python/comments/1itzac1/what_the_hell_is_going_on_with_type_hinting_these/>
-30. typing — Support for type hints — Python 3.13.7 documentation, accessed September 5, 2025, <https://docs.python.org/3/library/typing.html>
-31. Welcome to Pydantic - Pydantic, accessed September 5, 2025, <https://docs.pydantic.dev/latest/>
-32. An Introduction to Pydantic: the powerful Data Validation for your REST APIs, accessed September 5, 2025, <https://engineering.projectagora.com/an-introduction-to-pydantic-the-powerful-data-validation-for-your-rest-apis-a6edfb46b0e8>
-33. Google Python Style Guide, accessed September 5, 2025, <https://google.github.io/styleguide/pyguide.html>
-34. Python Docstrings Tutorial : Examples & Format for Pydoc, Numpy, Sphinx Doc Strings, accessed September 5, 2025, <https://www.datacamp.com/tutorial/docstrings-python>
-35. Example Google Style Python Docstrings — Solutions 0.0.1 documentation, accessed September 5, 2025, <https://iw3.math.rutgers.edu/solutions/example_google.html>
-36. Example Google Style Python Docstrings — napoleon 0.7 documentation, accessed September 5, 2025, <https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html>
-37. Creating Great README Files for Your Python Projects - Real Python, accessed September 5, 2025, <https://realpython.com/readme-python-project/>
-38. README File Guidelines and Resources — Python Packaging Guide - pyOpenSci, accessed September 5, 2025, <https://www.pyopensci.org/python-package-guide/documentation/repository-files/readme-file-best-practices.html>
-39. Make a README, accessed September 5, 2025, <https://www.makeareadme.com/>
-40. What in your opinion makes for a great README file? : r/opensource - Reddit, accessed September 5, 2025, <https://www.reddit.com/r/opensource/comments/1kk1wd8/what_in_your_opinion_makes_for_a_great_readme_file/>
+1. How Design Principles Help You Write Better Python Code - Amsterdam Tech, accessed September 5, 2025, <https://amsterdam.tech/how-design-principles-help-you-write-better-python-code/>
+1. Coupling and Cohesion - Software Engineering - GeeksforGeeks, accessed September 5, 2025, <https://www.geeksforgeeks.org/software-engineering/software-engineering-coupling-and-cohesion/>
+1. Cohesion vs Coupling - Important Python topics, accessed September 5, 2025, <https://pythonexpert.hashnode.dev/cohesion-and-coupling-in-python>
+1. SOLID Design Principles Explained: Building Better Software Architecture - DigitalOcean, accessed September 5, 2025, <https://www.digitalocean.com/community/conceptual-articles/s-o-l-i-d-the-first-five-principles-of-object-oriented-design>
+1. SOLID Principles explained in Python with examples. - GitHub Gist, accessed September 5, 2025, <https://gist.github.com/dmmeteo/f630fa04c7a79d3c132b9e9e5d037bfd>
+1. Design Principles: High Cohesion and Low Coupling | by Paul Chuang - Medium, accessed September 5, 2025, <https://paul-d-chuang.medium.com/design-principles-high-cohesion-and-low-coupling-fc15c05b6a2c>
+1. What does 'low in coupling and high in cohesion' mean - Stack Overflow, accessed September 5, 2025, <https://stackoverflow.com/questions/14000762/what-does-low-in-coupling-and-high-in-cohesion-mean>
+1. Dependency Injection in Python Programming - Custom Software Development - NG Logic, accessed September 5, 2025, <https://nglogic.com/dependency-injection-python/>
+1. Dependency Injection in Python: A Complete Guide to Cleaner ..., accessed September 5, 2025, <https://medium.com/@rohanmistry231/dependency-injection-in-python-a-complete-guide-to-cleaner-scalable-code-9c6b38d1b924>
+1. SOLID Principles: Improve Object-Oriented Design in Python – Real ..., accessed September 5, 2025, <https://realpython.com/solid-principles-python/>
+1. Dependency Injector Design Pattern — Python - Code Like A Girl, accessed September 5, 2025, <https://code.likeagirl.io/dependancy-injector-design-pattern-python-ec9f7ebe3e4a>
+1. Dependency injection in Python | Snyk, accessed September 5, 2025, <https://snyk.io/blog/dependency-injection-python/>
+1. Python Private Methods Explained | DataCamp, accessed September 5, 2025, <https://www.datacamp.com/tutorial/python-private-methods-explained>
+1. Documenting the public interface - public 6.0.1 documentation, accessed September 5, 2025, <https://public.readthedocs.io/en/latest/using.html>
+1. Demystifying \_\_all\_\_ in Python: A Closer Look at Module Exports | by Akshat Gadodia, accessed September 5, 2025, <https://medium.com/@akshatgadodia/demystifying-all-in-python-a-closer-look-at-module-exports-f4d818a12bb6>
+1. How to use \_\_all\_\_ in Python packages | LabEx, accessed September 5, 2025, <https://labex.io/tutorials/python-how-to-use-all-in-python-packages-450976>
+1. Understanding \_\_all\_\_ in Python Modules with Examples - eSparkBiz, accessed September 5, 2025, <https://www.esparkinfo.com/qanda/python/what-does-all-mean-in-python>
+1. python - What is the meaning of single and double underscore before an object name?, accessed September 5, 2025, <https://stackoverflow.com/questions/1301346/what-is-the-meaning-of-single-and-double-underscore-before-an-object-name>
+1. When should I prefix class private attributes/methods with single underscore instead of double underscore? : r/learnpython - Reddit, accessed September 5, 2025, <https://www.reddit.com/r/learnpython/comments/12mybox/when_should_i_prefix_class_private/>
+1. Private Methods - Single or Double Underscore : r/learnpython - Reddit, accessed September 5, 2025, <https://www.reddit.com/r/learnpython/comments/18j1ws2/private_methods_single_or_double_underscore/>
+1. Python Circular Import: Causes, Fixes, and Best Practices | DataCamp, accessed September 5, 2025, <https://www.datacamp.com/tutorial/python-circular-import>
+1. Python Circular Import Error Solved - Built In, accessed September 5, 2025, <https://builtin.com/articles/python-circular-import>
+1. How to Fix a Circular Import in Python - Rollbar, accessed September 5, 2025, <https://rollbar.com/blog/how-to-fix-circular-import-in-python/>
+1. Models - Pydantic, accessed September 5, 2025, <https://docs.pydantic.dev/latest/concepts/models/>
+1. Data Validation and Versioned Data Contracts with Pydantic - Data Gluons, accessed September 5, 2025, <https://www.datagluons.io/blog/pydantic-data-contract-manager>
+1. PEP 484 – Type Hints | peps.python.org, accessed September 5, 2025, <https://peps.python.org/pep-0484/>
+1. Python Types Intro - FastAPI, accessed September 5, 2025, <https://fastapi.tiangolo.com/python-types/>
+1. What the hell is going on with type hinting these days : r/Python - Reddit, accessed September 5, 2025, <https://www.reddit.com/r/Python/comments/1itzac1/what_the_hell_is_going_on_with_type_hinting_these/>
+1. typing — Support for type hints — Python 3.13.7 documentation, accessed September 5, 2025, <https://docs.python.org/3/library/typing.html>
+1. Welcome to Pydantic - Pydantic, accessed September 5, 2025, <https://docs.pydantic.dev/latest/>
+1. An Introduction to Pydantic: the powerful Data Validation for your REST APIs, accessed September 5, 2025, <https://engineering.projectagora.com/an-introduction-to-pydantic-the-powerful-data-validation-for-your-rest-apis-a6edfb46b0e8>
+1. Google Python Style Guide, accessed September 5, 2025, <https://google.github.io/styleguide/pyguide.html>
+1. Python Docstrings Tutorial : Examples & Format for Pydoc, Numpy, Sphinx Doc Strings, accessed September 5, 2025, <https://www.datacamp.com/tutorial/docstrings-python>
+1. Example Google Style Python Docstrings — Solutions 0.0.1 documentation, accessed September 5, 2025, <https://iw3.math.rutgers.edu/solutions/example_google.html>
+1. Example Google Style Python Docstrings — napoleon 0.7 documentation, accessed September 5, 2025, <https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html>
+1. Creating Great README Files for Your Python Projects - Real Python, accessed September 5, 2025, <https://realpython.com/readme-python-project/>
+1. README File Guidelines and Resources — Python Packaging Guide - pyOpenSci, accessed September 5, 2025, <https://www.pyopensci.org/python-package-guide/documentation/repository-files/readme-file-best-practices.html>
+1. Make a README, accessed September 5, 2025, <https://www.makeareadme.com/>
+1. What in your opinion makes for a great README file? : r/opensource - Reddit, accessed September 5, 2025, <https://www.reddit.com/r/opensource/comments/1kk1wd8/what_in_your_opinion_makes_for_a_great_readme_file/>

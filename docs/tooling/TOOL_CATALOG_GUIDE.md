@@ -54,11 +54,11 @@ The schema for both collections resides in `tooling/schema/`.
 
 1. Modify or add JSON documents under `tooling/catalog`. Reuse shared fragments
    where possible to minimise duplication.
-2. Run `pytest tests/test_catalog_metadata.py` to confirm metadata helpers still
+1. Run `pytest tests/test_catalog_metadata.py` to confirm metadata helpers still
    behave correctly.
-3. Update `tooling/catalog/cache.json` by computing the new checksum via
+1. Update `tooling/catalog/cache.json` by computing the new checksum via
    `ToolCatalogLoader.compute_checksum()` (or the helper used in the tests).
-4. Commit both the JSON changes and the updated checksum together to keep the
+1. Commit both the JSON changes and the updated checksum together to keep the
    cache coherent.
 
 Authoring new tools should rarely require Python changes; ensure any bespoke

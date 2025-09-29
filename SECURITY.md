@@ -35,10 +35,10 @@ PyQA is maintained by Blackcat Informatics® Inc. and we take security seriously
 ## Responsible Disclosure Process
 
 1. Security vulnerabilities are reported privately.
-2. The PyQA maintainers confirm and triage issues.
-3. Fixes are developed, reviewed, and tested.
-4. A coordinated release is prepared.
-5. Public disclosure occurs after users have reasonable time to update.
+1. The PyQA maintainers confirm and triage issues.
+1. Fixes are developed, reviewed, and tested.
+1. A coordinated release is prepared.
+1. Public disclosure occurs after users have reasonable time to update.
 
 ## Security Advisories & Updates
 
@@ -51,7 +51,7 @@ PyQA is maintained by Blackcat Informatics® Inc. and we take security seriously
 - Email: <security@blackcat.ca>
 - PGP Key (optional for encrypted reports):
 
-\-----BEGIN PGP PUBLIC KEY BLOCK-----
+-----BEGIN PGP PUBLIC KEY BLOCK-----
 Version: GnuPG v2
 
 mQINBFhhjUABEADg4mASErImePxCj0Ri8v08Axa1D1gnWPQBqtJW+P6OpQRuRXw0
@@ -105,7 +105,7 @@ qL+AeU7BXe9VtTdvKyOwsdS/ayX0NeriPSxReZlBPgoG9/SEX+hyki9n7lS8eJby
 jmyGBkMW5wHhJjlyy7SiZ/gg4Sb59vNLjbhQTJOB9DcCCWRHDZXR2avsJjP35YOQ
 XE4dvUx/JNzvuZ/nkLMnuVf+feQJsvc+kLNV1K2sFGffpC/ZdBkU0lz5oLfqTtAM
 1k2Eu+FYVJiyxA6fujgY65hx/hj/qZZJeuBTNgfWwiTn/A==
-\=fCTf
-\-----END PGP PUBLIC KEY BLOCK-----
+=fCTf
+-----END PGP PUBLIC KEY BLOCK-----
 
 For general questions about PyQA, please use GitHub discussions or open an issue with the "question" label.

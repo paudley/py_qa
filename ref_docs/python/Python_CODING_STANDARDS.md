@@ -14,10 +14,10 @@ Every line of code generated must be built upon four pillars, which collectively
 
 1. **Strictness**: All code must be provably correct through static analysis. Ambiguity is considered an error. This principle is enforced through mandatory compliance with mypy --strict 1 and a zero-tolerance policy for
    pylint warnings.2 The goal is to eliminate an entire class of runtime errors before the code is ever executed.
-2. **Explicitness**: Code must be self-documenting. Dependencies, data contracts, and control flow must be immediately obvious from reading the code itself. This aligns with the "Zen of Python" principle, "Explicit is better than implicit" 3, and is the primary justification for forbidding ambiguous patterns like
+1. **Explicitness**: Code must be self-documenting. Dependencies, data contracts, and control flow must be immediately obvious from reading the code itself. This aligns with the "Zen of Python" principle, "Explicit is better than implicit" 3, and is the primary justification for forbidding ambiguous patterns like
    typing.Any.
-3. **Robustness**: Code must anticipate and gracefully handle failure, especially at system boundaries where it interacts with external data or services. This principle mandates the use of robust parsing libraries like tolerantjson 4 and data validation frameworks like Pydantic 5 to create a secure perimeter around the core application logic.
-4. **Testability**: All code must be designed for complete, automated verification. Testability is a primary design constraint, not an afterthought. This is enforced by the mandate for 100% test coverage, which in turn dictates specific architectural patterns.6
+1. **Robustness**: Code must anticipate and gracefully handle failure, especially at system boundaries where it interacts with external data or services. This principle mandates the use of robust parsing libraries like tolerantjson 4 and data validation frameworks like Pydantic 5 to create a secure perimeter around the core application logic.
+1. **Testability**: All code must be designed for complete, automated verification. Testability is a primary design constraint, not an afterthought. This is enforced by the mandate for 100% test coverage, which in turn dictates specific architectural patterns.6
 
 The interaction between these pillars is more important than any single rule. For instance, the requirement for 100% test coverage is nearly impossible to achieve for code that tightly couples its components, such as a function that directly instantiates a database connection within its own body.7 This strict testing requirement serves as a forcing function; it makes brittle patterns difficult or impossible to implement correctly, thereby compelling the adoption of superior, decoupled architectural patterns. To achieve full test coverage, components must be testable in isolation. This isolation is most effectively achieved through decoupling, and the designated pattern for this is Dependency Injection.6 Therefore, the 100% test coverage rule implicitly mandates Dependency Injection as a core architectural pattern. The system is designed so that the only path to compliance is through high-quality design.
 
@@ -102,14 +102,14 @@ To ensure the integrity of the type system, certain ambiguous type hints are str
 - **Prohibition of typing.Any**: The Any type is forbidden. It acts as an escape hatch that silently disables type checking, violating the principles of Strictness and Explicitness.20 Instead, one of the following explicit alternatives MUST be used.
 - **Prohibition of typing.Union / |**: The Union type is forbidden for defining collections of different complex object types. This pattern leads to brittle conditional logic (if isinstance(...)) scattered throughout the codebase, making it difficult to maintain and reason about. Specific, more robust alternatives are required.
 
-The type system should be used as a design tool to create explicit data contracts and state machines. For example, a function signature like def process(data: Union) creates a weak contract that forces the implementation to perform runtime checks. A superior approach is to model this as a Pydantic discriminated union, where a common field (e.g., animal_type: Literal\['cat', 'dog']) is used to distinguish between models. Pydantic handles the validation, and the application logic can use pattern matching (match animal: case Cat():...) on a guaranteed, unambiguous type. This moves the state-checking logic to the data validation boundary, where it belongs.
+The type system should be used as a design tool to create explicit data contracts and state machines. For example, a function signature like def process(data: Union) creates a weak contract that forces the implementation to perform runtime checks. A superior approach is to model this as a Pydantic discriminated union, where a common field (e.g., animal_type: Literal['cat', 'dog']) is used to distinguish between models. Pydantic handles the validation, and the application logic can use pattern matching (match animal: case Cat():...) on a guaranteed, unambiguous type. This moves the state-checking logic to the data validation boundary, where it belongs.
 
 The following table provides a non-negotiable mapping of forbidden types to their mandatory alternatives.
 
-| Forbidden Type                     | Reason for Prohibition                                                        | Recommended Alternative(s)                                                                                                   | Example                                          |
-| :--------------------------------- | :---------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------- |
-| typing.Any                         | Defeats static analysis; creates type holes that hide bugs.                   | typing.TypeVar (for generics), typing.Protocol (for structural contracts), object (with mandatory isinstance checks).        | def process(item: T) -> T:                       |
-| typing.Union (for complex objects) | Creates ambiguous branching logic (if/else on type); promotes weak contracts. | Pydantic Discriminated Unions (using Literal), typing.Literal (for simple values), or separate functions for distinct types. | class Model(BaseModel): type: Literal\['a', 'b'] |
+| Forbidden Type                     | Reason for Prohibition                                                        | Recommended Alternative(s)                                                                                                   | Example                                         |
+| :--------------------------------- | :---------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------- |
+| typing.Any                         | Defeats static analysis; creates type holes that hide bugs.                   | typing.TypeVar (for generics), typing.Protocol (for structural contracts), object (with mandatory isinstance checks).        | def process(item: T) -> T:                      |
+| typing.Union (for complex objects) | Creates ambiguous branching logic (if/else on type); promotes weak contracts. | Pydantic Discriminated Unions (using Literal), typing.Literal (for simple values), or separate functions for distinct types. | class Model(BaseModel): type: Literal['a', 'b'] |
 
 ### **Mandatory Use of Final and Literal**
 
@@ -120,8 +120,8 @@ To further enhance the principles of Strictness and Explicitness, the use of typ
   \# MANDATORY PATTERN
   from typing import Final
 
-  API_ENDPOINT: Final\[str] = "https://api.example.com/v1"
-  TIMEOUT_SECONDS: Final = 30 # Type is inferred as Literal\[21]
+  API_ENDPOINT: Final[str] = "https://api.example.com/v1"
+  TIMEOUT_SECONDS: Final = 30 # Type is inferred as Literal[21]
 
   Note that Final only prevents the name from being re-bound; it does not make the assigned value immutable. For mutable collections, use immutable counterparts (e.g., tuple instead of list) where appropriate.21
 
@@ -130,7 +130,7 @@ To further enhance the principles of Strictness and Explicitness, the use of typ
   \# MANDATORY PATTERN
   from typing import Literal
 
-  def set_align(align: Literal\["left", "center", "right"]) -> None:
+  def set_align(align: Literal["left", "center", "right"]) -> None:
   ...
 
   set_align("center") # OK
@@ -278,16 +278,16 @@ The pyproject.toml file serves as the central configuration hub for project meta
 
 Ini, TOML
 
-\[tool.pytest.ini_options]
+[tool.pytest.ini_options]
 \# Fail the build if test coverage is below 100%
 addopts = "--cov=src --cov-report=term-missing --cov-fail-under=100"
-testpaths = \["tests"]
+testpaths = ["tests"]
 
-\[tool.mypy]
+[tool.mypy]
 \# Point to the mypy configuration file
 config_file = "mypy.ini"
 
-\[tool.pylint]
+[tool.pylint]
 \# Point to the pylint configuration file
 rcfile = ".pylintrc"
 
@@ -297,7 +297,7 @@ This file configures mypy to enforce the strict type system.
 
 Ini, TOML
 
-\[mypy]
+[mypy]
 python_version = 3.12
 strict = True
 warn_unused_configs = True
@@ -307,7 +307,7 @@ warn_unused_ignores = True
 \# Exclude test files from certain strict checks if necessary,
 \# as test code often involves patterns that are intentionally
 \# dynamic for mocking purposes.
-\[mypy-tests.\*]
+[mypy-tests.\*]
 disallow_untyped_defs = False
 
 ### **.pylintrc**

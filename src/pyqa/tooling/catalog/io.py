@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Mapping
+from collections.abc import Mapping
 
 from .errors import CatalogIntegrityError
 from .types import JSONValue

@@ -5,23 +5,36 @@ from __future__ import annotations
 import importlib
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import cast
 
 from ..loader import CatalogIntegrityError
+from ..catalog.types import JSONValue
 from ..tools.base import ToolContext
 from ..tools.builtin_helpers import download_tool_artifact
 
 
-def install_download_artifact(config: Mapping[str, Any]) -> Callable[[ToolContext], None]:
-    """Return an installer that provisions catalog-defined downloads."""
+def install_download_artifact(config: Mapping[str, JSONValue]) -> Callable[[ToolContext], None]:
+    """Return a catalog-driven installer for download artifacts.
 
-    plain_config = _as_plain_json(config)
+    Args:
+        config: Catalog configuration describing the download specification.
+
+    Returns:
+        Callable[[ToolContext], None]: Installer that ensures the artifact is
+        materialised prior to tool execution.
+
+    Raises:
+        CatalogIntegrityError: If the configuration is malformed.
+    """
+
+    plain_config = cast(JSONValue, _as_plain_json(config))
     if not isinstance(plain_config, Mapping):
         raise CatalogIntegrityError("install_download_artifact: configuration must be an object")
 
     download_config = plain_config.get("download")
     if not isinstance(download_config, Mapping):
         raise CatalogIntegrityError("install_download_artifact: 'download' must be an object")
+    download_mapping = cast(Mapping[str, JSONValue], download_config)
 
     version_value = plain_config.get("version")
     if version_value is not None and not isinstance(version_value, str):
@@ -38,7 +51,7 @@ def install_download_artifact(config: Mapping[str, Any]) -> Callable[[ToolContex
     def installer(ctx: ToolContext) -> None:
         cache_root = ctx.root / ".lint-cache"
         _download_artifact_for_tool(
-            download_config,
+            download_mapping,
             version=version_value,
             cache_root=cache_root,
             context=context_value,
@@ -59,7 +72,7 @@ def _load_attribute(path: str, *, context: str) -> Any:
 
 
 def _require_string_sequence(
-    config: Mapping[str, Any],
+    config: Mapping[str, JSONValue],
     key: str,
     *,
     context: str,
@@ -73,14 +86,14 @@ def _require_string_sequence(
     return result
 
 
-def _require_str(config: Mapping[str, Any], key: str, *, context: str) -> str:
+def _require_str(config: Mapping[str, JSONValue], key: str, *, context: str) -> str:
     value = config.get(key)
     if not isinstance(value, str):
         raise CatalogIntegrityError(f"{context}: expected '{key}' to be a string")
     return value
 
 
-def _normalize_sequence(value: Any) -> tuple[Any, ...]:
+def _normalize_sequence(value: JSONValue) -> tuple[JSONValue, ...]:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return tuple(_normalize_value(item) for item in value)
     if value in (None,):
@@ -88,7 +101,7 @@ def _normalize_sequence(value: Any) -> tuple[Any, ...]:
     raise CatalogIntegrityError("strategy configuration: 'args' must be a sequence")
 
 
-def _normalize_mapping(value: Any) -> dict[str, Any]:
+def _normalize_mapping(value: JSONValue) -> dict[str, JSONValue]:
     if not value:
         return {}
     if not isinstance(value, Mapping):
@@ -96,7 +109,7 @@ def _normalize_mapping(value: Any) -> dict[str, Any]:
     return {str(key): _normalize_value(item) for key, item in value.items()}
 
 
-def _normalize_value(value: Any) -> Any:
+def _normalize_value(value: JSONValue) -> JSONValue:
     if isinstance(value, Mapping):
         return {str(key): _normalize_value(item) for key, item in value.items()}
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
@@ -105,13 +118,13 @@ def _normalize_value(value: Any) -> Any:
 
 
 def _download_artifact_for_tool(
-    download_config: Mapping[str, Any],
+    download_config: Mapping[str, JSONValue],
     *,
     version: str | None,
     cache_root: Path,
     context: str,
 ) -> Path:
-    plain_config = _as_plain_json(download_config)
+    plain_config = cast(JSONValue, _as_plain_json(download_config))
     if not isinstance(plain_config, Mapping):
         raise CatalogIntegrityError(f"{context}: download configuration must be a mapping")
     return download_tool_artifact(plain_config, version=version, cache_root=cache_root, context=context)

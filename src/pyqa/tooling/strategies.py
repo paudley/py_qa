@@ -6,7 +6,9 @@ import importlib
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator, Literal, NamedTuple, cast
+from typing import Any, Literal, NamedTuple, cast
+from ..catalog.types import JSONValue
+from collections.abc import Iterator
 
 from ..models import RawDiagnostic
 from ..parsers.base import JsonParser, TextParser
@@ -14,7 +16,6 @@ from ..tools.base import CommandBuilder, ToolContext
 from ..tools.builtin_commands_python import (
     _discover_pylint_plugins,
     _python_target_version,
-    _python_version_components,
     _python_version_number,
     _python_version_tag,
     _pyupgrade_flag_from_version,
@@ -35,6 +36,7 @@ __all__ = [
     "install_download_artifact",
     "command_download_binary",
     "command_project_scanner",
+    "command_option_map",
     "black_command",
     "isort_command",
     "mypy_command",
@@ -69,6 +71,148 @@ __all__ = [
     "dotenv_linter_command",
     "pyupgrade_command",
 ]
+
+
+@dataclass(slots=True)
+class _OptionMapping:
+    """Declarative mapping between tool settings and CLI arguments."""
+
+    settings: tuple[str, ...]
+    option_type: Literal["value", "path", "args", "flag", "repeatFlag"]
+    flag: str | None
+    join_separator: str | None
+    negate_flag: str | None
+    literal_values: tuple[str, ...]
+    default: JSONValue | None
+    default_from: str | None
+    transform: str | None
+
+    def apply(self, ctx: ToolContext, command: list[str]) -> None:
+        """Append CLI fragments derived from the configured option."""
+
+        value = self._resolve_value(ctx)
+        if value is None:
+            return
+        if self.transform:
+            value = self._apply_transform(value, ctx)
+        if self.option_type == "args":
+            values = _settings_list(value)
+            if not values:
+                return
+            if self.join_separator is not None:
+                combined = self.join_separator.join(str(item) for item in values)
+                if self.flag:
+                    command.extend([self.flag, combined])
+                else:
+                    command.append(combined)
+                return
+            for entry in values:
+                if self.flag:
+                    command.extend([self.flag, str(entry)])
+                else:
+                    command.append(str(entry))
+            return
+        if self.option_type == "path":
+            if isinstance(value, (str, Path)) and str(value) in self.literal_values:
+                resolved = str(value)
+            else:
+                resolved = str(_resolve_path(ctx.root, value))
+            if self.flag:
+                command.extend([self.flag, resolved])
+            else:
+                command.append(resolved)
+            return
+        if self.option_type == "value":
+            text = str(value)
+            if self.flag:
+                command.extend([self.flag, text])
+            else:
+                command.append(text)
+            return
+        if self.option_type == "flag":
+            bool_value = _as_bool(value)
+            if bool_value is None:
+                return
+            if bool_value:
+                if self.flag:
+                    command.append(self.flag)
+            elif self.negate_flag:
+                command.append(self.negate_flag)
+            return
+        if self.option_type == "repeatFlag":
+            if self.flag is None:
+                return
+            count = _coerce_repeat_count(value)
+            if count == 0:
+                if self.negate_flag:
+                    command.append(self.negate_flag)
+                return
+            command.extend([self.flag] * count)
+            return
+        raise CatalogIntegrityError("command_option_map: unsupported option type")
+
+    def _resolve_value(self, ctx: ToolContext) -> JSONValue | None:
+        value: JSONValue | None = None
+        for name in self.settings:
+            candidate = cast(JSONValue | None, _setting(ctx.settings, name))
+            if candidate is not None:
+                value = candidate
+                break
+        if value is None and self.default is not None:
+            value = self.default
+        if value is None and self.default_from is not None:
+            value = _resolve_default_reference(self.default_from, ctx)
+        return value
+
+    def _apply_transform(self, value: JSONValue, ctx: ToolContext) -> JSONValue:
+        if self.transform == "python_version_tag":
+            return _python_version_tag(_coerce_version_string(value, ctx))
+        if self.transform == "python_version_number":
+            return _python_version_number(_coerce_version_string(value, ctx))
+        if self.transform == "pyupgrade_flag":
+            return _pyupgrade_flag_from_version(_coerce_version_string(value, ctx))
+        return value
+
+
+def _resolve_default_reference(token: str, ctx: ToolContext) -> JSONValue | None:
+    mapping = {
+        "execution.line_length": ctx.cfg.execution.line_length,
+        "complexity.max_complexity": ctx.cfg.complexity.max_complexity,
+        "complexity.max_arguments": ctx.cfg.complexity.max_arguments,
+        "severity.bandit_level": ctx.cfg.severity.bandit_level,
+        "severity.bandit_confidence": ctx.cfg.severity.bandit_confidence,
+        "severity.pylint_fail_under": ctx.cfg.severity.pylint_fail_under,
+        "strictness.type_checking": ctx.cfg.strictness.type_checking,
+    }
+    if token in mapping:
+        return mapping[token]
+    if token == "python.target_version_tag":
+        return _python_version_tag(_python_target_version(ctx))
+    if token == "python.target_version_number":
+        return _python_version_number(_python_target_version(ctx))
+    if token == "pyupgrade.default_flag":
+        return _pyupgrade_flag_from_version(_python_target_version(ctx))
+    if token.startswith("tool_setting."):
+        setting_name = token.split(".", 1)[1]
+        return cast(JSONValue | None, _setting(ctx.settings, setting_name))
+    return None
+
+
+def _coerce_repeat_count(value: JSONValue) -> int:
+    if isinstance(value, bool):
+        return 1 if value else 0
+    if isinstance(value, (int, float)):
+        return max(int(value), 0)
+    try:
+        return max(int(str(value)), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _coerce_version_string(value: JSONValue, ctx: ToolContext) -> str:
+    if value is None:
+        return _python_target_version(ctx)
+    return str(value)
 
 
 def json_parser(config: Mapping[str, Any]) -> JsonParser:
@@ -318,6 +462,136 @@ class _JsonDiagnosticExtractor:
             specs[field_name] = self._build_field_spec(field_name, raw_spec)
         return specs
 
+
+@dataclass(slots=True)
+class _OptionCommandStrategy(CommandBuilder):
+    """Command builder driven by declarative option mappings."""
+
+    base: tuple[str, ...]
+    append_files: bool
+    options: tuple[_OptionMapping, ...]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        command = list(self.base)
+        for option in self.options:
+            option.apply(ctx, command)
+        if self.append_files and ctx.files:
+            command.extend(str(path) for path in ctx.files)
+        return tuple(command)
+
+
+def command_option_map(config: Mapping[str, Any]) -> CommandBuilder:
+    """Return a command builder that maps settings to CLI flags.
+
+    Args:
+        config: Mapping describing the base command, optional file append
+            behaviour, and option mappings.
+
+    Returns:
+        CommandBuilder: Strategy capable of rendering the command for the
+        configured tool action.
+
+    Raises:
+        CatalogIntegrityError: If required configuration fields are missing or
+            invalid.
+    """
+
+    base_args = _require_string_sequence(config, "base", context="command_option_map")
+    append_files = bool(config.get("appendFiles", True))
+    options_config = config.get("options", ())
+    mappings: list[_OptionMapping] = []
+    if options_config is not None:
+        if not isinstance(options_config, Sequence) or isinstance(options_config, (str, bytes, bytearray)):
+            raise CatalogIntegrityError("command_option_map: 'options' must be an array of objects")
+        for index, entry in enumerate(options_config):
+            context = f"command_option_map.options[{index}]"
+            if not isinstance(entry, Mapping):
+                raise CatalogIntegrityError(f"{context}: option must be an object")
+            mappings.append(_parse_option_mapping(entry, context=context))
+    return _OptionCommandStrategy(
+        base=base_args,
+        append_files=append_files,
+        options=tuple(mappings),
+    )
+
+
+def _parse_option_mapping(entry: Mapping[str, Any], *, context: str) -> _OptionMapping:
+    setting_value = entry.get("setting")
+    if isinstance(setting_value, str):
+        names = (setting_value,)
+    elif isinstance(setting_value, Sequence) and not isinstance(setting_value, (str, bytes, bytearray)):
+        names = tuple(str(name) for name in setting_value if name is not None)
+    else:
+        raise CatalogIntegrityError(f"{context}: 'setting' must be a string or array of strings")
+    if not names:
+        raise CatalogIntegrityError(f"{context}: 'setting' must provide at least one entry")
+
+    type_value = entry.get("type", "value")
+    if not isinstance(type_value, str):
+        raise CatalogIntegrityError(f"{context}: 'type' must be a string")
+    normalized_type_key = type_value.strip().lower()
+    type_mapping: dict[str, Literal["value", "path", "args", "flag", "repeatFlag"]] = {
+        "value": "value",
+        "path": "path",
+        "args": "args",
+        "flag": "flag",
+        "repeatflag": "repeatFlag",
+    }
+    option_type = type_mapping.get(normalized_type_key)
+    if option_type is None:
+        raise CatalogIntegrityError(f"{context}: unsupported option type '{type_value}'")
+
+    flag_value = entry.get("flag")
+    if flag_value is not None and not isinstance(flag_value, str):
+        raise CatalogIntegrityError(f"{context}: 'flag' must be a string when provided")
+    join_value = entry.get("joinWith")
+    if join_value is None:
+        join_separator = None
+    elif isinstance(join_value, str):
+        join_separator = join_value
+    else:
+        raise CatalogIntegrityError(f"{context}: 'joinWith' must be a string when provided")
+
+    negate_flag_value = entry.get("negateFlag")
+    if negate_flag_value is None:
+        negate_flag = None
+    elif isinstance(negate_flag_value, str):
+        negate_flag = negate_flag_value
+    else:
+        raise CatalogIntegrityError(f"{context}: 'negateFlag' must be a string when provided")
+
+    literal_values_value = entry.get("literalValues", ())
+    if isinstance(literal_values_value, str):
+        literal_values = (literal_values_value,)
+    elif isinstance(literal_values_value, Sequence) and not isinstance(
+        literal_values_value,
+        (str, bytes, bytearray),
+    ):
+        literal_values = tuple(str(item) for item in literal_values_value if item is not None)
+    else:
+        raise CatalogIntegrityError(f"{context}: 'literalValues' must be a string or array of strings")
+
+    default_value = entry.get("default")
+    default_from_value = entry.get("defaultFrom")
+    if default_from_value is not None and not isinstance(default_from_value, str):
+        raise CatalogIntegrityError(f"{context}: 'defaultFrom' must be a string when provided")
+
+    transform_value = entry.get("transform")
+    if transform_value is not None and not isinstance(transform_value, str):
+        raise CatalogIntegrityError(f"{context}: 'transform' must be a string when provided")
+
+    return _OptionMapping(
+        settings=names,
+        option_type=option_type,
+        flag=flag_value,
+        join_separator=join_separator,
+        negate_flag=negate_flag,
+        literal_values=literal_values,
+        default=cast(JSONValue | None, default_value),
+        default_from=default_from_value,
+        transform=transform_value,
+    )
+
     def _build_field_spec(self, name: str, raw_spec: Any) -> _FieldSpec:
         """Create a field specification for a single diagnostic attribute."""
 
@@ -429,8 +703,7 @@ def _descend(nodes: Iterable[Any], token: _PathComponent) -> Iterator[Any]:
     elif token.kind == "wildcard":
         for node in nodes:
             if isinstance(node, Sequence) and not isinstance(node, (str, bytes, bytearray)):
-                for item in node:
-                    yield item
+                yield from node
 
 
 def _extract_path(entry: Mapping[str, Any], path: tuple[_PathComponent, ...] | None) -> Any | None:

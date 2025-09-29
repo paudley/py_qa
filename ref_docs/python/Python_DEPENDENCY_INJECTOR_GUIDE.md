@@ -173,7 +173,7 @@ When a provider is called (e.g., container.analytics_service()), it first resolv
 The architecture of Containers and Providers creates a powerful separation of concerns between **configuration** and **execution**.
 
 1. **Configuration:** The container, with its collection of providers, defines _how_ the application's components are assembled. This is the architectural blueprint. It specifies which concrete classes to use, how they connect to each other, and their lifetimes.
-2. **Execution:** The application's business logic simply _uses_ the objects provided by the container. It declares _what_ it needs (e.g., an AnalyticsService) but remains completely unaware of the complex process of its creation.
+1. **Execution:** The application's business logic simply _uses_ the objects provided by the container. It declares _what_ it needs (e.g., an AnalyticsService) but remains completely unaware of the complex process of its creation.
 
 This separation is the key to unlocking the benefits of DI. The entire object graph can be reconfigured for different environments (e.g., production vs. testing) by modifying or replacing the container, without altering a single line of the application's business logic. This profound architectural advantage enables true modularity and unparalleled testability.
 
@@ -377,7 +377,7 @@ Storing configuration in files is a common practice for separating settings from
 
 #### **4.2.1 Loading from YAML (.from_yaml())**
 
-YAML is a popular choice for configuration due to its human-readable syntax. To use this feature, the PyYAML library must be installed: pip install dependency-injector\[yaml].13
+YAML is a popular choice for configuration due to its human-readable syntax. To use this feature, the PyYAML library must be installed: pip install dependency-injector[yaml].13
 
 **config.yml:**
 
@@ -418,12 +418,12 @@ INI files are another common format, supported natively without extra dependenci
 
 Ini, TOML
 
-\[database]\
+[database]\
 host = localhost\
 port = 5432\
 user = dev_user
 
-\[api]\
+[api]\
 key = default-key\
 timeout = 10
 
@@ -509,13 +509,13 @@ The Configuration provider supports several advanced features that enable robust
   container.config.api.timeout.from_env("TIMEOUT", as\_=int, default=5)\
   container.config.feature.enabled.from_env("ENABLE_FEATURE", as\_=bool, default=False)
 
-- **Environment Variable Interpolation:** This powerful feature allows you to embed environment variable lookups directly within your YAML or INI files. The syntax is ${ENV_VAR} for a required variable or ${ENV_VAR:default_value} to provide a fallback. This allows for a base configuration file to be checked into version control, with sensitive or environment-specific values being injected from the environment at runtime.13\
+- **Environment Variable Interpolation:** This powerful feature allows you to embed environment variable lookups directly within your YAML or INI files. The syntax is ${ENV_VAR} for a required variable or $\{ENV_VAR:default_value} to provide a fallback. This allows for a base configuration file to be checked into version control, with sensitive or environment-specific values being injected from the environment at runtime.13\
   **config.yml with interpolation:**\
   YAML\
   database:\
   host: ${DB_HOST:localhost}
-  port: ${DB_PORT:5432}\
-  password: ${DB_PASSWORD} # This must be set in the environment
+  port: $\{DB_PORT:5432}\
+  password: \$\{DB_PASSWORD} # This must be set in the environment
 
   When container.config.from_yaml("config.yml") is called, the provider will automatically substitute these placeholders with the corresponding environment variable values.
 
@@ -532,8 +532,8 @@ The framework's approach to wiring is intentionally explicit to maintain clarity
 The wiring mechanism is built on three core components that work together 15:
 
 1. **The @inject Decorator:** This decorator is placed on any function or method that needs to have dependencies injected. It acts as a marker, signaling to the container that this function is a target for the wiring process.
-2. **The Provide Marker:** This special object is used as the default value for a function argument. It specifies _which_ provider from the container should be injected into that argument. The syntax Provide\[Container.provider_name] creates an unambiguous link between the function argument and its corresponding provider.
-3. **The container.wire() Method:** This is the explicit activation step. You call this method, typically at application startup, and provide it with a list of modules or packages to scan. The container will then inspect only these specified modules for functions decorated with @inject and prepare them for injection.
+1. **The Provide Marker:** This special object is used as the default value for a function argument. It specifies _which_ provider from the container should be injected into that argument. The syntax Provide[Container.provider_name] creates an unambiguous link between the function argument and its corresponding provider.
+1. **The container.wire() Method:** This is the explicit activation step. You call this method, typically at application startup, and provide it with a list of modules or packages to scan. The container will then inspect only these specified modules for functions decorated with @inject and prepare them for injection.
 
 ### **5.2 Step-by-Step Implementation**
 
@@ -550,7 +550,7 @@ class ApiClient:\
 def \_\_init\_\_(self, api_key: str, timeout: int):\
 self.api_key = api_key\
 self.timeout = timeout\
-print(f"ApiClient created with key '...{api_key\[-4:]}' and timeout {timeout}s")
+print(f"ApiClient created with key '...{api_key[-4:]}' and timeout \{timeout}s")
 
 ```
 def get\_data(self):
@@ -589,7 +589,7 @@ data\_service \= providers.Factory(
 \# 3. Define a function that uses the dependency\
 @inject\
 def main(\
-data_service: DataService = Provide\[Container.data_service],\
+data_service: DataService = Provide[Container.data_service],\
 ) -> None:\
 """\
 This function requires a DataService instance.\
@@ -597,7 +597,7 @@ The @inject decorator and Provide marker handle the injection.\
 """\
 print("main: starting application logic.")\
 result_length = data_service.process_data()\
-print(f"main: processed data length is {result_length}.")
+print(f"main: processed data length is \{result_length}.")
 
 \# 4. Instantiate the container and run the application\
 if \_\_name\_\_ == "\_\_main\_\_":\
@@ -642,14 +642,14 @@ app = Flask(\_\_name\_\_)\
 container = Container()\
 container.config.api.key.from_value("flask-app-key")\
 container.config.api.timeout.from_value("10")\
-container.wire(modules=\[\_\_name\_\_])
+container.wire(modules=[\_\_name\_\_])
 
 @app.route("/")\
 @inject\
-def index(data_service: DataService = Provide\[Container.data_service]):\
+def index(data_service: DataService = Provide[Container.data_service]):\
 \# The data_service is automatically injected for each request.\
 processed_length = data_service.process_data()\
-return f"Processed data length: {processed_length}"
+return f"Processed data length: \{processed_length}"
 
 \# To run: flask --app \<filename> run
 
@@ -669,14 +669,14 @@ from dependency_injector.wiring import inject, Provide
 container = Container()\
 container.config.api.key.from_value("fastapi-app-key")\
 container.config.api.timeout.from_value("15")\
-container.wire(modules=\[\_\_name\_\_])
+container.wire(modules=[\_\_name\_\_])
 
 app = FastAPI()
 
 @app.get("/")\
 @inject\
 def read_root(\
-data_service: DataService = Depends(Provide\[Container.data_service]),\
+data_service: DataService = Depends(Provide[Container.data_service]),\
 ):\
 \# FastAPI handles the dependency resolution, which in turn calls\
 \# the dependency-injector provider.\
@@ -705,8 +705,8 @@ class Container(containers.DeclarativeContainer):\
 db_client = providers.Resource(init_async_db_client)
 
 @inject\
-async def fetch_data_from_db(db = Provide\[Container.db_client]):\
-print(f"Fetching data using: {db}")\
+async def fetch_data_from_db(db = Provide[Container.db_client]):\
+print(f"Fetching data using: \{db}")\
 await asyncio.sleep(0.2)\
 return "some data"
 
@@ -825,7 +825,7 @@ Python
 stub_api_client = StubApiClient() # A fake implementation for local dev\
 container.api_client.override(stub_api_client)
 
-\#... use the container with the stub...
+#... use the container with the stub...
 
 \# Manually reset the override to restore original behavior\
 container.api_client.reset_override()
@@ -892,7 +892,7 @@ dependency-injector intentionally avoids autowiring, a feature in some framework
   Python\
   class BadService:\
   @inject\
-  def \_\_init\_\_(self, container: Container = Provide\["\<container>"]):\
+  def \_\_init\_\_(self, container: Container = Provide["\<container>"]):\
   self.\_api_client = container.api_client() # Hidden dependency
 
   **Prefer:**\
@@ -911,23 +911,23 @@ dependency-injector intentionally avoids autowiring, a feature in some framework
 #### **Works cited**
 
 1. Dependency injection - .NET | Microsoft Learn, accessed September 3, 2025, <https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection>
-2. dependency-injector - PyPI, accessed September 3, 2025, <https://pypi.org/project/dependency-injector/3.15.0/>
-3. Dependency Injection in Python: A Complete Guide to Cleaner, Scalable Code - Medium, accessed September 3, 2025, <https://medium.com/@rohanmistry231/dependency-injection-in-python-a-complete-guide-to-cleaner-scalable-code-9c6b38d1b924>
-4. Dependency Injection in Python | Better Stack Community, accessed September 3, 2025, <https://betterstack.com/community/guides/scaling-python/python-dependency-injection/>
-5. Dependency injection in Python | Snyk, accessed September 3, 2025, <https://snyk.io/blog/dependency-injection-python/>
-6. Dependency injection and inversion of control in Python ..., accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/introduction/di_in_python.html>
-7. Injector 0.22.0 documentation, accessed September 3, 2025, <https://injector.readthedocs.io/>
-8. dependency-injector - PyPI, accessed September 3, 2025, <https://pypi.org/project/dependency-injector/>
-9. ets-labs/python-dependency-injector: Dependency injection framework for Python - GitHub, accessed September 3, 2025, <https://github.com/ets-labs/python-dependency-injector>
-10. Key features — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/introduction/key_features.html>
-11. dependency-injector - PyPI, accessed September 3, 2025, <https://pypi.org/project/dependency-injector/4.0.0a2/>
-12. Providers — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/providers/index.html>
-13. Configuration provider — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/providers/configuration.html>
-14. providers.Configuration(ini_files=...) doesn't seem to work · Issue #564 · ets-labs/python-dependency-injector - GitHub, accessed September 3, 2025, <https://github.com/ets-labs/python-dependency-injector/issues/564>
-15. Wiring — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/wiring.html>
-16. dependency_injector.wiring — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/api/wiring.html>
-17. Python Dependency Injection: Build Modular and Testable Code - DataCamp, accessed September 3, 2025, <https://www.datacamp.com/tutorial/python-dependency-injection>
-18. Provider overriding — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/providers/overriding.html>
-19. Container overriding — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/containers/overriding.html>
-20. Mastering Python Dependency Injection | Startup House, accessed September 3, 2025, <https://startup-house.com/blog/python-dependency-injection-guide>
-21. Good and bad practices - Injector 0.22.0 documentation, accessed September 3, 2025, <https://injector.readthedocs.io/en/latest/practices.html>
+1. dependency-injector - PyPI, accessed September 3, 2025, <https://pypi.org/project/dependency-injector/3.15.0/>
+1. Dependency Injection in Python: A Complete Guide to Cleaner, Scalable Code - Medium, accessed September 3, 2025, <https://medium.com/@rohanmistry231/dependency-injection-in-python-a-complete-guide-to-cleaner-scalable-code-9c6b38d1b924>
+1. Dependency Injection in Python | Better Stack Community, accessed September 3, 2025, <https://betterstack.com/community/guides/scaling-python/python-dependency-injection/>
+1. Dependency injection in Python | Snyk, accessed September 3, 2025, <https://snyk.io/blog/dependency-injection-python/>
+1. Dependency injection and inversion of control in Python ..., accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/introduction/di_in_python.html>
+1. Injector 0.22.0 documentation, accessed September 3, 2025, <https://injector.readthedocs.io/>
+1. dependency-injector - PyPI, accessed September 3, 2025, <https://pypi.org/project/dependency-injector/>
+1. ets-labs/python-dependency-injector: Dependency injection framework for Python - GitHub, accessed September 3, 2025, <https://github.com/ets-labs/python-dependency-injector>
+1. Key features — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/introduction/key_features.html>
+1. dependency-injector - PyPI, accessed September 3, 2025, <https://pypi.org/project/dependency-injector/4.0.0a2/>
+1. Providers — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/providers/index.html>
+1. Configuration provider — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/providers/configuration.html>
+1. providers.Configuration(ini_files=...) doesn't seem to work · Issue #564 · ets-labs/python-dependency-injector - GitHub, accessed September 3, 2025, <https://github.com/ets-labs/python-dependency-injector/issues/564>
+1. Wiring — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/wiring.html>
+1. dependency_injector.wiring — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/api/wiring.html>
+1. Python Dependency Injection: Build Modular and Testable Code - DataCamp, accessed September 3, 2025, <https://www.datacamp.com/tutorial/python-dependency-injection>
+1. Provider overriding — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/providers/overriding.html>
+1. Container overriding — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/containers/overriding.html>
+1. Mastering Python Dependency Injection | Startup House, accessed September 3, 2025, <https://startup-house.com/blog/python-dependency-injection-guide>
+1. Good and bad practices - Injector 0.22.0 documentation, accessed September 3, 2025, <https://injector.readthedocs.io/en/latest/practices.html>

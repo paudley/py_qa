@@ -33,10 +33,10 @@ Example:
 
 1. Keep fragment scope focused (e.g., runtime defaults for a single ecosystem,
    shared suppressions for a suite of tools).
-2. Avoid tool-specific configuration—those belong in individual tool files.
-3. Validate fragments with `uv run pytest tests/test_tooling_loader.py` to catch
+1. Avoid tool-specific configuration—those belong in individual tool files.
+1. Validate fragments with `uv run pytest tests/test_tooling_loader.py` to catch
    schema issues.
-4. Update this document when adding or renaming fragments to keep the catalog
+1. Update this document when adding or renaming fragments to keep the catalog
    discoverable.
 
 Fragments are merged prior to schema validation, so any conflicting fields will

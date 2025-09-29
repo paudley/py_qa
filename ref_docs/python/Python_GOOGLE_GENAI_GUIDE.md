@@ -4,7 +4,7 @@
 
 # **A Developer's and Agent's Guide to the google.genai Python SDK**
 
----
+______________________________________________________________________
 
 ## **1. Foundational Concepts and SDK Migration**
 
@@ -19,7 +19,7 @@ google-generativeai and specific generative modules within google-cloud-aiplatfo
 A core architectural advantage of the google-genai SDK is its dual support for two distinct API surfaces through a single, consistent client object.6 This design is not merely a technical convenience but a strategic decision to create a seamless pathway for applications to mature from initial experimentation to enterprise-scale deployment. The SDK acts as a bridge between two primary environments:
 
 1. **Gemini Developer API:** Designed for rapid prototyping and development. It uses a simple API key for authentication, allowing developers to get started quickly with minimal setup, often leveraging the free tier available through Google AI Studio.2
-2. **Gemini API on Vertex AI:** The enterprise-grade solution integrated within the Google Cloud Platform (GCP). It leverages Google Cloud's robust infrastructure, security, and governance features, using standard GCP authentication mechanisms like Application Default Credentials (ADC) instead of standalone API keys.6
+1. **Gemini API on Vertex AI:** The enterprise-grade solution integrated within the Google Cloud Platform (GCP). It leverages Google Cloud's robust infrastructure, security, and governance features, using standard GCP authentication mechanisms like Application Default Credentials (ADC) instead of standalone API keys.6
 
 This dual-target capability directly addresses a historical point of friction for developers, who previously had to contend with different SDKs and significant code refactoring when moving an application from a prototyping environment to a production environment on Vertex AI.4 With the unified SDK, this transition is managed by a simple flag during client initialization, allowing the core application logic to remain unchanged.
 
@@ -35,7 +35,7 @@ For applications requiring high-performance asynchronous operations, an optional
 
 Bash
 
-pip install -q -U "google-genai\[aiohttp]"
+pip install -q -U "google-genai[aiohttp]"
 
 ### **1.2. Critical Migration Guide: From google-generativeai to google.genai**
 
@@ -122,7 +122,7 @@ location="us-central1",\
 http_options=types.HttpOptions(api_version='v1')\
 )
 
----
+______________________________________________________________________
 
 ## **2. Core Scenarios: Generating Content**
 
@@ -224,7 +224,7 @@ print(f"Completed upload: {video_file.uri}")
 print("Generating content...")\
 response = client.generate_content(\
 model="gemini-2.5-flash",\
-contents=\["Please provide a summary of this video.", video_file]\
+contents=["Please provide a summary of this video.", video_file]\
 )
 
 print(response.text)
@@ -283,7 +283,7 @@ print()
 if \_\_name\_\_ == "\_\_main\_\_":\
 asyncio.run(main())
 
----
+______________________________________________________________________
 
 ## **3. Advanced Capabilities and Workflows**
 
@@ -326,7 +326,7 @@ client = genai.Client()
 \# Recreate a conversation history\
 previous_history =),\
 types.ModelContent(parts=)\
-]
+\]
 
 chat_session = client.chats.create(\
 model="gemini-2.5-flash",\
@@ -347,9 +347,9 @@ Function calling is a cornerstone of building reliable AI agents. It allows the 
 The process involves four key steps 32:
 
 1. **Define Tools:** The developer provides the model with declarations for available functions, including their names, descriptions, and strongly-typed parameters. The google-genai SDK can automatically generate these declarations from standard Python functions that use type hints and docstrings.2
-2. **Model Call & Tool Selection:** The model receives the user's prompt and the list of tool declarations. It analyzes the prompt and, if it determines a tool is needed, returns a genai.types.FunctionCall object instead of a text response. This object contains the name of the function to call and the arguments to use.
-3. **Application Execution:** The model _does not execute the function_. The developer's application code is responsible for receiving the FunctionCall object, invoking the corresponding Python function with the provided arguments, and capturing its return value.34
-4. **Return Result to Model:** The return value from the function is sent back to the model in the next conversational turn as a genai.types.FunctionResponse object. The model then uses this new information to generate a final, natural-language response for the user.32
+1. **Model Call & Tool Selection:** The model receives the user's prompt and the list of tool declarations. It analyzes the prompt and, if it determines a tool is needed, returns a genai.types.FunctionCall object instead of a text response. This object contains the name of the function to call and the arguments to use.
+1. **Application Execution:** The model _does not execute the function_. The developer's application code is responsible for receiving the FunctionCall object, invoking the corresponding Python function with the provided arguments, and capturing its return value.34
+1. **Return Result to Model:** The return value from the function is sent back to the model in the next conversational turn as a genai.types.FunctionResponse object. The model then uses this new information to generate a final, natural-language response for the user.32
 
 The following is a complete, end-to-end example:
 
@@ -382,7 +382,7 @@ else:
 client = genai.Client()
 
 \# The SDK automatically generates the declaration from the function\
-tools = \[get_current_weather]
+tools = [get_current_weather]
 
 response = client.generate_content(\
 model="gemini-2.5-flash",\
@@ -398,7 +398,7 @@ print(f"Model wants to call function: {tool_call.name} with args: {dict(tool_cal
 function_to_call = get_current_weather\
 function_args = dict(tool_call.args)\
 function_response_data = function_to_call(\*\*function_args)\
-print(f"Function execution result: {function_response_data}")
+print(f"Function execution result: \{function_response_data}")
 
 \# --- Step 4: Return the result to the model ---\
 response = client.generate_content(\
@@ -409,7 +409,7 @@ types.Part.from_function_response(\
 name=tool_call.name,\
 response=function_response_data,\
 )\
-],\
+\],\
 tools=tools\
 )
 
@@ -442,7 +442,7 @@ task_type=types.TaskType.RETRIEVAL_DOCUMENT\
 )
 
 \# Extract the embedding vectors\
-embeddings = \[np.array(e.values) for e in result.embeddings]\
+embeddings = [np.array(e.values) for e in result.embeddings]\
 embeddings_matrix = np.array(embeddings)
 
 \# Calculate and print the similarity matrix\
@@ -466,8 +466,8 @@ import json
 \# --- Define the desired output structure using Pydantic ---\
 class Recipe(BaseModel):\
 recipe_name: str = Field(description="The name of the recipe.")\
-ingredients: list\[str] = Field(description="A list of ingredients for the recipe.")\
-steps: list\[str] = Field(description="The steps to prepare the recipe.")\
+ingredients: list[str] = Field(description="A list of ingredients for the recipe.")\
+steps: list[str] = Field(description="The steps to prepare the recipe.")\
 prep_time_minutes: int = Field(description="The preparation time in minutes.")
 
 \# --- Make the API call with the schema ---\
@@ -487,12 +487,12 @@ print(json.dumps(json.loads(recipe_json), indent=2))
 
 \# You can now parse it directly with the Pydantic model\
 pancake_recipe = Recipe.model_validate_json(recipe_json)\
-print(f"\nRecipe Name: {pancake_recipe.recipe_name}")\
+print(f"\\nRecipe Name: {pancake_recipe.recipe_name}")\
 print(f"Preparation Time: {pancake_recipe.prep_time_minutes} minutes")
 
 When using structured output, it is a best practice to keep schemas as simple as possible. Overly complex schemas with deep nesting, long property names, or numerous optional fields can increase token usage and may lead to a 400 INVALID_ARGUMENT error.39
 
----
+______________________________________________________________________
 
 ## **4. Best Practices, Optimization, and Control**
 
@@ -635,7 +635,7 @@ contents=prompt\
 
 print(f"Total tokens in prompt: {token_count.total_tokens}")
 
----
+______________________________________________________________________
 
 ## **5. Error Handling and Troubleshooting**
 
@@ -723,7 +723,7 @@ return response.text\
 except Exception as e:\
 \# In a production environment, log the specific error.\
 \# This example catches a generic exception for simplicity.\
-print(f"An error occurred: {e}")\
+print(f"An error occurred: \{e}")\
 retry_count += 1\
 if retry_count >= max_retries:\
 print("Max retries reached. Failing.")\
@@ -746,55 +746,55 @@ print(result)
 #### **Works cited**
 
 1. google-gemini/deprecated-generative-ai-python: This SDK is now deprecated, use the new unified Google GenAI SDK. - GitHub, accessed September 3, 2025, <https://github.com/google-gemini/deprecated-generative-ai-python>
-2. Migrating to the new Google Gen AI SDK (Python) | by Maciej Strzelczyk - Medium, accessed September 3, 2025, <https://medium.com/google-cloud/migrating-to-the-new-google-gen-ai-sdk-python-074d583c2350>
-3. Vertex AI SDK migration guide - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/deprecations/genai-vertexai-sdk>
-4. Need clarification about Google AI python packageS (google-genai vs google-generativeai) - Gemini API - Google AI Developers Forum, accessed September 3, 2025, <https://discuss.ai.google.dev/t/need-clarification-about-google-ai-python-packages-google-genai-vs-google-generativeai/61116>
-5. Gemini API libraries | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/libraries>
-6. googleapis/python-genai: Google Gen AI Python SDK provides an interface for developers to integrate Google's generative models into their Python applications. - GitHub, accessed September 3, 2025, <https://github.com/googleapis/python-genai>
-7. google-genai - PyPI, accessed September 3, 2025, <https://pypi.org/project/google-genai/>
-8. The Google GenAI SDK: A guide with a Python tutorial - Wandb, accessed September 3, 2025, <https://wandb.ai/byyoung3/gemini-genai/reports/The-Google-GenAI-SDK-A-guide-with-a-Python-tutorial--VmlldzoxMzE2NDIwNA>
-9. Gemini API quickstart | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/quickstart>
-10. Migrate to the Google GenAI SDK | Gemini API | Google AI for ..., accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/migrate>
-11. Google Gen AI SDK documentation, accessed September 3, 2025, <https://googleapis.github.io/python-genai/>
-12. deprecated-generative-ai-python - Swift Package Registry, accessed September 3, 2025, <https://swiftpackageregistry.com/google-gemini/deprecated-generative-ai-python>
-13. google-gemini/gemini-api-quickstart: Get up and running with the Gemini API in under 5 minutes (with Python) - GitHub, accessed September 3, 2025, <https://github.com/google-gemini/gemini-api-quickstart>
-14. Create a chat session with a Generative Model | Generative AI on ..., accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/samples/googlegenaisdk-textgen-chat-with-txt>
-15. Using Gemini API keys | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/api-key>
-16. Submodules - Google Gen AI SDK documentation, accessed September 3, 2025, <https://googleapis.github.io/python-genai/genai.html>
-17. Gemini API in Vertex AI quickstart - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/start/quickstart>
-18. Google Gen AI SDK | Generative AI on Vertex AI - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/sdks/overview>
-19. Stream answers | AI Applications - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/generative-ai-app-builder/docs/stream-answer>
-20. Implementing response streaming from LLMs - Hivekind, accessed September 3, 2025, <https://hivekind.com/blog/implementing-response-streaming-from-llms>
-21. Streaming.ipynb - Colab, accessed September 3, 2025, <https://colab.research.google.com/github/google-gemini/cookbook/blob/main/quickstarts/Streaming.ipynb>
-22. Generate streaming text content with Generative Model | Generative AI on Vertex AI | Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/samples/googlegenaisdk-textgen-with-txt-stream>
-23. Generative AI - Gemini multimodal | Google Cloud Skills Boost, accessed September 3, 2025, <https://www.cloudskillsboost.google/course_templates/593/video/565192?locale=uk>
-24. Mastering Multimodality: A Journey with Google's Gemini and ..., accessed September 3, 2025, <https://medium.com/@akashpittalwar107/mastering-multimodality-a-journey-with-googles-gemini-and-multimodal-rag-75325bbf5e1f>
-25. Full Tutorial: How to Use Google Generative AI for Text and Image Content Creation in Python - KoshurAI, accessed September 3, 2025, <https://koshurai.medium.com/full-tutorial-how-to-use-google-generative-ai-for-text-and-image-content-creation-in-python-ad5c43c1c761>
-26. Generating content | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/api/generate-content>
-27. Multimodal AI in action - YouTube, accessed September 3, 2025, <https://www.youtube.com/watch?v=pEmCgIGpIoo>
-28. Generate text from multimodal prompt | Generative AI on Vertex AI - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/samples/generativeaionvertexai-gemini-single-turn-multi-image>
-29. Google Gen AI Python SDK: A Complete Guide - Analytics Vidhya, accessed September 3, 2025, <https://www.analyticsvidhya.com/blog/2025/08/google-gen-ai-python-sdk-guide/>
-30. How to Set Up and Use Google Generative AI in Python - Priyanshu Sharma, accessed September 3, 2025, <https://priyanshu.com.np/genai/>
-31. What is the best way to persist chat history into file? - Gemini API ..., accessed September 3, 2025, <https://discuss.ai.google.dev/t/what-is-the-best-way-to-persist-chat-history-into-file/3804>
-32. Function calling with the Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/function-calling>
-33. Gemini API: Function calling with Python - Colab - Google, accessed September 3, 2025, <https://colab.research.google.com/github/google-gemini/cookbook/blob/main/quickstarts/Function_calling.ipynb>
-34. Function calling with Gemma | Google AI for Developers - Gemini API, accessed September 3, 2025, <https://ai.google.dev/gemma/docs/capabilities/function-calling>
-35. Gemini API: Getting started with Gemini embedding models - Colab - Google, accessed September 3, 2025, <https://colab.research.google.com/github/google-gemini/cookbook/blob/main/quickstarts/Embeddings.ipynb>
-36. Get text embeddings | Generative AI on Vertex AI - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings>
-37. Text embeddings API | Generative AI on Vertex AI - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/text-embeddings-api>
-38. Embeddings | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/embeddings>
-39. Structured output | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/structured-output>
-40. Prompt design strategies | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/prompting-strategies>
-41. Safety settings | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/safety-settings>
-42. Safety and content filters | Generative AI on Vertex AI - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/configure-safety-filters>
-43. Migrate \`embedchain/\` from \`google-generativeai\` to \`python-genai\` · Issue #3361 · mem0ai/mem0 - GitHub, accessed September 3, 2025, <https://github.com/mem0ai/mem0/issues/3361>
-44. Safety settings | Google AI for Developers - Gemini API, accessed September 3, 2025, <https://ai.google.dev/palm_docs/safety_setting_palm>
-45. Gemini thinking | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/thinking>
-46. Gemini Developer API Pricing | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/pricing>
-47. Batch Mode in the Gemini API: Process more for less - Google ..., accessed September 3, 2025, <https://developers.googleblog.com/en/scale-your-ai-workloads-batch-mode-gemini-api/>
-48. Troubleshooting guide | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/troubleshooting>
-49. Generative AI on Vertex AI inference API errors | Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/api-errors>
-50. Resolving Google Gemini API Error 500 in Python with try-except Loops - Kent McCann MD, accessed September 3, 2025, <https://www.kentmccannmd.com/resolving-google-gemini-api-error-500/>
-51. Rate limits | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/rate-limits>
-52. Generate text from an image with safety settings | Generative AI on Vertex AI - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/samples/generativeaionvertexai-gemini-safety-settings>
-53. Python for AI: Week 10 — Error Handling and Exceptions in Python - Medium, accessed September 3, 2025, <https://medium.com/@ebimsv/python-for-ai-week-10-error-handling-and-exceptions-in-python-296a75c34abe>
+1. Migrating to the new Google Gen AI SDK (Python) | by Maciej Strzelczyk - Medium, accessed September 3, 2025, <https://medium.com/google-cloud/migrating-to-the-new-google-gen-ai-sdk-python-074d583c2350>
+1. Vertex AI SDK migration guide - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/deprecations/genai-vertexai-sdk>
+1. Need clarification about Google AI python packageS (google-genai vs google-generativeai) - Gemini API - Google AI Developers Forum, accessed September 3, 2025, <https://discuss.ai.google.dev/t/need-clarification-about-google-ai-python-packages-google-genai-vs-google-generativeai/61116>
+1. Gemini API libraries | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/libraries>
+1. googleapis/python-genai: Google Gen AI Python SDK provides an interface for developers to integrate Google's generative models into their Python applications. - GitHub, accessed September 3, 2025, <https://github.com/googleapis/python-genai>
+1. google-genai - PyPI, accessed September 3, 2025, <https://pypi.org/project/google-genai/>
+1. The Google GenAI SDK: A guide with a Python tutorial - Wandb, accessed September 3, 2025, <https://wandb.ai/byyoung3/gemini-genai/reports/The-Google-GenAI-SDK-A-guide-with-a-Python-tutorial--VmlldzoxMzE2NDIwNA>
+1. Gemini API quickstart | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/quickstart>
+1. Migrate to the Google GenAI SDK | Gemini API | Google AI for ..., accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/migrate>
+1. Google Gen AI SDK documentation, accessed September 3, 2025, <https://googleapis.github.io/python-genai/>
+1. deprecated-generative-ai-python - Swift Package Registry, accessed September 3, 2025, <https://swiftpackageregistry.com/google-gemini/deprecated-generative-ai-python>
+1. google-gemini/gemini-api-quickstart: Get up and running with the Gemini API in under 5 minutes (with Python) - GitHub, accessed September 3, 2025, <https://github.com/google-gemini/gemini-api-quickstart>
+1. Create a chat session with a Generative Model | Generative AI on ..., accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/samples/googlegenaisdk-textgen-chat-with-txt>
+1. Using Gemini API keys | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/api-key>
+1. Submodules - Google Gen AI SDK documentation, accessed September 3, 2025, <https://googleapis.github.io/python-genai/genai.html>
+1. Gemini API in Vertex AI quickstart - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/start/quickstart>
+1. Google Gen AI SDK | Generative AI on Vertex AI - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/sdks/overview>
+1. Stream answers | AI Applications - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/generative-ai-app-builder/docs/stream-answer>
+1. Implementing response streaming from LLMs - Hivekind, accessed September 3, 2025, <https://hivekind.com/blog/implementing-response-streaming-from-llms>
+1. Streaming.ipynb - Colab, accessed September 3, 2025, <https://colab.research.google.com/github/google-gemini/cookbook/blob/main/quickstarts/Streaming.ipynb>
+1. Generate streaming text content with Generative Model | Generative AI on Vertex AI | Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/samples/googlegenaisdk-textgen-with-txt-stream>
+1. Generative AI - Gemini multimodal | Google Cloud Skills Boost, accessed September 3, 2025, <https://www.cloudskillsboost.google/course_templates/593/video/565192?locale=uk>
+1. Mastering Multimodality: A Journey with Google's Gemini and ..., accessed September 3, 2025, <https://medium.com/@akashpittalwar107/mastering-multimodality-a-journey-with-googles-gemini-and-multimodal-rag-75325bbf5e1f>
+1. Full Tutorial: How to Use Google Generative AI for Text and Image Content Creation in Python - KoshurAI, accessed September 3, 2025, <https://koshurai.medium.com/full-tutorial-how-to-use-google-generative-ai-for-text-and-image-content-creation-in-python-ad5c43c1c761>
+1. Generating content | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/api/generate-content>
+1. Multimodal AI in action - YouTube, accessed September 3, 2025, <https://www.youtube.com/watch?v=pEmCgIGpIoo>
+1. Generate text from multimodal prompt | Generative AI on Vertex AI - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/samples/generativeaionvertexai-gemini-single-turn-multi-image>
+1. Google Gen AI Python SDK: A Complete Guide - Analytics Vidhya, accessed September 3, 2025, <https://www.analyticsvidhya.com/blog/2025/08/google-gen-ai-python-sdk-guide/>
+1. How to Set Up and Use Google Generative AI in Python - Priyanshu Sharma, accessed September 3, 2025, <https://priyanshu.com.np/genai/>
+1. What is the best way to persist chat history into file? - Gemini API ..., accessed September 3, 2025, <https://discuss.ai.google.dev/t/what-is-the-best-way-to-persist-chat-history-into-file/3804>
+1. Function calling with the Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/function-calling>
+1. Gemini API: Function calling with Python - Colab - Google, accessed September 3, 2025, <https://colab.research.google.com/github/google-gemini/cookbook/blob/main/quickstarts/Function_calling.ipynb>
+1. Function calling with Gemma | Google AI for Developers - Gemini API, accessed September 3, 2025, <https://ai.google.dev/gemma/docs/capabilities/function-calling>
+1. Gemini API: Getting started with Gemini embedding models - Colab - Google, accessed September 3, 2025, <https://colab.research.google.com/github/google-gemini/cookbook/blob/main/quickstarts/Embeddings.ipynb>
+1. Get text embeddings | Generative AI on Vertex AI - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings>
+1. Text embeddings API | Generative AI on Vertex AI - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/text-embeddings-api>
+1. Embeddings | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/embeddings>
+1. Structured output | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/structured-output>
+1. Prompt design strategies | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/prompting-strategies>
+1. Safety settings | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/safety-settings>
+1. Safety and content filters | Generative AI on Vertex AI - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/configure-safety-filters>
+1. Migrate \`embedchain/\` from \`google-generativeai\` to \`python-genai\` · Issue #3361 · mem0ai/mem0 - GitHub, accessed September 3, 2025, <https://github.com/mem0ai/mem0/issues/3361>
+1. Safety settings | Google AI for Developers - Gemini API, accessed September 3, 2025, <https://ai.google.dev/palm_docs/safety_setting_palm>
+1. Gemini thinking | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/thinking>
+1. Gemini Developer API Pricing | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/pricing>
+1. Batch Mode in the Gemini API: Process more for less - Google ..., accessed September 3, 2025, <https://developers.googleblog.com/en/scale-your-ai-workloads-batch-mode-gemini-api/>
+1. Troubleshooting guide | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/troubleshooting>
+1. Generative AI on Vertex AI inference API errors | Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/api-errors>
+1. Resolving Google Gemini API Error 500 in Python with try-except Loops - Kent McCann MD, accessed September 3, 2025, <https://www.kentmccannmd.com/resolving-google-gemini-api-error-500/>
+1. Rate limits | Gemini API | Google AI for Developers, accessed September 3, 2025, <https://ai.google.dev/gemini-api/docs/rate-limits>
+1. Generate text from an image with safety settings | Generative AI on Vertex AI - Google Cloud, accessed September 3, 2025, <https://cloud.google.com/vertex-ai/generative-ai/docs/samples/generativeaionvertexai-gemini-safety-settings>
+1. Python for AI: Week 10 — Error Handling and Exceptions in Python - Medium, accessed September 3, 2025, <https://medium.com/@ebimsv/python-for-ai-week-10-error-handling-and-exceptions-in-python-296a75c34abe>

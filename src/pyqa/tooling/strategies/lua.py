@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
+from typing import cast
 
 from ..loader import CatalogIntegrityError
 from ..tools.base import CommandBuilder, ToolContext
@@ -14,6 +12,7 @@ from .common import (
     _download_artifact_for_tool,
     _require_string_sequence,
 )
+from ..catalog.types import JSONValue
 
 
 class _SeleneStrategy(CommandBuilder):
@@ -66,7 +65,7 @@ class _SeleneStrategy(CommandBuilder):
         return tuple(cmd)
 
 
-def selene_command(config: Mapping[str, Any]) -> CommandBuilder:
+def selene_command(config: Mapping[str, JSONValue]) -> CommandBuilder:
     """Return a command builder configured for Selene."""
 
     base_args = _require_string_sequence(config, "base", context="command_selene")
@@ -77,7 +76,7 @@ class _LualintStrategy(CommandBuilder):
     """Command builder that invokes the lualint shim."""
 
     base: tuple[str, ...]
-    download: Mapping[str, Any]
+    download: Mapping[str, JSONValue]
 
     def build(self, ctx: ToolContext) -> Sequence[str]:
         cache_root = ctx.root / ".lint-cache"
@@ -103,14 +102,15 @@ class _LualintStrategy(CommandBuilder):
         return tuple(cmd)
 
 
-def lualint_command(config: Mapping[str, Any]) -> CommandBuilder:
+def lualint_command(config: Mapping[str, JSONValue]) -> CommandBuilder:
     """Return a command builder configured for lualint."""
 
     base_args = _require_string_sequence(config, "base", context="command_lualint")
     download_config = config.get("download")
     if not isinstance(download_config, Mapping):
         raise CatalogIntegrityError("command_lualint: missing 'download' configuration")
-    return _LualintStrategy(base=base_args, download=download_config)
+    download_mapping = cast(Mapping[str, JSONValue], download_config)
+    return _LualintStrategy(base=base_args, download=download_mapping)
 
 
 class _LuacheckStrategy(CommandBuilder):

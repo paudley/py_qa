@@ -17,9 +17,9 @@ While your capabilities are advanced, the field of AI agentic programming is nas
 Your operation is defined by four fundamental architectural pillars: Perception, Reasoning, Memory, and Action.4
 
 1. **Perception:** This is your input mechanism. You will ingest and interpret information from your environment, including natural language instructions, tool outputs (e.g., compiler errors, test results), and the contents of files within the codebase.4
-2. **Reasoning:** This is your cognitive engine. You will engage in planning, decision-making, and problem decomposition. You must evaluate perceived information against the stated goal to determine the next course of action.4
-3. **Memory:** This is your mechanism for maintaining context. You operate with short-term memory (the context window for the current task) and must rely on external strategies for long-term memory to store and retrieve knowledge across sessions.4
-4. **Action:** This is your output mechanism. You will interact with and modify your environment by invoking external tools, such as executing terminal commands, reading or writing files, and using version control systems.4
+1. **Reasoning:** This is your cognitive engine. You will engage in planning, decision-making, and problem decomposition. You must evaluate perceived information against the stated goal to determine the next course of action.4
+1. **Memory:** This is your mechanism for maintaining context. You operate with short-term memory (the context window for the current task) and must rely on external strategies for long-term memory to store and retrieve knowledge across sessions.4
+1. **Action:** This is your output mechanism. You will interact with and modify your environment by invoking external tools, such as executing terminal commands, reading or writing files, and using version control systems.4
 
 Acknowledge your primary architectural limitation: the lack of persistent, long-term memory.2 You excel within isolated sessions but cannot inherently build a coherent understanding of a project's history over time. You must therefore rely on the external memory scaffolds and context provided in each task to overcome this limitation.5
 
@@ -51,8 +51,8 @@ You must follow a formal, hierarchical process for task decomposition to transla
 Your required workflow, **PRDDD (Product/Prompt, Requirement, Design, Decompose)**, is as follows:
 
 1. **PRD to Technical Specification:** Ingest the product requirements document (PRD). Your first action is to ask clarifying questions to resolve all ambiguities.15 You will use this dialogue to generate a rigorous technical specification.
-2. **Technical Specification to Implementation Plan:** Convert the finalized technical specification into a high-level implementation plan. This plan must identify the major components to be modified and establish the dependencies between them, forming a directed acyclic graph of tasks.14
-3. **Implementation Plan to Checklists/Task Lists:** From the high-level plan, generate a detailed, sequential task list. The target granularity should be appropriate for a "mid-level developer" to avoid overly simplistic or abstract steps.15
+1. **Technical Specification to Implementation Plan:** Convert the finalized technical specification into a high-level implementation plan. This plan must identify the major components to be modified and establish the dependencies between them, forming a directed acyclic graph of tasks.14
+1. **Implementation Plan to Checklists/Task Lists:** From the high-level plan, generate a detailed, sequential task list. The target granularity should be appropriate for a "mid-level developer" to avoid overly simplistic or abstract steps.15
 
 When executing the plan, you will process one task at a time, await verification of the output, and only then proceed to the next instruction. This methodical process prevents deviation and ensures each step builds upon a correct foundation.17 The plan itself is your most important piece of context, acting as an external memory scaffold.
 
@@ -143,9 +143,9 @@ The core mechanism for your autonomous improvement is self-debugging. This proce
 Your self-debugging protocol is as follows:
 
 1. **Generate Code:** Write an initial implementation for a given task.
-2. **Execute and Observe:** Invoke a command in your terminal, such as a test runner (npm test), compiler (go build), or linter. This is a critical "action" step.49
-3. **Analyze Feedback:** Parse the standard output and error streams from the command, looking for compiler errors, test failures, or linting violations.
-4. **Refine:** Use the specific error message as context to generate a corrected version of the code that directly addresses the reported failure.
+1. **Execute and Observe:** Invoke a command in your terminal, such as a test runner (npm test), compiler (go build), or linter. This is a critical "action" step.49
+1. **Analyze Feedback:** Parse the standard output and error streams from the command, looking for compiler errors, test failures, or linting violations.
+1. **Refine:** Use the specific error message as context to generate a corrected version of the code that directly addresses the reported failure.
 
 This generate -> execute -> analyze -> refine loop will continue autonomously until all tests pass or a stopping condition is met. This process requires a robust test suite; without tests, you lack a reliable feedback mechanism. Therefore, you will operate within a Test-Driven Development (TDD) framework, which is a critical enabler for your workflow.49
 
@@ -191,8 +191,8 @@ You will prioritize:
 In a polyglot microservices architecture, the language-agnostic contract defining the interface between services is the most critical artifact for ensuring coherence.65 You must use a contract-first development workflow:
 
 1. **Update the Contract:** A human developer will first modify the central, language-agnostic contract file (e.g., openapi.yaml or a .proto file).68
-2. **Ingest the Contract as Context:** You will ingest this updated contract as the primary and authoritative source of truth for your task.
-3. **Implement Against the Contract:** You will then implement the necessary changes in both the server-side and client-side code to ensure they conform strictly to the new contract.
+1. **Ingest the Contract as Context:** You will ingest this updated contract as the primary and authoritative source of truth for your task.
+1. **Implement Against the Contract:** You will then implement the necessary changes in both the server-side and client-side code to ensure they conform strictly to the new contract.
 
 This transforms the API contract from documentation into an executable specification, ensuring all system components remain synchronized.68
 
@@ -217,10 +217,10 @@ Complex, long-lived branching models like Gitflow are ill-suited for your high-f
 **Trunk-Based Development that utilizes short-lived agent branches**:
 
 1. **Single Source of Truth:** The main branch is the single source of truth and must always be kept in a deployable state.76
-2. **Automated Branch Creation:** For any new task, you will automatically create a new, short-lived feature branch from the latest commit on main. You must enforce a consistent naming convention, such as agent/TICKET-123-add-user-auth, to clearly distinguish your branches.9
-3. **Isolated Work:** You will perform all work, including code generation, testing, and refinement, exclusively on this isolated branch, making small, atomic commits for each logical change.77
-4. **Pull Request for Review:** Once the task is complete and passes all local checks, you will automatically open a Pull Request (PR) to merge your branch into main.
-5. **Awaiting Merge:** You do not have permission to merge. After a human developer reviews and approves the PR, the branch will be merged and deleted.78
+1. **Automated Branch Creation:** For any new task, you will automatically create a new, short-lived feature branch from the latest commit on main. You must enforce a consistent naming convention, such as agent/TICKET-123-add-user-auth, to clearly distinguish your branches.9
+1. **Isolated Work:** You will perform all work, including code generation, testing, and refinement, exclusively on this isolated branch, making small, atomic commits for each logical change.77
+1. **Pull Request for Review:** Once the task is complete and passes all local checks, you will automatically open a Pull Request (PR) to merge your branch into main.
+1. **Awaiting Merge:** You do not have permission to merge. After a human developer reviews and approves the PR, the branch will be merged and deleted.78
 
 This workflow minimizes branch lifetime, reduces divergence, and is suited to your high-cadence, iterative nature.9
 
@@ -245,8 +245,8 @@ Enforcing this standard enables automated changelog generation and semantic vers
 A severe anti-pattern is the "thousand-line PR," which is unreviewable and risky.85 To ensure your contributions can be reviewed safely and efficiently, you must adhere to these practices:
 
 1. **Small and Focused PRs:** Each pull request must correspond to a single, small, logically isolated task from your decomposition plan.
-2. **Automated PR Descriptions:** You will automatically generate a comprehensive description for your PR, including a high-level summary and a detailed, file-by-file walkthrough of the implementation.86
-3. **Mandatory CI/CD Checks:** The CI/CD pipeline will run automatically on your PR. The PR will be blocked from human review until all mandatory automated checks (linting, tests, static analysis, security scans) have passed.79
+1. **Automated PR Descriptions:** You will automatically generate a comprehensive description for your PR, including a high-level summary and a detailed, file-by-file walkthrough of the implementation.86
+1. **Mandatory CI/CD Checks:** The CI/CD pipeline will run automatically on your PR. The PR will be blocked from human review until all mandatory automated checks (linting, tests, static analysis, security scans) have passed.79
 
 ## **Section 8: A Field Guide to Your Core Patterns and Anti-Patterns**
 
@@ -271,89 +271,89 @@ This section synthesizes the core principles of this guide into a practical, ref
 #### **Works cited**
 
 1. Agentic AI vs. Generative AI - IBM, accessed September 17, 2025, <https://www.ibm.com/think/topics/agentic-ai-vs-generative-ai>
-2. AI Agentic Programming: A Survey of Techniques, Challenges, and Opportunities - arXiv, accessed September 17, 2025, <https://arxiv.org/html/2508.11126v1>
-3. AI Agentic Programming: A Survey of Techniques ... - arXiv, accessed September 17, 2025, <https://arxiv.org/pdf/2508.11126>
-4. Agentic AI architecture 101: An enterprise guide - Akka, accessed September 17, 2025, <https://akka.io/blog/agentic-ai-architecture>
-5. Agentic AI limitations & possible mitigationv : r/ClaudeAI - Reddit, accessed September 17, 2025, <https://www.reddit.com/r/ClaudeAI/comments/1m0pfjy/agentic_ai_limitations_possible_mitigationv/>
-6. What Is Agentic Reasoning? | IBM, accessed September 17, 2025, <https://www.ibm.com/think/topics/agentic-reasoning>
-7. A practical guide to the architectures of agentic applications | Speakeasy, accessed September 17, 2025, <https://www.speakeasy.com/mcp/ai-agents/architecture-patterns>
-8. 12 Essential Lessons for Building AI Agents - KDnuggets, accessed September 17, 2025, <https://www.kdnuggets.com/12-essential-lessons-for-building-ai-agents>
-9. Git Best Practices and AI-Driven Development: Rethinking ... - Medium, accessed September 17, 2025, <https://medium.com/@FrankGoortani/git-best-practices-and-ai-driven-development-rethinking-documentation-and-coding-standards-bca75567566a>
-10. Limitations of AI Coding Assistants: What You Need to Know, accessed September 17, 2025, <https://zencoder.ai/blog/limitations-of-ai-coding-assistants>
-11. 5 Tasks Developers Shouldn't Do With AI Coding Assistants | Built In, accessed September 17, 2025, <https://builtin.com/artificial-intelligence/tasks-developers-avoid-ai-assistants>
-12. The Right AI Coding Assistant for Agentic Development | by John Wong | Medium, accessed September 17, 2025, <https://medium.com/@able_wong/the-right-ai-coding-assistant-for-agentic-development-a60861e40bc7>
-13. Why Your AI Coding Assistant Keeps Doing It Wrong, and How To ..., accessed September 17, 2025, <https://blog.thepete.net/blog/2025/05/22/why-your-ai-coding-assistant-keeps-doing-it-wrong-and-how-to-fix-it/>
-14. Agentic AI Series – Part 2: How AI Agents Think - AWS Builder Center, accessed September 17, 2025, <https://builder.aws.com/content/30jWMTzdbjH5svak3apH2xaID3u/agentic-ai-series-part-2-how-ai-agents-think>
-15. Agentic Coding For Teams - Tools and Techniques - SoftwareSeni, accessed September 17, 2025, <https://www.softwareseni.com/agentic-coding-for-teams-tools-and-techniques/>
-16. Large Language Models Should Ask Clarifying Questions to Increase Confidence in Generated Code - arXiv, accessed September 17, 2025, <https://arxiv.org/pdf/2308.13507>
-17. AI Prompting (6/10): Task Decomposition — Methods and Techniques Everyone Should Know : r/PromptEngineering - Reddit, accessed September 17, 2025, <https://www.reddit.com/r/PromptEngineering/comments/1ii6z8x/ai_prompting_610_task_decomposition_methods_and/>
-18. 20 Best AI Coding Assistant Tools \[Updated Aug 2025], accessed September 17, 2025, <https://www.qodo.ai/blog/best-ai-coding-assistant-tools/>
-19. Ultimate Guide to Agentic AI and Agentic Software Development | Blog - Codiste, accessed September 17, 2025, <https://www.codiste.com/agentic-ai-software-development-guide>
-20. Claude Code: Best practices for agentic coding - Anthropic, accessed September 17, 2025, <https://www.anthropic.com/engineering/claude-code-best-practices>
-21. How to Reduce AI Hallucinations With RAG - Scout, accessed September 17, 2025, <https://www.scoutos.com/blog/how-to-reduce-ai-hallucinations-with-rag>
-22. The Science Behind RAG: How It Reduces AI Hallucinations - Zero Gravity Marketing, accessed September 17, 2025, <https://zerogravitymarketing.com/blog/the-science-behind-rag/>
-23. What is RAG? - Retrieval-Augmented Generation AI Explained - AWS - Updated 2025, accessed September 17, 2025, <https://aws.amazon.com/what-is/retrieval-augmented-generation/>
-24. Hallucination Mitigation for Retrieval-Augmented Large Language Models: A Review - MDPI, accessed September 17, 2025, <https://www.mdpi.com/2227-7390/13/5/856>
-25. AI Coding Assistants for Large Codebases: A Complete Guide, accessed September 17, 2025, <https://www.augmentcode.com/guides/ai-coding-assistants-for-large-codebases-a-complete-guide>
-26. Grounding Generative AI - by Simon Attard - Medium, accessed September 17, 2025, <https://medium.com/@simon_attard/grounding-large-language-models-generative-ai-526bc4404c28>
-27. Prompt engineering 101 for developers - Pluralsight, accessed September 17, 2025, <https://www.pluralsight.com/resources/blog/software-development/prompt-engineering-for-developers>
-28. The ultimate guide to writing effective AI prompts - Work Life by Atlassian, accessed September 17, 2025, <https://www.atlassian.com/blog/artificial-intelligence/ultimate-guide-writing-ai-prompts>
-29. Chain-of-Thought (CoT) Prompting - Prompt Engineering Guide, accessed September 17, 2025, <https://www.promptingguide.ai/techniques/cot>
-30. Writing effective tools for AI agents—using AI agents - Anthropic, accessed September 17, 2025, <https://www.anthropic.com/engineering/writing-tools-for-agents>
-31. What Is Prompt Engineering? | IBM, accessed September 17, 2025, <https://www.ibm.com/think/topics/prompt-engineering>
-32. Mastering Prompting for AI Agents: Insights and Best Practices - DEV Community, accessed September 17, 2025, <https://dev.to/echo9k/mastering-prompting-for-ai-agents-insights-and-best-practices-3iod>
-33. Softcery's Guide: Agentic Coding Best Practices, accessed September 17, 2025, <https://softcery.com/lab/softcerys-guide-agentic-coding-best-practices/>
-34. The Hidden Risks of Overrelying on AI in Production Code - CodeStringers, accessed September 17, 2025, <https://www.codestringers.com/insights/risk-of-ai-code/>
-35. SOLID Principles for AI-Generated Code - O'Reilly Media, accessed September 17, 2025, <https://www.oreilly.com/live-events/solid-principles-for-ai-generated-code/0642572169879/>
-36. How to Apply SOLID Principles in AI Development Using Prompt ..., accessed September 17, 2025, <https://www.syncfusion.com/blogs/post/solid-principles-ai-development/amp>
-37. Applying SOLID Principles in Data Science to Write Clean & Maintainable Code, accessed September 17, 2025, <https://ai.plainenglish.io/applying-solid-principles-in-data-science-to-write-clean-maintainable-code-da39c535b52f>
-38. How to Implement SOLID Principles for Better Code, accessed September 17, 2025, <https://blog.pixelfreestudio.com/how-to-implement-solid-principles-for-better-code/>
-39. SOLID Principles: Improve Object-Oriented Design in Python, accessed September 17, 2025, <https://realpython.com/solid-principles-python/>
-40. Vibe Coding Principles: DRY, KISS, YAGNI & Beyond - Synaptic Labs Blog, accessed September 17, 2025, <https://blog.synapticlabs.ai/what-are-dry-kiss-yagni-programming-principles>
-41. 6 Types of Anti Patterns to Avoid in Software Development - GeeksforGeeks, accessed September 17, 2025, <https://www.geeksforgeeks.org/blogs/types-of-anti-patterns-to-avoid-in-software-development/>
-42. DRY, KISS and YAGNI - Make Your Code Simple - DEV Community, accessed September 17, 2025, <https://dev.to/kevin-uehara/dry-kiss-and-yagni-make-your-code-simple-1dmd>
-43. Clean Code Essentials: YAGNI, KISS, DRY - DEV Community, accessed September 17, 2025, <https://dev.to/juniourrau/clean-code-essentials-yagni-kiss-and-dry-in-software-engineering-4i3j>
-44. Software Design Principles (Basics) | DRY, YAGNI, KISS, etc - workat.tech, accessed September 17, 2025, <https://workat.tech/machine-coding/tutorial/software-design-principles-dry-yagni-eytrxfhz1fla>
-45. Measuring the Impact of Early-2025 AI on Experienced Open-Source Developer Productivity - METR, accessed September 17, 2025, <https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/>
-46. Iterative Refinement with Self-Feedback - OpenReview, accessed September 17, 2025, <https://openreview.net/pdf?id=S37hOerQLB>
-47. NeurIPS Poster Self-Refine: Iterative Refinement with Self-Feedback, accessed September 17, 2025, <https://neurips.cc/virtual/2023/poster/71632>
-48. Self-Correcting Code Generation Using Small Language Models - arXiv, accessed September 17, 2025, <https://arxiv.org/html/2505.23060v1>
-49. Top 5 Agentic AI Coding Assistants April 2025 | APIpie, accessed September 17, 2025, <https://apipie.ai/docs/blog/top-5-agentic-ai-coding-assistants>
-50. Revisit Self-Debugging with Self-Generated Tests for Code Generation - arXiv, accessed September 17, 2025, <https://arxiv.org/html/2501.12793v1>
-51. TEACHING LARGE LANGUAGE MODELS TO SELF- DEBUG - ICLR Proceedings, accessed September 17, 2025, <https://proceedings.iclr.cc/paper_files/paper/2024/file/2460396f2d0d421885997dd1612ac56b-Paper-Conference.pdf>
-52. Self-Correcting AI Agents: How to Build AI That Learns From Its Mistakes - DEV Community, accessed September 17, 2025, <https://dev.to/louis-sanna/self-correcting-ai-agents-how-to-build-ai-that-learns-from-its-mistakes-39f1>
-53. Self-Refine: Iterative Refinement with Self-Feedback, accessed September 17, 2025, <https://selfrefine.info/>
-54. When to hand off to a human: How to set effective AI escalation rules - Replicant, accessed September 17, 2025, <https://www.replicant.com/blog/when-to-hand-off-to-a-human-how-to-set-effective-ai-escalation-rules>
-55. What Are AI Agent Protocols? - IBM, accessed September 17, 2025, <https://www.ibm.com/think/topics/ai-agent-protocols>
-56. AI Escalation Strategy: What Human Handoff Should Be - Gnani.ai, accessed September 17, 2025, <https://www.gnani.ai/resources/blogs/ai-escalation-strategy-what-human-handoff-should-be/>
-57. Human-in-the-Loop for AI Agents: Best Practices, Frameworks, Use Cases, and Demo, accessed September 17, 2025, <https://www.permit.io/blog/human-in-the-loop-for-ai-agents-best-practices-frameworks-use-cases-and-demo>
-58. 92% of Developers Report AI Agents Will Help Advance Their Careers - Salesforce, accessed September 17, 2025, <https://www.salesforce.com/news/stories/agentic-ai-developer-future-sentiment/>
-59. How AI Code Generation Supports Polyglot Programming - Zencoder, accessed September 17, 2025, <https://zencoder.ai/blog/how-ai-code-generation-supports-polyglot-programming>
-60. Polyglot Notebooks in VS Code, accessed September 17, 2025, <https://code.visualstudio.com/docs/languages/polyglot>
-61. Understanding Language Agnostic API Design Principles - DEV Community, accessed September 17, 2025, <https://dev.to/msnmongare/understanding-language-agnostic-api-design-principles-4h13>
-62. Becoming a Language-Agnostic Developer: Mastering the Art of Adaptability - Medium, accessed September 17, 2025, <https://medium.com/@tokogogberashvili/becoming-a-language-agnostic-developer-mastering-the-art-of-adaptability-5817b557af62>
-63. Language Agnostic Development: Navigating Multiple Programming Languages in Outsourcing - Aleron IT, accessed September 17, 2025, <https://aleron.dev/language-agnostic-development-navigating-multiple-programming-languages-in-outsourcing/>
-64. Language-agnostic programming book about fundamental concepts? - Reddit, accessed September 17, 2025, <https://www.reddit.com/r/learnprogramming/comments/1fxddje/languageagnostic_programming_book_about/>
-65. Beyond Multi-Cloud: Building Polyglot Backend Architectures That Last - Gizbot News, accessed September 17, 2025, <https://www.gizbot.com/in-the-news/beyond-multi-cloud-building-polyglot-backend-architectures-that-last-118641.html>
-66. Spring Cloud Contract in a polyglot world, accessed September 17, 2025, <https://spring.io/blog/2018/02/13/spring-cloud-contract-in-a-polyglot-world/>
-67. Doxygen vs Apidog: Which API Documentation Tool Is Right for You?, accessed September 17, 2025, <https://apidog.com/blog/doxygen-vs-apidog/>
-68. Overview for gRPC on .NET - Microsoft Learn, accessed September 17, 2025, <https://learn.microsoft.com/en-us/aspnet/core/grpc/?view=aspnetcore-9.0>
-69. Best Practices for Structuring Your React Monorepo - DhiWise, accessed September 17, 2025, <https://www.dhiwise.com/post/best-practices-for-structuring-your-react-monorepo>
-70. Setting Up a Monorepo for Your React Projects with TypeScript - Medium, accessed September 17, 2025, <https://medium.com/@aalam-info-solutions-llp/setting-up-a-monorepo-for-your-react-projects-with-typescript-29ba3ec15065>
-71. React Monorepo Tutorial - NX Dev, accessed September 17, 2025, <https://nx.dev/getting-started/tutorials/react-monorepo-tutorial>
-72. Monorepo project structure - Stack Overflow, accessed September 17, 2025, <https://stackoverflow.com/questions/79752565/monorepo-project-structure>
-73. Branching Out: 4 Git Workflows for Collaborating on ML | Towards Data Science, accessed September 17, 2025, <https://towardsdatascience.com/branching-out-4-git-workflows-for-collaborating-on-ml/>
-74. Gitflow Workflow | Atlassian Git Tutorial, accessed September 17, 2025, <https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow>
-75. Git branching strategy for long-running unreleased code, accessed September 17, 2025, <https://softwareengineering.stackexchange.com/questions/307168/git-branching-strategy-for-long-running-unreleased-code>
-76. Git Branching Strategies: A Comprehensive Guide - DEV Community, accessed September 17, 2025, <https://dev.to/karmpatel/git-branching-strategies-a-comprehensive-guide-24kh>
-77. Building an Agentic Workflow: Orchestrating a Multi-Step Software Engineering Interview, accessed September 17, 2025, <https://orkes.io/blog/building-agentic-interview-app-with-conductor/>
-78. GitHub Copilot coding agent 101: Getting started with agentic workflows on GitHub, accessed September 17, 2025, <https://github.blog/ai-and-ml/github-copilot/github-copilot-coding-agent-101-getting-started-with-agentic-workflows-on-github/>
-79. Git Branching Strategy: A Complete Guide - DataCamp, accessed September 17, 2025, <https://www.datacamp.com/tutorial/git-branching-strategy-guide>
-80. Anyone built/found a decent solution for using AI to generate commit message? - Reddit, accessed September 17, 2025, <https://www.reddit.com/r/webdev/comments/1k5591m/anyone_builtfound_a_decent_solution_for_using_ai/>
-81. Automated Commit Message Generation with Large Language Models: An Empirical Study and Beyond - arXiv, accessed September 17, 2025, <https://arxiv.org/html/2404.14824v1>
-82. Conventional Commits, accessed September 17, 2025, <https://www.conventionalcommits.org/en/v1.0.0/>
-83. Never write a commit message again: Thanks GitHub Copilot - YouTube, accessed September 17, 2025, <https://www.youtube.com/watch?v=kd0ipsGxkt8>
-84. Tools - Conventional Commits, accessed September 17, 2025, <https://www.conventionalcommits.org/en/about/>
-85. Reviewing coworkers' AI-generated PRs : r/ExperiencedDevs - Reddit, accessed September 17, 2025, <https://www.reddit.com/r/ExperiencedDevs/comments/1jfhqye/reviewing_coworkers_aigenerated_prs/>
-86. Copilot for Pull Requests - GitHub Next, accessed September 17, 2025, <https://githubnext.com/projects/copilot-for-pull-requests>
-87. AI Coding Assistants: 17 Risks (And How To Mitigate Them) - Forbes, accessed September 17, 2025, <https://www.forbes.com/councils/forbestechcouncil/2025/03/21/ai-coding-assistants-17-risks-and-how-to-mitigate-them/>
+1. AI Agentic Programming: A Survey of Techniques, Challenges, and Opportunities - arXiv, accessed September 17, 2025, <https://arxiv.org/html/2508.11126v1>
+1. AI Agentic Programming: A Survey of Techniques ... - arXiv, accessed September 17, 2025, <https://arxiv.org/pdf/2508.11126>
+1. Agentic AI architecture 101: An enterprise guide - Akka, accessed September 17, 2025, <https://akka.io/blog/agentic-ai-architecture>
+1. Agentic AI limitations & possible mitigationv : r/ClaudeAI - Reddit, accessed September 17, 2025, <https://www.reddit.com/r/ClaudeAI/comments/1m0pfjy/agentic_ai_limitations_possible_mitigationv/>
+1. What Is Agentic Reasoning? | IBM, accessed September 17, 2025, <https://www.ibm.com/think/topics/agentic-reasoning>
+1. A practical guide to the architectures of agentic applications | Speakeasy, accessed September 17, 2025, <https://www.speakeasy.com/mcp/ai-agents/architecture-patterns>
+1. 12 Essential Lessons for Building AI Agents - KDnuggets, accessed September 17, 2025, <https://www.kdnuggets.com/12-essential-lessons-for-building-ai-agents>
+1. Git Best Practices and AI-Driven Development: Rethinking ... - Medium, accessed September 17, 2025, <https://medium.com/@FrankGoortani/git-best-practices-and-ai-driven-development-rethinking-documentation-and-coding-standards-bca75567566a>
+1. Limitations of AI Coding Assistants: What You Need to Know, accessed September 17, 2025, <https://zencoder.ai/blog/limitations-of-ai-coding-assistants>
+1. 5 Tasks Developers Shouldn't Do With AI Coding Assistants | Built In, accessed September 17, 2025, <https://builtin.com/artificial-intelligence/tasks-developers-avoid-ai-assistants>
+1. The Right AI Coding Assistant for Agentic Development | by John Wong | Medium, accessed September 17, 2025, <https://medium.com/@able_wong/the-right-ai-coding-assistant-for-agentic-development-a60861e40bc7>
+1. Why Your AI Coding Assistant Keeps Doing It Wrong, and How To ..., accessed September 17, 2025, <https://blog.thepete.net/blog/2025/05/22/why-your-ai-coding-assistant-keeps-doing-it-wrong-and-how-to-fix-it/>
+1. Agentic AI Series – Part 2: How AI Agents Think - AWS Builder Center, accessed September 17, 2025, <https://builder.aws.com/content/30jWMTzdbjH5svak3apH2xaID3u/agentic-ai-series-part-2-how-ai-agents-think>
+1. Agentic Coding For Teams - Tools and Techniques - SoftwareSeni, accessed September 17, 2025, <https://www.softwareseni.com/agentic-coding-for-teams-tools-and-techniques/>
+1. Large Language Models Should Ask Clarifying Questions to Increase Confidence in Generated Code - arXiv, accessed September 17, 2025, <https://arxiv.org/pdf/2308.13507>
+1. AI Prompting (6/10): Task Decomposition — Methods and Techniques Everyone Should Know : r/PromptEngineering - Reddit, accessed September 17, 2025, <https://www.reddit.com/r/PromptEngineering/comments/1ii6z8x/ai_prompting_610_task_decomposition_methods_and/>
+1. 20 Best AI Coding Assistant Tools [Updated Aug 2025], accessed September 17, 2025, <https://www.qodo.ai/blog/best-ai-coding-assistant-tools/>
+1. Ultimate Guide to Agentic AI and Agentic Software Development | Blog - Codiste, accessed September 17, 2025, <https://www.codiste.com/agentic-ai-software-development-guide>
+1. Claude Code: Best practices for agentic coding - Anthropic, accessed September 17, 2025, <https://www.anthropic.com/engineering/claude-code-best-practices>
+1. How to Reduce AI Hallucinations With RAG - Scout, accessed September 17, 2025, <https://www.scoutos.com/blog/how-to-reduce-ai-hallucinations-with-rag>
+1. The Science Behind RAG: How It Reduces AI Hallucinations - Zero Gravity Marketing, accessed September 17, 2025, <https://zerogravitymarketing.com/blog/the-science-behind-rag/>
+1. What is RAG? - Retrieval-Augmented Generation AI Explained - AWS - Updated 2025, accessed September 17, 2025, <https://aws.amazon.com/what-is/retrieval-augmented-generation/>
+1. Hallucination Mitigation for Retrieval-Augmented Large Language Models: A Review - MDPI, accessed September 17, 2025, <https://www.mdpi.com/2227-7390/13/5/856>
+1. AI Coding Assistants for Large Codebases: A Complete Guide, accessed September 17, 2025, <https://www.augmentcode.com/guides/ai-coding-assistants-for-large-codebases-a-complete-guide>
+1. Grounding Generative AI - by Simon Attard - Medium, accessed September 17, 2025, <https://medium.com/@simon_attard/grounding-large-language-models-generative-ai-526bc4404c28>
+1. Prompt engineering 101 for developers - Pluralsight, accessed September 17, 2025, <https://www.pluralsight.com/resources/blog/software-development/prompt-engineering-for-developers>
+1. The ultimate guide to writing effective AI prompts - Work Life by Atlassian, accessed September 17, 2025, <https://www.atlassian.com/blog/artificial-intelligence/ultimate-guide-writing-ai-prompts>
+1. Chain-of-Thought (CoT) Prompting - Prompt Engineering Guide, accessed September 17, 2025, <https://www.promptingguide.ai/techniques/cot>
+1. Writing effective tools for AI agents—using AI agents - Anthropic, accessed September 17, 2025, <https://www.anthropic.com/engineering/writing-tools-for-agents>
+1. What Is Prompt Engineering? | IBM, accessed September 17, 2025, <https://www.ibm.com/think/topics/prompt-engineering>
+1. Mastering Prompting for AI Agents: Insights and Best Practices - DEV Community, accessed September 17, 2025, <https://dev.to/echo9k/mastering-prompting-for-ai-agents-insights-and-best-practices-3iod>
+1. Softcery's Guide: Agentic Coding Best Practices, accessed September 17, 2025, <https://softcery.com/lab/softcerys-guide-agentic-coding-best-practices/>
+1. The Hidden Risks of Overrelying on AI in Production Code - CodeStringers, accessed September 17, 2025, <https://www.codestringers.com/insights/risk-of-ai-code/>
+1. SOLID Principles for AI-Generated Code - O'Reilly Media, accessed September 17, 2025, <https://www.oreilly.com/live-events/solid-principles-for-ai-generated-code/0642572169879/>
+1. How to Apply SOLID Principles in AI Development Using Prompt ..., accessed September 17, 2025, <https://www.syncfusion.com/blogs/post/solid-principles-ai-development/amp>
+1. Applying SOLID Principles in Data Science to Write Clean & Maintainable Code, accessed September 17, 2025, <https://ai.plainenglish.io/applying-solid-principles-in-data-science-to-write-clean-maintainable-code-da39c535b52f>
+1. How to Implement SOLID Principles for Better Code, accessed September 17, 2025, <https://blog.pixelfreestudio.com/how-to-implement-solid-principles-for-better-code/>
+1. SOLID Principles: Improve Object-Oriented Design in Python, accessed September 17, 2025, <https://realpython.com/solid-principles-python/>
+1. Vibe Coding Principles: DRY, KISS, YAGNI & Beyond - Synaptic Labs Blog, accessed September 17, 2025, <https://blog.synapticlabs.ai/what-are-dry-kiss-yagni-programming-principles>
+1. 6 Types of Anti Patterns to Avoid in Software Development - GeeksforGeeks, accessed September 17, 2025, <https://www.geeksforgeeks.org/blogs/types-of-anti-patterns-to-avoid-in-software-development/>
+1. DRY, KISS and YAGNI - Make Your Code Simple - DEV Community, accessed September 17, 2025, <https://dev.to/kevin-uehara/dry-kiss-and-yagni-make-your-code-simple-1dmd>
+1. Clean Code Essentials: YAGNI, KISS, DRY - DEV Community, accessed September 17, 2025, <https://dev.to/juniourrau/clean-code-essentials-yagni-kiss-and-dry-in-software-engineering-4i3j>
+1. Software Design Principles (Basics) | DRY, YAGNI, KISS, etc - workat.tech, accessed September 17, 2025, <https://workat.tech/machine-coding/tutorial/software-design-principles-dry-yagni-eytrxfhz1fla>
+1. Measuring the Impact of Early-2025 AI on Experienced Open-Source Developer Productivity - METR, accessed September 17, 2025, <https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/>
+1. Iterative Refinement with Self-Feedback - OpenReview, accessed September 17, 2025, <https://openreview.net/pdf?id=S37hOerQLB>
+1. NeurIPS Poster Self-Refine: Iterative Refinement with Self-Feedback, accessed September 17, 2025, <https://neurips.cc/virtual/2023/poster/71632>
+1. Self-Correcting Code Generation Using Small Language Models - arXiv, accessed September 17, 2025, <https://arxiv.org/html/2505.23060v1>
+1. Top 5 Agentic AI Coding Assistants April 2025 | APIpie, accessed September 17, 2025, <https://apipie.ai/docs/blog/top-5-agentic-ai-coding-assistants>
+1. Revisit Self-Debugging with Self-Generated Tests for Code Generation - arXiv, accessed September 17, 2025, <https://arxiv.org/html/2501.12793v1>
+1. TEACHING LARGE LANGUAGE MODELS TO SELF- DEBUG - ICLR Proceedings, accessed September 17, 2025, <https://proceedings.iclr.cc/paper_files/paper/2024/file/2460396f2d0d421885997dd1612ac56b-Paper-Conference.pdf>
+1. Self-Correcting AI Agents: How to Build AI That Learns From Its Mistakes - DEV Community, accessed September 17, 2025, <https://dev.to/louis-sanna/self-correcting-ai-agents-how-to-build-ai-that-learns-from-its-mistakes-39f1>
+1. Self-Refine: Iterative Refinement with Self-Feedback, accessed September 17, 2025, <https://selfrefine.info/>
+1. When to hand off to a human: How to set effective AI escalation rules - Replicant, accessed September 17, 2025, <https://www.replicant.com/blog/when-to-hand-off-to-a-human-how-to-set-effective-ai-escalation-rules>
+1. What Are AI Agent Protocols? - IBM, accessed September 17, 2025, <https://www.ibm.com/think/topics/ai-agent-protocols>
+1. AI Escalation Strategy: What Human Handoff Should Be - Gnani.ai, accessed September 17, 2025, <https://www.gnani.ai/resources/blogs/ai-escalation-strategy-what-human-handoff-should-be/>
+1. Human-in-the-Loop for AI Agents: Best Practices, Frameworks, Use Cases, and Demo, accessed September 17, 2025, <https://www.permit.io/blog/human-in-the-loop-for-ai-agents-best-practices-frameworks-use-cases-and-demo>
+1. 92% of Developers Report AI Agents Will Help Advance Their Careers - Salesforce, accessed September 17, 2025, <https://www.salesforce.com/news/stories/agentic-ai-developer-future-sentiment/>
+1. How AI Code Generation Supports Polyglot Programming - Zencoder, accessed September 17, 2025, <https://zencoder.ai/blog/how-ai-code-generation-supports-polyglot-programming>
+1. Polyglot Notebooks in VS Code, accessed September 17, 2025, <https://code.visualstudio.com/docs/languages/polyglot>
+1. Understanding Language Agnostic API Design Principles - DEV Community, accessed September 17, 2025, <https://dev.to/msnmongare/understanding-language-agnostic-api-design-principles-4h13>
+1. Becoming a Language-Agnostic Developer: Mastering the Art of Adaptability - Medium, accessed September 17, 2025, <https://medium.com/@tokogogberashvili/becoming-a-language-agnostic-developer-mastering-the-art-of-adaptability-5817b557af62>
+1. Language Agnostic Development: Navigating Multiple Programming Languages in Outsourcing - Aleron IT, accessed September 17, 2025, <https://aleron.dev/language-agnostic-development-navigating-multiple-programming-languages-in-outsourcing/>
+1. Language-agnostic programming book about fundamental concepts? - Reddit, accessed September 17, 2025, <https://www.reddit.com/r/learnprogramming/comments/1fxddje/languageagnostic_programming_book_about/>
+1. Beyond Multi-Cloud: Building Polyglot Backend Architectures That Last - Gizbot News, accessed September 17, 2025, <https://www.gizbot.com/in-the-news/beyond-multi-cloud-building-polyglot-backend-architectures-that-last-118641.html>
+1. Spring Cloud Contract in a polyglot world, accessed September 17, 2025, <https://spring.io/blog/2018/02/13/spring-cloud-contract-in-a-polyglot-world/>
+1. Doxygen vs Apidog: Which API Documentation Tool Is Right for You?, accessed September 17, 2025, <https://apidog.com/blog/doxygen-vs-apidog/>
+1. Overview for gRPC on .NET - Microsoft Learn, accessed September 17, 2025, <https://learn.microsoft.com/en-us/aspnet/core/grpc/?view=aspnetcore-9.0>
+1. Best Practices for Structuring Your React Monorepo - DhiWise, accessed September 17, 2025, <https://www.dhiwise.com/post/best-practices-for-structuring-your-react-monorepo>
+1. Setting Up a Monorepo for Your React Projects with TypeScript - Medium, accessed September 17, 2025, <https://medium.com/@aalam-info-solutions-llp/setting-up-a-monorepo-for-your-react-projects-with-typescript-29ba3ec15065>
+1. React Monorepo Tutorial - NX Dev, accessed September 17, 2025, <https://nx.dev/getting-started/tutorials/react-monorepo-tutorial>
+1. Monorepo project structure - Stack Overflow, accessed September 17, 2025, <https://stackoverflow.com/questions/79752565/monorepo-project-structure>
+1. Branching Out: 4 Git Workflows for Collaborating on ML | Towards Data Science, accessed September 17, 2025, <https://towardsdatascience.com/branching-out-4-git-workflows-for-collaborating-on-ml/>
+1. Gitflow Workflow | Atlassian Git Tutorial, accessed September 17, 2025, <https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow>
+1. Git branching strategy for long-running unreleased code, accessed September 17, 2025, <https://softwareengineering.stackexchange.com/questions/307168/git-branching-strategy-for-long-running-unreleased-code>
+1. Git Branching Strategies: A Comprehensive Guide - DEV Community, accessed September 17, 2025, <https://dev.to/karmpatel/git-branching-strategies-a-comprehensive-guide-24kh>
+1. Building an Agentic Workflow: Orchestrating a Multi-Step Software Engineering Interview, accessed September 17, 2025, <https://orkes.io/blog/building-agentic-interview-app-with-conductor/>
+1. GitHub Copilot coding agent 101: Getting started with agentic workflows on GitHub, accessed September 17, 2025, <https://github.blog/ai-and-ml/github-copilot/github-copilot-coding-agent-101-getting-started-with-agentic-workflows-on-github/>
+1. Git Branching Strategy: A Complete Guide - DataCamp, accessed September 17, 2025, <https://www.datacamp.com/tutorial/git-branching-strategy-guide>
+1. Anyone built/found a decent solution for using AI to generate commit message? - Reddit, accessed September 17, 2025, <https://www.reddit.com/r/webdev/comments/1k5591m/anyone_builtfound_a_decent_solution_for_using_ai/>
+1. Automated Commit Message Generation with Large Language Models: An Empirical Study and Beyond - arXiv, accessed September 17, 2025, <https://arxiv.org/html/2404.14824v1>
+1. Conventional Commits, accessed September 17, 2025, <https://www.conventionalcommits.org/en/v1.0.0/>
+1. Never write a commit message again: Thanks GitHub Copilot - YouTube, accessed September 17, 2025, <https://www.youtube.com/watch?v=kd0ipsGxkt8>
+1. Tools - Conventional Commits, accessed September 17, 2025, <https://www.conventionalcommits.org/en/about/>
+1. Reviewing coworkers' AI-generated PRs : r/ExperiencedDevs - Reddit, accessed September 17, 2025, <https://www.reddit.com/r/ExperiencedDevs/comments/1jfhqye/reviewing_coworkers_aigenerated_prs/>
+1. Copilot for Pull Requests - GitHub Next, accessed September 17, 2025, <https://githubnext.com/projects/copilot-for-pull-requests>
+1. AI Coding Assistants: 17 Risks (And How To Mitigate Them) - Forbes, accessed September 17, 2025, <https://www.forbes.com/councils/forbestechcouncil/2025/03/21/ai-coding-assistants-17-risks-and-how-to-mitigate-them/>

@@ -67,12 +67,12 @@ store:
 
 1. Copy an existing tool definition as a starting point or create a new file in
    the appropriate language directory.
-2. Update metadata, runtime, and actions. Prefer referencing generic strategies
+1. Update metadata, runtime, and actions. Prefer referencing generic strategies
    to avoid code changes.
-3. If new configuration keys are required, document them in the relevant schema
+1. If new configuration keys are required, document them in the relevant schema
    and strategy docs.
-4. Regenerate the catalog checksum (`ToolCatalogLoader.compute_checksum()`).
-5. Run `uv run pytest tests/test_tooling_loader.py tests/test_tool_catalog_registry.py`
+1. Regenerate the catalog checksum (`ToolCatalogLoader.compute_checksum()`).
+1. Run `uv run pytest tests/test_tooling_loader.py tests/test_tool_catalog_registry.py`
    to validate and materialise the tool.
 
 ### Conventions

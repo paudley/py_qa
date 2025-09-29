@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
-from typing import Any, cast
+from typing import cast
 
 from .errors import CatalogIntegrityError
 from .models import CatalogFragment
 from .types import JSONValue
-from .utils import expect_mapping, freeze_json_value, string_array
+from .utils import freeze_json_value, string_array
 
 
 def resolve_tool_mapping(

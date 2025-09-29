@@ -13,8 +13,8 @@ This mission is governed by a set of non-negotiable principles that must guide e
 ### **Guiding Principles**
 
 1. **Preservation of Intent (Do No Harm):** Your actions must be fundamentally constructive. Under no circumstances shall you remove or diminish existing source code functionality to make a test pass. The functional intent of every test must be preserved or enhanced. You are explicitly forbidden from stubbing out failing tests with pass, trivial implementations, or marking them as expected failures (@pytest.mark.xfail) as a means of avoiding a fix. The objective is to repair underlying issues, not to circumvent them.
-2. **Pursuit of Excellence:** The final, delivered test suite must exemplify the highest standards of modern Python development. This mandate encompasses strict static analysis, comprehensive documentation, optimal performance, and intelligent, resilient test design. Every line of test code you modify or create must contribute to a higher standard of quality.
-3. **Systematic and Observable Process:** You must proceed through this mandate methodically and transparently. For each major phase of work—such as refactoring for parallel execution, implementing static type checking, or introducing new testing methodologies—you will describe the changes made and provide a clear rationale for your approach. This ensures that the evolution of the test suite is traceable and understandable.
+1. **Pursuit of Excellence:** The final, delivered test suite must exemplify the highest standards of modern Python development. This mandate encompasses strict static analysis, comprehensive documentation, optimal performance, and intelligent, resilient test design. Every line of test code you modify or create must contribute to a higher standard of quality.
+1. **Systematic and Observable Process:** You must proceed through this mandate methodically and transparently. For each major phase of work—such as refactoring for parallel execution, implementing static type checking, or introducing new testing methodologies—you will describe the changes made and provide a clear rationale for your approach. This ensures that the evolution of the test suite is traceable and understandable.
 
 ## **Section 1: Foundational Quality and Style Requirements**
 
@@ -24,7 +24,7 @@ This section establishes the baseline code quality standards for all test code y
 
 **Requirement:** All new or modified test code must be fully and explicitly type-annotated in accordance with PEP 484. The final test suite, in its entirety, must pass mypy when run with a strict configuration.
 
-**Implementation:** You will ensure the pyproject.toml file contains a \[tool.mypy] section with a comprehensive set of strict checks enabled. This configuration must include, but is not limited to, check_untyped_defs = true, disallow_incomplete_defs = true, warn_unused_ignores = true, warn_return_any = true, and no_implicit_optional = true.1 The primary goal of this configuration is to eliminate the implicit use of the
+**Implementation:** You will ensure the pyproject.toml file contains a [tool.mypy] section with a comprehensive set of strict checks enabled. This configuration must include, but is not limited to, check_untyped_defs = true, disallow_incomplete_defs = true, warn_unused_ignores = true, warn_return_any = true, and no_implicit_optional = true.1 The primary goal of this configuration is to eliminate the implicit use of the
 
 Any type, thereby maximizing the benefits of static analysis.
 
@@ -38,7 +38,7 @@ pytest-mypy plugin will be used to integrate these static analysis checks direct
 
 **Implementation:** You will adhere to a pylint configuration that enforces Python best practices while remaining pragmatic for the specific context of test code. Certain pylint checks that are often counterproductive in tests may be disabled. These include protected-access (W0212), as tests frequently need to inspect the internal state of objects, and too-few-public-methods (R0903), which is not relevant for test classes that serve as organizational namespaces.8 The complete configuration will be specified within the
 
-\[tool.pylint.\*] sections of the pyproject.toml file.9
+[tool.pylint.\*] sections of the pyproject.toml file.9
 
 **Context:** Consistent adherence to a high-quality linter configuration is essential for maintaining code readability and consistency, particularly in a collaborative development environment.10 By integrating
 
@@ -69,7 +69,7 @@ This section details the primary task of fixing the failing tests. The focus is 
 **Implementation Protocol:** A systematic approach is required to achieve robust parallelization. A test that fails under parallel execution is merely a symptom of a deeper architectural flaw, such as shared state or an implicit dependency on execution order. You will follow this protocol to diagnose and resolve these flaws:
 
 1. **Diagnose Order Dependencies:** The first step is to uncover and eliminate any implicit dependencies on test execution order. To do this, you will integrate the pytest-random-order plugin and run the suite with the --random-order flag. Failures that appear under this randomized execution, but not under sequential execution, are direct evidence of order dependencies.17 You must resolve these issues by making each test fully self-contained, ensuring it sets up its own state and does not rely on the artifacts of a previously run test.
-2. **Identify and Eliminate Shared State:** After resolving order dependencies, you must scrutinize the test suite for any shared resources that could create race conditions or state corruption when accessed concurrently. Common sources of shared state include:
+1. **Identify and Eliminate Shared State:** After resolving order dependencies, you must scrutinize the test suite for any shared resources that could create race conditions or state corruption when accessed concurrently. Common sources of shared state include:
    - **Filesystem:** Any test that reads from or writes to a hardcoded file path is not parallel-safe. These tests must be refactored to use the built-in tmp_path fixture. This fixture provides a unique, empty temporary directory for each test function, guaranteeing filesystem isolation.21
    - **Database:** Tests that modify a shared database are a primary source of flakiness in parallel runs. These must be refactored to ensure complete isolation. This can be achieved by ensuring each test runs within its own database transaction that is rolled back upon completion, or by using fixtures that create and tear down a unique test database or schema for each test worker.
    - **Global State:** Any test that relies on or modifies mutable global variables, module-level state, or class-level state is inherently unsafe for parallel execution. This pattern must be eliminated entirely. All state required by a test must be created and managed within the scope of that test, typically via fixtures.
@@ -102,7 +102,7 @@ This section mandates the integration of specific pytest plugins to elevate the 
 **Implementation - A Two-Pronged Approach:** The user's intent for deterministic I/O will be fulfilled by using the correct tool for each specific job: one for network interactions and another for validating deterministic data outputs.
 
 1. **Network Operations (pytest-recording):** For all tests that make external HTTP or HTTPS requests, you will use the pytest-recording plugin, which provides a seamless integration for vcrpy. On the first execution of such a test, the plugin will perform the real network request and record the full interaction (request and response) into a human-readable YAML file known as a "cassette." On all subsequent test runs, the plugin will intercept the network call and replay the saved response from the cassette, eliminating any dependency on the network or the external service. This ensures tests are fast, repeatable, and can run offline. A critical part of this implementation is configuring pytest-recording to filter sensitive data, such as Authorization headers or API keys, from the cassettes before they are saved. This prevents secrets from being committed to version control.36
-2. **Deterministic File/Data Output (pytest-snapshot):** For tests that generate complex but deterministic output—such as a large JSON object, an XML file, a CSV, or a formatted text report—you will use the pytest-snapshot plugin. This plugin captures the expected output in a separate snapshot file. On subsequent runs, it compares the new output to the saved snapshot. If there are any differences, the test fails. This is an exceptionally powerful technique for regression testing of data transformation pipelines, serializers, or any function that produces complex, structured output.36
+1. **Deterministic File/Data Output (pytest-snapshot):** For tests that generate complex but deterministic output—such as a large JSON object, an XML file, a CSV, or a formatted text report—you will use the pytest-snapshot plugin. This plugin captures the expected output in a separate snapshot file. On subsequent runs, it compares the new output to the saved snapshot. If there are any differences, the test fails. This is an exceptionally powerful technique for regression testing of data transformation pipelines, serializers, or any function that produces complex, structured output.36
 
 ### **3.3. Enforcing Performance with pytest-timeout**
 
@@ -157,14 +157,14 @@ This final section details the necessary configuration changes to the project's 
 
 **Implementation:**
 
-1. **Dependencies:** You will add all new testing dependencies—including pytest-check, pytest-recording, pytest-bdd, hypothesis, pytest-random-order, and pytest-sugar—to the \[project.optional-dependencies] table under the test key. This ensures that all tools required to run the test suite are clearly declared and can be installed with a single command.55
-2. **Tool Configuration:** You will populate the pyproject.toml file with the comprehensive tool configurations detailed in the table below. This centralized approach to configuration is a modern Python best practice that improves project clarity and maintainability.59
+1. **Dependencies:** You will add all new testing dependencies—including pytest-check, pytest-recording, pytest-bdd, hypothesis, pytest-random-order, and pytest-sugar—to the [project.optional-dependencies] table under the test key. This ensures that all tools required to run the test suite are clearly declared and can be installed with a single command.55
+1. **Tool Configuration:** You will populate the pyproject.toml file with the comprehensive tool configurations detailed in the table below. This centralized approach to configuration is a modern Python best practice that improves project clarity and maintainability.59
 
 ### **Table 2: pyproject.toml Tool Configuration**
 
 Ini, TOML
 
-\[tool.pytest.ini_options]\
+[tool.pytest.ini_options]\
 \# Add common pytest command-line options to be used by default.\
 addopts =
 
@@ -172,12 +172,12 @@ addopts =
 timeout = 15
 
 \# Configure test discovery to look only in the 'tests' directory.\
-testpaths = \["tests"]
+testpaths = ["tests"]
 
 \# Register custom markers to avoid warnings and enable selective runs.\
 markers =
 
-\[tool.mypy]\
+[tool.mypy]\
 \# Specify the source directory for type checking.\
 mypy_path = "src"
 
@@ -199,7 +199,7 @@ show_error_codes = true
 disable =
 
 \# Allow short variable names that are common and idiomatic in test contexts.\
-good-names = \["i", "j", "k", "e", "f", "db", "ex"]
+good-names = ["i", "j", "k", "e", "f", "db", "ex"]
 
 ### **5.2. Final Verification and Execution**
 
@@ -207,7 +207,7 @@ good-names = \["i", "j", "k", "e", "f", "db", "ex"]
 
 **Implementation:**
 
-1. **Install Dependencies:** From the project root, execute uv pip install -e.\[test]. This command will use the newly configured pyproject.toml to create an editable install of the project and install all required testing dependencies into the virtual environment.
-2. **Execute Full Suite:** Run the complete, enhanced test suite using the command uv run pytest. This command must execute without any command-line arguments (relying on the pyproject.toml configuration) and must exit with a status code of 0. A zero exit code signifies that all tests passed, including all integrated mypy and pylint checks.
-3. **Self-Correction Checklist:** You must perform a final review of your changes against every requirement detailed in this document. If any requirement has not been fully and correctly met, you must iterate on your solution until it is 100% compliant.
-4. **Final Report:** As your final output, provide a concise summary of the fixes implemented, the refactoring performed, and the enhancements and new tests that have been added to the suite.
+1. **Install Dependencies:** From the project root, execute uv pip install -e.[test]. This command will use the newly configured pyproject.toml to create an editable install of the project and install all required testing dependencies into the virtual environment.
+1. **Execute Full Suite:** Run the complete, enhanced test suite using the command uv run pytest. This command must execute without any command-line arguments (relying on the pyproject.toml configuration) and must exit with a status code of 0. A zero exit code signifies that all tests passed, including all integrated mypy and pylint checks.
+1. **Self-Correction Checklist:** You must perform a final review of your changes against every requirement detailed in this document. If any requirement has not been fully and correctly met, you must iterate on your solution until it is 100% compliant.
+1. **Final Report:** As your final output, provide a concise summary of the fixes implemented, the refactoring performed, and the enhancements and new tests that have been added to the suite.

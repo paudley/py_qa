@@ -18,8 +18,8 @@ catalog or strategy layer.
 ## Catalog Lifecycle
 
 1. **Validation & Snapshotting** – `ToolCatalogLoader` walks the catalog directories, validates JSON against the schemas, merges `_shared` fragments, and computes a checksum stored in `tooling/catalog/cache.json`.
-2. **Materialisation** – `register_catalog_tools` converts validated definitions into `Tool` instances by instantiating referenced strategies (commands, parsers, installers).
-3. **Execution** – The orchestrator (`src/pyqa/execution/orchestrator.py`) uses the registry to fetch tools for a run, executes actions in phase order, and feeds stdout/stderr into the configured parsers.
+1. **Materialisation** – `register_catalog_tools` converts validated definitions into `Tool` instances by instantiating referenced strategies (commands, parsers, installers).
+1. **Execution** – The orchestrator (`src/pyqa/execution/orchestrator.py`) uses the registry to fetch tools for a run, executes actions in phase order, and feeds stdout/stderr into the configured parsers.
 
 ## Strategies
 
@@ -63,9 +63,9 @@ change.
 ## Authoring Checklist
 
 1. Update or add JSON under `tooling/catalog/…`.
-2. Ensure any new configuration keys are documented in the schemas (`tool_definition` or `strategy_definition`).
-3. Regenerate `tooling/catalog/cache.json` via `ToolCatalogLoader.compute_checksum()`.
-4. Run `uv run pytest tests/test_tooling_loader.py tests/test_tool_catalog_registry.py` (or the full suite) before opening a PR.
+1. Ensure any new configuration keys are documented in the schemas (`tool_definition` or `strategy_definition`).
+1. Regenerate `tooling/catalog/cache.json` via `ToolCatalogLoader.compute_checksum()`.
+1. Run `uv run pytest tests/test_tooling_loader.py tests/test_tool_catalog_registry.py` (or the full suite) before opening a PR.
 
 Keeping these steps in sync ensures the catalog remains source-of-truth and the
 Python runtime layer stays minimal.

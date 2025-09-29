@@ -19,7 +19,7 @@ class SchemaRepository:
     strategy_validator: Draft202012Validator
 
     @classmethod
-    def load(cls, *, catalog_root: Path, schema_root: Path | None = None) -> "SchemaRepository":
+    def load(cls, *, catalog_root: Path, schema_root: Path | None = None) -> SchemaRepository:
         """Load schema validators from disk."""
 
         resolved_root = schema_root or (catalog_root.parent / "schema")

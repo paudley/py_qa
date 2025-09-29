@@ -282,7 +282,7 @@ def _resolve_strategy_callable(definition: StrategyDefinition) -> Callable[..., 
 def _call_strategy_factory(factory: Callable[..., Any], config: Mapping[str, Any]) -> Any:
     try:
         return factory(config)
-    except TypeError as exc:
+    except TypeError:
         if config:
             raise
         return factory()

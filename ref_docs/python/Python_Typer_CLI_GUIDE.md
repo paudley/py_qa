@@ -44,10 +44,10 @@ This separation ensures that adding or modifying a command requires only CLI bin
 ## Maximal Integration Checklist
 
 1. Every published script or automation hook routes through `pyqa.cli.app` and uses `create_typer()` helpers to maintain consistent help output.
-2. Command callbacks surface only orchestration-level APIs. If new logic surfaces, extract it into a non-CLI module before binding options.
-3. Shared flags (e.g., emoji toggles, root selection) use common utilities or dataclasses so behavioural changes remain centralised.
-4. Tests exercise CLI behaviour through Typer's `CliRunner`, living alongside orchestration unit tests to prevent regressions.
-5. Documentation references the Typer-centric workflow (`uv run pyqa <command>`) and highlights how to extend the CLI via new modules.
+1. Command callbacks surface only orchestration-level APIs. If new logic surfaces, extract it into a non-CLI module before binding options.
+1. Shared flags (e.g., emoji toggles, root selection) use common utilities or dataclasses so behavioural changes remain centralised.
+1. Tests exercise CLI behaviour through Typer's `CliRunner`, living alongside orchestration unit tests to prevent regressions.
+1. Documentation references the Typer-centric workflow (`uv run pyqa <command>`) and highlights how to extend the CLI via new modules.
 
 ## Future Enhancements
 

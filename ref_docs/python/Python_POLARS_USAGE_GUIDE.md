@@ -4,7 +4,7 @@
 
 # **The Definitive Guide to High-Performance Data Manipulation with Polars LazyFrames**
 
----
+______________________________________________________________________
 
 ## **Section 1: The Lazy Execution Paradigm: A Fundamental Shift in Data Processing**
 
@@ -37,11 +37,11 @@ _what_ transformations are needed. The responsibility of determining _how_ to ex
 The meticulously constructed query plan remains dormant until its execution is explicitly triggered. There are two primary categories of triggers:
 
 1. **In-Memory Materialization:** The .collect() method is the most common trigger. When called, it passes the complete logical plan to the query optimizer, which generates an efficient physical execution plan. The engine then executes this plan, processes the data, and materializes the final result as a standard, in-memory Polars DataFrame.3
-2. **Out-of-Core Sinking:** For workflows where the final result is too large to fit in RAM, the .sink\_\*() methods (e.g., .sink_parquet(), .sink_csv()) serve as the execution trigger. These methods execute the query plan in a streaming fashion and write the results directly to a file on disk, batch by batch. This powerful technique allows Polars to process and generate datasets of arbitrary size, as the full result is never held in memory at once.10
+1. **Out-of-Core Sinking:** For workflows where the final result is too large to fit in RAM, the .sink\_\*() methods (e.g., .sink_parquet(), .sink_csv()) serve as the execution trigger. These methods execute the query plan in a streaming fashion and write the results directly to a file on disk, batch by batch. This powerful technique allows Polars to process and generate datasets of arbitrary size, as the full result is never held in memory at once.10
 
 The lazy API can be viewed as a contract between the developer and the Polars engine. The developer agrees to provide the full sequence of operations before demanding a result. In return, the engine guarantees that it will use its global view of this sequence to find and execute the most performant computation path possible. This symbiotic relationship is impossible in an eager framework, where the engine's lack of foresight about future operations is a fundamental barrier to holistic optimization. Therefore, the practice of chaining as many operations as feasible before a final .collect() or .sink\_\*() call is not merely a stylistic preference; it is the central mechanism for unlocking the profound performance advantages of Polars.
 
----
+______________________________________________________________________
 
 ## **Section 2: Under the Hood: The Polars Query Optimizer**
 
@@ -74,13 +74,13 @@ The true power of the optimizer is realized when these pushdowns are combined. A
 While predicate and projection pushdown are the most prominent, the Polars optimizer performs a host of other valuable transformations 11:
 
 - **Slice Pushdown:** A query like lf.head(10) does not result in a full file scan. The optimizer pushes the slice information down to the scanner, which is instructed to stop reading data as soon as 10 rows have been collected.
-- **Expression Simplification & Constant Folding:** The optimizer performs algebraic simplification on expressions. For instance, pl.col("price") \_ (1.0 + 0.2) will be rewritten as pl.col("price") \_ 1.2 before execution, avoiding a redundant addition operation on every row.
+- **Expression Simplification & Constant Folding:** The optimizer performs algebraic simplification on expressions. For instance, pl.col("price") _ (1.0 + 0.2) will be rewritten as pl.col("price") _ 1.2 before execution, avoiding a redundant addition operation on every row.
 - **Common Subplan Elimination:** If a query involves using the same LazyFrame in multiple branches (e.g., in a self-join or a union), the optimizer will identify this common sub-plan, execute it only once, and cache the result for reuse, preventing redundant computation.
 - **Join Ordering:** In queries involving multiple joins, the optimizer can use cardinality estimates to reorder the joins. It will attempt to perform the most selective joins (those that produce the smallest intermediate results) first, which helps to minimize memory pressure throughout the rest of the pipeline.
 
 The query plan, made visible through the .explain() method, serves as a crucial feedback mechanism. By comparing the "naive" plan (what was written) to the "optimized" plan (what will be executed), a developer can gain a deep understanding of how their coding patterns directly influence performance. For example, observing that a SELECTION predicate has been integrated into the PARQUET SCAN node confirms that predicate pushdown was successful. This insight establishes a clear causal link: writing optimizer-friendly code—such as starting with scan_parquet() instead of the read_parquet().lazy() anti-pattern—directly enables these powerful performance gains. Therefore, inspecting the query plan is not an academic exercise; it is a fundamental practice for debugging, learning, and writing high-performance Polars code.
 
----
+______________________________________________________________________
 
 ## **Section 3: A Practical Guide to Core LazyFrame Operations**
 
@@ -122,7 +122,7 @@ pl.scan_parquet("data/taxi_trips.parquet")\
 (pl.col("pickup_datetime").dt.year() == 2023) &\
 (pl.col("passenger_count") == 2)\
 )\
-.select(\["pickup_datetime", "trip_distance", "total_amount"])\
+.select(["pickup_datetime", "trip_distance", "total_amount"])\
 .sort("trip_distance", descending=True)\
 .head(5)\
 )
@@ -148,7 +148,7 @@ duration_minutes=(pl.col("dropoff_datetime") - pl.col("pickup_datetime")).dt.tot
 \# Calculate fare per mile\
 fare_per_mile=pl.col("fare_amount") / pl.col("trip_distance")\
 )\
-.select(\["duration_minutes", "fare_per_mile", "total_amount"])\
+.select(["duration_minutes", "fare_per_mile", "total_amount"])\
 )
 
 \# Execute the query to get the result\
@@ -183,7 +183,7 @@ Joins are handled lazily, allowing the optimizer to perform pushdown operations 
 Python
 
 \# Create two LazyFrames\
-lf_trips = pl.scan_parquet("data/taxi_trips.parquet").select(\["vendor_id", "total_amount"])\
+lf_trips = pl.scan_parquet("data/taxi_trips.parquet").select(["vendor_id", "total_amount"])\
 lf_vendors = pl.scan_csv("data/vendor_lookup.csv").lazy() #.lazy() is fine here as the CSV is small
 
 \# Example: Perform a left join to add vendor names to the trip data.\
@@ -219,7 +219,7 @@ The following table summarizes the connection between the automatic optimization
 | **Expression Simplification** | Pre-calculates constants and simplifies algebraic expressions before execution.     | This is fully automatic. Write clear, readable expressions; Polars will optimize them.         |
 | **Streaming Engine**          | Processes data in smaller, memory-fitting batches instead of all at once.           | For larger-than-RAM datasets, use .collect(streaming=True) or .sink\_\*().                     |
 
----
+______________________________________________________________________
 
 ## **Section 4: Scaling to Massive Datasets with the Streaming Engine**
 
@@ -260,7 +260,7 @@ Python
 lazy_query = (\
 pl.scan_parquet("data/very_large_dataset.parquet")\
 .with_columns(\
-processed_value=pl.col("value") \* 1.1\
+processed_value=pl.col("value") * 1.1\
 )\
 )
 
@@ -281,7 +281,7 @@ Troubleshooting Streaming Queries:\
 The .explain(streaming=True) method is the essential tool for debugging streaming performance. The output will explicitly demarcate which parts of the plan are running in streaming mode inside a --- STREAMING --- block. Any operations outside this block are pipeline breakers that will trigger an in-memory materialization.17\
 The primary strategy for handling massive datasets is to design a "streaming-aware" architecture. This involves structuring the query to perform as much data reduction as possible (e.g., filtering and aggregating) within the streaming part of the plan _before_ any non-streamable operations. For instance, performing a group_by().agg() before a .sort() is vastly more memory-efficient than the reverse, as the aggregation dramatically reduces the number of rows that need to be sorted in memory. This conscious planning of the query pipeline is critical for successfully processing data at scale.
 
----
+______________________________________________________________________
 
 ## **Section 5: Advanced Strategies and Best Practices for Production Workloads**
 
@@ -347,7 +347,7 @@ source_lf = pl.scan_csv("data/source_data.csv")
 
 source_lf.sink_parquet(\
 "./output_partitioned/",\
-partition_by=\["category", "event_year"],\
+partition_by=["category", "event_year"],\
 \# Creates a Hive-style directory structure like /category=A/event_year=2024/\
 )
 
@@ -385,7 +385,7 @@ While the guiding principle of lazy execution is to delay .collect() until the v
 
 In these scenarios, it is often wise to strategically materialize an intermediate result. By running the expensive initial steps once and calling .collect(), the developer creates a smaller, cleaned, in-memory DataFrame. Subsequent iterative analysis and experimentation can then be performed in eager mode on this cached result, providing instant feedback without the cost of re-running the initial heavy lifting.19 This is a conscious trade-off, sacrificing pure lazy execution for a significant boost in development velocity.
 
----
+______________________________________________________________________
 
 ## **Conclusion**
 
@@ -404,21 +404,21 @@ By adopting these principles, data professionals can harness the full power of P
 #### **Works cited**
 
 1. What are the advantages of a polars LazyFrame over a Dataframe? - Stack Overflow, accessed September 4, 2025, <https://stackoverflow.com/questions/76612163/what-are-the-advantages-of-a-polars-lazyframe-over-a-dataframe>
-2. Wrestling the Bear — Benchmarking execution modes of Polars - Medium, accessed September 4, 2025, <https://medium.com/dev-jam/wrestling-the-bear-benchmarking-execution-modes-of-polars-8b2626efd643>
-3. How to Get Started with LazyFrames in Polars - Statology, accessed September 4, 2025, <https://www.statology.org/how-to-started-lazyframes-polars/>
-4. LazyFrame: Exploring Laziness in Dataframes from Polars in Python | by Manoj Das, accessed September 4, 2025, <https://medium.com/@HeCanThink/lazyframe-exploring-laziness-in-dataframes-from-polars-in-python-46da61d48e79>
-5. Lazy API - Polars user guide, accessed September 4, 2025, <https://docs.pola.rs/user-guide/concepts/lazy-api/>
-6. How to Work With Polars LazyFrames - Real Python, accessed September 4, 2025, <https://realpython.com/polars-lazyframe/>
-7. Part 2: Efficient Data Manipulation with Python Polars: Lazy Frames, Table Combining and Deduplication | by Arkimetrix Analytics | Medium, accessed September 4, 2025, <https://medium.com/@arkimetrix.analytics/part-2-unlocking-the-power-of-python-polars-fe7a0ca4435c>
-8. Handling Larger-than-Memory Datasets with Polars LazyFrame, accessed September 4, 2025, <https://www.jtrive.com/posts/polars-lazyframe/polars-lazyframe.html>
-9. Quick Guide to LazyFrames in Polars - YouTube, accessed September 4, 2025, <https://www.youtube.com/watch?v=-odaDBEnbiA>
-10. LazyFrame — Polars documentation, accessed September 4, 2025, <https://docs.pola.rs/py-polars/html/reference/lazyframe/index.html>
-11. Optimizations - Polars user guide, accessed September 4, 2025, <https://docs.pola.rs/user-guide/lazy/optimizations/>
-12. The power of predicate pushdown - Polars, accessed September 4, 2025, <https://pola.rs/posts/predicate-pushdown-query-optimizer/>
-13. How to Inspect and Optimize Query Plans in Python Polars - Stuff by Yuki, accessed September 4, 2025, <https://stuffbyyuki.com/how-to-inspect-and-optimize-query-plans-in-python-polars/>
-14. How to Use explain() to Understand LazyFrame Query Optimization in Polars - Statology, accessed September 4, 2025, <https://www.statology.org/how-to-use-explain-understand-lazyframe-query-optimization-polars/>
-15. Polars — DataFrames for the new era, accessed September 4, 2025, <https://pola.rs/>
-16. Polars — Updated PDS-H benchmark results (May 2025), accessed September 4, 2025, <https://pola.rs/posts/benchmarks/>
-17. Streaming large datasets in Polars | Rho Signal, accessed September 4, 2025, <https://www.rhosignal.com/posts/streaming-in-polars/>
-18. Polars LazyFrame Comprehensive Guide - YouTube, accessed September 4, 2025, <https://www.youtube.com/watch?v=mZ_QheGOCSA>
-19. polars: Eager vs Lazy - Calmcode, accessed September 4, 2025, <https://calmcode.io/course/polars/eager-vs-lazy>
+1. Wrestling the Bear — Benchmarking execution modes of Polars - Medium, accessed September 4, 2025, <https://medium.com/dev-jam/wrestling-the-bear-benchmarking-execution-modes-of-polars-8b2626efd643>
+1. How to Get Started with LazyFrames in Polars - Statology, accessed September 4, 2025, <https://www.statology.org/how-to-started-lazyframes-polars/>
+1. LazyFrame: Exploring Laziness in Dataframes from Polars in Python | by Manoj Das, accessed September 4, 2025, <https://medium.com/@HeCanThink/lazyframe-exploring-laziness-in-dataframes-from-polars-in-python-46da61d48e79>
+1. Lazy API - Polars user guide, accessed September 4, 2025, <https://docs.pola.rs/user-guide/concepts/lazy-api/>
+1. How to Work With Polars LazyFrames - Real Python, accessed September 4, 2025, <https://realpython.com/polars-lazyframe/>
+1. Part 2: Efficient Data Manipulation with Python Polars: Lazy Frames, Table Combining and Deduplication | by Arkimetrix Analytics | Medium, accessed September 4, 2025, <https://medium.com/@arkimetrix.analytics/part-2-unlocking-the-power-of-python-polars-fe7a0ca4435c>
+1. Handling Larger-than-Memory Datasets with Polars LazyFrame, accessed September 4, 2025, <https://www.jtrive.com/posts/polars-lazyframe/polars-lazyframe.html>
+1. Quick Guide to LazyFrames in Polars - YouTube, accessed September 4, 2025, <https://www.youtube.com/watch?v=-odaDBEnbiA>
+1. LazyFrame — Polars documentation, accessed September 4, 2025, <https://docs.pola.rs/py-polars/html/reference/lazyframe/index.html>
+1. Optimizations - Polars user guide, accessed September 4, 2025, <https://docs.pola.rs/user-guide/lazy/optimizations/>
+1. The power of predicate pushdown - Polars, accessed September 4, 2025, <https://pola.rs/posts/predicate-pushdown-query-optimizer/>
+1. How to Inspect and Optimize Query Plans in Python Polars - Stuff by Yuki, accessed September 4, 2025, <https://stuffbyyuki.com/how-to-inspect-and-optimize-query-plans-in-python-polars/>
+1. How to Use explain() to Understand LazyFrame Query Optimization in Polars - Statology, accessed September 4, 2025, <https://www.statology.org/how-to-use-explain-understand-lazyframe-query-optimization-polars/>
+1. Polars — DataFrames for the new era, accessed September 4, 2025, <https://pola.rs/>
+1. Polars — Updated PDS-H benchmark results (May 2025), accessed September 4, 2025, <https://pola.rs/posts/benchmarks/>
+1. Streaming large datasets in Polars | Rho Signal, accessed September 4, 2025, <https://www.rhosignal.com/posts/streaming-in-polars/>
+1. Polars LazyFrame Comprehensive Guide - YouTube, accessed September 4, 2025, <https://www.youtube.com/watch?v=mZ_QheGOCSA>
+1. polars: Eager vs Lazy - Calmcode, accessed September 4, 2025, <https://calmcode.io/course/polars/eager-vs-lazy>

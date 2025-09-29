@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal, cast
 
 from ..loader import CatalogIntegrityError
 from ..tools.base import CommandBuilder, ToolContext
@@ -13,11 +13,8 @@ from ..tools.builtin_helpers import _as_bool, _resolve_path, _setting, _settings
 from .common import (
     _as_plain_json,
     _download_artifact_for_tool,
-    _normalize_mapping,
-    _normalize_sequence,
-    _require_str,
-    _require_string_sequence,
 )
+from ..catalog.types import JSONValue
 
 DEFAULT_BINARY_PLACEHOLDER = "${binary}"
 
@@ -33,7 +30,7 @@ class _CommandOption:
     join_separator: str | None
     negate_flag: str | None
     literal_values: tuple[str, ...]
-    default: Any | None
+    default: JSONValue | None
 
     def apply(self, *, ctx: ToolContext, command: list[str]) -> None:
         """Append CLI arguments derived from the configured option.
@@ -43,7 +40,7 @@ class _CommandOption:
             command: Mutable command list to augment with option-derived values.
         """
 
-        raw_value = _setting(ctx.settings, self.primary, *self.aliases)
+        raw_value = cast(JSONValue | None, _setting(ctx.settings, self.primary, *self.aliases))
         if raw_value is None and self.default is not None:
             raw_value = self.default
         if raw_value is None:
@@ -159,7 +156,7 @@ class _DownloadBinaryStrategy(CommandBuilder):
     """Command builder that executes downloaded binaries with mapped options."""
 
     version: str | None
-    download: Mapping[str, Any]
+    download: Mapping[str, JSONValue]
     base: tuple[str, ...]
     placeholder: str
     options: tuple[_CommandOption, ...]
@@ -192,28 +189,30 @@ class _DownloadBinaryStrategy(CommandBuilder):
         return tuple(command)
 
 
-def command_download_binary(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a command builder that downloads a binary and applies option maps.
+def command_download_binary(config: Mapping[str, JSONValue]) -> CommandBuilder:
+    """Build a download-backed command strategy.
 
     Args:
-        config: Mapping describing the download specification, base arguments, and
-            option mappings.
+        config: Catalog-driven configuration describing download metadata,
+            command arguments, and option mappings.
 
     Returns:
-        CommandBuilder: Builder that materialises the CLI invocation for the tool.
+        CommandBuilder: Strategy instance capable of building the executable
+        command for the catalog-defined tool action.
 
     Raises:
         CatalogIntegrityError: If the configuration is missing required fields or
             contains invalid values.
     """
 
-    plain_config = _as_plain_json(config)
+    plain_config = cast(JSONValue, _as_plain_json(config))
     if not isinstance(plain_config, Mapping):
         raise CatalogIntegrityError("command_download_binary: configuration must be an object")
 
     download_config = plain_config.get("download")
     if not isinstance(download_config, Mapping):
         raise CatalogIntegrityError("command_download_binary: 'download' must be an object")
+    download_mapping = cast(Mapping[str, JSONValue], download_config)
 
     version_value = plain_config.get("version")
     if version_value is not None and not isinstance(version_value, str):
@@ -253,7 +252,7 @@ def command_download_binary(config: Mapping[str, Any]) -> CommandBuilder:
 
     return _DownloadBinaryStrategy(
         version=version_value,
-        download=download_config,
+        download=download_mapping,
         base=base_parts,
         placeholder=placeholder,
         options=tuple(option_specs),
@@ -261,15 +260,17 @@ def command_download_binary(config: Mapping[str, Any]) -> CommandBuilder:
     )
 
 
-def _parse_command_option(entry: Any, *, index: int) -> _CommandOption:
+def _parse_command_option(entry: JSONValue, *, index: int) -> _CommandOption:
     """Materialise a command option from catalog configuration.
 
     Args:
         entry: Raw JSON entry describing the option.
-        index: Index of the option within the configuration array, used for errors.
+        index: Index of the option within the configuration array, used for
+            detailed error messaging.
 
     Returns:
-        _DownloadBinaryOption: Parsed option ready for application during command build.
+        _CommandOption: Parsed option ready for application during command
+        composition.
 
     Raises:
         CatalogIntegrityError: If the option definition is malformed.
@@ -293,7 +294,7 @@ def _parse_command_option(entry: Any, *, index: int) -> _CommandOption:
     if not isinstance(type_value, str):
         raise CatalogIntegrityError(f"{context}: 'type' must be a string")
     normalized_type_key = type_value.strip().lower()
-    type_mapping = {
+    type_mapping: dict[str, Literal["value", "path", "args", "flag", "repeatFlag"]] = {
         "value": "value",
         "path": "path",
         "args": "args",
@@ -345,7 +346,20 @@ def _parse_command_option(entry: Any, *, index: int) -> _CommandOption:
     )
 
 
-def _parse_target_selector(entry: Any, *, context: str) -> _TargetSelector:
+def _parse_target_selector(entry: JSONValue, *, context: str) -> _TargetSelector:
+    """Create a target selector from catalog metadata.
+
+    Args:
+        entry: Raw JSON configuration for the selector.
+        context: Human-readable context used for error reporting.
+
+    Returns:
+        _TargetSelector: Normalised selector configuration.
+
+    Raises:
+        CatalogIntegrityError: If required fields are missing or invalid.
+    """
+
     if not isinstance(entry, Mapping):
         raise CatalogIntegrityError(f"{context}: target selector must be an object")
 
@@ -408,6 +422,17 @@ class _ProjectTargetPlan:
     prefix: str | None
 
     def resolve(self, ctx: ToolContext, *, excluded: set[Path], root: Path) -> list[str]:
+        """Return resolved command targets.
+
+        Args:
+            ctx: Tool execution context supplying settings and configuration.
+            excluded: Paths that should be omitted from target selection.
+            root: Repository root for resolving relative paths.
+
+        Returns:
+            list[str]: Ordered list of target arguments.
+        """
+
         targets: set[Path] = set()
         for name in self.settings:
             for value in _settings_list(_setting(ctx.settings, name)):
@@ -464,6 +489,16 @@ class _ProjectScannerStrategy(CommandBuilder):
     target_plan: _ProjectTargetPlan | None
 
     def build(self, ctx: ToolContext) -> Sequence[str]:
+        """Compose the project scanner command for the provided context.
+
+        Args:
+            ctx: Tool execution context containing repository metadata and
+                configured settings.
+
+        Returns:
+            Sequence[str]: Fully rendered command arguments.
+        """
+
         root = ctx.root
         command = list(self.base)
 
@@ -497,10 +532,23 @@ class _ProjectScannerStrategy(CommandBuilder):
         return tuple(command)
 
 
-def command_project_scanner(config: Mapping[str, Any]) -> CommandBuilder:
-    """Return a project-aware scanner command builder driven by catalog data."""
+def command_project_scanner(config: Mapping[str, JSONValue]) -> CommandBuilder:
+    """Build a project-aware scanner command builder.
 
-    plain_config = _as_plain_json(config)
+    Args:
+        config: Catalog configuration describing the scanner’s base command,
+            option mappings, exclusion behaviour, and target resolution plan.
+
+    Returns:
+        CommandBuilder: Strategy that produces commands aligned with the
+        catalog-defined scanning workflow.
+
+    Raises:
+        CatalogIntegrityError: If the configuration is missing required fields or
+            contains invalid values.
+    """
+
+    plain_config = cast(JSONValue, _as_plain_json(config))
     if not isinstance(plain_config, Mapping):
         raise CatalogIntegrityError("command_project_scanner: configuration must be an object")
 
@@ -561,7 +609,20 @@ def command_project_scanner(config: Mapping[str, Any]) -> CommandBuilder:
     )
 
 
-def _parse_project_target_plan(entry: Any) -> _ProjectTargetPlan:
+def _parse_project_target_plan(entry: JSONValue) -> _ProjectTargetPlan:
+    """Create a project target plan from catalog data.
+
+    Args:
+        entry: Raw JSON configuration describing target selection.
+
+    Returns:
+        _ProjectTargetPlan: Parsed configuration used to resolve command
+        targets at runtime.
+
+    Raises:
+        CatalogIntegrityError: If the configuration is malformed.
+    """
+
     if not isinstance(entry, Mapping):
         raise CatalogIntegrityError("command_project_scanner.targets must be an object")
 

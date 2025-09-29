@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Mapping, Sequence, cast
+from typing import cast
+from collections.abc import Mapping, Sequence
 
 from jsonschema import exceptions as jsonschema_exceptions
 
