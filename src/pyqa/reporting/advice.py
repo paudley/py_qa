@@ -18,6 +18,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from ..annotations import AnnotationEngine
+from ..filesystem.paths import normalize_path
 from ..tools.catalog_metadata import catalog_duplicate_hint_codes
 
 
@@ -83,8 +84,12 @@ def generate_advice(
     def is_test_path(path: str | None) -> bool:
         if not path:
             return False
-        normalized = path.replace("\\", "/")
-        return any(part.startswith("test") or part == "tests" for part in normalized.split("/"))
+        try:
+            normalised = normalize_path(path)
+        except (ValueError, OSError):
+            normalised = Path(str(path))
+        parts = [part.lower() for part in normalised.parts]
+        return any(part.startswith("test") or part == "tests" for part in parts)
 
     # Complexity hotspots
     complexity_targets: dict[tuple[str, str], tuple[str, str]] = {}

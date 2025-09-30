@@ -188,7 +188,11 @@
       "^pylint, (?:.+/)?tests?/.*:.*R2004.*$",
       "^pylint, (?:.+/)?tests?/.*:.*magic-value-comparison.*$",
       "^pylint, (?:.+/)?tests?/.*:.*protected-access.*$",
-      "^pylint, (?:.+/)?tests?/.*:.*unused-argument.*$"
+      "^pylint, (?:.+/)?tests?/.*:.*unused-argument.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*missing-function-docstring.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*too-few-public-methods.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*missing-class-docstring.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*consider-using-assignment-expr.*$"
     ]
   },
   "documentation": {

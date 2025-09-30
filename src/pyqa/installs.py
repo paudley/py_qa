@@ -277,8 +277,7 @@ def install_with_preferred_manager(
     if which("uv"):
         cp = runner(["uv", "pip", "install", "-U", *args_list])
         if cp.returncode != 0:
-            warn("uv pip install failed; trying 'uv run -m pip'")
-            return runner(["uv", "run", "-m", "pip", "install", "-U", *args_list])
+            warn("uv pip install failed")
         return cp
 
     pip_exe = which("pip3") or which("pip")

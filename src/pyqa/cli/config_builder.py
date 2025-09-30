@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from ..config import Config, ExecutionConfig, FileDiscoveryConfig, OutputConfig
 from ..config_loader import ConfigLoader
+from ..filesystem.paths import normalize_path
 from ..testing.suppressions import flatten_test_suppressions
 from ..tools.catalog_metadata import catalog_general_suppressions
 from .options import LintOptions, ToolFilters
@@ -526,7 +527,18 @@ def _unique_paths(paths: Iterable[Path]) -> list[Path]:
     seen: set[Path] = set()
     result: list[Path] = []
     for path in paths:
-        resolved = path.resolve()
+        try:
+            normalised = normalize_path(path)
+        except (ValueError, OSError):
+            resolved = path.resolve()
+        else:
+            if normalised.is_absolute():
+                resolved = normalised
+            else:
+                try:
+                    resolved = (Path.cwd() / normalised).resolve()
+                except OSError:
+                    resolved = (Path.cwd() / normalised).absolute()
         if resolved not in seen:
             result.append(resolved)
             seen.add(resolved)
@@ -534,20 +546,41 @@ def _unique_paths(paths: Iterable[Path]) -> list[Path]:
 
 
 def _resolve_path(root: Path, path: Path) -> Path:
-    return path if path.is_absolute() else (root / path)
+    try:
+        normalised = normalize_path(path, base_dir=root)
+    except (ValueError, OSError):
+        return path if path.is_absolute() else (root / path)
+    if normalised.is_absolute():
+        return normalised
+    return root / normalised
 
 
 def _resolve_optional_path(root: Path, path: Path | None) -> Path | None:
     if path is None:
         return None
-    return _resolve_path(root, path).resolve()
+    resolved = _resolve_path(root, path)
+    try:
+        return resolved.resolve()
+    except OSError:
+        return resolved.absolute()
 
 
 def _existing_unique_paths(paths: Iterable[Path]) -> list[Path]:
     collected: list[Path] = []
     seen: set[Path] = set()
     for path in paths:
-        resolved = path.resolve()
+        try:
+            normalised = normalize_path(path)
+        except (ValueError, OSError):
+            resolved = path.resolve()
+        else:
+            if normalised.is_absolute():
+                resolved = normalised
+            else:
+                try:
+                    resolved = (Path.cwd() / normalised).resolve()
+                except OSError:
+                    resolved = (Path.cwd() / normalised).absolute()
         if not resolved.exists():
             continue
         if resolved in seen:
@@ -558,7 +591,11 @@ def _existing_unique_paths(paths: Iterable[Path]) -> list[Path]:
 
 
 def _ensure_abs(root: Path, path: Path) -> Path:
-    return path if path.is_absolute() else (root / path).resolve()
+    resolved = _resolve_path(root, path)
+    try:
+        return resolved.resolve()
+    except OSError:
+        return resolved.absolute()
 
 
 def _is_within_any(path: Path, bounds: Iterable[Path]) -> bool:

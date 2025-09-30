@@ -15,6 +15,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import Final, Protocol, cast
 
+from ..filesystem.paths import normalize_path
 from ..models import RawDiagnostic
 from ..severity import Severity
 from .base import ToolContext
@@ -95,9 +96,13 @@ def _settings_list(value: object) -> list[str]:
 def _resolve_path(root: Path, value: object) -> Path:
     """Return an absolute path for *value* anchored at *root* when needed."""
     candidate = Path(str(value)).expanduser()
-    if candidate.is_absolute():
-        return candidate.resolve()
-    return (root / candidate).resolve()
+    try:
+        normalised = normalize_path(candidate, base_dir=root)
+    except (ValueError, OSError):
+        return candidate.resolve() if candidate.is_absolute() else (root / candidate).resolve()
+    if normalised.is_absolute():
+        return normalised.resolve()
+    return (root / normalised).resolve()
 
 
 def _as_bool(value: object | None) -> bool | None:

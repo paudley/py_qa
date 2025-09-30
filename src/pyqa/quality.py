@@ -27,6 +27,7 @@ from .config import FileDiscoveryConfig, LicenseConfig, QualityConfigSection
 from .constants import ALWAYS_EXCLUDE_DIRS
 from .discovery.filesystem import FilesystemDiscovery
 from .discovery.git import GitDiscovery, list_tracked_files
+from .filesystem.paths import normalize_path
 from .process_utils import run_command
 from .tools.settings import tool_setting_schema_as_dict
 
@@ -337,7 +338,16 @@ class QualityChecker:
         return any(fnmatch(relative_str, pattern) for pattern in self.quality.skip_globs)
 
     def _resolve_path(self, path: Path) -> Path:
-        return path if path.is_absolute() else (self.root / path).resolve()
+        try:
+            normalised = normalize_path(path, base_dir=self.root)
+        except (ValueError, OSError):
+            return path if path.is_absolute() else (self.root / path).resolve()
+        if normalised.is_absolute():
+            return normalised
+        try:
+            return (self.root / normalised).resolve()
+        except OSError:
+            return (self.root / normalised).absolute()
 
 
 CONVENTIONAL_SUBJECT = re.compile(

@@ -8,6 +8,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .filesystem.paths import normalise_path_key, normalize_path_key
+
 
 @dataclass(slots=True)
 class FileMetrics:
@@ -80,18 +82,11 @@ def compute_file_metrics(path: Path) -> FileMetrics:
     return metrics
 
 
-def normalise_path_key(path: Path) -> str:
-    """Return a canonical string key for *path* suitable for metric caches."""
-    try:
-        return str(path.resolve())
-    except OSError:
-        return str(path)
-
-
 __all__ = [
     "SUPPRESSION_LABELS",
     "SUPPRESSION_PATTERNS",
     "FileMetrics",
     "compute_file_metrics",
     "normalise_path_key",
+    "normalize_path_key",
 ]

@@ -33,6 +33,11 @@ _CROSS_TOOL_EQUIVALENT_CODES = {
     frozenset({"F822", "reportUnsupportedDunderAll"}),
     frozenset({"F821", "reportUndefinedVariable"}),
     frozenset({"PLR2004", "R2004"}),
+    frozenset({"arg-type", "reportArgumentType"}),
+}
+
+_CODE_PREFERENCE: dict[frozenset[str], str] = {
+    frozenset({"arg-type", "reportArgumentType"}): "pyright",
 }
 
 _ANNOTATION_ENGINE = AnnotationEngine()
@@ -197,6 +202,13 @@ def _line_distance(lhs: int | None, rhs: int | None) -> int:
 
 
 def _prefer(existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig) -> Diagnostic:
+    pair = frozenset(code for code in (existing.code, candidate.code) if code)
+    preferred_tool = _CODE_PREFERENCE.get(pair)
+    if preferred_tool:
+        if (existing.tool or "").lower() == preferred_tool:
+            return existing
+        if (candidate.tool or "").lower() == preferred_tool:
+            return candidate
     if cfg.dedupe_by == "first":
         return existing
     if cfg.dedupe_by == "severity":

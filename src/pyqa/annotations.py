@@ -11,10 +11,12 @@ highlighting consistent without re-tokenising every message.
 from __future__ import annotations
 
 import os
+import subprocess
 import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
+from shutil import which
 from typing import Literal
 
 from .context import TreeSitterContextResolver
@@ -278,15 +280,33 @@ def _overlap(left: MessageSpan, right: MessageSpan) -> bool:
 def _download_spacy_model(model_name: str) -> bool:
     if spacy is None:
         return False
-    try:
-        from spacy.cli import download  # type: ignore[import]
-    except Exception:  # pragma: no cover - spaCy optional command missing
+    uv_path = which("uv")
+    if not uv_path:
         return False
-    try:
-        download(model_name)  # type: ignore[call-arg]
-        return True
-    except BaseException:  # pragma: no cover - network or install issue / SystemExit
+
+    version = getattr(spacy, "__version__", None)
+    if not version:
         return False
+
+    url = (
+        "https://github.com/explosion/spacy-models/releases/download/"
+        f"{model_name}-{version}/{model_name}-{version}-py3-none-any.whl"
+    )
+
+    try:
+        completed = subprocess.run(
+            [uv_path, "pip", "install", url],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return False
+
+    if completed.returncode != 0:
+        return False
+
+    return True
 
 
 __all__ = [

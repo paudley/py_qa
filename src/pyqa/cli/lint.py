@@ -25,6 +25,7 @@ from ..console import console_manager, is_tty
 from ..constants import PY_QA_DIR_NAME
 from ..discovery import build_default_discovery
 from ..execution.orchestrator import FetchEvent, Orchestrator, OrchestratorHooks
+from ..filesystem.paths import normalize_path
 from ..logging import info, warn
 from ..models import RunResult
 from ..reporting.emitters import write_json_report, write_pr_summary, write_sarif_report
@@ -236,10 +237,25 @@ def lint_command(
 
     invocation_cwd = Path.cwd()
     provided_paths = list(paths or [])
-    normalized_paths = [_normalise_path(arg, invocation_cwd) for arg in provided_paths]
+    normalized_paths = [normalize_path(arg, base_dir=invocation_cwd) for arg in provided_paths]
+
+    dirs = [normalize_path(directory, base_dir=invocation_cwd) for directory in dirs]
+    exclude = [normalize_path(entry, base_dir=invocation_cwd) for entry in exclude]
+    cache_dir = normalize_path(cache_dir, base_dir=invocation_cwd)
+    report_json = (
+        normalize_path(report_json, base_dir=invocation_cwd) if report_json is not None else None
+    )
+    sarif_out = (
+        normalize_path(sarif_out, base_dir=invocation_cwd) if sarif_out is not None else None
+    )
+    pr_summary_out = (
+        normalize_path(pr_summary_out, base_dir=invocation_cwd)
+        if pr_summary_out is not None
+        else None
+    )
 
     root_source = _parameter_source_name(ctx, "root")
-    root = _normalise_path(root, invocation_cwd)
+    root = normalize_path(root, base_dir=invocation_cwd)
     if root_source in {"DEFAULT", "DEFAULT_MAP"} and normalized_paths:
         derived_root = _derive_default_root(normalized_paths)
         if derived_root is not None:
@@ -756,17 +772,12 @@ def _collect_provided_flags(
     return provided
 
 
-def _normalise_path(value: Path, cwd: Path) -> Path:
-    candidate = value if value.is_absolute() else cwd / value
-    return candidate.resolve()
-
-
 def _display_path(path: Path, root: Path) -> str:
     try:
-        relative = path.relative_to(root)
-        return relative.as_posix()
-    except ValueError:
+        normalised = normalize_path(path, base_dir=root)
+    except (ValueError, OSError):
         return str(path)
+    return normalised.as_posix()
 
 
 def _derive_default_root(paths: list[Path]) -> Path | None:

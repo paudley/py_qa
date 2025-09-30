@@ -445,7 +445,7 @@ class Config(BaseModel):
             self.dedupe.dedupe = True
             self.dedupe.dedupe_by = "prefer"
             prefer_list = list(self.dedupe.dedupe_prefer)
-            for tool_name in ("mypy", "pyright"):
+            for tool_name in ("pyright", "mypy"):
                 if tool_name not in prefer_list:
                     prefer_list.append(tool_name)
             self.dedupe.dedupe_prefer = prefer_list

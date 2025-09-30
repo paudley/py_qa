@@ -11,6 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
+from .filesystem.paths import normalize_path
 from .metrics import FileMetrics
 from .severity import Severity
 
@@ -73,6 +74,21 @@ class RawDiagnostic(BaseModel):
     tool: str | None = None
     group: str | None = None
     function: str | None = None
+
+    @field_validator("file", mode="before")
+    @classmethod
+    def _normalize_file(cls, value: object) -> object:
+        """Ensure diagnostic file paths are stored relative to the invocation root."""
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return value
+        raw = Path(str(value)) if not isinstance(value, Path) else value
+        try:
+            normalised = normalize_path(raw)
+        except Exception:
+            return str(value)
+        return normalised.as_posix()
 
 
 class ToolOutcome(BaseModel):

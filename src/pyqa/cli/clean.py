@@ -12,9 +12,9 @@ import typer
 from ..clean import sparkly_clean
 from ..config_loader import ConfigError, ConfigLoader
 from ..constants import PY_QA_DIR_NAME
+from ..filesystem.paths import display_relative_path
 from ..logging import fail, warn
 from .typer_ext import create_typer
-from .utils import display_relative_path
 
 clean_app = create_typer(name="sparkly-clean", help="Remove temporary build/cache artefacts.")
 

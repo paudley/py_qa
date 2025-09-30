@@ -1019,7 +1019,9 @@ class _TargetSelector:
             if self.contains and not any(fragment in text for fragment in self.contains):
                 continue
             if self.path_requires and not _path_matches_requirements(
-                candidate, ctx.root, self.path_requires,
+                candidate,
+                ctx.root,
+                self.path_requires,
             ):
                 continue
             matched.append(candidate)

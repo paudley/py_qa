@@ -12,6 +12,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from .config import Config, ConfigError
+from .filesystem.paths import normalize_path
 from .serialization import jsonify
 from .tools.settings import tool_setting_schema_as_dict
 
@@ -95,7 +96,18 @@ def _unique_paths(paths: Iterable[Path]) -> list[Path]:
     seen: set[Path] = set()
     result: list[Path] = []
     for path in paths:
-        resolved = path.resolve()
+        try:
+            normalised = normalize_path(path)
+        except (ValueError, OSError):
+            resolved = path.resolve()
+        else:
+            if normalised.is_absolute():
+                resolved = normalised
+            else:
+                try:
+                    resolved = (Path.cwd() / normalised).resolve()
+                except OSError:
+                    resolved = (Path.cwd() / normalised).absolute()
         if resolved not in seen:
             result.append(resolved)
             seen.add(resolved)
@@ -106,7 +118,18 @@ def _existing_unique_paths(paths: Iterable[Path]) -> list[Path]:
     collected: list[Path] = []
     seen: set[Path] = set()
     for path in paths:
-        resolved = path.resolve()
+        try:
+            normalised = normalize_path(path)
+        except (ValueError, OSError):
+            resolved = path.resolve()
+        else:
+            if normalised.is_absolute():
+                resolved = normalised
+            else:
+                try:
+                    resolved = (Path.cwd() / normalised).resolve()
+                except OSError:
+                    resolved = (Path.cwd() / normalised).absolute()
         if not resolved.exists():
             continue
         if resolved in seen:

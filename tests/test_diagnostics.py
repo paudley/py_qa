@@ -138,3 +138,110 @@ def test_dedupe_prefer_list(tmp_path: Path) -> None:
 
     assert len(result.outcomes[0].diagnostics) == 0
     assert result.outcomes[1].diagnostics == [diag_b]
+
+
+def test_dedupe_prefers_pyright_over_mypy(tmp_path: Path) -> None:
+    cfg = DedupeConfig(
+        dedupe=True,
+        dedupe_by="prefer",
+        dedupe_prefer=["pyright", "mypy"],
+        dedupe_line_fuzz=0,
+    )
+    diag_mypy = Diagnostic(
+        file="tests/test_reporting.py",
+        line=1126,
+        column=None,
+        severity=Severity.WARNING,
+        message='Argument "stdout" to "ToolOutcome" has incompatible type "str"; expected "list[str]"',
+        tool="mypy",
+        code="arg-type",
+    )
+    diag_pyright = Diagnostic(
+        file="tests/test_reporting.py",
+        line=1126,
+        column=None,
+        severity=Severity.WARNING,
+        message='Argument of type "Literal[\'\']" cannot be assigned to parameter "stdout" of type "list[str]" in function "__init__"',
+        tool="pyright",
+        code="reportArgumentType",
+    )
+
+    result = RunResult(
+        root=tmp_path,
+        files=[tmp_path / "tests" / "test_reporting.py"],
+        outcomes=[
+            ToolOutcome(
+                tool="mypy",
+                action="lint",
+                returncode=1,
+                stdout=[],
+                stderr=[],
+                diagnostics=[diag_mypy],
+            ),
+            ToolOutcome(
+                tool="pyright",
+                action="lint",
+                returncode=1,
+                stdout=[],
+                stderr=[],
+                diagnostics=[diag_pyright],
+            ),
+        ],
+    )
+
+    dedupe_outcomes(result, cfg)
+
+    assert not result.outcomes[0].diagnostics
+    assert result.outcomes[1].diagnostics == [diag_pyright]
+    cfg = DedupeConfig(
+        dedupe=True,
+        dedupe_by="prefer",
+        dedupe_prefer=["pylint"],
+        dedupe_line_fuzz=1,
+    )
+    diag_a = Diagnostic(
+        file="src/app.py",
+        line=20,
+        column=None,
+        severity=Severity.WARNING,
+        message="issue",
+        tool="ruff",
+        code="W100",
+    )
+    diag_b = Diagnostic(
+        file="src/app.py",
+        line=21,
+        column=None,
+        severity=Severity.WARNING,
+        message="issue",
+        tool="pylint",
+        code="W100",
+    )
+
+    result = RunResult(
+        root=tmp_path,
+        files=[tmp_path / "src" / "app.py"],
+        outcomes=[
+            ToolOutcome(
+                tool="ruff",
+                action="lint",
+                returncode=1,
+                stdout="",
+                stderr="",
+                diagnostics=[diag_a],
+            ),
+            ToolOutcome(
+                tool="pylint",
+                action="lint",
+                returncode=1,
+                stdout="",
+                stderr="",
+                diagnostics=[diag_b],
+            ),
+        ],
+    )
+
+    dedupe_outcomes(result, cfg)
+
+    assert len(result.outcomes[0].diagnostics) == 0
+    assert result.outcomes[1].diagnostics == [diag_b]

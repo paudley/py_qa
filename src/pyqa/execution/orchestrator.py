@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, NamedTuple, Protocol
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -28,9 +28,10 @@ from ..diagnostics import (
 from ..discovery.base import SupportsDiscovery
 from ..environments import inject_node_defaults, prepend_venv_to_path
 from ..execution.cache import CachedEntry, ResultCache
+from ..filesystem.paths import normalize_path_key
 from ..languages import detect_languages
 from ..logging import info, warn
-from ..metrics import FileMetrics, compute_file_metrics, normalise_path_key
+from ..metrics import FileMetrics, compute_file_metrics
 from ..models import Diagnostic, RunResult, ToolOutcome
 from ..severity import SeverityRuleView
 from ..tool_env import CommandPreparer, PreparedCommand
@@ -63,11 +64,13 @@ def _filter_diagnostics(
     root: Path,
 ) -> list[Diagnostic]:
     """Remove diagnostics matching suppression patterns for *tool_name*."""
-    if not diagnostics or not patterns:
-        return list(diagnostics)
+    if not diagnostics:
+        return []
 
-    compiled = [re.compile(pattern) for pattern in patterns]
+    compiled = [re.compile(pattern) for pattern in patterns] if patterns else []
     kept: list[Diagnostic] = []
+    seen_duplicate_groups: set[tuple[str, ...]] = set()
+    duplicate_codes = {"R0801", "DUPLICATE-CODE"}
     for diagnostic in diagnostics:
         tool = diagnostic.tool or tool_name
         location = diagnostic.file or "<unknown>"
@@ -82,10 +85,23 @@ def _filter_diagnostics(
         message = diagnostic.message.splitlines()[0].strip()
         candidate = f"{tool}, {location}, {code}, {message}"
 
-        if any(pattern.search(candidate) for pattern in compiled):
+        if compiled and any(pattern.search(candidate) for pattern in compiled):
             continue
 
-        if tool == "pylint" and (diagnostic.code or "").upper() == "R0801":
+        upper_code = (diagnostic.code or "").upper()
+        if tool == "pylint" and upper_code in duplicate_codes:
+            entries = _collect_duplicate_code_entries(diagnostic.message, root)
+            group_key = _duplicate_group_key(entries)
+            if group_key:
+                if group_key in seen_duplicate_groups:
+                    continue
+                seen_duplicate_groups.add(group_key)
+                preferred = _select_duplicate_primary(entries, diagnostic, root)
+                if preferred:
+                    diagnostic.file = preferred.path
+                    if preferred.line is not None:
+                        diagnostic.line = preferred.line
+
             lines = diagnostic.message.splitlines()
             snippet: list[str] = []
             for entry in lines[1:]:
@@ -104,9 +120,10 @@ def _filter_diagnostics(
             if source_line is not None and source_line.lstrip().startswith("#"):
                 continue
 
+        suppressed_codes = duplicate_codes | {"W0613", "W0212"}
         if (
             tool == "pylint"
-            and (diagnostic.code or "").upper() in {"W0613", "W0212", "R0801"}
+            and upper_code in suppressed_codes
             and diagnostic.file
             and "tests/" in diagnostic.file.replace("\\", "/")
         ):
@@ -128,6 +145,204 @@ def _read_source_line(root: Path, file_str: str, line_no: int) -> str | None:
     except OSError:
         return None
     return None
+
+
+class _DuplicateCodeEntry(NamedTuple):
+    """Details extracted from a pylint duplicate-code diagnostic."""
+
+    key: str
+    path: str
+    line: int | None
+
+
+def _collect_duplicate_code_entries(message: str, root: Path) -> list[_DuplicateCodeEntry]:
+    """Extract duplicate-code targets from ``message`` with normalised metadata."""
+    entries: list[_DuplicateCodeEntry] = []
+    lines = [line.strip() for line in message.splitlines() if line.strip()]
+    details: list[str] = []
+
+    for line in lines[1:]:
+        if line.startswith("=="):
+            details.append(line[2:].strip())
+
+    if not details and lines:
+        _, _, suffix = lines[0].partition(":")
+        if suffix:
+            for candidate in suffix.split(","):
+                token = candidate.strip()
+                if token:
+                    details.append(token)
+
+    for detail in details:
+        name, span = _split_duplicate_code_entry(detail)
+        if not name:
+            continue
+        path = _resolve_duplicate_target(name, root)
+        span_token = span.strip()
+        try:
+            key_path = normalize_path_key(path, base_dir=root)
+        except ValueError:
+            key_path = path.replace("\\", "/")
+        key = key_path.lower()
+        if span_token:
+            key = f"{key}|{span_token.lower()}"
+        entries.append(
+            _DuplicateCodeEntry(
+                key=key,
+                path=path,
+                line=_parse_duplicate_line(span_token),
+            ),
+        )
+    return entries
+
+
+_TRAILING_SPAN = re.compile(r":(?P<start>\d+)(?::(?P<end>\d+))?\s*$")
+
+
+def _split_duplicate_code_entry(entry: str) -> tuple[str, str]:
+    """Split ``entry`` into the referenced module/file name and line span."""
+    stripped = entry.strip()
+    bracket_index = stripped.find("[")
+    if bracket_index != -1:
+        name = stripped[:bracket_index].rstrip(":")
+        span = stripped[bracket_index:]
+        return name.strip(), span.strip()
+
+    match = _TRAILING_SPAN.search(stripped)
+    if match:
+        name = stripped[: match.start()].rstrip(":")
+        start = match.group("start")
+        end = match.group("end")
+        if end:
+            span = f"[{start}:{end}]"
+        else:
+            span = f"[{start}]"
+        return name.strip(), span
+
+    return stripped, ""
+
+
+def _parse_duplicate_line(span: str) -> int | None:
+    """Return the starting line from a duplicate-code span like ``[12:18]``."""
+    cleaned = span.strip()[1:-1] if span.startswith("[") and span.endswith("]") else span.strip()
+    head, _, _ = cleaned.partition(":")
+    try:
+        return int(head)
+    except ValueError:
+        return None
+
+
+def _duplicate_group_key(entries: Sequence[_DuplicateCodeEntry]) -> tuple[str, ...]:
+    """Build a stable key describing a duplicate-code diagnostic group."""
+    if not entries:
+        return ()
+    unique_keys = {entry.key for entry in entries}
+    return tuple(sorted(unique_keys))
+
+
+def _select_duplicate_primary(
+    entries: Sequence[_DuplicateCodeEntry],
+    diagnostic: Diagnostic,
+    root: Path,
+) -> _DuplicateCodeEntry | None:
+    """Choose which duplicate entry should anchor the diagnostic location."""
+    if not entries:
+        return None
+
+    current = _normalise_duplicate_path(diagnostic.file or "", root)
+    for entry in entries:
+        if current and _normalise_duplicate_path(entry.path, root) == current:
+            return entry
+
+    for entry in entries:
+        if not _is_test_path(entry.path):
+            return entry
+
+    return entries[0]
+
+
+def _normalise_duplicate_path(path: str, root: Path) -> str:
+    """Return a normalised comparison key for ``path`` relative to ``root``."""
+    if not path:
+        return ""
+    try:
+        return normalize_path_key(path, base_dir=root)
+    except ValueError:
+        return path.replace("\\", "/")
+
+
+def _is_test_path(path: str) -> bool:
+    """Return ``True`` when ``path`` points inside a tests directory."""
+    normalized = path.replace("\\", "/").lower()
+    return normalized.startswith("tests/") or "/tests/" in normalized
+
+
+def _resolve_duplicate_target(name: str, root: Path) -> str:
+    """Resolve a pylint duplicate-code target to a stable display path."""
+    variants = _generate_duplicate_variants(name)
+
+    for variant in variants:
+        candidate = Path(variant)
+        if candidate.is_absolute() and candidate.exists():
+            return normalize_path_key(candidate, base_dir=root)
+
+    search_prefixes = ("", "src/", "tests/", "tooling/", "docs/", "ref_docs/")
+    for variant in variants:
+        for prefix in search_prefixes:
+            candidate = root / prefix / variant
+            if candidate.exists():
+                return normalize_path_key(candidate, base_dir=root)
+
+    fallback_candidates = [
+        variant
+        for variant in variants
+        if "/" in variant and Path(variant).suffix in {".py", ".pyi"}
+    ]
+    if not fallback_candidates:
+        fallback_candidates = [variant for variant in variants if "/" in variant]
+    if not fallback_candidates:
+        fallback_candidates = list(variants)
+
+    fallback = fallback_candidates[0] if fallback_candidates else name.strip().replace("\\", "/")
+    fallback = fallback.lstrip("./")
+    if Path(fallback).suffix == "":
+        fallback = f"{fallback}.py"
+    try:
+        return normalize_path_key(fallback, base_dir=root)
+    except ValueError:
+        return fallback
+
+
+def _generate_duplicate_variants(name: str) -> list[str]:
+    """Return candidate path variants for a duplicate-code entry name."""
+    token = name.strip().strip("\"'")
+    token = token.replace("\\", "/")
+    if not token:
+        return []
+
+    base_variants = [token]
+    dotted = token.replace(".", "/")
+    if dotted != token:
+        base_variants.append(dotted)
+
+    seen: set[str] = set()
+    variants: list[str] = []
+    for variant in base_variants:
+        cleaned = variant.lstrip("./")
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            variants.append(cleaned)
+        if cleaned and Path(cleaned).suffix == "":
+            with_ext = f"{cleaned}.py"
+            if with_ext not in seen:
+                seen.add(with_ext)
+                variants.append(with_ext)
+            if not cleaned.endswith("__init__"):
+                init_variant = f"{cleaned}/__init__.py"
+                if init_variant not in seen:
+                    seen.add(init_variant)
+                    variants.append(init_variant)
+    return variants
 
 
 @dataclass
@@ -800,7 +1015,7 @@ class Orchestrator:
 
     def _populate_missing_metrics(self, state: _ExecutionState, files: Sequence[Path]) -> None:
         for path in files:
-            key = normalise_path_key(path)
+            key = normalize_path_key(path)
             if key in state.file_metrics:
                 continue
             state.file_metrics[key] = compute_file_metrics(path)
@@ -812,7 +1027,7 @@ class Orchestrator:
     ) -> dict[str, FileMetrics]:
         collected: dict[str, FileMetrics] = {}
         for path in files:
-            key = normalise_path_key(path)
+            key = normalize_path_key(path)
             metric = state.file_metrics.get(key)
             if metric is None:
                 metric = compute_file_metrics(path)

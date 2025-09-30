@@ -246,7 +246,16 @@
       "^ruff, (?:.+/)?tests?/.*:.*PT018.*$",
       "^ruff, (?:.+/)?tests?/.*:.*ANN003.*$",
       "^ruff, (?:.+/)?tests?/.*:.*PLR2004.*$",
-      "^ruff, (?:.+/)?tests?/.*:.*ARG001.*$"
+      "^ruff, (?:.+/)?tests?/.*:.*ARG001.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*TRY003.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*EM102.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*TC003.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*D107.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*D102.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*ANN001.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*ARG005.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*EM101.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*D101.*$"
     ],
     "duplicates": ["pylint"]
   },

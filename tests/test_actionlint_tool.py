@@ -65,7 +65,8 @@ def test_actionlint_command_download(monkeypatch: pytest.MonkeyPatch, tmp_path: 
 
 
 def test_actionlint_filters_non_github_files(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     binary_path = tmp_path / "bin" / "actionlint"
     binary_path.parent.mkdir(parents=True, exist_ok=True)

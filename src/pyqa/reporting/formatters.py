@@ -16,13 +16,9 @@ from rich.text import Text
 from ..annotations import AnnotationEngine, MessageSpan
 from ..config import OutputConfig
 from ..console import console_manager
+from ..filesystem.paths import normalize_path, normalize_path_key
 from ..logging import colorize, emoji
-from ..metrics import (
-    SUPPRESSION_LABELS,
-    FileMetrics,
-    compute_file_metrics,
-    normalise_path_key,
-)
+from ..metrics import SUPPRESSION_LABELS, FileMetrics, compute_file_metrics
 from ..models import Diagnostic, RunResult
 from ..severity import Severity
 from .advice import AdviceEntry, generate_advice
@@ -254,7 +250,6 @@ def _highlight_for_output(
 
 def _summarize_duplicate_code(message: str, root: Path) -> str:
     """Create a concise duplicate-code message including file references."""
-
     lines = [line.strip() for line in message.splitlines() if line.strip()]
     if not lines:
         return ""
@@ -280,7 +275,6 @@ def _summarize_duplicate_code(message: str, root: Path) -> str:
 
 def _resolve_duplicate_code_target(name: str, root: Path) -> str:
     """Resolve a pylint duplicate-code location entry to a displayable path."""
-
     normalized = name.strip()
     if not normalized:
         return name
@@ -435,24 +429,11 @@ def _render_raw(result: RunResult) -> None:
 def _normalize_concise_path(path_str: str | None, root: Path) -> str:
     if not path_str:
         return "<unknown>"
-    candidate = Path(path_str)
     try:
-        if candidate.is_absolute():
-            try:
-                candidate_resolved = candidate.resolve()
-            except OSError:
-                candidate_resolved = candidate
-            try:
-                root_resolved = root.resolve()
-            except OSError:
-                root_resolved = root
-            try:
-                return candidate_resolved.relative_to(root_resolved).as_posix()
-            except ValueError:
-                return candidate_resolved.as_posix()
-        return candidate.as_posix()
-    except OSError:
-        return str(candidate)
+        normalised = normalize_path(path_str, base_dir=root)
+    except (ValueError, OSError):
+        return str(path_str)
+    return normalised.as_posix()
 
 
 def _dump_diagnostics(diags: Iterable[Diagnostic], cfg: OutputConfig) -> None:
@@ -600,7 +581,7 @@ def _gather_metrics(result: RunResult) -> dict[str, FileMetrics]:
     metrics: dict[str, FileMetrics] = {}
     seen: set[str] = set()
     for candidate in result.files:
-        key = normalise_path_key(candidate)
+        key = normalize_path_key(candidate)
         if key in seen:
             continue
         seen.add(key)
