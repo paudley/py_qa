@@ -5,12 +5,11 @@
 
 from __future__ import annotations
 
+import importlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
-
-from jsonschema import exceptions as jsonschema_exceptions
+from typing import TYPE_CHECKING, Final, Literal
 
 from .checksum import compute_catalog_checksum
 from .errors import CatalogIntegrityError, CatalogValidationError
@@ -26,6 +25,17 @@ from .scanner import CatalogScanner
 from .schema import SchemaRepository
 from .types import JSONValue
 from .utils import expect_mapping
+
+if TYPE_CHECKING:  # pragma: no cover - import-time typing helpers
+    from jsonschema import exceptions as jsonschema_exceptions
+else:  # pragma: no cover - fallback when typing information is unavailable
+    import jsonschema
+
+    jsonschema_exceptions = jsonschema.exceptions
+
+ValidatorKind = Literal["tool", "strategy"]
+TOOL_VALIDATOR: Final[ValidatorKind] = "tool"
+STRATEGY_VALIDATOR: Final[ValidatorKind] = "strategy"
 
 
 @dataclass(slots=True)
@@ -66,7 +76,7 @@ class ToolCatalogLoader:
         definitions: list[StrategyDefinition] = []
         for path in self._scanner.strategy_documents():
             document = load_document(path)
-            self._validate_document(document, validator="strategy", path=path)
+            self._validate_document(document, validator=STRATEGY_VALIDATOR, path=path)
             mapping = expect_mapping(document, key="<root>", context=str(path))
             definition = StrategyDefinition.from_mapping(mapping, source=path)
             _validate_strategy_implementation(definition)
@@ -90,8 +100,12 @@ class ToolCatalogLoader:
                 context=str(path),
                 fragments=fragment_lookup,
             )
-            plain_mapping = cast("Mapping[str, JSONValue]", to_plain_json(resolved_mapping))
-            self._validate_document(plain_mapping, validator="tool", path=path)
+            plain_mapping = expect_mapping(
+                to_plain_json(resolved_mapping),
+                key="<root>",
+                context=str(path),
+            )
+            self._validate_document(plain_mapping, validator=TOOL_VALIDATOR, path=path)
             definitions.append(
                 ToolDefinition.from_mapping(
                     resolved_mapping,
@@ -123,12 +137,12 @@ class ToolCatalogLoader:
         self,
         document: Mapping[str, JSONValue] | JSONValue,
         *,
-        validator: str,
+        validator: ValidatorKind,
         path: Path,
     ) -> None:
-        if validator == "tool":
+        if validator is TOOL_VALIDATOR:
             schema_validator = self._schemas.tool_validator
-        elif validator == "strategy":
+        elif validator is STRATEGY_VALIDATOR:
             schema_validator = self._schemas.strategy_validator
         else:  # pragma: no cover - defensive programming
             raise ValueError(f"unknown validator kind '{validator}'")
@@ -143,26 +157,25 @@ __all__ = ["ToolCatalogLoader"]
 
 def _validate_strategy_implementation(definition: StrategyDefinition) -> None:
     """Validate that a strategy definition points to an importable implementation."""
-    import importlib
-
     try:
-        if definition.entry is not None:
-            module = importlib.import_module(definition.implementation)
-            if not hasattr(module, definition.entry):
-                raise CatalogIntegrityError(
-                    f"{definition.source}: missing entry '{definition.entry}' on module '{definition.implementation}'",
-                )
-            getattr(module, definition.entry)
-            return
-
-        module_path, _, attribute_name = definition.implementation.rpartition(".")
-        if not module_path:
-            raise CatalogIntegrityError(
-                f"{definition.source}: implementation '{definition.implementation}' must include a module path",
-            )
-        module = importlib.import_module(module_path)
-        getattr(module, attribute_name)
-    except (ImportError, AttributeError) as exc:
+        _resolve_strategy_attribute(definition)
+    except (ImportError, AttributeError, ValueError) as exc:
         raise CatalogIntegrityError(
             f"{definition.source}: unable to import strategy implementation '{definition.implementation}'",
         ) from exc
+
+
+def _resolve_strategy_attribute(definition: StrategyDefinition) -> object:
+    if definition.entry is not None:
+        module = importlib.import_module(definition.implementation)
+        if not hasattr(module, definition.entry):
+            raise AttributeError(definition.entry)
+        return getattr(module, definition.entry)
+
+    module_path, _, attribute_name = definition.implementation.rpartition(".")
+    if not module_path:
+        raise ValueError(
+            f"{definition.source}: implementation '{definition.implementation}' must include a module path",
+        )
+    module = importlib.import_module(module_path)
+    return getattr(module, attribute_name)

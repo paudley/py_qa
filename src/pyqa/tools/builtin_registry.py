@@ -8,15 +8,17 @@ import importlib
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Final, Literal, cast
 
 from ..tooling import CatalogIntegrityError, CatalogSnapshot, ToolCatalogLoader
 from ..tooling.loader import StrategyDefinition
 from .base import (
+    CommandBuilder,
     DeferredCommand,
+    InstallerCallable,
+    Parser,
     Tool,
     ToolAction,
-    ToolContext,
     ToolDocumentation,
     ToolDocumentationEntry,
 )
@@ -27,6 +29,22 @@ from .builtin_helpers import (
     LUAROCKS_AVAILABLE,
 )
 from .registry import DEFAULT_REGISTRY, ToolRegistry
+
+ToolRuntimeKind = Literal["python", "npm", "binary", "go", "lua", "perl", "rust"]
+DEFAULT_RUNTIME_KIND: Final[ToolRuntimeKind] = "python"
+COMMAND_STRATEGY: Final[str] = "command"
+PARSER_STRATEGY: Final[str] = "parser"
+INSTALLER_STRATEGY: Final[str] = "installer"
+
+_VALID_RUNTIMES: Final[set[str]] = {
+    "python",
+    "npm",
+    "binary",
+    "go",
+    "lua",
+    "perl",
+    "rust",
+}
 
 
 @dataclass(frozen=True)
@@ -39,6 +57,17 @@ class _CatalogCacheEntry:
 
 
 _CATALOG_CACHE: dict[tuple[Path, Path], _CatalogCacheEntry] = {}
+
+
+@dataclass(frozen=True)
+class _RuntimeConfig:
+    """Normalised runtime metadata extracted from catalog definitions."""
+
+    kind: ToolRuntimeKind
+    package: str | None
+    min_version: str | None
+    version_command: tuple[str, ...] | None
+    installers: tuple[InstallerCallable, ...]
 
 
 def register_catalog_tools(
@@ -95,29 +124,11 @@ def _materialize_tool(
     definition: Any,
     strategies: Mapping[str, StrategyDefinition],
 ) -> Tool:
-    runtime = getattr(definition, "runtime", None)
-    documentation_bundle = getattr(definition, "documentation", None)
-    documentation_value = _convert_documentation(documentation_bundle)
-    runtime_kind = getattr(runtime, "kind", "python") if runtime is not None else "python"
-    package = getattr(runtime, "package", None) if runtime is not None else None
-    min_version = getattr(runtime, "min_version", None) if runtime is not None else None
-    version_command = getattr(runtime, "version_command", None) if runtime is not None else None
-    suppressions = getattr(definition.diagnostics_bundle, "suppressions", None)
-    suppressions_tests = suppressions.tests if suppressions is not None else ()
-    suppressions_general = suppressions.general if suppressions is not None else ()
-    suppressions_duplicates = suppressions.duplicates if suppressions is not None else ()
-
-    installers: list[Callable[[ToolContext], None]] = []
-    install_def = getattr(runtime, "install", None)
-    if install_def is not None:
-        installers.append(
-            _instantiate_installer(
-                install_def,
-                strategies,
-                context=definition.name,
-            ),
-        )
-
+    runtime_config = _extract_runtime(definition, strategies)
+    documentation_value = _convert_documentation(getattr(definition, "documentation", None))
+    suppressions_tuple = _extract_suppressions(
+        getattr(getattr(definition, "diagnostics_bundle", None), "suppressions", None),
+    )
     actions = tuple(
         _materialize_action(action, strategies, context=f"{definition.name}:{action.name}")
         for action in getattr(definition, "actions", ())
@@ -135,14 +146,14 @@ def _materialize_tool(
         description=getattr(definition, "description", ""),
         auto_install=getattr(definition, "auto_install", False),
         default_enabled=getattr(definition, "default_enabled", True),
-        runtime=runtime_kind,
-        package=package,
-        min_version=min_version,
-        version_command=version_command,
-        suppressions_tests=suppressions_tests,
-        suppressions_general=suppressions_general,
-        suppressions_duplicates=suppressions_duplicates,
-        installers=tuple(installers),
+        runtime=runtime_config.kind,
+        package=runtime_config.package,
+        min_version=runtime_config.min_version,
+        version_command=runtime_config.version_command,
+        suppressions_tests=suppressions_tuple.tests,
+        suppressions_general=suppressions_tuple.general,
+        suppressions_duplicates=suppressions_tuple.duplicates,
+        installers=runtime_config.installers,
         tags=getattr(definition, "tags", ()),
         documentation=documentation_value,
     )
@@ -204,11 +215,11 @@ def _instantiate_command(
     strategies: Mapping[str, StrategyDefinition],
     *,
     context: str,
-) -> Any:
+) -> CommandBuilder:
     strategy_definition = strategies.get(reference.strategy)
     if strategy_definition is None:
         raise CatalogIntegrityError(f"{context}: unknown command strategy '{reference.strategy}'")
-    if strategy_definition.strategy_type != "command":
+    if strategy_definition.strategy_type != COMMAND_STRATEGY:
         raise CatalogIntegrityError(
             f"{context}: strategy '{reference.strategy}' is not a command strategy",
         )
@@ -223,11 +234,11 @@ def _instantiate_parser(
     strategies: Mapping[str, StrategyDefinition],
     *,
     context: str,
-) -> Any:
+) -> Parser:
     strategy_definition = strategies.get(reference.strategy)
     if strategy_definition is None:
         raise CatalogIntegrityError(f"{context}: unknown parser strategy '{reference.strategy}'")
-    if strategy_definition.strategy_type != "parser":
+    if strategy_definition.strategy_type != PARSER_STRATEGY:
         raise CatalogIntegrityError(
             f"{context}: strategy '{reference.strategy}' is not a parser strategy",
         )
@@ -244,11 +255,11 @@ def _instantiate_installer(
     strategies: Mapping[str, StrategyDefinition],
     *,
     context: str,
-) -> Callable[[ToolContext], None]:
+) -> InstallerCallable:
     strategy_definition = strategies.get(reference.strategy)
     if strategy_definition is None:
         raise CatalogIntegrityError(f"{context}: unknown installer strategy '{reference.strategy}'")
-    if strategy_definition.strategy_type != "installer":
+    if strategy_definition.strategy_type != INSTALLER_STRATEGY:
         raise CatalogIntegrityError(
             f"{context}: strategy '{reference.strategy}' is not an installer strategy",
         )
@@ -259,7 +270,7 @@ def _instantiate_installer(
         raise CatalogIntegrityError(
             f"{context}: installer strategy '{reference.strategy}' did not return a callable",
         )
-    return installer
+    return cast(InstallerCallable, installer)
 
 
 def _convert_documentation(bundle: Any) -> ToolDocumentation | None:
@@ -286,10 +297,16 @@ def _to_tool_doc_entry(entry: Any) -> ToolDocumentationEntry | None:
 def _resolve_strategy_callable(definition: StrategyDefinition) -> Callable[..., Any]:
     if definition.entry is not None:
         module = importlib.import_module(definition.implementation)
-        return getattr(module, definition.entry)
-    module_path, _, attribute_name = definition.implementation.rpartition(".")
-    module = importlib.import_module(module_path)
-    return getattr(module, attribute_name)
+        attribute = getattr(module, definition.entry)
+    else:
+        module_path, _, attribute_name = definition.implementation.rpartition(".")
+        module = importlib.import_module(module_path)
+        attribute = getattr(module, attribute_name)
+    if not callable(attribute):
+        raise CatalogIntegrityError(
+            f"Strategy implementation '{definition.implementation}' is not callable",
+        )
+    return cast(Callable[..., Any], attribute)
 
 
 def _call_strategy_factory(factory: Callable[..., Any], config: Mapping[str, Any]) -> Any:
@@ -301,9 +318,9 @@ def _call_strategy_factory(factory: Callable[..., Any], config: Mapping[str, Any
         return factory()
 
 
-def _ensure_command_builder(instance: Any, *, context: str) -> Any:
+def _ensure_command_builder(instance: Any, *, context: str) -> CommandBuilder:
     if hasattr(instance, "build") and callable(instance.build):
-        return instance
+        return cast(CommandBuilder, instance)
     if isinstance(instance, Sequence) and not isinstance(instance, (str, bytes, bytearray)):
         return DeferredCommand(tuple(str(part) for part in instance))
     raise CatalogIntegrityError(
@@ -376,8 +393,77 @@ def _catalog_cache_key(catalog_root: Path, schema_root: Path | None) -> tuple[Pa
 
     """
     resolved_catalog = catalog_root.resolve()
-    if schema_root is None:
-        resolved_schema = (resolved_catalog.parent / "schema").resolve()
-    else:
-        resolved_schema = schema_root.resolve()
+    schema_candidate = schema_root or (resolved_catalog.parent / "schema")
+    resolved_schema = schema_candidate.resolve()
     return (resolved_catalog, resolved_schema)
+
+
+@dataclass(frozen=True, slots=True)
+class _SuppressionBundle:
+    tests: tuple[str, ...]
+    general: tuple[str, ...]
+    duplicates: tuple[str, ...]
+
+
+def _extract_runtime(
+    definition: Any,
+    strategies: Mapping[str, StrategyDefinition],
+) -> _RuntimeConfig:
+    runtime = getattr(definition, "runtime", None)
+    kind = _normalize_runtime_kind(getattr(runtime, "kind", None), context=definition.name)
+    package = getattr(runtime, "package", None) if runtime is not None else None
+    min_version = getattr(runtime, "min_version", None) if runtime is not None else None
+    version_command = _normalize_version_command(
+        getattr(runtime, "version_command", None) if runtime is not None else None,
+        context=definition.name,
+    )
+    installers: tuple[InstallerCallable, ...] = ()
+    if runtime is not None and getattr(runtime, "install", None) is not None:
+        installers = (
+            _instantiate_installer(
+                runtime.install,
+                strategies,
+                context=definition.name,
+            ),
+        )
+    return _RuntimeConfig(
+        kind=kind,
+        package=str(package) if package is not None else None,
+        min_version=str(min_version) if min_version is not None else None,
+        version_command=version_command,
+        installers=installers,
+    )
+
+
+def _normalize_runtime_kind(raw: Any, *, context: str) -> ToolRuntimeKind:
+    candidate = getattr(raw, "value", raw)
+    if candidate is None:
+        return DEFAULT_RUNTIME_KIND
+    candidate_str = str(candidate)
+    if candidate_str not in _VALID_RUNTIMES:
+        raise CatalogIntegrityError(
+            f"{context}: unsupported runtime '{candidate_str}'",
+        )
+    return cast(ToolRuntimeKind, candidate_str)
+
+
+def _normalize_version_command(value: Any, *, context: str) -> tuple[str, ...] | None:
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple, set)):
+        return tuple(str(entry) for entry in value)
+    if isinstance(value, str):
+        return (value,)
+    raise CatalogIntegrityError(
+        f"{context}: runtime version command must be a string or sequence of strings",
+    )
+
+
+def _extract_suppressions(bundle: Any) -> _SuppressionBundle:
+    if bundle is None:
+        return _SuppressionBundle(tests=(), general=(), duplicates=())
+    return _SuppressionBundle(
+        tests=tuple(getattr(bundle, "tests", ()) or ()),
+        general=tuple(getattr(bundle, "general", ()) or ()),
+        duplicates=tuple(getattr(bundle, "duplicates", ()) or ()),
+    )

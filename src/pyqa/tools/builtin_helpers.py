@@ -9,7 +9,7 @@ import shutil
 import stat
 import tarfile
 import tempfile
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
@@ -47,26 +47,37 @@ _LUA_AVAILABLE: Final[bool] = LUA_AVAILABLE
 _CARGO_AVAILABLE: Final[bool] = CARGO_AVAILABLE
 _CPANM_AVAILABLE: Final[bool] = CPANM_AVAILABLE
 
+TAR_GZ_ARCHIVE: Final[str] = "tar.gz"
+
 
 class _HttpResponse(Protocol):
+    """Minimal subset of ``requests.Response`` used by downloads."""
+
     content: bytes
 
-    def raise_for_status(self) -> None: ...
+    def raise_for_status(self) -> None:
+        """Raise an exception when the HTTP response indicates failure."""
+
+    def iter_content(self, chunk_size: int = 8192) -> Iterable[bytes]:  # pragma: no cover - protocol default
+        """Yield response body chunks; default implementation wraps ``content``."""
+
+        del chunk_size
+        return (self.content,)
 
 
-class _RequestsClient(Protocol):
-    def get(self, url: str, **kwargs: object) -> _HttpResponse: ...
+_RequestsGet = Callable[..., _HttpResponse]
 
 
-def _load_requests() -> _RequestsClient:
+def _load_requests_get() -> _RequestsGet:
     module = import_module("requests")
-    if not hasattr(module, "get"):
+    get_callable = getattr(module, "get", None)
+    if not callable(get_callable):
         msg = "requests.get not available"
         raise RuntimeError(msg)
-    return cast("_RequestsClient", module)
+    return cast(_RequestsGet, get_callable)
 
 
-_REQUESTS: Final[_RequestsClient] = _load_requests()
+_REQUESTS_GET: Final[_RequestsGet] = _load_requests_get()
 
 
 def _setting(settings: Mapping[str, object], *names: str) -> object | None:
@@ -139,41 +150,87 @@ def download_tool_artifact(
     context: str,
 ) -> Path:
     """Download a tool artifact described by *spec* if missing and return its path."""
-    name = str(spec.get("name", "tool")).strip() or "tool"
-    cache_dir = str(spec.get("cacheSubdir", name)).strip() or name
-    targets_value = spec.get("targets")
-    if not isinstance(targets_value, Sequence) or not targets_value:
-        raise RuntimeError(f"{context}: download specification must include targets")
 
-    targets = [_normalize_download_target(target, context=context) for target in targets_value]
+    tool_name = str(spec.get("name", "tool")).strip() or "tool"
+    targets = _parse_download_targets(spec, context=context)
     target = _select_download_target(targets, context=context)
 
-    base_dir = cache_root / cache_dir
-    if version:
-        base_dir = base_dir / version
-    base_dir.mkdir(parents=True, exist_ok=True)
-
-    filename = target.filename or target.member or _filename_from_url(target.url)
-    destination = base_dir / filename
+    base_dir = _resolve_cache_directory(
+        cache_root,
+        spec,
+        tool_name=tool_name,
+        version=version,
+    )
+    destination = base_dir / _determine_filename(target)
     if destination.exists():
         return destination
 
     variables = _DownloadFormatProxy(version=version)
     resolved_url = target.url.format_map(variables)
-    response = _REQUESTS.get(resolved_url, timeout=int(spec.get("timeout", 60)))
-    response.raise_for_status()
+    timeout = _normalize_timeout(spec.get("timeout", 60), context=context)
+    response = _fetch_artifact(resolved_url, timeout=timeout)
 
-    if target.archive_format is None:
-        destination.write_bytes(response.content)
-    elif target.archive_format == "tar.gz":
-        _extract_tar_member(response.content, target, destination, context=context)
-    else:
-        raise RuntimeError(f"{context}: unsupported archive format '{target.archive_format}'")
-
+    _write_artifact_content(response, target, destination, context=context)
     if target.chmod:
-        destination.chmod(destination.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        _make_executable(destination)
 
     return destination
+
+
+def _parse_download_targets(
+    spec: Mapping[str, object],
+    *,
+    context: str,
+) -> tuple[_DownloadTarget, ...]:
+    targets_value = spec.get("targets")
+    if not isinstance(targets_value, Sequence) or not targets_value:
+        raise RuntimeError(f"{context}: download specification must include targets")
+    return tuple(_normalize_download_target(target, context=context) for target in targets_value)
+
+
+def _resolve_cache_directory(
+    cache_root: Path,
+    spec: Mapping[str, object],
+    *,
+    tool_name: str,
+    version: str | None,
+) -> Path:
+    cache_dir = str(spec.get("cacheSubdir", tool_name)).strip() or tool_name
+    base_dir = cache_root / cache_dir
+    if version:
+        base_dir /= version
+    base_dir.mkdir(parents=True, exist_ok=True)
+    return base_dir
+
+
+def _determine_filename(target: _DownloadTarget) -> str:
+    return target.filename or target.member or _filename_from_url(target.url)
+
+
+def _fetch_artifact(url: str, *, timeout: int) -> _HttpResponse:
+    response = _REQUESTS_GET(url, timeout=timeout)
+    response.raise_for_status()
+    return response
+
+
+def _write_artifact_content(
+    response: _HttpResponse,
+    target: _DownloadTarget,
+    destination: Path,
+    *,
+    context: str,
+) -> None:
+    if target.archive_format is None:
+        destination.write_bytes(response.content)
+        return
+    if target.archive_format == TAR_GZ_ARCHIVE:
+        _extract_tar_member(response.content, target, destination, context=context)
+        return
+    raise RuntimeError(f"{context}: unsupported archive format '{target.archive_format}'")
+
+
+def _make_executable(path: Path) -> None:
+    path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
 def _normalize_download_target(data: object, *, context: str) -> _DownloadTarget:
@@ -262,7 +319,7 @@ def _filename_from_url(url: str) -> str:
     return url.rstrip("/").split("/")[-1]
 
 
-class _DownloadFormatProxy(dict):
+class _DownloadFormatProxy(dict[str, str]):
     """Dictionary proxy used to provide default values for format placeholders."""
 
     def __init__(self, *, version: str | None) -> None:
@@ -285,19 +342,66 @@ def _extract_tar_member(
         tmp_path = Path(tmpdir) / "archive.tar.gz"
         tmp_path.write_bytes(content)
         with tarfile.open(tmp_path, "r:gz") as archive:
-            member_path = target.member
-            if member_path is not None:
-                member = archive.getmember(member_path)
-                archive.extract(member, path=tmpdir)
-                extracted = Path(tmpdir) / member.name
-            else:
-                member = next((item for item in archive.getmembers() if item.isfile()), None)
-                if member is None:
-                    raise RuntimeError(f"{context}: archive did not contain any files")
-                archive.extract(member, path=tmpdir)
-                extracted = Path(tmpdir) / member.name
+            extracted = _extract_member_into_directory(
+                archive,
+                member_name=target.member,
+                scratch_dir=Path(tmpdir),
+                context=context,
+            )
 
         destination.write_bytes(extracted.read_bytes())
+
+
+def _normalize_timeout(value: object, *, context: str) -> int:
+    """Coerce the timeout value into an integer number of seconds."""
+
+    if isinstance(value, bool):
+        raise RuntimeError(f"{context}: timeout must be numeric")
+    if isinstance(value, (int, float)):
+        if value <= 0:
+            raise RuntimeError(f"{context}: timeout must be positive")
+        return int(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped.isdigit():
+            raise RuntimeError(f"{context}: timeout string must be numeric")
+        return int(stripped)
+    raise RuntimeError(f"{context}: timeout must be a number")
+
+
+def _extract_member_into_directory(
+    archive: tarfile.TarFile,
+    *,
+    member_name: str | None,
+    scratch_dir: Path,
+    context: str,
+) -> Path:
+    """Extract the requested archive member and return the extracted path."""
+
+    selected_member = _select_tar_member(archive, member_name=member_name, context=context)
+    archive.extract(selected_member, path=scratch_dir)
+    return scratch_dir / selected_member.name
+
+
+def _select_tar_member(
+    archive: tarfile.TarFile,
+    *,
+    member_name: str | None,
+    context: str,
+) -> tarfile.TarInfo:
+    """Select a tarfile member either by name or the first regular file."""
+
+    if member_name is not None:
+        try:
+            return archive.getmember(member_name)
+        except KeyError as exc:
+            raise RuntimeError(f"{context}: archive missing member '{member_name}'") from exc
+
+    for candidate in archive.getmembers():
+        if candidate.isfile():
+            return candidate
+
+    raise RuntimeError(f"{context}: archive did not contain any files")
 
 
 def _parse_gofmt_check(stdout: Sequence[str], _context: ToolContext) -> list[RawDiagnostic]:

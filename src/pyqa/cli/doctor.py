@@ -25,7 +25,7 @@ from ..context import TreeSitterContextResolver
 from ..process_utils import run_command
 from ..tools.builtins import initialize_registry
 from ..tools.registry import DEFAULT_REGISTRY
-from .utils import ToolStatus, check_tool_status
+from .utils import ToolAvailability, ToolStatus, check_tool_status
 
 
 @dataclass(slots=True)
@@ -168,17 +168,28 @@ def _render_configuration_section(console: Console, result: ConfigLoadResult) ->
     console.print(table)
 
 
-TOOL_STATUS_STYLE: Final[dict[str, str]] = {
-    "ok": "green",
-    "vendored": "cyan",
-    "outdated": "yellow",
-    "unknown": "yellow",
-    "not ok": "red",
-    "uninstalled": "red",
+TOOL_STATUS_STYLE: Final[dict[ToolAvailability, str]] = {
+    ToolAvailability.OK: "green",
+    ToolAvailability.VENDORED: "cyan",
+    ToolAvailability.OUTDATED: "yellow",
+    ToolAvailability.UNKNOWN: "yellow",
+    ToolAvailability.NOT_OK: "red",
+    ToolAvailability.UNINSTALLED: "red",
 }
 
 
 def _render_tooling_section(console: Console, config: Config) -> bool:
+    """Render tooling availability and return ``True`` when issues are detected.
+
+    Args:
+        console: Rich console used for rendering the table.
+        config: Loaded configuration providing override information.
+
+    Returns:
+        bool: ``True`` when any tool is considered unhealthy.
+
+    """
+
     summaries = _collect_tool_summaries(config)
     table = Table(title="Tooling Status", box=box.SIMPLE, expand=True)
     table.add_column("Tool", style="bold")
@@ -192,8 +203,8 @@ def _render_tooling_section(console: Console, config: Config) -> bool:
     unhealthy = False
     for summary in summaries:
         status = summary.status
-        style = TOOL_STATUS_STYLE.get(status.status, "red" if status.status else "yellow")
-        if status.status in {"not ok", "uninstalled"}:
+        style = TOOL_STATUS_STYLE.get(status.availability, "yellow")
+        if status.availability in {ToolAvailability.NOT_OK, ToolAvailability.UNINSTALLED}:
             unhealthy = True
         default_label = "yes" if summary.default_enabled else "no"
         if summary.has_override:
@@ -202,9 +213,9 @@ def _render_tooling_section(console: Console, config: Config) -> bool:
             status.name,
             summary.runtime,
             default_label,
-            f"[{style}]{status.status}[/]",
-            status.version or "-",
-            status.min_version or "-",
+            f"[{style}]{status.availability.value}[/]",
+            status.version.detected or "-",
+            status.version.minimum or "-",
             status.notes or "-",
         )
 

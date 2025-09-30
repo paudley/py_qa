@@ -25,6 +25,17 @@ class ConsoleManager:
         self._cache: dict[tuple[bool, bool], Console] = {}
 
     def get(self, *, color: bool, emoji: bool) -> Console:
+        """Return a configured ``Console`` instance.
+
+        Args:
+            color: Enable colour output when terminal capabilities allow.
+            emoji: Enable Rich emoji rendering.
+
+        Returns:
+            Console: Cached console matching the requested flags.
+
+        """
+
         key = (color, emoji)
         if key not in self._cache:
             tty = is_tty()
@@ -38,6 +49,11 @@ class ConsoleManager:
                 soft_wrap=True,
             )
         return self._cache[key]
+
+    def __call__(self, *, color: bool, emoji: bool) -> Console:
+        """Expose ``ConsoleManager`` as a callable proxy to :meth:`get`."""
+
+        return self.get(color=color, emoji=emoji)
 
 
 console_manager = ConsoleManager()

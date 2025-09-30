@@ -51,7 +51,7 @@ class StrategyReference:
         config_data = data.get("config")
         config_mapping = (
             freeze_json_mapping(
-                cast("Mapping[str, JSONValue]", config_data),
+                expect_mapping(config_data, key="config", context=context),
                 context=f"{context}.config",
             )
             if isinstance(config_data, Mapping)
@@ -128,7 +128,7 @@ class RuntimeInstallDefinition:
         config_data = data.get("config")
         config_mapping = (
             freeze_json_mapping(
-                cast("Mapping[str, JSONValue]", config_data),
+                expect_mapping(config_data, key="config", context=context),
                 context=f"{context}.config",
             )
             if isinstance(config_data, Mapping)
@@ -138,6 +138,24 @@ class RuntimeInstallDefinition:
 
 
 RuntimeType: TypeAlias = Literal["python", "npm", "binary", "go", "lua", "perl", "rust"]
+_VALID_RUNTIME_TYPES: tuple[RuntimeType, ...] = (
+    "python",
+    "npm",
+    "binary",
+    "go",
+    "lua",
+    "perl",
+    "rust",
+)
+
+
+def _normalize_runtime_type(value: object | None, *, context: str) -> RuntimeType:
+    runtime_value = expect_string(value, key="type", context=context)
+    if runtime_value not in _VALID_RUNTIME_TYPES:
+        raise CatalogIntegrityError(
+            f"{context}: runtime type '{runtime_value}' is not supported",
+        )
+    return cast(RuntimeType, runtime_value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,7 +185,7 @@ class RuntimeDefinition:
             CatalogIntegrityError: If any required runtime fields are missing or invalid.
 
         """
-        kind_value = expect_string(data.get("type"), key="type", context=context)
+        kind_value = _normalize_runtime_type(data.get("type"), context=context)
         package_value = optional_string(data.get("package"), key="package", context=context)
         min_version_value = optional_string(
             data.get("minVersion"),
@@ -188,14 +206,14 @@ class RuntimeDefinition:
         install_data = data.get("install")
         install_value = (
             RuntimeInstallDefinition.from_mapping(
-                cast("Mapping[str, JSONValue]", install_data),
+                expect_mapping(install_data, key="install", context=context),
                 context=f"{context}.install",
             )
             if isinstance(install_data, Mapping)
             else None
         )
         return RuntimeDefinition(
-            kind=cast("RuntimeType", kind_value),
+            kind=kind_value,
             package=package_value,
             min_version=min_version_value,
             max_version=max_version_value,
@@ -277,6 +295,28 @@ OptionType: TypeAlias = Literal[
     "path",
     "list[str]",
 ]
+_OPTION_TYPE_ALIASES: dict[str, OptionType] = {
+    "string": "string",
+    "str": "string",
+    "boolean": "boolean",
+    "bool": "boolean",
+    "integer": "integer",
+    "int": "integer",
+    "number": "number",
+    "float": "number",
+    "array": "list[str]",
+    "list[str]": "list[str]",
+    "object": "mapping",
+    "mapping": "mapping",
+    "path": "path",
+}
+
+
+def _normalize_option_type(value: object, *, context: str) -> OptionType:
+    raw = expect_string(value, key="type", context=context).lower()
+    if raw not in _OPTION_TYPE_ALIASES:
+        raise CatalogIntegrityError(f"{context}: unknown option type '{raw}'")
+    return _OPTION_TYPE_ALIASES[raw]
 
 
 @dataclass(frozen=True, slots=True)
@@ -342,7 +382,7 @@ class OptionDefinition:
 
         """
         name_value = expect_string(data.get("name"), key="name", context=context)
-        option_type_value = expect_string(data.get("type"), key="type", context=context)
+        option_type_value = _normalize_option_type(data.get("type"), context=context)
         description_value = optional_string(
             data.get("description"),
             key="description",
@@ -352,7 +392,7 @@ class OptionDefinition:
         cli_data = data.get("cli")
         cli_value = (
             CliOptionMetadata.from_mapping(
-                cast("Mapping[str, JSONValue]", cli_data),
+                expect_mapping(cli_data, key="cli", context=context),
                 context=f"{context}.cli",
             )
             if isinstance(cli_data, Mapping)
@@ -362,7 +402,7 @@ class OptionDefinition:
         aliases_value = string_array(data.get("aliases"), key="aliases", context=context)
         return OptionDefinition(
             name=name_value,
-            option_type=cast("OptionType", option_type_value),
+            option_type=option_type_value,
             description=description_value,
             default=default_value,
             cli=cli_value,
@@ -510,12 +550,25 @@ def _documentation_entry(
         return None
     if not isinstance(value, Mapping):
         raise CatalogIntegrityError(f"{context}: documentation entry must be an object")
+    mapping = expect_mapping(value, key="documentation", context=context)
     return DocumentationEntry.from_mapping(
-        cast("Mapping[str, JSONValue]", value),
+        mapping,
         context=context,
         catalog_root=catalog_root,
         source=source,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ActionExecution:
+    """Execution behaviour for a tool action."""
+
+    append_files: bool
+    is_fix: bool
+    ignore_exit: bool
+    timeout_seconds: float | None
+    env: Mapping[str, str]
+    filters: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -524,12 +577,7 @@ class ActionDefinition:
 
     name: str
     description: str | None
-    append_files: bool
-    is_fix: bool
-    ignore_exit: bool
-    timeout_seconds: float | None
-    env: Mapping[str, str]
-    filters: tuple[str, ...]
+    execution: ActionExecution
     command: CommandDefinition
     parser: ParserDefinition | None
 
@@ -579,24 +627,51 @@ class ActionDefinition:
         parser_data = data.get("parser")
         parser_value = (
             ParserDefinition.from_mapping(
-                cast("Mapping[str, JSONValue]", parser_data),
+                expect_mapping(parser_data, key="parser", context=context),
                 context=f"{context}.parser",
             )
             if isinstance(parser_data, Mapping)
             else None
         )
-        return ActionDefinition(
-            name=name_value,
-            description=description_value,
+        execution = ActionExecution(
             append_files=append_files_value,
             is_fix=is_fix_value,
             ignore_exit=ignore_exit_value,
             timeout_seconds=timeout_value,
             env=env_value,
             filters=filters_value,
+        )
+        return ActionDefinition(
+            name=name_value,
+            description=description_value,
+            execution=execution,
             command=command_value,
             parser=parser_value,
         )
+
+    @property
+    def append_files(self) -> bool:
+        return self.execution.append_files
+
+    @property
+    def is_fix(self) -> bool:
+        return self.execution.is_fix
+
+    @property
+    def ignore_exit(self) -> bool:
+        return self.execution.ignore_exit
+
+    @property
+    def timeout_seconds(self) -> float | None:
+        return self.execution.timeout_seconds
+
+    @property
+    def env(self) -> Mapping[str, str]:
+        return self.execution.env
+
+    @property
+    def filters(self) -> tuple[str, ...]:
+        return self.execution.filters
 
 
 @dataclass(frozen=True, slots=True)
@@ -630,25 +705,65 @@ class CatalogSnapshot:
 class ToolDefinition:
     """Immutable representation of a tool catalog entry."""
 
-    schema_version: str
-    name: str
-    aliases: tuple[str, ...]
-    description: str
-    languages: tuple[str, ...]
-    tags: tuple[str, ...]
-    default_enabled: bool
-    auto_install: bool
-    phase: str
-    before: tuple[str, ...]
-    after: tuple[str, ...]
-    file_extensions: tuple[str, ...]
-    config_files: tuple[str, ...]
+    metadata: ToolMetadata
     runtime: RuntimeDefinition | None
     diagnostics_bundle: DiagnosticsBundle
     documentation: DocumentationBundle | None
     options: tuple[OptionDefinition, ...]
     actions: tuple[ActionDefinition, ...]
     source: Path
+
+    @property
+    def schema_version(self) -> str:
+        return self.metadata.schema_version
+
+    @property
+    def name(self) -> str:
+        return self.metadata.identity.name
+
+    @property
+    def aliases(self) -> tuple[str, ...]:
+        return self.metadata.identity.aliases
+
+    @property
+    def description(self) -> str:
+        return self.metadata.identity.description
+
+    @property
+    def languages(self) -> tuple[str, ...]:
+        return self.metadata.identity.languages
+
+    @property
+    def tags(self) -> tuple[str, ...]:
+        return self.metadata.identity.tags
+
+    @property
+    def default_enabled(self) -> bool:
+        return self.metadata.behaviour.default_enabled
+
+    @property
+    def auto_install(self) -> bool:
+        return self.metadata.behaviour.auto_install
+
+    @property
+    def phase(self) -> str:
+        return self.metadata.ordering.phase
+
+    @property
+    def before(self) -> tuple[str, ...]:
+        return self.metadata.ordering.before
+
+    @property
+    def after(self) -> tuple[str, ...]:
+        return self.metadata.ordering.after
+
+    @property
+    def file_extensions(self) -> tuple[str, ...]:
+        return self.metadata.files.file_extensions
+
+    @property
+    def config_files(self) -> tuple[str, ...]:
+        return self.metadata.files.config_files
 
     @staticmethod
     def from_mapping(
@@ -662,6 +777,7 @@ class ToolDefinition:
         Args:
             data: Mapping containing tool configuration.
             source: Filesystem path to the JSON document providing the data.
+            catalog_root: Root directory containing catalog documents and documentation.
 
         Returns:
             ToolDefinition: Frozen tool definition materialized from the mapping.
@@ -680,98 +796,33 @@ class ToolDefinition:
             raise CatalogIntegrityError(
                 f"{context}: schemaVersion '{schema_version_value}' is not supported; expected '{TOOL_SCHEMA_VERSION}'",
             )
-        name_value = expect_string(data.get("name"), key="name", context=context)
-        aliases_value = string_array(data.get("aliases"), key="aliases", context=context)
-        description_value = expect_string(
-            data.get("description"),
-            key="description",
+        schema_version_value = expect_string(
+            data.get("schemaVersion"),
+            key="schemaVersion",
             context=context,
         )
-        languages_value = string_array(data.get("languages"), key="languages", context=context)
-        tags_value = string_array(data.get("tags"), key="tags", context=context)
-        default_enabled_value = optional_bool(
-            data.get("defaultEnabled"),
-            key="defaultEnabled",
-            context=context,
-            default=True,
-        )
-        auto_install_value = optional_bool(
-            data.get("autoInstall"),
-            key="autoInstall",
-            context=context,
-            default=False,
-        )
-        phase_value = expect_string(data.get("phase"), key="phase", context=context)
-        before_value = string_array(data.get("before"), key="before", context=context)
-        after_value = string_array(data.get("after"), key="after", context=context)
-        file_extensions_value = string_array(
-            data.get("fileExtensions"),
-            key="fileExtensions",
-            context=context,
-        )
-        config_files_value = string_array(
-            data.get("configFiles"),
-            key="configFiles",
-            context=context,
-        )
-        runtime_data = data.get("runtime")
-        runtime_value = (
-            RuntimeDefinition.from_mapping(
-                cast("Mapping[str, JSONValue]", runtime_data),
-                context=f"{context}.runtime",
+        if schema_version_value != TOOL_SCHEMA_VERSION:
+            raise CatalogIntegrityError(
+                f"{context}: schemaVersion '{schema_version_value}' is not supported; expected '{TOOL_SCHEMA_VERSION}'",
             )
-            if isinstance(runtime_data, Mapping)
-            else None
+
+        metadata = _extract_tool_metadata(
+            data,
+            context=context,
+            schema_version=schema_version_value,
         )
-        diagnostics_data = data.get("diagnostics")
-        diagnostics_value = (
-            DiagnosticsDefinition.from_mapping(
-                cast("Mapping[str, JSONValue]", diagnostics_data),
-                context=f"{context}.diagnostics",
-            )
-            if isinstance(diagnostics_data, Mapping)
-            else None
-        )
-        suppressions_data = data.get("suppressions")
-        suppressions_value = (
-            SuppressionsDefinition.from_mapping(
-                cast("Mapping[str, JSONValue]", suppressions_data),
-                context=f"{context}.suppressions",
-            )
-            if isinstance(suppressions_data, Mapping)
-            else None
-        )
-        documentation_data = data.get("documentation")
-        documentation_value = (
-            DocumentationBundle.from_mapping(
-                cast("Mapping[str, JSONValue]", documentation_data),
-                context=f"{context}.documentation",
-                catalog_root=catalog_root,
-                source=source,
-            )
-            if isinstance(documentation_data, Mapping)
-            else None
+        runtime_value = _extract_runtime_definition(data, context=context)
+        diagnostics_bundle = _extract_diagnostics_bundle(data, context=context)
+        documentation_value = _extract_documentation_bundle(
+            data,
+            context=context,
+            catalog_root=catalog_root,
+            source=source,
         )
         options_value = _options_array(data.get("options"), key="options", context=context)
         actions_value = _actions_array(data.get("actions"), key="actions", context=context)
-        diagnostics_bundle = DiagnosticsBundle(
-            diagnostics=diagnostics_value,
-            suppressions=suppressions_value,
-        )
         return ToolDefinition(
-            schema_version=schema_version_value,
-            name=name_value,
-            aliases=aliases_value,
-            description=description_value,
-            languages=languages_value,
-            tags=tags_value,
-            default_enabled=default_enabled_value,
-            auto_install=auto_install_value,
-            phase=phase_value,
-            before=before_value,
-            after=after_value,
-            file_extensions=file_extensions_value,
-            config_files=config_files_value,
+            metadata=metadata,
             runtime=runtime_value,
             diagnostics_bundle=diagnostics_bundle,
             documentation=documentation_value,
@@ -781,7 +832,141 @@ class ToolDefinition:
         )
 
 
+def _extract_tool_metadata(
+    data: Mapping[str, JSONValue],
+    *,
+    context: str,
+    schema_version: str,
+) -> ToolMetadata:
+    identity = ToolIdentity(
+        name=expect_string(data.get("name"), key="name", context=context),
+        aliases=string_array(data.get("aliases"), key="aliases", context=context),
+        description=expect_string(
+            data.get("description"),
+            key="description",
+            context=context,
+        ),
+        languages=string_array(data.get("languages"), key="languages", context=context),
+        tags=string_array(data.get("tags"), key="tags", context=context),
+    )
+    behaviour = ToolBehaviour(
+        default_enabled=optional_bool(
+            data.get("defaultEnabled"),
+            key="defaultEnabled",
+            context=context,
+            default=True,
+        ),
+        auto_install=optional_bool(
+            data.get("autoInstall"),
+            key="autoInstall",
+            context=context,
+            default=False,
+        ),
+    )
+    ordering = ToolOrdering(
+        phase=expect_string(data.get("phase"), key="phase", context=context),
+        before=string_array(data.get("before"), key="before", context=context),
+        after=string_array(data.get("after"), key="after", context=context),
+    )
+    files = ToolFiles(
+        file_extensions=string_array(
+            data.get("fileExtensions"),
+            key="fileExtensions",
+            context=context,
+        ),
+        config_files=string_array(
+            data.get("configFiles"),
+            key="configFiles",
+            context=context,
+        ),
+    )
+    return ToolMetadata(
+        schema_version=schema_version,
+        identity=identity,
+        behaviour=behaviour,
+        ordering=ordering,
+        files=files,
+    )
+
+
+def _extract_runtime_definition(
+    data: Mapping[str, JSONValue],
+    *,
+    context: str,
+) -> RuntimeDefinition | None:
+    runtime_data = data.get("runtime")
+    if not isinstance(runtime_data, Mapping):
+        return None
+    runtime_context = f"{context}.runtime"
+    mapping = expect_mapping(runtime_data, key="runtime", context=context)
+    return RuntimeDefinition.from_mapping(mapping, context=runtime_context)
+
+
+def _extract_diagnostics_bundle(
+    data: Mapping[str, JSONValue],
+    *,
+    context: str,
+) -> DiagnosticsBundle:
+    diagnostics_data = data.get("diagnostics")
+    diagnostics_value = (
+        DiagnosticsDefinition.from_mapping(
+            expect_mapping(diagnostics_data, key="diagnostics", context=context),
+            context=f"{context}.diagnostics",
+        )
+        if isinstance(diagnostics_data, Mapping)
+        else None
+    )
+    suppressions_data = data.get("suppressions")
+    suppressions_value = (
+        SuppressionsDefinition.from_mapping(
+            expect_mapping(suppressions_data, key="suppressions", context=context),
+            context=f"{context}.suppressions",
+        )
+        if isinstance(suppressions_data, Mapping)
+        else None
+    )
+    return DiagnosticsBundle(
+        diagnostics=diagnostics_value,
+        suppressions=suppressions_value,
+    )
+
+
+def _extract_documentation_bundle(
+    data: Mapping[str, JSONValue],
+    *,
+    context: str,
+    catalog_root: Path,
+    source: Path,
+) -> DocumentationBundle | None:
+    documentation_data = data.get("documentation")
+    if not isinstance(documentation_data, Mapping):
+        return None
+    mapping = expect_mapping(documentation_data, key="documentation", context=context)
+    return DocumentationBundle.from_mapping(
+        mapping,
+        context=f"{context}.documentation",
+        catalog_root=catalog_root,
+        source=source,
+    )
+
+
 StrategyType: TypeAlias = Literal["command", "parser", "formatter", "postProcessor", "installer"]
+_STRATEGY_TYPE_ALIASES: dict[str, StrategyType] = {
+    "command": "command",
+    "parser": "parser",
+    "formatter": "formatter",
+    "postprocessor": "postProcessor",
+    "postProcessor": "postProcessor",
+    "installer": "installer",
+}
+
+
+def _normalize_strategy_type(value: object, *, context: str) -> StrategyType:
+    raw = expect_string(value, key="type", context=context)
+    alias = _STRATEGY_TYPE_ALIASES.get(raw)
+    if alias is None:
+        raise CatalogIntegrityError(f"{context}: unknown strategy type '{raw}'")
+    return alias
 
 
 @dataclass(frozen=True, slots=True)
@@ -807,7 +992,7 @@ class StrategyConfigField:
             CatalogIntegrityError: If required field metadata is missing or invalid.
 
         """
-        type_value = expect_string(data.get("type"), key="type", context=context)
+        type_value = _normalize_option_type(data.get("type"), context=context)
         required_value = optional_bool(
             data.get("required"),
             key="required",
@@ -820,7 +1005,7 @@ class StrategyConfigField:
             context=context,
         )
         return StrategyConfigField(
-            value_type=cast("OptionType", type_value),
+            value_type=type_value,
             required=required_value,
             description=description_value,
         )
@@ -865,7 +1050,7 @@ class StrategyDefinition:
                 f"{context}: schemaVersion '{schema_version_value}' is not supported; expected '{STRATEGY_SCHEMA_VERSION}'",
             )
         identifier_value = expect_string(data.get("id"), key="id", context=context)
-        strategy_type_value = expect_string(data.get("type"), key="type", context=context)
+        strategy_type_value = _normalize_strategy_type(data.get("type"), context=context)
         description_value = optional_string(
             data.get("description"),
             key="description",
@@ -882,7 +1067,7 @@ class StrategyDefinition:
         return StrategyDefinition(
             schema_version=schema_version_value,
             identifier=identifier_value,
-            strategy_type=cast("StrategyType", strategy_type_value),
+            strategy_type=strategy_type_value,
             description=description_value,
             implementation=implementation_value,
             entry=entry_value,
@@ -963,6 +1148,7 @@ def _strategy_config_mapping(
 
 __all__ = [
     "ActionDefinition",
+    "ActionExecution",
     "CatalogFragment",
     "CatalogSnapshot",
     "CommandDefinition",
@@ -981,5 +1167,57 @@ __all__ = [
     "StrategyReference",
     "StrategyType",
     "SuppressionsDefinition",
+    "ToolBehaviour",
     "ToolDefinition",
+    "ToolFiles",
+    "ToolIdentity",
+    "ToolMetadata",
+    "ToolOrdering",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class ToolIdentity:
+    """Core identifying information for a tool definition."""
+
+    name: str
+    aliases: tuple[str, ...]
+    description: str
+    languages: tuple[str, ...]
+    tags: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ToolBehaviour:
+    """Behaviour flags controlling default enablement and installation."""
+
+    default_enabled: bool
+    auto_install: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ToolOrdering:
+    """Phase ordering metadata for a tool."""
+
+    phase: str
+    before: tuple[str, ...]
+    after: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ToolFiles:
+    """File extension and config file metadata for a tool."""
+
+    file_extensions: tuple[str, ...]
+    config_files: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ToolMetadata:
+    """Aggregated metadata describing a tool definition."""
+
+    schema_version: str
+    identity: ToolIdentity
+    behaviour: ToolBehaviour
+    ordering: ToolOrdering
+    files: ToolFiles

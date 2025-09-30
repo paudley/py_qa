@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import ast
 import importlib
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass
+from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Final
@@ -16,50 +18,6 @@ from pydantic import BaseModel, ConfigDict
 from .models import Diagnostic
 
 
-def _build_parser_loader() -> Callable[[str], Any] | None:
-    tree_sitter_module = importlib.import_module("tree_sitter")
-    parser_cls = getattr(tree_sitter_module, "Parser", None)
-    if parser_cls is None:
-        raise RuntimeError("tree_sitter.Parser is unavailable; upgrade the tree-sitter package")
-
-    try:
-        bundled_get_parser = importlib.import_module("tree_sitter_languages").get_parser
-    except ModuleNotFoundError:
-        try:
-            language_module = importlib.import_module("tree_sitter")
-            language_cls = getattr(language_module, "Language", None)
-        except (ModuleNotFoundError, AttributeError):
-            return None
-
-        def bundled_get_parser(name: str) -> Any:
-            module_name = f"tree_sitter_{name.replace('-', '_')}"
-            try:
-                module = importlib.import_module(module_name)
-            except ModuleNotFoundError:
-                return None
-            language_factory = getattr(module, "language", None)
-            if language_factory is None:
-                return None
-            language = language_cls(language_factory()) if callable(language_cls) else None
-            parser = parser_cls() if callable(parser_cls) else None
-            if language is None or parser is None:
-                return None
-            setter = getattr(parser, "set_language", None)
-            if callable(setter):
-                setter(language)
-            elif hasattr(parser, "language"):
-                try:
-                    parser.language = language  # type: ignore[assignment]
-                except (AttributeError, TypeError, ValueError):
-                    return None
-            return parser
-
-    return bundled_get_parser
-
-
-_GET_PARSER = _build_parser_loader()
-
-
 class _ParseResult(BaseModel):
     tree: Any
     source: bytes
@@ -67,55 +25,195 @@ class _ParseResult(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
+class Language(str, Enum):
+    """Enumerate languages supported by the context resolver."""
+
+    PYTHON = "python"
+    MARKDOWN = "markdown"
+    JSON = "json"
+    JAVASCRIPT = "javascript"
+    TYPESCRIPT = "typescript"
+    GO = "go"
+    RUST = "rust"
+    SQL = "sql"
+    YAML = "yaml"
+    SHELL = "shell"
+    LUA = "lua"
+    PHP = "php"
+    TOML = "toml"
+    DOCKERFILE = "dockerfile"
+    MAKE = "make"
+
+
+@dataclass(frozen=True)
+class ParserFactory:
+    """Factory capable of constructing tree-sitter parsers on demand."""
+
+    parser_cls: type[Any]
+    get_parser: Callable[[str], Any] | None
+    language_cls: type[Any] | None
+
+    def create(self, grammar_name: str) -> Any | None:
+        """Return an initialised parser for ``grammar_name`` when possible."""
+
+        if self.get_parser is not None:
+            return self.get_parser(grammar_name)
+        if self.language_cls is None:
+            return None
+        module_name = f"tree_sitter_{grammar_name.replace('-', '_')}"
+        module = self._import_language_module(module_name)
+        if module is None:
+            return None
+        language = self._build_language(module)
+        parser = self._build_parser()
+        if language is None or parser is None:
+            return None
+        return self._assign_language(parser, language)
+
+    def _build_language(self, module: Any) -> Any | None:
+        """Return a language object constructed from ``module`` when possible."""
+
+        language_factory = getattr(module, "language", None)
+        if not callable(language_factory) or not callable(self.language_cls):
+            return None
+        try:
+            return self.language_cls(language_factory())
+        except (TypeError, ValueError):
+            return None
+
+    def _build_parser(self) -> Any | None:
+        """Return a fresh parser instance when available."""
+
+        if not callable(self.parser_cls):
+            return None
+        try:
+            return self.parser_cls()
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _import_language_module(module_name: str) -> Any | None:
+        """Import the Tree-sitter language module if present."""
+
+        try:
+            return importlib.import_module(module_name)
+        except ModuleNotFoundError:
+            return None
+
+    @staticmethod
+    def _assign_language(parser: Any, language: Any) -> Any | None:
+        """Attach ``language`` to ``parser`` returning the parser or ``None``."""
+
+        setter = getattr(parser, "set_language", None)
+        if callable(setter):
+            setter(language)
+            return parser
+        if hasattr(parser, "language"):
+            try:
+                parser.language = language  # type: ignore[attr-defined]
+            except (AttributeError, TypeError, ValueError):
+                return None
+            return parser
+        return None
+
+
+def _build_parser_loader() -> ParserFactory | None:
+    """Return a parser factory when tree-sitter bindings are available."""
+
+    tree_sitter_module = importlib.import_module("tree_sitter")
+    parser_cls = getattr(tree_sitter_module, "Parser", None)
+    if parser_cls is None:
+        raise RuntimeError(
+            "tree_sitter.Parser is unavailable; upgrade the tree-sitter package",
+        )
+
+    language_cls = getattr(tree_sitter_module, "Language", None)
+
+    try:
+        bundled = importlib.import_module("tree_sitter_languages")
+    except ModuleNotFoundError:
+        if language_cls is None:
+            return None
+        return ParserFactory(parser_cls=parser_cls, get_parser=None, language_cls=language_cls)
+
+    get_parser = getattr(bundled, "get_parser", None)
+    if not callable(get_parser):
+        raise RuntimeError(
+            "tree_sitter_languages.get_parser is unavailable; reinstall tree-sitter-languages",
+        )
+    return ParserFactory(parser_cls=parser_cls, get_parser=get_parser, language_cls=language_cls)
+
+
+_PARSER_FACTORY = _build_parser_loader()
+
+
 class TreeSitterContextResolver:
     """Enrich diagnostics with structural context using Tree-sitter."""
 
-    _LANGUAGE_ALIASES: Final[dict[str, set[str]]] = {
-        "python": {".py", ".pyi"},
-        "markdown": {".md", ".markdown", ".mdx"},
-        "json": {".json"},
-        "javascript": {".js", ".jsx"},
-        "typescript": {".ts", ".tsx"},
-        "go": {".go"},
-        "rust": {".rs"},
-        "sql": {".sql"},
-        "yaml": {".yaml", ".yml"},
-        "shell": {".sh", ".bash", ".zsh"},
-        "lua": {".lua"},
-        "php": {".php", ".phtml"},
-        "toml": {".toml"},
-        "make": {".mk"},
+    _LANGUAGE_ALIASES: Final[dict[Language, tuple[str, ...]]] = {
+        Language.PYTHON: (".py", ".pyi"),
+        Language.MARKDOWN: (".md", ".markdown", ".mdx"),
+        Language.JSON: (".json",),
+        Language.JAVASCRIPT: (".js", ".jsx"),
+        Language.TYPESCRIPT: (".ts", ".tsx"),
+        Language.GO: (".go",),
+        Language.RUST: (".rs",),
+        Language.SQL: (".sql",),
+        Language.YAML: (".yaml", ".yml"),
+        Language.SHELL: (".sh", ".bash", ".zsh"),
+        Language.LUA: (".lua",),
+        Language.PHP: (".php", ".phtml"),
+        Language.TOML: (".toml",),
+        Language.MAKE: (".mk",),
     }
 
-    _GRAMMAR_NAMES: Final[dict[str, str]] = {
-        "python": "python",
-        "markdown": "markdown",
-        "json": "json",
-        "javascript": "javascript",
-        "typescript": "typescript",
-        "go": "go",
-        "rust": "rust",
-        "sql": "sql",
-        "yaml": "yaml",
-        "shell": "bash",
-        "lua": "lua",
-        "php": "php",
-        "toml": "toml",
-        "dockerfile": "dockerfile",
-        "make": "make",
+    _SPECIAL_FILENAMES: Final[dict[str, Language]] = {
+        "dockerfile": Language.DOCKERFILE,
+        "containerfile": Language.DOCKERFILE,
+        "makefile": Language.MAKE,
     }
 
-    _FALLBACK_LANGUAGES: Final[set[str]] = {"python", "markdown", "json"}
+    _GRAMMAR_NAMES: Final[dict[Language, str]] = {
+        Language.PYTHON: "python",
+        Language.MARKDOWN: "markdown",
+        Language.JSON: "json",
+        Language.JAVASCRIPT: "javascript",
+        Language.TYPESCRIPT: "typescript",
+        Language.GO: "go",
+        Language.RUST: "rust",
+        Language.SQL: "sql",
+        Language.YAML: "yaml",
+        Language.SHELL: "bash",
+        Language.LUA: "lua",
+        Language.PHP: "php",
+        Language.TOML: "toml",
+        Language.DOCKERFILE: "dockerfile",
+        Language.MAKE: "make",
+    }
+
+    _FALLBACK_LANGUAGES: Final[set[Language]] = {
+        Language.PYTHON,
+        Language.MARKDOWN,
+        Language.JSON,
+    }
 
     def __init__(self) -> None:
-        self._parsers: dict[str, Any | None] = {}
-        self._disabled: set[str] = set()
+        self._parsers: dict[Language, Any] = {}
+        self._disabled: set[Language] = set()
 
     def grammar_modules(self) -> dict[str, str]:
         """Expose supported grammar modules for diagnostic tooling."""
-        return dict(self._GRAMMAR_NAMES)
+        return {language.value: name for language, name in self._GRAMMAR_NAMES.items()}
 
     def annotate(self, diagnostics: Iterable[Diagnostic], *, root: Path) -> None:
+        """Populate ``diagnostic.function`` using structural context when available.
+
+        Args:
+            diagnostics: Iterable of diagnostics requiring contextual enrichment.
+            root: Repository root used to resolve relative file paths.
+
+        """
+
         root_path = root.resolve()
         for diag in diagnostics:
             if diag.function or diag.line is None or not diag.file:
@@ -137,6 +235,18 @@ class TreeSitterContextResolver:
         root: Path,
         lines: Iterable[int],
     ) -> dict[int, str]:
+        """Return context strings for the requested ``lines``.
+
+        Args:
+            file_path: File containing the diagnostics.
+            root: Repository root directory for resolving ``file_path``.
+            lines: Line numbers that require contextual names.
+
+        Returns:
+            Mapping of line number to resolved context string.
+
+        """
+
         language = self._detect_language(file_path)
         if language is None:
             return {}
@@ -153,18 +263,16 @@ class TreeSitterContextResolver:
                 contexts[line] = context
         return contexts
 
-    def _detect_language(self, file_str: str) -> str | None:
+    def _detect_language(self, file_str: str) -> Language | None:
+        """Return the language associated with ``file_str`` when known."""
+
         path = Path(file_str)
         suffix = path.suffix.lower()
         for language, suffixes in self._LANGUAGE_ALIASES.items():
             if suffix in suffixes:
                 return language
         name = path.name.lower()
-        if name in {"dockerfile", "containerfile"}:
-            return "dockerfile"
-        if name == "makefile":
-            return "make"
-        return None
+        return self._SPECIAL_FILENAMES.get(name)
 
     @staticmethod
     def _resolve_path(file_str: str, root: Path) -> Path | None:
@@ -173,7 +281,7 @@ class TreeSitterContextResolver:
             candidate = (root / candidate).resolve()
         return candidate
 
-    def _get_parser(self, language: str) -> Any | None:
+    def _get_parser(self, language: Language) -> Any | None:
         if language in self._disabled:
             return None
         cached = self._parsers.get(language)
@@ -193,9 +301,9 @@ class TreeSitterContextResolver:
         self._parsers[language] = parser
         return parser
 
-    def _resolve_parser_loader(self, language: str) -> Callable[[], Any] | None:
-        loader_fn = _GET_PARSER
-        if loader_fn is None:
+    def _resolve_parser_loader(self, language: Language) -> Callable[[], Any] | None:
+        factory = _PARSER_FACTORY
+        if factory is None:
             self._disable_language(language)
             return None
         grammar_name = self._GRAMMAR_NAMES.get(language)
@@ -203,24 +311,26 @@ class TreeSitterContextResolver:
             self._disable_language(language)
             return None
 
+        parser_factory = factory
+
         def _loader() -> Any:
-            return loader_fn(grammar_name) if loader_fn is not None else None
+            return parser_factory.create(grammar_name)
 
         return _loader
 
-    def _disable_language(self, language: str) -> None:
+    def _disable_language(self, language: Language) -> None:
         if language not in self._FALLBACK_LANGUAGES:
             self._disabled.add(language)
-        self._parsers[language] = None
+        self._parsers.pop(language, None)
 
     @lru_cache(maxsize=256)
-    def _parse(self, language: str, path: Path, _mtime_ns: int) -> _ParseResult | None:
+    def _parse(self, language: Language, path: Path, _mtime_ns: int) -> _ParseResult | None:
         parser = self._get_parser(language)
         if parser is None:
             return None
         try:
             source = path.read_bytes()
-        except (FileNotFoundError, OSError):
+        except OSError:
             return None
         try:
             tree = parser.parse(source)
@@ -228,7 +338,7 @@ class TreeSitterContextResolver:
             return None
         return _ParseResult(tree=tree, source=source)
 
-    def _find_context(self, language: str, path: Path, line: int) -> str | None:
+    def _find_context(self, language: Language, path: Path, line: int) -> str | None:
         try:
             mtime_ns = path.stat().st_mtime_ns
         except OSError:
@@ -240,97 +350,71 @@ class TreeSitterContextResolver:
                 return tree_context
         return self._fallback_context(language, path, line)
 
-    def _context_from_parse(self, language: str, parsed: _ParseResult, line: int) -> str | None:
+    def _context_from_parse(
+        self,
+        language: Language,
+        parsed: _ParseResult,
+        line: int,
+    ) -> str | None:
         tree = getattr(parsed.tree, "root_node", None)
         if tree is None:
             return None
-        if language == "python":
+        if language is Language.PYTHON:
             return self._python_context(tree, line)
-        if language == "markdown":
+        if language is Language.MARKDOWN:
             return self._markdown_context(tree, line, parsed.source)
-        if language == "json":
+        if language is Language.JSON:
             node = self._node_at(tree, line)
             if node is not None:
                 return self._json_context(node)
         return None
 
-    def _fallback_context(self, language: str, path: Path, line: int) -> str | None:
-        if language == "python":
+    def _fallback_context(self, language: Language, path: Path, line: int) -> str | None:
+        if language is Language.PYTHON:
             context = self._python_ast_context(path, line)
             return context or self._python_fallback(path, line)
-        if language == "markdown":
+        if language is Language.MARKDOWN:
             context = self._markdown_heading_context(path, line)
             return context or self._markdown_fallback(path, line)
-        if language == "json":
+        if language is Language.JSON:
             return self._json_fallback(path, line)
         return None
 
     def _python_context(self, node: Any, line: int) -> str | None:
-        best_named_line = -1
-        best_named_value: str | None = None
-        best_generic_line = -1
-        best_generic_node: Any | None = None
-        stack = [node]
-        while stack:
-            current = stack.pop()
-            start_point = getattr(current, "start_point", None)
-            end_point = getattr(current, "end_point", None)
-            children = getattr(current, "children", None)
-            if not start_point or not end_point:
-                if children:
-                    stack.extend(child for child in children if child is not None)
-                continue
-            start_row = start_point[0] + 1
-            end_row = end_point[0] + 1
-            if start_row > line or line > end_row:
-                if children:
-                    stack.extend(child for child in children if child is not None)
-                continue
+        """Return the most specific Python scope covering ``line``."""
 
-            node_type = getattr(current, "type", "")
-            if node_type in {"function_definition", "class_definition"}:
-                name = self._node_name(current)
-                if name and start_row >= best_named_line:
-                    best_named_line = start_row
-                    best_named_value = name
-
-            if start_row >= best_generic_line:
-                best_generic_line = start_row
-                best_generic_node = current
-
-            if children:
-                stack.extend(child for child in children if child is not None)
-
-        if best_named_value:
-            return best_named_value
-        if best_generic_node is None:
+        named_scope = _nearest_python_named_scope(node, line)
+        if named_scope:
+            return named_scope
+        generic_node = _nearest_python_generic_node(node, line)
+        if generic_node is None:
             return None
-        fallback_name = self._node_name(best_generic_node)
+        fallback_name = _tree_node_name(generic_node)
         if fallback_name:
             return fallback_name
-        node_type = getattr(best_generic_node, "type", None)
-        return str(node_type) if node_type else None
+        node_type = getattr(generic_node, "type", None)
+        return str(node_type) if isinstance(node_type, str) else None
 
     def _markdown_context(self, node: Any, line: int, source: bytes) -> str | None:
+        """Return the Markdown heading that precedes ``line`` when available."""
+
         heading = self._select_markdown_heading(node, line)
         if heading is None:
             return None
         return self._extract_markdown_heading(heading, source)
 
     def _select_markdown_heading(self, node: Any, line: int) -> Any | None:
-        stack = [node]
         best_node: Any | None = None
         best_start = -1
-        while stack:
-            current = stack.pop()
+        for current in _iter_tree_nodes(node):
             node_type = getattr(current, "type", "")
-            if node_type.startswith("heading"):
-                start_point = getattr(current, "start_point", None)
-                if start_point and start_point[0] + 1 <= line and start_point[0] >= best_start:
-                    best_node = current
-                    best_start = start_point[0]
-            children = getattr(current, "children", [])
-            stack.extend(children)
+            if not node_type.startswith("heading"):
+                continue
+            start_row, _ = _node_row_span(current)
+            if start_row is None or start_row > line or start_row < best_start:
+                continue
+            best_start = start_row
+            best_node = current
         return best_node
 
     def _extract_markdown_heading(self, node: Any, source: bytes) -> str | None:
@@ -342,23 +426,6 @@ class TreeSitterContextResolver:
         if start_byte is None or end_byte is None:
             return None
         return source[start_byte:end_byte].decode("utf-8").strip()
-
-    @staticmethod
-    def _node_name(node: Any) -> str | None:
-        extractor = getattr(node, "child_by_field_name", None)
-        if callable(extractor):
-            name_node = extractor("name")
-            raw = getattr(name_node, "text", None)
-            if isinstance(raw, bytes):
-                return raw.decode("utf-8")
-            if isinstance(raw, str):
-                return raw
-        text = getattr(node, "text", None)
-        if isinstance(text, bytes):
-            text = text.decode("utf-8")
-        if isinstance(text, str) and text.strip():
-            return text.strip()
-        return None
 
     def _markdown_heading_context(self, path: Path, line: int) -> str | None:
         try:
@@ -386,20 +453,15 @@ class TreeSitterContextResolver:
         return lines[line - 1].strip() or None
 
     def _node_at(self, node: Any, line: int) -> Any | None:
-        stack = [node]
-        while stack:
-            current = stack.pop()
-            start_point = getattr(current, "start_point", None)
-            end_point = getattr(current, "end_point", None)
-            if not start_point or not end_point:
+        best_node: Any | None = None
+        best_depth = -1
+        for current, depth in _iter_tree_nodes_with_depth(node):
+            if not _node_contains_line(current, line):
                 continue
-            if start_point[0] + 1 <= line <= end_point[0] + 1:
-                children = getattr(current, "children", None)
-                if children:
-                    stack.extend(children)
-                    continue
-                return current
-        return None
+            if depth >= best_depth:
+                best_depth = depth
+                best_node = current
+        return best_node
 
     @staticmethod
     def _json_context(node: Any) -> str | None:
@@ -451,6 +513,103 @@ class TreeSitterContextResolver:
             return None
         raw = lines[line - 1].strip()
         return raw or None
+
+
+def _tree_node_name(node: Any) -> str | None:
+    """Return a normalised display name for ``node`` when available."""
+
+    extractor = getattr(node, "child_by_field_name", None)
+    if callable(extractor):
+        name_node = extractor("name")
+        raw = getattr(name_node, "text", None)
+        if isinstance(raw, bytes):
+            return raw.decode("utf-8")
+        if isinstance(raw, str):
+            return raw
+    text = getattr(node, "text", None)
+    if isinstance(text, bytes):
+        text = text.decode("utf-8")
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+    return None
+
+
+def _iter_tree_nodes(node: Any) -> Iterator[Any]:
+    """Yield nodes in depth-first order starting from ``node``."""
+
+    yield node
+    children = getattr(node, "children", None)
+    if not children:
+        return
+    for child in children:
+        if child is not None:
+            yield from _iter_tree_nodes(child)
+
+
+def _iter_tree_nodes_with_depth(node: Any, depth: int = 0) -> Iterator[tuple[Any, int]]:
+    """Yield nodes and their depth in depth-first order."""
+
+    yield node, depth
+    children = getattr(node, "children", None)
+    if not children:
+        return
+    for child in children:
+        if child is not None:
+            yield from _iter_tree_nodes_with_depth(child, depth + 1)
+
+
+def _node_row_span(node: Any) -> tuple[int | None, int | None]:
+    """Return 1-based (start, end) line numbers for ``node`` when available."""
+
+    start_point = getattr(node, "start_point", None)
+    end_point = getattr(node, "end_point", None)
+    start_row = start_point[0] + 1 if start_point else None
+    end_row = end_point[0] + 1 if end_point else None
+    return start_row, end_row
+
+
+def _node_contains_line(node: Any, line: int) -> bool:
+    """Return ``True`` when ``node`` spans ``line``."""
+
+    start_row, end_row = _node_row_span(node)
+    return bool(start_row is not None and end_row is not None and start_row <= line <= end_row)
+
+
+def _nearest_python_named_scope(node: Any, line: int) -> str | None:
+    """Return the innermost named Python scope covering ``line``."""
+
+    best_line = -1
+    best_name: str | None = None
+    for current in _iter_tree_nodes(node):
+        node_type = getattr(current, "type", "")
+        if node_type not in {"function_definition", "class_definition"}:
+            continue
+        if not _node_contains_line(current, line):
+            continue
+        start_row, _ = _node_row_span(current)
+        if start_row is None or start_row < best_line:
+            continue
+        name = _tree_node_name(current)
+        if name:
+            best_line = start_row
+            best_name = name
+    return best_name
+
+
+def _nearest_python_generic_node(node: Any, line: int) -> Any | None:
+    """Return the deepest node covering ``line`` when no named scope exists."""
+
+    best_node: Any | None = None
+    best_line = -1
+    for current in _iter_tree_nodes(node):
+        if not _node_contains_line(current, line):
+            continue
+        start_row, _ = _node_row_span(current)
+        if start_row is None or start_row < best_line:
+            continue
+        best_line = start_row
+        best_node = current
+    return best_node
 
 
 CONTEXT_RESOLVER = TreeSitterContextResolver()

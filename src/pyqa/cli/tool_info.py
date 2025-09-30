@@ -111,6 +111,18 @@ def _build_metadata_table(
     status: ToolStatus,
     catalog_tool: ToolDefinition | None = None,
 ) -> Table:
+    """Build a rich table containing static and runtime tool metadata.
+
+    Args:
+        tool: Tool definition retrieved from the registry.
+        status: Runtime status information obtained via :func:`check_tool_status`.
+        catalog_tool: Optional catalog definition containing additional metadata.
+
+    Returns:
+        Table: Rich table populated with metadata rows for display.
+
+    """
+
     table = Table(title="Metadata", box=box.SIMPLE, expand=True)
     table.add_column("Field", style="bold")
     table.add_column("Value", overflow="fold")
@@ -129,11 +141,11 @@ def _build_metadata_table(
         table.add_row("Phase", catalog_tool.phase)
     version_cmd = " ".join(map(str, tool.version_command)) if tool.version_command else "-"
     table.add_row("Version Command", version_cmd)
-    table.add_row("Current Version", status.version or "-")
-    table.add_row("Status", status.status)
+    table.add_row("Current Version", status.version.detected or "-")
+    table.add_row("Status", status.availability.value)
     table.add_row("Notes", status.notes or "-")
-    if status.path:
-        table.add_row("Executable Path", status.path)
+    if status.execution.path:
+        table.add_row("Executable Path", status.execution.path)
     return table
 
 

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
@@ -22,6 +23,9 @@ from ..workspace import is_py_qa_workspace
 from .typer_ext import create_typer
 from .utils import filter_py_qa_paths
 
+ROOT_OPTION = Annotated[Path, typer.Option(Path.cwd(), "--root", "-r", help="Project root.")]
+EMOJI_OPTION = Annotated[bool, typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output.")]
+
 quality_app = create_typer(
     name="check-quality",
     help="Run repository quality checks (license headers, schema, hygiene).",
@@ -32,12 +36,12 @@ quality_app = create_typer(
 @quality_app.callback()
 def main(
     ctx: typer.Context,
+    root: ROOT_OPTION,
     paths: list[Path] | None = typer.Argument(
         None,
         metavar="[PATHS...]",
         help="Optional file paths to scope the checks.",
     ),
-    root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
     staged: bool = typer.Option(
         False,
         "--staged/--no-staged",
@@ -56,8 +60,25 @@ def main(
         help="Limit execution to specific checks (e.g. license,file-size,schema,python).",
     ),
     no_schema: bool = typer.Option(False, "--no-schema", help="Skip schema validation."),
-    emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output."),
+    emoji: EMOJI_OPTION = True,
 ) -> None:
+    """Execute repository quality checks across the configured project.
+
+    Args:
+        ctx: Typer context used to detect subcommand invocations.
+        root: Project root directory containing configuration and sources.
+        paths: Optional explicit paths limiting the scope of checks.
+        staged: Whether to consider only staged changes when no paths are provided.
+        fix: Whether to automatically repair applicable issues before rechecking.
+        check: Optional list of specific checks to run.
+        no_schema: Whether to skip schema validation entirely.
+        emoji: Toggle emoji output when rendering progress and results.
+
+    Returns:
+        None: The command exits via :func:`typer.Exit` after rendering results.
+
+    """
+
     if ctx.invoked_subcommand:
         return
 
@@ -117,10 +138,22 @@ def main(
 
 @quality_app.command("commit-msg")
 def commit_msg(
+    root: ROOT_OPTION,
     message_file: Path = typer.Argument(..., metavar="FILE", help="Commit message file."),
-    root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output."),
+    emoji: EMOJI_OPTION = True,
 ) -> None:
+    """Validate commit message quality according to repository policy.
+
+    Args:
+        root: Repository root used for configuration and ignore detection.
+        message_file: Path to the commit message provided by git hooks.
+        emoji: Toggle emoji output when rendering diagnostic results.
+
+    Returns:
+        None: The command exits via :func:`typer.Exit` with the check result.
+
+    """
+
     result = check_commit_message(root, message_file)
     _render_result(result, root, emoji)
     raise typer.Exit(code=result.exit_code())
@@ -128,9 +161,20 @@ def commit_msg(
 
 @quality_app.command("branch")
 def branch_guard(
-    root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    emoji: bool = typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output."),
+    root: ROOT_OPTION,
+    emoji: EMOJI_OPTION = True,
 ) -> None:
+    """Ensure protected branch policies align with repository configuration.
+
+    Args:
+        root: Repository root containing the quality configuration.
+        emoji: Toggle emoji output for rendered diagnostics.
+
+    Returns:
+        None: The command exits via :func:`typer.Exit` after reporting status.
+
+    """
+
     loader = ConfigLoader.for_root(root)
     try:
         load_result = loader.load_with_trace()

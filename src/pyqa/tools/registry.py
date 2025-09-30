@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import heapq
 from collections import defaultdict
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 
 from .base import Tool
 
@@ -35,6 +35,8 @@ class ToolRegistry(Mapping[str, Tool]):
         self._ordered: tuple[str, ...] = ()
 
     def register(self, tool: Tool) -> None:
+        """Register *tool* with the registry enforcing uniqueness by name."""
+
         if tool.name in self._tools:
             raise ValueError(f"Tool '{tool.name}' already registered")
         self._tools[tool.name] = tool
@@ -46,10 +48,14 @@ class ToolRegistry(Mapping[str, Tool]):
         self._by_language.clear()
         self._ordered = ()
 
-    def get(self, name: str) -> Tool:
-        return self._tools[name]
+    def get(self, name: str, default: Tool | None = None) -> Tool | None:
+        """Return the tool named *name* if present; otherwise return *default*."""
+
+        return self._tools.get(name, default)
 
     def try_get(self, name: str) -> Tool | None:
+        """Return the tool named *name* when registered, otherwise ``None``."""
+
         return self._tools.get(name)
 
     def tools(self) -> Iterable[Tool]:
@@ -61,7 +67,7 @@ class ToolRegistry(Mapping[str, Tool]):
         names = self._by_language.get(language, [])
         return tuple(self._tools[name] for name in names if name in self._tools)
 
-    def __contains__(self, name: object) -> bool:  # type: ignore[override]
+    def __contains__(self, name: object) -> bool:
         return isinstance(name, str) and name in self._tools
 
     def __len__(self) -> int:
@@ -72,18 +78,6 @@ class ToolRegistry(Mapping[str, Tool]):
 
     def __getitem__(self, name: str) -> Tool:
         return self._tools[name]
-
-    def keys(self) -> Iterable[str]:
-        """Return an iterable of registered tool names."""
-        return self._ordered
-
-    def values(self) -> Iterable[Tool]:  # type: ignore[override]
-        """Return an iterable of registered :class:`Tool` objects."""
-        return tuple(self._tools[name] for name in self._ordered)
-
-    def items(self) -> Iterable[tuple[str, Tool]]:  # type: ignore[override]
-        """Return an iterable of ``(name, tool)`` pairs."""
-        return tuple((name, self._tools[name]) for name in self._ordered)
 
     def _recompute_order(self) -> None:
         phase_priority = {phase: index for index, phase in enumerate(self._PHASE_ORDER)}
@@ -100,13 +94,35 @@ class ToolRegistry(Mapping[str, Tool]):
         self._ordered = tuple(ordered)
         self._rebuild_language_index()
 
-    def _order_phase(self, tools: list[Tool]) -> list[str]:
-        adjacency: dict[str, set[str]] = {}
-        indegree: dict[str, int] = {}
+    def _order_phase(self, tools: Sequence[Tool]) -> list[str]:
+        adjacency, indegree = self._build_phase_graph(tools)
+        ordered: list[str] = []
+        iteration_count = len(indegree)
+        ready = [name for name, count in indegree.items() if count == 0]
+        heapq.heapify(ready)
+
+        for _ in range(iteration_count):
+            if not ready:
+                break
+            current = heapq.heappop(ready)
+            ordered.append(current)
+            for neighbour in sorted(adjacency.get(current, ())):
+                indegree[neighbour] -= 1
+                if indegree[neighbour] == 0:
+                    heapq.heappush(ready, neighbour)
+
+        names_in_phase = set(indegree)
+        if len(ordered) != len(names_in_phase):
+            ordered.extend(sorted(names_in_phase - set(ordered)))
+        return ordered
+
+    def _build_phase_graph(
+        self,
+        tools: Sequence[Tool],
+    ) -> tuple[dict[str, set[str]], dict[str, int]]:
         names_in_phase = {tool.name for tool in tools}
-        for tool in tools:
-            adjacency.setdefault(tool.name, set())
-            indegree.setdefault(tool.name, 0)
+        adjacency: dict[str, set[str]] = {tool.name: set() for tool in tools}
+        indegree: dict[str, int] = {tool.name: 0 for tool in tools}
 
         for tool in tools:
             for successor in tool.before:
@@ -117,25 +133,10 @@ class ToolRegistry(Mapping[str, Tool]):
                     adjacency.setdefault(predecessor, set()).add(tool.name)
 
         for source, targets in adjacency.items():
-            indegree.setdefault(source, 0)
             for target in targets:
                 indegree[target] = indegree.get(target, 0) + 1
 
-        ready = [name for name, count in indegree.items() if count == 0]
-        heapq.heapify(ready)
-        ordered: list[str] = []
-        while ready:
-            current = heapq.heappop(ready)
-            ordered.append(current)
-            for neighbor in sorted(adjacency.get(current, ())):
-                indegree[neighbor] -= 1
-                if indegree[neighbor] == 0:
-                    heapq.heappush(ready, neighbor)
-
-        if len(ordered) != len(names_in_phase):
-            remaining = sorted(names_in_phase - set(ordered))
-            ordered.extend(remaining)
-        return ordered
+        return adjacency, indegree
 
     def _rebuild_language_index(self) -> None:
         language_map: dict[str, list[str]] = defaultdict(list)

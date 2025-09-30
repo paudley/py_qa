@@ -7,10 +7,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-
-from jsonschema import Draft202012Validator
+from typing import TYPE_CHECKING
 
 from .io import load_schema
+
+if TYPE_CHECKING:  # pragma: no cover - typing-only import
+    from jsonschema import Draft202012Validator
+else:  # pragma: no cover - runtime import without stubs
+    import jsonschema
+
+    Draft202012Validator = jsonschema.Draft202012Validator
 
 
 @dataclass(slots=True)

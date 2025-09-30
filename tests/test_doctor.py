@@ -13,7 +13,12 @@ from typer.testing import CliRunner
 
 from pyqa.cli.app import app
 from pyqa.cli.doctor import run_doctor
-from pyqa.cli.utils import ToolStatus
+from pyqa.cli.utils import (
+    ToolAvailability,
+    ToolExecutionDetails,
+    ToolStatus,
+    ToolVersionStatus,
+)
 from pyqa.config import Config
 from pyqa.config_loader import ConfigLoadResult
 from pyqa.tools.base import DeferredCommand, Tool, ToolAction
@@ -66,13 +71,10 @@ def test_run_doctor_catalog_initializes_registry(monkeypatch, tmp_path: Path) ->
     def fake_check_tool_status(tool: Tool) -> ToolStatus:
         return ToolStatus(
             name=tool.name,
-            status="ok",
-            version=None,
-            min_version=None,
-            executable=None,
-            path=None,
             notes="",
-            returncode=0,
+            availability=ToolAvailability.OK,
+            version=ToolVersionStatus(detected=None, minimum=None),
+            execution=ToolExecutionDetails(executable=None, path=None, returncode=0),
             raw_output=None,
         )
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from pydantic import BaseModel
 
@@ -28,6 +28,10 @@ _KNOWN_SECTIONS: set[str] = {
     "update",
     "tools",
 }
+
+_TOOL_SECTION: Final[str] = "tools"
+_TOOL_SETTINGS_SECTION: Final[str] = "tool_settings"
+_CONFIG_SECTION_KEYS: Final[set[str]] = _KNOWN_SECTIONS - {_TOOL_SECTION}
 
 _ENV_VAR_PATTERN = re.compile(r"\$(\w+)|\$\{([^}]+)\}")
 
@@ -156,55 +160,71 @@ def _coerce_iterable(value: Any, context: str) -> list[Any]:
 
 
 def _normalise_pyproject_payload(data: dict[str, Any]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    tool_settings: dict[str, Any] = {}
-    for key, value in data.items():
-        if key == "tool_settings":
-            key = "tools"
-        if key in _KNOWN_SECTIONS - {"tools"}:
-            result[key] = value
-            continue
-        if key == "tools":
-            if not isinstance(value, Mapping):
-                raise ConfigError("tools section must be a table")
-            for tool, settings in value.items():
-                if not isinstance(settings, Mapping):
-                    raise ConfigError(f"tools.{tool} section must be a table")
-                tool_settings[tool] = dict(settings)
-            continue
-        if isinstance(value, Mapping):
-            tool_settings[key] = dict(value)
-        else:
-            result[key] = value
+    """Return normalised ``pyproject`` payload splitting tool sections."""
+
+    result, tool_settings = _partition_sections(data.items())
     if tool_settings:
-        result["tools"] = tool_settings
+        result[_TOOL_SECTION] = tool_settings
     return result
 
 
 def _normalise_fragment(fragment: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalise config fragments produced by catalog loaders."""
+
+    result, tool_settings = _partition_sections(fragment.items())
+    if tool_settings:
+        result[_TOOL_SECTION] = tool_settings
+    return result
+
+
+def _partition_sections(
+    items: Iterable[tuple[str, Any]],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Separate known config sections from tool-specific entries.
+
+    Args:
+        items: Iterable of key/value pairs sourced from configuration payloads.
+
+    Returns:
+        Tuple containing a mapping of recognised configuration sections and a
+        mapping of tool-specific settings.
+
+    """
+
     result: dict[str, Any] = {}
     tool_settings: dict[str, Any] = {}
-    for key, value in fragment.items():
-        if key == "tool_settings":
-            key = "tools"
-        if key in _KNOWN_SECTIONS - {"tools"}:
-            result[key] = value
+    for section_key, value in items:
+        canonical_key = _canonical_section(section_key)
+        if canonical_key in _CONFIG_SECTION_KEYS:
+            result[canonical_key] = value
             continue
-        if key == "tools":
-            if not isinstance(value, Mapping):
-                raise ConfigError("tools section must be a table")
-            for tool, settings in value.items():
-                if not isinstance(settings, Mapping):
-                    raise ConfigError(f"tools.{tool} section must be a table")
-                tool_settings[tool] = dict(settings)
+        if canonical_key == _TOOL_SECTION:
+            tool_settings.update(_validate_tool_section(value))
             continue
         if isinstance(value, Mapping):
-            tool_settings[key] = dict(value)
+            tool_settings[canonical_key] = dict(value)
         else:
-            result[key] = value
-    if tool_settings:
-        result["tools"] = tool_settings
-    return result
+            result[canonical_key] = value
+    return result, tool_settings
+
+
+def _canonical_section(key: str) -> str:
+    """Return canonical section name for ``key``."""
+
+    return _TOOL_SECTION if key == _TOOL_SETTINGS_SECTION else key
+
+
+def _validate_tool_section(value: Any) -> dict[str, Any]:
+    """Validate and normalise the ``tools`` configuration table."""
+
+    if not isinstance(value, Mapping):
+        raise ConfigError("tools section must be a table")
+    tools: dict[str, Any] = {}
+    for tool_name, settings in value.items():
+        if not isinstance(settings, Mapping):
+            raise ConfigError(f"tools.{tool_name} section must be a table")
+        tools[tool_name] = dict(settings)
+    return tools
 
 
 def _expand_env(data: Mapping[str, Any], env: Mapping[str, str]) -> dict[str, Any]:

@@ -8,9 +8,40 @@ import importlib
 import importlib.util
 import re
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 from .base import ToolContext
+
+
+def _is_plugin_available(module: str) -> bool:
+    """Return ``True`` when *module* can be imported and registers plugins."""
+
+    try:
+        spec = importlib.util.find_spec(module)
+    except ImportError:
+        return False
+    if spec is None:
+        return False
+    imported = importlib.import_module(module)
+    return hasattr(imported, "register")
+
+
+def _collect_plugins(candidates: Sequence[str]) -> set[str]:
+    """Return the subset of *candidates* that expose pylint plugin hooks."""
+
+    return {plugin for plugin in candidates if _is_plugin_available(plugin)}
+
+
+def _collect_optional_plugins() -> set[str]:
+    """Return optional plugins when both requirement and plugin are importable."""
+
+    discovered: set[str] = set()
+    for requirement, plugin in _OPTIONAL_PYLINT_PLUGINS.items():
+        if _is_plugin_available(requirement) and _is_plugin_available(plugin):
+            discovered.add(plugin)
+    return discovered
+
 
 _BASE_PYLINT_PLUGINS: tuple[str, ...] = (
     "pylint.extensions.bad_builtin",
@@ -98,27 +129,11 @@ def _pyupgrade_flag_from_version(version: str) -> str:
 
 def _discover_pylint_plugins(root: Path) -> tuple[str, ...]:
     """Return default pylint plugins, discovering optional extras when present."""
-    discovered: set[str] = set()
 
-    def _loadable(module: str) -> bool:
-        try:
-            spec = importlib.util.find_spec(module)
-            if spec is None:
-                return False
-            mod = importlib.import_module(module)
-            return hasattr(mod, "register")
-        except Exception:
-            return False
+    discovered = _collect_plugins(_BASE_PYLINT_PLUGINS)
+    discovered.update(_collect_optional_plugins())
 
-    for plugin in _BASE_PYLINT_PLUGINS:
-        if _loadable(plugin):
-            discovered.add(plugin)
-
-    for requirement, plugin in _OPTIONAL_PYLINT_PLUGINS.items():
-        if _loadable(requirement) and _loadable(plugin):
-            discovered.add(plugin)
-
-    if (root / ".venv").is_dir() and _loadable("pylint_venv"):
+    if (root / ".venv").is_dir() and _is_plugin_available("pylint_venv"):
         discovered.add("pylint_venv")
 
     return tuple(sorted(discovered))

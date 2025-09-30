@@ -7,12 +7,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
-from typing import cast
+from typing import Final, cast
 
 from .errors import CatalogIntegrityError
 from .models import CatalogFragment
 from .types import JSONValue
-from .utils import freeze_json_value, string_array
+from .utils import expect_mapping, freeze_json_value, string_array
+
+EXTENDS_KEY: Final[str] = "extends"
 
 
 def resolve_tool_mapping(
@@ -35,10 +37,10 @@ def resolve_tool_mapping(
         CatalogIntegrityError: If the tool references unknown fragments or repeats identifiers.
 
     """
-    extends_value = mapping.get("extends")
+    extends_value = mapping.get(EXTENDS_KEY)
     merged: Mapping[str, JSONValue] = MappingProxyType({})
     if extends_value is not None:
-        fragment_names = string_array(extends_value, key="extends", context=context)
+        fragment_names = string_array(extends_value, key=EXTENDS_KEY, context=context)
         seen: set[str] = set()
         for identifier in fragment_names:
             if identifier in seen:
@@ -57,7 +59,7 @@ def resolve_tool_mapping(
                 context=f"{context}.extends[{identifier}]",
             )
 
-    overlay = {key: value for key, value in mapping.items() if key != "extends"}
+    overlay = {key: value for key, value in mapping.items() if key != EXTENDS_KEY}
     return merge_json_objects(merged, overlay, context=context)
 
 
@@ -82,19 +84,20 @@ def merge_json_objects(
     for key, value in base.items():
         merged[key] = freeze_json_value(value, context=f"{context}.{key}")
     for key, value in overlay.items():
-        if key in merged and isinstance(merged[key], Mapping) and isinstance(value, Mapping):
+        existing = merged.get(key)
+        if isinstance(existing, Mapping) and isinstance(value, Mapping):
             merged[key] = merge_json_objects(
-                cast("Mapping[str, JSONValue]", merged[key]),
-                cast("Mapping[str, JSONValue]", value),
+                expect_mapping(existing, key=key, context=context),
+                expect_mapping(value, key=key, context=context),
                 context=f"{context}.{key}",
             )
+            continue
+
+        frozen_value = freeze_json_value(value, context=f"{context}.{key}")
+        if isinstance(existing, tuple) and isinstance(frozen_value, tuple):
+            merged[key] = tuple(dict.fromkeys(existing + frozen_value))
         else:
-            frozen_value = freeze_json_value(value, context=f"{context}.{key}")
-            existing = merged.get(key)
-            if isinstance(existing, tuple) and isinstance(frozen_value, tuple):
-                merged[key] = tuple(dict.fromkeys(existing + frozen_value))
-            else:
-                merged[key] = frozen_value
+            merged[key] = frozen_value
     return MappingProxyType(merged)
 
 

@@ -20,7 +20,7 @@ def test_tool_iterable_and_indexable(tmp_path: Path) -> None:
     tool = _make_tool()
 
     assert len(tool) == 2
-    actions = list(tool)
+    actions = list(tool.iter_actions())
     assert [action.name for action in actions] == ["lint", "fix"]
     assert "lint" in tool
     assert actions[0] in tool

@@ -8,6 +8,9 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
+
+CATALOG_CACHE_FILENAME: Final[str] = "cache.json"
 
 
 @dataclass(slots=True)
@@ -28,7 +31,7 @@ class CatalogScanner:
                 continue
             if json_path.name.startswith("_"):
                 continue
-            if json_path.name == "cache.json":
+            if json_path.name == CATALOG_CACHE_FILENAME:
                 continue
             paths.append(json_path)
         return tuple(sorted(paths))
@@ -44,11 +47,12 @@ class CatalogScanner:
     def fragment_documents(self) -> tuple[Path, ...]:
         """Return sorted catalog fragment document paths."""
         strategies_root = self.catalog_root / "strategies"
+        docs_root = self.catalog_root / "docs"
         fragments: list[Path] = []
         for json_path in self.catalog_root.rglob("*.json"):
             if strategies_root in json_path.parents:
                 continue
-            if (self.catalog_root / "docs") in json_path.parents:
+            if docs_root in json_path.parents:
                 continue
             if not json_path.name.startswith("_"):
                 continue

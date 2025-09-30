@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 from ..config import Config
 from ..models import Diagnostic, OutputFilter, RawDiagnostic
@@ -51,6 +51,7 @@ class ToolContext(BaseModel):
         raise TypeError("files must be a sequence of paths")
 
 
+@runtime_checkable
 class Parser(Protocol):
     """Protocol implemented by output parsers."""
 
@@ -64,11 +65,24 @@ class Parser(Protocol):
         """Convert raw tool output into diagnostics or raw diagnostics."""
         raise NotImplementedError
 
+    def describe(self) -> str:
+        """Return a human-readable description of the parser implementation."""
 
+        return self.__class__.__name__
+
+
+@runtime_checkable
 class CommandBuilder(Protocol):
     """Build a command for execution based on the tool context."""
 
-    def build(self, ctx: ToolContext) -> Sequence[str]: ...
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        """Return the executable command derived from *ctx*."""
+        raise NotImplementedError
+
+    def describe(self) -> str:
+        """Return a human-readable description of the builder."""
+
+        return self.__class__.__name__
 
 
 if TYPE_CHECKING:
@@ -79,6 +93,9 @@ else:
     CommandField = Any
     ParserField = Any
     ConfigField = Any
+
+
+InstallerCallable = Callable[["ToolContext"], None]
 
 
 class DeferredCommand(BaseModel):
@@ -105,6 +122,8 @@ class DeferredCommand(BaseModel):
         super().__init__(**data)
 
     def build(self, ctx: ToolContext) -> Sequence[str]:
+        """Return the deferred command regardless of the provided *ctx*."""
+
         del ctx
         return tuple(self.args)
 
@@ -146,18 +165,26 @@ class ToolAction(BaseModel):
         raise TypeError("env must be a mapping of strings")
 
     def build_command(self, ctx: ToolContext) -> list[str]:
+        """Return the command arguments for this action within *ctx*."""
+
         cmd = list(self.command.build(ctx))
         if self.append_files and ctx.files:
             cmd.extend(str(path) for path in ctx.files)
         return cmd
 
     def filter_stdout(self, text: str, extra_patterns: Sequence[str] | None = None) -> str:
-        patterns = list(self.filter_patterns)
-        if extra_patterns:
-            patterns.extend(extra_patterns)
-        return OutputFilter(patterns=tuple(patterns)).apply(text)
+        """Filter stdout text using configured patterns and *extra_patterns*."""
+
+        return self._apply_filters(text, extra_patterns)
 
     def filter_stderr(self, text: str, extra_patterns: Sequence[str] | None = None) -> str:
+        """Filter stderr text using configured patterns and *extra_patterns*."""
+
+        return self._apply_filters(text, extra_patterns)
+
+    def _apply_filters(self, text: str, extra_patterns: Sequence[str] | None) -> str:
+        """Apply output filtering for the action and return the filtered text."""
+
         patterns = list(self.filter_patterns)
         if extra_patterns:
             patterns.extend(extra_patterns)
@@ -231,23 +258,30 @@ class Tool(BaseModel):
             return tuple(items)
         raise TypeError("actions must be an iterable of ToolAction instances")
 
-    def model_post_init(self, __context: Any) -> None:  # pragma: no cover - pydantic hook
+    @model_validator(mode="after")
+    def _populate_action_index(self) -> Tool:
+        """Populate the private action index after validation completes."""
+
         self._refresh_action_index()
+        return self
 
     def _refresh_action_index(self) -> None:
+        """Rebuild the name -> action index for quick lookups."""
+
         object.__setattr__(
             self,
             "_actions_by_name",
             {action.name: action for action in self.actions},
         )
 
-    def __iter__(self) -> Iterator[ToolAction]:
-        return iter(self.actions)
-
     def __len__(self) -> int:
+        """Return the number of actions associated with the tool."""
+
         return len(self.actions)
 
-    def __contains__(self, item: object) -> bool:  # type: ignore[override]
+    def __contains__(self, item: object) -> bool:
+        """Return ``True`` when *item* refers to an action in this tool."""
+
         if isinstance(item, ToolAction):
             return item in self.actions
         if isinstance(item, str):
@@ -262,19 +296,34 @@ class Tool(BaseModel):
         raise TypeError("Tool indices must be integers or action names")
 
     def keys(self) -> Iterable[str]:
+        """Return an iterable over the action names managed by the tool."""
+
         return self._actions_by_name.keys()
 
     def values(self) -> Iterable[ToolAction]:
+        """Return an iterable over the tool actions."""
+
         return self._actions_by_name.values()
 
     def items(self) -> Iterable[tuple[str, ToolAction]]:
+        """Return (name, action) pairs for all actions."""
+
         return self._actions_by_name.items()
 
     def get(self, name: str, default: ToolAction | None = None) -> ToolAction | None:
+        """Return the action identified by *name*, falling back to *default*."""
+
         return self._actions_by_name.get(name, default)
 
     def action_names(self) -> tuple[str, ...]:
+        """Return the tuple of action names in declaration order."""
+
         return tuple(self._actions_by_name.keys())
+
+    def iter_actions(self) -> Iterator[ToolAction]:
+        """Return an iterator over actions preserving declaration order."""
+
+        return iter(self.actions)
 
     @field_validator("languages", "file_extensions", "config_files", mode="before")
     @classmethod
@@ -330,17 +379,17 @@ class Tool(BaseModel):
     def _coerce_installers(
         cls,
         value: object,
-    ) -> tuple[Callable[[ToolContext], None], ...]:
+    ) -> tuple[InstallerCallable, ...]:
         if value is None:
             return ()
         if isinstance(value, tuple):
-            return value
+            return tuple(cast(InstallerCallable, item) for item in value)
         if isinstance(value, list):
-            installers: list[Callable[[ToolContext], None]] = []
+            installers: list[InstallerCallable] = []
             for item in value:
                 if not callable(item):
                     raise TypeError("installers must contain callables")
-                installers.append(item)
+                installers.append(cast(InstallerCallable, item))
             return tuple(installers)
         raise TypeError("installers must be a sequence of callables")
 
@@ -350,6 +399,8 @@ class Tool(BaseModel):
         language: str | None = None,
         files: Sequence[Path] | None = None,
     ) -> bool:
+        """Return ``True`` when the tool is applicable to *language*/*files*."""
+
         if language and self.languages and language not in self.languages:
             return False
         if files:

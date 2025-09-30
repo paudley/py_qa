@@ -56,7 +56,8 @@ def test_catalog_tool_options_with_choices() -> None:
     ruff_options = options.get("ruff")
     assert ruff_options is not None
     assert any(
-        option.name == "line-length" and option.option_type == "int" for option in ruff_options
+        option.name == "line-length" and option.option_type == "integer"
+        for option in ruff_options
     )
     target_version = next(
         (option for option in ruff_options if option.name == "target-version"),

@@ -40,19 +40,20 @@ RawToolSettingSchema = dict[str, dict[str, dict[str, object]]]
 def _normalise_type(option: CatalogOption) -> str:
     """Return the legacy type string for *option* based on catalog metadata."""
     option_type = option.option_type.lower()
-    if option_type in {"bool", "boolean"}:
-        return "bool"
-    if option_type in {"int", "integer"}:
-        return "int"
-    if option_type in {"float", "number"}:
-        return "float"
-    if option_type in {"str", "string"}:
-        return "str"
-    if option_type == "path":
-        return "path"
-    if option_type in {"list[str]", "array"}:
-        return "list[str]"
-    return option.option_type
+    alias_map = {
+        "bool": "bool",
+        "boolean": "bool",
+        "int": "int",
+        "integer": "int",
+        "float": "float",
+        "number": "float",
+        "str": "str",
+        "string": "str",
+        "path": "path",
+        "list[str]": "list[str]",
+        "array": "list[str]",
+    }
+    return alias_map.get(option_type, option.option_type)
 
 
 def _build_field(option: CatalogOption) -> SettingField:

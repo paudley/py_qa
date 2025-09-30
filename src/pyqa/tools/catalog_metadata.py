@@ -10,7 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Final
 
-from ..tooling import CatalogSnapshot, ToolCatalogLoader
+from ..tooling import CatalogIntegrityError, CatalogSnapshot, ToolCatalogLoader
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,7 +205,7 @@ def _load_snapshot() -> CatalogSnapshot | None:
         return None
     try:
         return loader.load_snapshot()
-    except Exception as exc:
+    except (CatalogIntegrityError, ValueError, OSError) as exc:
         # Debug aid: surface catalog loading issues to ease troubleshooting.
         print(f"[catalog-metadata] failed to load snapshot: {exc}")
         return None
