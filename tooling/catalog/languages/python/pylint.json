@@ -212,6 +212,7 @@
     }
   ],
   "suppressions": {
+    "general": ["^pylint, .*:.*consider-using-assignment-expr.*$"],
     "tests": [
       "^pylint, (?:.+/)?tests?/.*:.*W0212.*Access to a protected member .*$",
       "^pylint, (?:.+/)?tests?/.*:.*W0613.*Unused argument .*$",

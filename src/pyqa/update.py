@@ -227,30 +227,30 @@ class WorkspaceStrategy(Protocol):
 
     kind: WorkspaceKind
 
+    def detect(self, directory: Path, filenames: set[str]) -> bool:
+        """Return ``True`` when ``directory`` belongs to this strategy.
 
-def detect(self, directory: Path, filenames: set[str]) -> bool:
-    """Return ``True`` when ``directory`` belongs to this strategy.
+        Args:
+            directory: Directory being evaluated.
+            filenames: Filenames contained within ``directory``.
 
-    Args:
-        directory: Directory being evaluated.
-        filenames: Set of filenames contained within ``directory``.
+        Returns:
+            bool: ``True`` if the strategy can manage the workspace.
+        """
 
-    Returns:
-        bool: ``True`` if the strategy can manage the workspace.
+        ...
 
-    """
+    def plan(self, workspace: Workspace) -> list[CommandSpec]:
+        """Return the commands required to update ``workspace``.
 
+        Args:
+            workspace: Workspace to update.
 
-def plan(self, workspace: Workspace) -> list[CommandSpec]:
-    """Produce the ordered command list required to update ``workspace``.
+        Returns:
+            list[CommandSpec]: Commands that perform the update.
+        """
 
-    Args:
-        workspace: Workspace to update.
-
-    Returns:
-        list[CommandSpec]: Commands that perform the update.
-
-    """
+        ...
 
 
 class PythonStrategy:
@@ -258,19 +258,19 @@ class PythonStrategy:
 
     kind = WorkspaceKind.PYTHON
 
-    def detect(self, _directory: Path, filenames: set[str]) -> bool:
+    def detect(self, directory: Path, filenames: set[str]) -> bool:
         """Return ``True`` when a ``pyproject.toml`` manifest exists.
 
         Args:
-            _directory: Candidate directory being inspected (unused).
+            directory: Candidate directory being inspected.
             filenames: Filenames contained in the directory.
 
         Returns:
             bool: ``True`` if the strategy should manage the directory.
-
         """
 
-        return PYPROJECT_MANIFEST in filenames
+        manifest_path = directory / PYPROJECT_MANIFEST
+        return manifest_path.exists() or PYPROJECT_MANIFEST in filenames
 
     def plan(self, workspace: Workspace) -> list[CommandSpec]:
         """Return uv commands that synchronise Python dependencies.
@@ -316,35 +316,35 @@ class PnpmStrategy:
 
     kind = WorkspaceKind.PNPM
 
-    def detect(self, _directory: Path, filenames: set[str]) -> bool:
+    def detect(self, directory: Path, filenames: set[str]) -> bool:
         """Return ``True`` when a ``pnpm-lock.yaml`` file is present.
 
         Args:
-            _directory: Candidate directory being inspected (unused).
+            directory: Candidate directory being inspected.
             filenames: Filenames contained in the directory.
 
         Returns:
             bool: ``True`` if this strategy should handle the directory.
-
         """
 
-        return PNPM_LOCKFILE in filenames
+        manifest_path = directory / PNPM_LOCKFILE
+        return manifest_path.exists() or PNPM_LOCKFILE in filenames
 
-    def plan(self, _workspace: Workspace) -> list[CommandSpec]:
+    def plan(self, workspace: Workspace) -> list[CommandSpec]:
         """Return commands that upgrade the pnpm workspace to latest versions.
 
         Args:
-            _workspace: Workspace whose dependencies should be updated (unused).
+            workspace: Workspace whose dependencies should be updated.
 
         Returns:
             list[CommandSpec]: Command specifications to run with pnpm.
-
         """
 
+        label = workspace.directory.name or str(workspace.directory)
         return [
             CommandSpec(
                 args=("pnpm", "up", "--latest"),
-                description="Update pnpm workspace",
+                description=f"Update pnpm workspace {label}",
                 requires=("pnpm",),
             ),
         ]
@@ -355,26 +355,35 @@ class YarnStrategy:
 
     kind = WorkspaceKind.YARN
 
-    def detect(self, _directory: Path, filenames: set[str]) -> bool:
-        """Return ``True`` when a ``yarn.lock`` manifest exists."""
+    def detect(self, directory: Path, filenames: set[str]) -> bool:
+        """Return ``True`` when a ``yarn.lock`` manifest exists.
 
-        return YARN_LOCKFILE in filenames
+        Args:
+            directory: Candidate directory being inspected.
+            filenames: Filenames contained in the directory.
 
-    def plan(self, _workspace: Workspace) -> list[CommandSpec]:
+        Returns:
+            bool: ``True`` if this strategy should manage the directory.
+        """
+
+        manifest_path = directory / YARN_LOCKFILE
+        return manifest_path.exists() or YARN_LOCKFILE in filenames
+
+    def plan(self, workspace: Workspace) -> list[CommandSpec]:
         """Return commands that upgrade Yarn dependencies.
 
         Args:
-            _workspace: Workspace whose dependencies should be updated (unused).
+            workspace: Workspace whose dependencies should be updated.
 
         Returns:
             list[CommandSpec]: Command specifications to execute via Yarn.
-
         """
 
+        label = workspace.directory.name or str(workspace.directory)
         return [
             CommandSpec(
                 args=("yarn", "upgrade", "--latest"),
-                description="Upgrade yarn dependencies",
+                description=f"Upgrade yarn dependencies in {label}",
                 requires=("yarn",),
             ),
         ]
@@ -385,35 +394,35 @@ class NpmStrategy:
 
     kind = WorkspaceKind.NPM
 
-    def detect(self, _directory: Path, filenames: set[str]) -> bool:
+    def detect(self, directory: Path, filenames: set[str]) -> bool:
         """Return ``True`` when ``package.json`` is present.
 
         Args:
-            _directory: Candidate directory being inspected (unused).
+            directory: Candidate directory being inspected.
             filenames: Filenames contained in the directory.
 
         Returns:
             bool: ``True`` if this strategy should handle the directory.
-
         """
 
-        return NPM_MANIFEST in filenames
+        manifest_path = directory / NPM_MANIFEST
+        return manifest_path.exists() or NPM_MANIFEST in filenames
 
-    def plan(self, _workspace: Workspace) -> list[CommandSpec]:
+    def plan(self, workspace: Workspace) -> list[CommandSpec]:
         """Return commands that update npm-managed dependencies.
 
         Args:
-            _workspace: Workspace whose dependencies should be updated (unused).
+            workspace: Workspace whose dependencies should be updated.
 
         Returns:
             list[CommandSpec]: Command specifications to execute via npm.
-
         """
 
+        label = workspace.directory.name or str(workspace.directory)
         return [
             CommandSpec(
                 args=("npm", "update"),
-                description="Update npm dependencies",
+                description=f"Update npm dependencies in {label}",
                 requires=("npm",),
             ),
         ]
@@ -424,38 +433,42 @@ class GoStrategy:
 
     kind = WorkspaceKind.GO
 
-    def detect(self, _directory: Path, filenames: set[str]) -> bool:
+    def detect(self, directory: Path, filenames: set[str]) -> bool:
         """Return ``True`` when ``go.mod`` is present.
 
         Args:
-            _directory: Candidate directory being inspected (unused).
+            directory: Candidate directory being inspected.
             filenames: Filenames contained in the directory.
 
         Returns:
             bool: ``True`` if this strategy should handle the directory.
-
         """
 
-        return GO_MANIFEST in filenames
+        manifest_path = directory / GO_MANIFEST
+        return manifest_path.exists() or GO_MANIFEST in filenames
 
-    def plan(self, _workspace: Workspace) -> list[CommandSpec]:
+    def plan(self, workspace: Workspace) -> list[CommandSpec]:
         """Return commands that upgrade Go module dependencies.
 
         Args:
-            _workspace: Workspace whose dependencies should be updated (unused).
+            workspace: Workspace whose dependencies should be updated.
 
         Returns:
             list[CommandSpec]: Command specifications to execute via the Go toolchain.
-
         """
 
+        label = workspace.directory.name or str(workspace.directory)
         return [
             CommandSpec(
                 args=("go", "get", "-u", "./..."),
-                description="Update Go modules",
+                description=f"Update Go modules in {label}",
                 requires=("go",),
             ),
-            CommandSpec(args=("go", "mod", "tidy"), description="Tidy go.mod", requires=("go",)),
+            CommandSpec(
+                args=("go", "mod", "tidy"),
+                description=f"Tidy go.mod for {label}",
+                requires=("go",),
+            ),
         ]
 
 
@@ -464,35 +477,35 @@ class RustStrategy:
 
     kind = WorkspaceKind.RUST
 
-    def detect(self, _directory: Path, filenames: set[str]) -> bool:
+    def detect(self, directory: Path, filenames: set[str]) -> bool:
         """Return ``True`` when ``Cargo.toml`` is present.
 
         Args:
-            _directory: Candidate directory being inspected (unused).
+            directory: Candidate directory being inspected.
             filenames: Filenames contained in the directory.
 
         Returns:
             bool: ``True`` if this strategy should handle the directory.
-
         """
 
-        return CARGO_MANIFEST in filenames
+        manifest_path = directory / CARGO_MANIFEST
+        return manifest_path.exists() or CARGO_MANIFEST in filenames
 
-    def plan(self, _workspace: Workspace) -> list[CommandSpec]:
+    def plan(self, workspace: Workspace) -> list[CommandSpec]:
         """Return commands that update Cargo dependencies.
 
         Args:
-            _workspace: Workspace whose dependencies should be updated (unused).
+            workspace: Workspace whose dependencies should be updated.
 
         Returns:
             list[CommandSpec]: Command specifications to execute via Cargo.
-
         """
 
+        label = workspace.directory.name or str(workspace.directory)
         return [
             CommandSpec(
                 args=("cargo", "update"),
-                description="Update Cargo dependencies",
+                description=f"Update Cargo dependencies in {label}",
                 requires=("cargo",),
             ),
         ]
@@ -626,9 +639,9 @@ class WorkspacePlanner:
 
         """
 
-        allowed: set[WorkspaceKind] | None = (
-            {WorkspaceKind.from_str(kind) for kind in enabled_managers} if enabled_managers else None
-        )
+        allowed: set[WorkspaceKind] | None = None
+        if enabled_managers is not None:
+            allowed = {WorkspaceKind.from_str(kind) for kind in enabled_managers}
         items: list[UpdatePlanItem] = []
         for workspace in workspaces:
             if allowed is not None and workspace.kind not in allowed:
@@ -662,7 +675,6 @@ class WorkspaceUpdater:
             runner: Callable used to execute shell commands.
             dry_run: When ``True`` commands are logged but not executed.
             use_emoji: When ``True`` rich logging includes emoji markers.
-
         """
 
         self._runner = runner or _default_runner
@@ -674,7 +686,6 @@ class WorkspaceUpdater:
 
         Returns:
             bool: ``True`` if commands are skipped rather than executed.
-
         """
 
         return self._dry_run
@@ -688,7 +699,6 @@ class WorkspaceUpdater:
 
         Returns:
             UpdateResult: Collected execution summary.
-
         """
 
         result = UpdateResult()
@@ -696,115 +706,118 @@ class WorkspaceUpdater:
             self._process_plan_item(item=item, root=root, result=result)
         return result
 
+    def _process_plan_item(
+        self,
+        *,
+        item: UpdatePlanItem,
+        root: Path,
+        result: UpdateResult,
+    ) -> None:
+        """Execute the commands for a single plan item and record outcomes.
 
-def _process_plan_item(self, *, item: UpdatePlanItem, root: Path, result: UpdateResult) -> None:
-    """Execute the commands for a single plan item and record outcomes.
+        Args:
+            item: Plan item currently being executed.
+            root: Project root used for relative path presentation.
+            result: Aggregate result recorder tracking successes/failures.
+        """
 
-    Args:
-        item: Plan item currently being executed.
-        root: Project root used for relative path presentation.
-        result: Aggregate result recorder tracking successes/failures.
-
-    """
-
-    workspace = item.workspace
-    rel_path = _format_relative(workspace.directory, root)
-    info(
-        f"Updating {workspace.kind.value} workspace at {rel_path}",
-        use_emoji=self._use_emoji,
-    )
-    if not item.commands:
-        warn("No update strategy available", use_emoji=self._use_emoji)
-        result.register_skip(workspace, [])
-        return
-
-    executions: list[ExecutionDetail] = []
-    for plan_command in item.commands:
-        detail, failure = self._execute_command(
-            workspace=workspace,
-            spec=plan_command.spec,
-            rel_path=rel_path,
+        workspace = item.workspace
+        rel_path = _format_relative(workspace.directory, root)
+        info(
+            f"Updating {workspace.kind.value} workspace at {rel_path}",
+            use_emoji=self._use_emoji,
         )
-        executions.append(detail)
-        if failure is not None:
-            result.register_failure(workspace, failure, executions)
+        if not item.commands:
+            warn("No update strategy available", use_emoji=self._use_emoji)
+            result.register_skip(workspace, [])
             return
 
-    if all(detail.status == SKIPPED_STATUS for detail in executions):
-        warn(
-            f"No commands executed for {workspace.kind.value} workspace at {rel_path}",
-            use_emoji=self._use_emoji,
-        )
-        result.register_skip(workspace, executions)
-        return
+        executions: list[ExecutionDetail] = []
+        for plan_command in item.commands:
+            detail, failure = self._execute_command(
+                workspace=workspace,
+                spec=plan_command.spec,
+                rel_path=rel_path,
+            )
+            executions.append(detail)
+            if failure is not None:
+                result.register_failure(workspace, failure, executions)
+                return
 
-    if self._dry_run:
-        result.register_skip(workspace, executions)
-        return
+        if all(detail.status == SKIPPED_STATUS for detail in executions):
+            warn(
+                f"No commands executed for {workspace.kind.value} workspace at {rel_path}",
+                use_emoji=self._use_emoji,
+            )
+            result.register_skip(workspace, executions)
+            return
 
-    ok("Workspace updated", use_emoji=self._use_emoji)
-    result.register_success(workspace, executions)
+        if self._dry_run:
+            result.register_skip(workspace, executions)
+            return
 
+        ok("Workspace updated", use_emoji=self._use_emoji)
+        result.register_success(workspace, executions)
 
-def _execute_command(
-    self,
-    *,
-    workspace: Workspace,
-    spec: CommandSpec,
-    rel_path: str,
-) -> tuple[ExecutionDetail, str | None]:
-    """Execute a single command returning detail metadata and failure summary.
+    def _execute_command(
+        self,
+        *,
+        workspace: Workspace,
+        spec: CommandSpec,
+        rel_path: str,
+    ) -> tuple[ExecutionDetail, str | None]:
+        """Execute a single command returning detail metadata and failure summary.
 
-    Args:
-        workspace: Workspace the command operates on.
-        spec: Command specification to execute.
-        rel_path: Workspace path relative to the project root for logging.
+        Args:
+            workspace: Workspace the command operates on.
+            spec: Command specification to execute.
+            rel_path: Workspace path relative to the project root for logging.
 
-    Returns:
-        tuple[ExecutionDetail, str | None]: Execution detail paired with an
+        Returns:
+            tuple[ExecutionDetail, str | None]: Execution detail paired with an
             optional failure summary suitable for user-facing messages.
+        """
 
-    """
+        missing_tools = [tool for tool in spec.requires if shutil.which(tool) is None]
+        if missing_tools:
+            message = f"missing {', '.join(missing_tools)}"
+            warn(
+                f"Skipping command {' '.join(spec.args)} ({message})",
+                use_emoji=self._use_emoji,
+            )
+            detail = ExecutionDetail(
+                command=spec,
+                status=SKIPPED_STATUS,
+                message=message,
+            )
+            return detail, None
 
-    if missing := [tool for tool in spec.requires if shutil.which(tool) is None]:
-        message = f"missing {', '.join(missing)}"
-        warn(
-            f"Skipping command {' '.join(spec.args)} ({message})",
-            use_emoji=self._use_emoji,
-        )
-        detail = ExecutionDetail(
-            command=spec,
-            status=SKIPPED_STATUS,
-            message=message,
-        )
+        if self._dry_run:
+            info(
+                f"DRY RUN: {' '.join(spec.args)}",
+                use_emoji=self._use_emoji,
+            )
+            detail = ExecutionDetail(
+                command=spec,
+                status=SKIPPED_STATUS,
+                message="dry-run",
+            )
+            return detail, None
+
+        completed = self._runner(spec.args, workspace.directory)
+        if completed.returncode != 0:
+            message = f"Command '{' '.join(spec.args)}' failed with exit code {completed.returncode}"
+            fail(message, use_emoji=self._use_emoji)
+            detail = ExecutionDetail(
+                command=spec,
+                status=ExecutionStatus.FAILED,
+                message=message,
+            )
+            summary = f"{rel_path}: {message}"
+            return detail, summary
+
+        detail = ExecutionDetail(command=spec, status=ExecutionStatus.RAN)
         return detail, None
-
-    if self._dry_run:
-        info(
-            f"DRY RUN: {' '.join(spec.args)}",
-            use_emoji=self._use_emoji,
-        )
-        detail = ExecutionDetail(
-            command=spec,
-            status=SKIPPED_STATUS,
-            message="dry-run",
-        )
-        return detail, None
-
-    completed = self._runner(spec.args, workspace.directory)
-    if completed.returncode != 0:
-        message = f"Command '{' '.join(spec.args)}' failed with exit code {completed.returncode}"
-        fail(message, use_emoji=self._use_emoji)
-        detail = ExecutionDetail(
-            command=spec,
-            status=ExecutionStatus.FAILED,
-            message=message,
-        )
-        summary = f"{rel_path}: {message}"
-        return detail, summary
-
-    detail = ExecutionDetail(command=spec, status=ExecutionStatus.RAN)
-    return detail, None
 
 
 def ensure_lint_install(root: Path, runner: CommandRunner, *, dry_run: bool) -> None:
