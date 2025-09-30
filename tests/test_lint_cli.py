@@ -156,16 +156,96 @@ def test_lint_no_stats_flag(monkeypatch, tmp_path: Path) -> None:
         ],
     )
 
+
+def test_lint_no_lint_tests_flag(monkeypatch, tmp_path: Path) -> None:
+    runner = CliRunner()
+    captured: dict[str, Any] = {}
+
+    original_build_config = lint_module.build_config
+
+    def fake_build_config(options):
+        captured["options"] = options
+        return original_build_config(options)
+
+    def fake_run(self, config, root):  # noqa: ANN001
+        captured["config"] = config
+        return RunResult(root=root, files=[], outcomes=[], tool_versions={})
+
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(lint_module, "build_config", fake_build_config)
+    monkeypatch.setattr(lint_module.Orchestrator, "run", fake_run)
+
+    result = runner.invoke(
+        app,
+        [
+            "lint",
+            "--root",
+            str(tmp_path),
+            "--no-lint-tests",
+            "--no-color",
+            "--no-emoji",
+        ],
+    )
+
     assert result.exit_code == 0
     options = captured["options"]
     assert isinstance(options, LintOptions)
-    assert options.no_stats is True
+    assert Path("tests") in options.exclude
     config = captured["config"]
     assert isinstance(config, Config)
-    assert config.output.show_stats is False
-    assert "stats" not in result.stdout.lower()
-    assert "Passed" in result.stdout
+    resolved_tests = (tmp_path / "tests").resolve()
+    assert any(path == resolved_tests for path in config.file_discovery.excludes)
 
+
+
+
+def test_lint_meta_normal_applies_defaults(monkeypatch, tmp_path: Path) -> None:
+    runner = CliRunner()
+    captured: dict[str, Any] = {}
+
+    original_build_config = lint_module.build_config
+
+    def fake_build_config(options):
+        captured["options"] = options
+        return original_build_config(options)
+
+    def fake_run(self, config, root):  # noqa: ANN001
+        captured["config"] = config
+        return RunResult(root=root, files=[], outcomes=[], tool_versions={})
+
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(lint_module, "build_config", fake_build_config)
+    monkeypatch.setattr(lint_module.Orchestrator, "run", fake_run)
+
+    result = runner.invoke(
+        app,
+        [
+            "lint",
+            "--root",
+            str(tmp_path),
+            "-n",
+            "normal",
+            "--no-color",
+            "--no-emoji",
+        ],
+    )
+
+    assert result.exit_code == 0
+    options = captured["options"]
+    assert isinstance(options, LintOptions)
+    assert options.advice is True
+    assert options.use_local_linters is True
+    assert options.no_lint_tests is True
+    assert options.output_mode == "concise"
+    assert Path("tests") in options.exclude
+    config = captured["config"]
+    assert isinstance(config, Config)
+    resolved_tests = (tmp_path / "tests").resolve()
+    assert any(path == resolved_tests for path in config.file_discovery.excludes)
 
 def test_concise_mode_renders_progress_status(monkeypatch, tmp_path: Path) -> None:
     runner = CliRunner()

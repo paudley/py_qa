@@ -31,6 +31,7 @@ class LintOptions:
     no_color: bool = False
     no_emoji: bool = False
     no_stats: bool = False
+    no_lint_tests: bool = False
     output_mode: str = "concise"
     show_passing: bool = False
     jobs: int = 1

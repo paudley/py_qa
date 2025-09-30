@@ -106,9 +106,23 @@
           "base": ["ruff", "check", "--force-exclude", "--output-format", "json"],
           "appendFiles": false,
           "options": [
-            { "setting": "config", "type": "path", "flag": "--config" },
-            { "setting": "select", "type": "args", "flag": "--select", "joinWith": "," },
-            { "setting": "ignore", "type": "args", "flag": "--ignore", "joinWith": "," },
+            {
+              "setting": "config",
+              "type": "path",
+              "flag": "--config"
+            },
+            {
+              "setting": "select",
+              "type": "args",
+              "flag": "--select",
+              "joinWith": ","
+            },
+            {
+              "setting": "ignore",
+              "type": "args",
+              "flag": "--ignore",
+              "joinWith": ","
+            },
             {
               "setting": "extend-select",
               "type": "args",
@@ -139,7 +153,12 @@
               "flag": "--per-file-ignores",
               "joinWith": ";"
             },
-            { "setting": "exclude", "type": "args", "flag": "--exclude", "joinWith": "," },
+            {
+              "setting": "exclude",
+              "type": "args",
+              "flag": "--exclude",
+              "joinWith": ","
+            },
             {
               "setting": "extend-exclude",
               "type": "args",
@@ -158,9 +177,20 @@
               "flag": "--preview",
               "negateFlag": "--no-preview"
             },
-            { "setting": "unsafe-fixes", "type": "flag", "flag": "--unsafe-fixes" },
-            { "setting": "fix", "type": "flag", "flag": "--fix" },
-            { "setting": "args", "type": "args" }
+            {
+              "setting": "unsafe-fixes",
+              "type": "flag",
+              "flag": "--unsafe-fixes"
+            },
+            {
+              "setting": "fix",
+              "type": "flag",
+              "flag": "--fix"
+            },
+            {
+              "setting": "args",
+              "type": "args"
+            }
           ]
         }
       },
@@ -180,9 +210,23 @@
           "base": ["ruff", "check", "--fix", "--force-exclude"],
           "appendFiles": false,
           "options": [
-            { "setting": "config", "type": "path", "flag": "--config" },
-            { "setting": "select", "type": "args", "flag": "--select", "joinWith": "," },
-            { "setting": "ignore", "type": "args", "flag": "--ignore", "joinWith": "," },
+            {
+              "setting": "config",
+              "type": "path",
+              "flag": "--config"
+            },
+            {
+              "setting": "select",
+              "type": "args",
+              "flag": "--select",
+              "joinWith": ","
+            },
+            {
+              "setting": "ignore",
+              "type": "args",
+              "flag": "--ignore",
+              "joinWith": ","
+            },
             {
               "setting": "extend-select",
               "type": "args",
@@ -213,7 +257,12 @@
               "flag": "--per-file-ignores",
               "joinWith": ";"
             },
-            { "setting": "exclude", "type": "args", "flag": "--exclude", "joinWith": "," },
+            {
+              "setting": "exclude",
+              "type": "args",
+              "flag": "--exclude",
+              "joinWith": ","
+            },
             {
               "setting": "extend-exclude",
               "type": "args",
@@ -232,8 +281,15 @@
               "flag": "--preview",
               "negateFlag": "--no-preview"
             },
-            { "setting": "unsafe-fixes", "type": "flag", "flag": "--unsafe-fixes" },
-            { "setting": "args", "type": "args" }
+            {
+              "setting": "unsafe-fixes",
+              "type": "flag",
+              "flag": "--unsafe-fixes"
+            },
+            {
+              "setting": "args",
+              "type": "args"
+            }
           ]
         }
       }
@@ -255,7 +311,12 @@
       "^ruff, (?:.+/)?tests?/.*:.*ANN001.*$",
       "^ruff, (?:.+/)?tests?/.*:.*ARG005.*$",
       "^ruff, (?:.+/)?tests?/.*:.*EM101.*$",
-      "^ruff, (?:.+/)?tests?/.*:.*D101.*$"
+      "^ruff, (?:.+/)?tests?/.*:.*D101.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*D100.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*SLF001.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*ANN202.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*PLR0913.*$",
+      "^ruff, (?:.+/)?tests?/.*:.*E501.*$"
     ],
     "duplicates": ["pylint"]
   },

@@ -108,7 +108,11 @@
           "base": ["pylint", "--output-format=json"],
           "appendFiles": false,
           "options": [
-            { "setting": ["rcfile", "config"], "type": "path", "flag": "--rcfile" },
+            {
+              "setting": ["rcfile", "config"],
+              "type": "path",
+              "flag": "--rcfile"
+            },
             {
               "setting": ["load-plugins", "plugins"],
               "type": "args",
@@ -116,17 +120,40 @@
               "joinWith": ",",
               "defaultFrom": "python.discover_pylint_plugins"
             },
-            { "setting": "disable", "type": "args", "flag": "--disable", "joinWith": "," },
-            { "setting": "enable", "type": "args", "flag": "--enable", "joinWith": "," },
-            { "setting": "jobs", "type": "value", "flag": "-j" },
+            {
+              "setting": "disable",
+              "type": "args",
+              "flag": "--disable",
+              "joinWith": ","
+            },
+            {
+              "setting": "enable",
+              "type": "args",
+              "flag": "--enable",
+              "joinWith": ","
+            },
+            {
+              "setting": "jobs",
+              "type": "value",
+              "flag": "-j"
+            },
             {
               "setting": "fail-under",
               "type": "value",
               "flag": "--fail-under",
               "defaultFrom": "severity.pylint_fail_under"
             },
-            { "setting": "exit-zero", "type": "flag", "flag": "--exit-zero" },
-            { "setting": "score", "type": "value", "flag": "--score=", "transform": "bool_to_yn" },
+            {
+              "setting": "exit-zero",
+              "type": "flag",
+              "flag": "--exit-zero"
+            },
+            {
+              "setting": "score",
+              "type": "value",
+              "flag": "--score=",
+              "transform": "bool_to_yn"
+            },
             {
               "setting": "reports",
               "type": "value",
@@ -169,7 +196,10 @@
               "flag": "--py-version",
               "defaultFrom": "python.target_version"
             },
-            { "setting": "args", "type": "args" }
+            {
+              "setting": "args",
+              "type": "args"
+            }
           ]
         }
       },
@@ -192,7 +222,11 @@
       "^pylint, (?:.+/)?tests?/.*:.*missing-function-docstring.*$",
       "^pylint, (?:.+/)?tests?/.*:.*too-few-public-methods.*$",
       "^pylint, (?:.+/)?tests?/.*:.*missing-class-docstring.*$",
-      "^pylint, (?:.+/)?tests?/.*:.*consider-using-assignment-expr.*$"
+      "^pylint, (?:.+/)?tests?/.*:.*consider-using-assignment-expr.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*too-complex.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*too-many-arguments.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*too-many-locals.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*line-too-long.*$"
     ]
   },
   "documentation": {

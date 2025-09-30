@@ -155,9 +155,7 @@ def generate_advice(
         code = record["code"]
         if not code:
             continue
-        if (
-            record["tool"] == "ruff" and (code.startswith("D1") or code in {"D401", "D402"})
-        ) or code in {
+        if (record["tool"] == "ruff" and (code.startswith("D1") or code in {"D401", "D402"})) or code in {
             "TC002",
             "TC003",
         }:
@@ -212,9 +210,7 @@ def generate_advice(
     stub_flags = {
         record["file"]
         for record in diagnostics
-        if (record["file"] or "").endswith(".pyi")
-        and record["tool"] == "ruff"
-        and record["code"].startswith("ANN")
+        if (record["file"] or "").endswith(".pyi") and record["tool"] == "ruff" and record["code"].startswith("ANN")
     }
     override_flags = {
         record["file"]
@@ -257,8 +253,7 @@ def generate_advice(
             )
             break
         if record["tool"] == "pyright" and (
-            code == "REPORTPRIVATEIMPORTUSAGE"
-            or any(keyword in message_lower for keyword in private_keywords)
+            code == "REPORTPRIVATEIMPORTUSAGE" or any(keyword in message_lower for keyword in private_keywords)
         ):
             add(
                 "Encapsulation",

@@ -231,10 +231,7 @@
     }
   ],
   "suppressions": {
-    "tests": [
-      "^mypy, (?:.+/)?tests?/.*:.*no-untyped-def.*$",
-      "^mypy, (?:.+/)?tests?/.*:.*attr-defined.*$"
-    ]
+    "tests": ["^mypy, (?:.+/)?tests?/.*:.*no-untyped-def.*$", "^mypy, (?:.+/)?tests?/.*:.*attr-defined.*$"]
   },
   "documentation": {
     "help": {

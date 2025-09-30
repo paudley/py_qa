@@ -257,9 +257,7 @@ def _speccy_message(issue: Mapping[str, Any]) -> str:
 
 
 def _speccy_severity(issue: Mapping[str, Any], default_label: str) -> Severity:
-    label = (
-        (issue.get("type") or issue.get("severity") or default_label or "warning").strip().lower()
-    )
+    label = (issue.get("type") or issue.get("severity") or default_label or "warning").strip().lower()
     return SPECCY_SEVERITY_MAP.get(label, Severity.WARNING)
 
 

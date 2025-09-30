@@ -1369,9 +1369,7 @@ def _parse_target_selector(entry: Any, *, context: str) -> _TargetSelector:
         raise CatalogIntegrityError(
             f"{context}: 'pathMustInclude' must be a string or array of strings",
         )
-    path_requires = tuple(
-        requirement for item in raw_requires if (requirement := _normalise_path_requirement(item))
-    )
+    path_requires = tuple(requirement for item in raw_requires if (requirement := _normalise_path_requirement(item)))
 
     fallback_value = entry.get("fallbackDirectory")
     if fallback_value is None:

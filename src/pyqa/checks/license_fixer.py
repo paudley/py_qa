@@ -120,11 +120,7 @@ class LicenseHeaderFixer:
 
         identifiers = extract_spdx_identifiers(content)
         if self.policy.spdx_id:
-            allowed = {
-                spdx
-                for spdx in (self.policy.spdx_id, *(self.policy.allow_alternate_spdx or ()))
-                if spdx
-            }
+            allowed = {spdx for spdx in (self.policy.spdx_id, *(self.policy.allow_alternate_spdx or ())) if spdx}
             conflicting = [identifier for identifier in identifiers if identifier not in allowed]
             if conflicting:
                 raise ConflictingLicenseError(conflicting)

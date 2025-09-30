@@ -226,9 +226,7 @@ def verify_file_license(
         allowed = {spdx for spdx in (expected_id, *(policy.allow_alternate_spdx or ())) if spdx}
 
         if expected_id:
-            conflicting = sorted(
-                identifier for identifier in identifiers if identifier not in allowed
-            )
+            conflicting = sorted(identifier for identifier in identifiers if identifier not in allowed)
             if conflicting:
                 formatted = ", ".join(conflicting)
                 issues.append(

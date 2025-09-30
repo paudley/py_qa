@@ -108,8 +108,7 @@ class FilesystemDiscovery(DiscoveryStrategy):
             dirnames[:] = [
                 name
                 for name in dirnames
-                if name not in ALWAYS_EXCLUDE_DIRS
-                and not any(self._is_child_of(current / name, ex) for ex in excludes)
+                if name not in ALWAYS_EXCLUDE_DIRS and not any(self._is_child_of(current / name, ex) for ex in excludes)
             ]
             for filename in filenames:
                 candidate = current / filename

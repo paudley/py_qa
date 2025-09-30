@@ -94,34 +94,19 @@
               "defaultFrom": "execution.line_length"
             },
             {
-              "setting": [
-                "max-code-line-length",
-                "max_code_line_length",
-                "max-line-length",
-                "max_line_length"
-              ],
+              "setting": ["max-code-line-length", "max_code_line_length", "max-line-length", "max_line_length"],
               "type": "value",
               "flag": "--max-code-line-length",
               "defaultFrom": "execution.line_length"
             },
             {
-              "setting": [
-                "max-string-line-length",
-                "max_string_line_length",
-                "max-line-length",
-                "max_line_length"
-              ],
+              "setting": ["max-string-line-length", "max_string_line_length", "max-line-length", "max_line_length"],
               "type": "value",
               "flag": "--max-string-line-length",
               "defaultFrom": "execution.line_length"
             },
             {
-              "setting": [
-                "max-comment-line-length",
-                "max_comment_line_length",
-                "max-line-length",
-                "max_line_length"
-              ],
+              "setting": ["max-comment-line-length", "max_comment_line_length", "max-line-length", "max_line_length"],
               "type": "value",
               "flag": "--max-comment-line-length",
               "defaultFrom": "execution.line_length"

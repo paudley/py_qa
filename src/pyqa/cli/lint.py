@@ -74,6 +74,17 @@ def lint_command(
         help="Add directory to discovery roots (repeatable).",
     ),
     exclude: list[Path] = typer.Option([], help="Exclude specific paths or globs."),
+    normal: bool = typer.Option(
+        False,
+        "-n",
+        "--normal",
+        help="Apply the built-in 'normal' lint preset (concise output, advice, no tests, local linters).",
+    ),
+    no_lint_tests: bool = typer.Option(
+        False,
+        "--no-lint-tests",
+        help="Exclude paths containing 'tests' from linting.",
+    ),
     filters: list[str] = typer.Option(
         [],
         "--filter",
@@ -242,17 +253,9 @@ def lint_command(
     dirs = [normalize_path(directory, base_dir=invocation_cwd) for directory in dirs]
     exclude = [normalize_path(entry, base_dir=invocation_cwd) for entry in exclude]
     cache_dir = normalize_path(cache_dir, base_dir=invocation_cwd)
-    report_json = (
-        normalize_path(report_json, base_dir=invocation_cwd) if report_json is not None else None
-    )
-    sarif_out = (
-        normalize_path(sarif_out, base_dir=invocation_cwd) if sarif_out is not None else None
-    )
-    pr_summary_out = (
-        normalize_path(pr_summary_out, base_dir=invocation_cwd)
-        if pr_summary_out is not None
-        else None
-    )
+    report_json = normalize_path(report_json, base_dir=invocation_cwd) if report_json is not None else None
+    sarif_out = normalize_path(sarif_out, base_dir=invocation_cwd) if sarif_out is not None else None
+    pr_summary_out = normalize_path(pr_summary_out, base_dir=invocation_cwd) if pr_summary_out is not None else None
 
     root_source = _parameter_source_name(ctx, "root")
     root = normalize_path(root, base_dir=invocation_cwd)
@@ -326,6 +329,21 @@ def lint_command(
         language=language,
     )
 
+    if normal:
+        if "output_mode" not in provided:
+            output_mode = "concise"
+        advice = True
+        no_lint_tests = True
+        use_local_linters = True
+        provided.update({"output_mode", "advice", "exclude", "use_local_linters", "no_lint_tests"})
+
+    exclude_paths = list(exclude)
+    if no_lint_tests:
+        tests_path = Path("tests")
+        if tests_path not in exclude_paths:
+            exclude_paths.append(tests_path)
+        provided.add("exclude")
+
     options = LintOptions(
         paths=list(normalized_paths),
         root=root,
@@ -335,7 +353,7 @@ def lint_command(
         base_branch=base_branch,
         paths_from_stdin=paths_from_stdin,
         dirs=list(dirs),
-        exclude=list(exclude),
+        exclude=exclude_paths,
         filters=list(filters),
         only=list(only),
         language=list(language),
@@ -346,6 +364,7 @@ def lint_command(
         no_color=no_color,
         no_emoji=no_emoji,
         no_stats=no_stats,
+        no_lint_tests=no_lint_tests,
         output_mode=output_mode,
         show_passing=show_passing,
         jobs=effective_jobs,
@@ -447,11 +466,7 @@ def lint_command(
             results = orchestrator.fetch_all_tools(config, root=root)
         tool_lookup = {tool.name: tool for tool in DEFAULT_REGISTRY.tools()}
         phase_rank = {
-            name: (
-                PHASE_SORT_ORDER.index(tool.phase)
-                if tool.phase in PHASE_SORT_ORDER
-                else len(PHASE_SORT_ORDER)
-            )
+            name: (PHASE_SORT_ORDER.index(tool.phase) if tool.phase in PHASE_SORT_ORDER else len(PHASE_SORT_ORDER))
             for name, tool in tool_lookup.items()
         }
         results.sort(
@@ -502,11 +517,7 @@ def lint_command(
                 )
         raise typer.Exit(code=0)
     progress_enabled = (
-        config.output.output == "concise"
-        and not quiet
-        and not config.output.quiet
-        and config.output.color
-        and is_tty()
+        config.output.output == "concise" and not quiet and not config.output.quiet and config.output.color and is_tty()
     )
 
     extra_phases = 2  # post-processing + rendering
@@ -564,11 +575,7 @@ def lint_command(
             if progress is None or progress_task_id is None:
                 return
             nonlocal progress_completed
-            status = (
-                "[green]ok[/]"
-                if outcome.ok and config.output.color
-                else ("ok" if outcome.ok else "issues")
-            )
+            status = "[green]ok[/]" if outcome.ok and config.output.color else ("ok" if outcome.ok else "issues")
             if not outcome.ok and config.output.color:
                 status = "[red]issues[/]"
             label = f"{outcome.tool}:{outcome.action}"
@@ -643,11 +650,7 @@ def lint_command(
         status_text = (
             "[green]done[/]"
             if success and config.output.color
-            else (
-                "[red]issues detected[/]"
-                if config.output.color
-                else ("done" if success else "issues detected")
-            )
+            else ("[red]issues detected[/]" if config.output.color else ("done" if success else "issues detected"))
         )
         with progress_lock:
             total = max(progress_total, progress_completed)
@@ -723,6 +726,7 @@ def _collect_provided_flags(
         "filters",
         "only",
         "language",
+        "normal",
         "fix_only",
         "check_only",
         "verbose",
