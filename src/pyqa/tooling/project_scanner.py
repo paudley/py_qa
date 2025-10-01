@@ -6,14 +6,19 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Final, cast
 
 from ..tools.base import CommandBuilder, ToolContext
 from ..tools.builtin_helpers import _resolve_path, _setting, _settings_list
+from .catalog.types import JSONValue
 from .command_options import OptionMapping, compile_option_mappings
 from .loader import CatalogIntegrityError
 
 __all__ = ["build_project_scanner"]
+
+
+_CURRENT_DIRECTORY_MARKER: Final[str] = "."
+_PATH_SEPARATOR: Final[str] = "/"
 
 
 @dataclass(slots=True)
@@ -95,7 +100,7 @@ class _ProjectTargetPlan:
         candidates: set[Path] = set()
         for fallback in self.fallback_paths:
             candidate = _resolve_path(root, fallback)
-            if fallback != "." and not candidate.exists():
+            if fallback != _CURRENT_DIRECTORY_MARKER and not candidate.exists():
                 continue
             if self._is_excluded(candidate, excluded):
                 continue
@@ -220,7 +225,7 @@ def build_project_scanner(plain_config: Mapping[str, Any]) -> CommandBuilder:
             "command_project_scanner: 'base' must contain at least one argument",
         )
 
-    raw_options = cast("JSONValue | None", plain_config.get("options"))
+    raw_options = cast(JSONValue | None, plain_config.get("options"))
     option_mappings = compile_option_mappings(
         raw_options,
         context="command_project_scanner.options",
@@ -364,24 +369,74 @@ def _path_matches_requirements(
 
 
 def _candidate_parts(candidate: Path, root: Path) -> tuple[str, ...]:
-    """Return normalised path components for *candidate* relative to *root*."""
+    """Return normalised path components for *candidate* relative to *root*.
 
+    Args:
+        candidate: Filesystem path produced by catalog configuration.
+        root: Root directory associated with the current tool execution.
+
+    Returns:
+        tuple[str, ...]: Normalised path parts or an empty tuple when the input
+        cannot be resolved.
+    """
+
+    relative_path = _resolve_relative_path(candidate, root)
+    normalised = _normalise_parts(relative_path)
+    if normalised:
+        return normalised
+    return _fallback_parts(candidate)
+
+
+def _resolve_relative_path(candidate: Path, root: Path) -> Path | None:
+    """Return *candidate* relative to *root* when possible.
+
+    Args:
+        candidate: Path to evaluate.
+        root: Base path used for relative resolution.
+
+    Returns:
+        Path | None: Relative path or ``None`` when resolution fails.
+    """
+
+    if not candidate.is_absolute():
+        return candidate
     try:
-        if candidate.is_absolute():
-            try:
-                relative = candidate.relative_to(root)
-            except ValueError:
-                relative = candidate
-        else:
-            relative = candidate
-        parts = tuple(part for part in relative.parts if part not in ("", "."))
-        if parts:
-            return parts
+        return candidate.relative_to(root)
+    except ValueError:
+        return candidate
     except OSError:
-        pass
+        return None
 
-    fallback = candidate.as_posix().split("/")
-    return tuple(part for part in fallback if part)
+
+def _normalise_parts(path: Path | None) -> tuple[str, ...]:
+    """Return cleaned components for *path* or an empty tuple.
+
+    Args:
+        path: Path object to normalise.
+
+    Returns:
+        tuple[str, ...]: Tuple of non-empty, non-dot path segments.
+    """
+
+    if path is None:
+        return ()
+    try:
+        return tuple(part for part in path.parts if part not in ("", _CURRENT_DIRECTORY_MARKER))
+    except OSError:
+        return ()
+
+
+def _fallback_parts(candidate: Path) -> tuple[str, ...]:
+    """Return path components using POSIX splitting when direct methods fail.
+
+    Args:
+        candidate: Path to split.
+
+    Returns:
+        tuple[str, ...]: Fallback sequence of path segments.
+    """
+
+    return tuple(segment for segment in candidate.as_posix().split(_PATH_SEPARATOR) if segment)
 
 
 def _has_path_sequence(parts: Sequence[str], required: tuple[str, ...]) -> bool:
@@ -393,37 +448,65 @@ def _has_path_sequence(parts: Sequence[str], required: tuple[str, ...]) -> bool:
         target = required[0]
         return any(part == target for part in parts)
 
-    limit = len(parts) - len(required) + 1
+    length = len(required)
+    limit = len(parts) - length + 1
     if limit <= 0:
         return False
-    for offset in range(limit):
-        if all(parts[offset + idx] == required[idx] for idx in range(len(required))):
-            return True
-    return False
+    return any(tuple(parts[offset : offset + length]) == required for offset in range(limit))
 
 
 def _compile_exclude_arguments(excluded_paths: set[Path], root: Path) -> set[str]:
     """Build CLI exclusion arguments for discovery-aware scanners."""
 
     arguments: set[str] = set()
+    resolved_root = root.resolve()
     for path in excluded_paths:
         resolved = path.resolve()
         arguments.add(str(resolved))
-        try:
-            relative = resolved.relative_to(root.resolve())
-            arguments.add(str(relative))
-        except ValueError:
-            continue
+        relative = _relative_to_root(resolved, resolved_root)
+        if relative is not None:
+            arguments.add(relative)
     return arguments
 
 
 def _is_under_any(candidate: Path, bases: set[Path]) -> bool:
     """Return ``True`` if ``candidate`` resides within any path in ``bases``."""
 
-    for base in bases:
-        try:
-            candidate.resolve().relative_to(base.resolve())
-            return True
-        except ValueError:
-            continue
-    return False
+    return any(_is_under_base(candidate, base) for base in bases)
+
+
+def _relative_to_root(path: Path, root: Path) -> str | None:
+    """Return the relative string representation of *path* to *root*.
+
+    Args:
+        path: Absolute path to relativise.
+        root: Root directory used for relativisation.
+
+    Returns:
+        str | None: Relative path string or ``None`` when *path* lies outside
+        of *root*.
+    """
+
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return None
+    return str(relative)
+
+
+def _is_under_base(candidate: Path, base: Path) -> bool:
+    """Return ``True`` if ``candidate`` resides within ``base``.
+
+    Args:
+        candidate: Path being evaluated for containment.
+        base: Directory that may contain ``candidate``.
+
+    Returns:
+        bool: ``True`` when ``candidate`` is within ``base``.
+    """
+
+    try:
+        candidate.resolve().relative_to(base.resolve())
+    except ValueError:
+        return False
+    return True

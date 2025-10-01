@@ -9,9 +9,9 @@ import importlib
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Final, Literal, cast
 
-from ..parsers.base import JsonParser, TextParser
+from ..parsers.base import JsonParser, JsonTransform, TextParser, TextTransform
 from ..tools.base import CommandBuilder, ToolContext
 from ..tools.builtin_helpers import _resolve_path, download_tool_artifact
 from .catalog.types import JSONValue
@@ -29,6 +29,9 @@ from .project_scanner import (
     _path_matches_requirements,
     build_project_scanner,
 )
+
+TargetSelectorMode = Literal["filePattern"]
+_TARGET_SELECTOR_MODE_FILE_PATTERN: Final[TargetSelectorMode] = "filePattern"
 
 __all__ = [
     "command_download_binary",
@@ -56,14 +59,14 @@ def install_download_artifact(config: Mapping[str, JSONValue]) -> Callable[[Tool
             malformed.
 
     """
-    plain_config = cast("JSONValue", _as_plain_json(config))
+    plain_config = cast(JSONValue, _as_plain_json(config))
     if not isinstance(plain_config, Mapping):
         raise CatalogIntegrityError("install_download_artifact: configuration must be an object")
 
     download_config = plain_config.get("download")
     if not isinstance(download_config, Mapping):
         raise CatalogIntegrityError("install_download_artifact: 'download' must be an object")
-    download_mapping = cast("Mapping[str, JSONValue]", download_config)
+    download_mapping = cast(Mapping[str, JSONValue], download_config)
 
     version_value = plain_config.get("version")
     if version_value is not None and not isinstance(version_value, str):
@@ -138,10 +141,11 @@ def json_parser(config: Mapping[str, Any]) -> JsonParser:
 
     """
     transform_path = require_str(config, "transform", context="json_parser")
-    transform = _load_attribute(transform_path, context="json_parser.transform")
-    if not callable(transform):
+    transform_candidate = _load_attribute(transform_path, context="json_parser.transform")
+    if not callable(transform_candidate):
         raise CatalogIntegrityError(f"json_parser: transform '{transform_path}' is not callable")
-    return JsonParser(transform)
+    json_transform = cast(JsonTransform, transform_candidate)
+    return JsonParser(json_transform)
 
 
 def text_parser(config: Mapping[str, Any]) -> TextParser:
@@ -158,10 +162,11 @@ def text_parser(config: Mapping[str, Any]) -> TextParser:
 
     """
     transform_path = require_str(config, "transform", context="text_parser")
-    transform = _load_attribute(transform_path, context="text_parser.transform")
-    if not callable(transform):
+    transform_candidate = _load_attribute(transform_path, context="text_parser.transform")
+    if not callable(transform_candidate):
         raise CatalogIntegrityError(f"text_parser: transform '{transform_path}' is not callable")
-    return TextParser(transform)
+    text_transform = cast(TextTransform, transform_candidate)
+    return TextParser(text_transform)
 
 
 def parser_json_diagnostics(config: Mapping[str, Any]) -> JsonParser:
@@ -296,7 +301,7 @@ def command_download_binary(config: Mapping[str, Any]) -> CommandBuilder:
     if placeholder not in base_parts:
         base_parts = (placeholder,) + base_parts
 
-    raw_options = cast("JSONValue | None", plain_config.get("options"))
+    raw_options = cast(JSONValue | None, plain_config.get("options"))
     option_mappings = compile_option_mappings(
         raw_options,
         context="command_download_binary.options",
@@ -324,7 +329,7 @@ def command_download_binary(config: Mapping[str, Any]) -> CommandBuilder:
 class _TargetSelector:
     """Derive command targets from file discovery metadata."""
 
-    mode: Literal["filePattern"]
+    mode: TargetSelectorMode
     suffixes: tuple[str, ...]
     contains: tuple[str, ...]
     path_requires: tuple[tuple[str, ...], ...]
@@ -344,10 +349,7 @@ class _TargetSelector:
         """
         matched: list[Path] = []
         for path in ctx.files:
-            if not isinstance(path, Path):
-                candidate = Path(str(path))
-            else:
-                candidate = path
+            candidate = path if isinstance(path, Path) else Path(str(path))
             text = str(candidate)
             if self.suffixes and not text.endswith(self.suffixes):
                 continue
@@ -415,10 +417,10 @@ def _parse_target_selector(entry: Any, *, context: str) -> _TargetSelector:
     if not isinstance(entry, Mapping):
         raise CatalogIntegrityError(f"{context}: target selector must be an object")
 
-    mode_value = entry.get("type", "filePattern")
+    mode_value = entry.get("type", _TARGET_SELECTOR_MODE_FILE_PATTERN)
     if not isinstance(mode_value, str):
         raise CatalogIntegrityError(f"{context}: 'type' must be a string")
-    if mode_value.strip() != "filePattern":
+    if mode_value.strip() != _TARGET_SELECTOR_MODE_FILE_PATTERN:
         raise CatalogIntegrityError(
             f"{context}: unsupported target selector type '{mode_value}'",
         )
@@ -451,7 +453,7 @@ def _parse_target_selector(entry: Any, *, context: str) -> _TargetSelector:
         raise CatalogIntegrityError(f"{context}: 'defaultToRoot' must be a boolean")
 
     return _TargetSelector(
-        mode="filePattern",
+        mode=_TARGET_SELECTOR_MODE_FILE_PATTERN,
         suffixes=suffixes,
         contains=contains,
         path_requires=path_requires,
@@ -467,7 +469,7 @@ def command_project_scanner(config: Mapping[str, Any]) -> CommandBuilder:
     if not isinstance(plain_config, Mapping):
         raise CatalogIntegrityError("command_project_scanner: configuration must be an object")
 
-    return build_project_scanner(cast("Mapping[str, Any]", plain_config))
+    return build_project_scanner(cast(Mapping[str, Any], plain_config))
 
 
 def _download_artifact_for_tool(

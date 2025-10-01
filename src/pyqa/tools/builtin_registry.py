@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Any, Final, Literal, cast
 
 from ..tooling import CatalogIntegrityError, CatalogSnapshot, ToolCatalogLoader
-from ..tooling.loader import StrategyDefinition
+from ..tooling.catalog.model_runtime import SUPPORTED_RUNTIME_TYPES
+from ..tooling.catalog.models import StrategyDefinition
 from .base import (
     CommandBuilder,
     DeferredCommand,
@@ -36,15 +37,7 @@ COMMAND_STRATEGY: Final[str] = "command"
 PARSER_STRATEGY: Final[str] = "parser"
 INSTALLER_STRATEGY: Final[str] = "installer"
 
-_VALID_RUNTIMES: Final[set[str]] = {
-    "python",
-    "npm",
-    "binary",
-    "go",
-    "lua",
-    "perl",
-    "rust",
-}
+VALID_RUNTIME_NAMES: Final[set[str]] = set(SUPPORTED_RUNTIME_TYPES)
 
 
 @dataclass(frozen=True)
@@ -440,7 +433,7 @@ def _normalize_runtime_kind(raw: Any, *, context: str) -> ToolRuntimeKind:
     if candidate is None:
         return DEFAULT_RUNTIME_KIND
     candidate_str = str(candidate)
-    if candidate_str not in _VALID_RUNTIMES:
+    if candidate_str not in VALID_RUNTIME_NAMES:
         raise CatalogIntegrityError(
             f"{context}: unsupported runtime '{candidate_str}'",
         )

@@ -87,6 +87,7 @@ OPTIONAL_TYPED: dict[str, tuple[str, ...]] = {
     "tabulate": ("types-tabulate",),
     "tensorflow": ("types-tensorflow",),
     "tqdm": ("types-tqdm",),
+    "jsonschema": ("types-jsonschema",),
 }
 
 STUB_GENERATION: dict[str, tuple[str, ...]] = {

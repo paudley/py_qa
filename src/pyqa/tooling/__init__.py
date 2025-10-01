@@ -5,13 +5,9 @@
 
 from __future__ import annotations
 
-from .loader import (
-    CatalogFragment,
-    CatalogIntegrityError,
-    CatalogSnapshot,
-    ToolCatalogLoader,
-    ToolDefinition,
-)
+from .catalog.errors import CatalogIntegrityError
+from .catalog.loader import ToolCatalogLoader
+from .catalog.models import CatalogFragment, CatalogSnapshot, ToolDefinition
 
 __all__ = [
     "CatalogFragment",

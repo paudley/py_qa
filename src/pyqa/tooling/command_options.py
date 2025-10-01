@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Any, Final, Protocol, cast
 
 from ..tools.base import CommandBuilder, ToolContext
 from ..tools.builtin_commands_python import (
@@ -28,6 +28,10 @@ __all__ = [
     "require_str",
     "require_string_sequence",
 ]
+
+
+_STRICT_PROFILE_LABEL: Final[str] = "strict"
+_LENIENT_PROFILE_LABEL: Final[str] = "lenient"
 
 
 class OptionKind(str, Enum):
@@ -52,11 +56,14 @@ class TransformName(str, Enum):
     BOOL_TO_STR = "bool_to_str"
 
 
-class _OptionBehavior(Protocol):  # pylint: disable=too-few-public-methods
+class _OptionBehavior(Protocol):
     """Behaviour contract responsible for appending CLI fragments."""
 
     def extend_command(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
         """Mutate ``command`` to reflect ``value`` in the current context."""
+
+    def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
+        """Invoke the behaviour using callable syntax."""
 
 
 @dataclass(slots=True, frozen=True)
@@ -73,10 +80,6 @@ class _ArgsOptionBehavior:
             ctx: Tool execution context (unused for args behaviour).
             command: Mutable command list to mutate.
             value: Raw configuration value assigned to the option.
-
-        Returns:
-            None: The command list is extended in place.
-
         """
 
         del ctx
@@ -89,6 +92,17 @@ class _ArgsOptionBehavior:
             return
         for entry in values:
             _append_flagged(command, str(entry), self.flag)
+
+    def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
+        """Delegate callable invocation to :meth:`extend_command`.
+
+        Args:
+            ctx: Tool execution context forwarded to ``extend_command``.
+            command: Mutable command list forwarded to the behaviour.
+            value: Option value forwarded unchanged.
+        """
+
+        self.extend_command(ctx, command, value)
 
 
 @dataclass(slots=True, frozen=True)
@@ -105,25 +119,35 @@ class _PathOptionBehavior:
             ctx: Tool execution context providing filesystem roots.
             command: Mutable command list.
             value: Raw option value containing path(s).
-
-        Returns:
-            None: Paths are appended to ``command`` in place.
-
         """
 
         entries: Sequence[JSONValue]
-        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-            entries = cast("Sequence[JSONValue]", value)
-        else:
-            entries = (value,)
+        entries = (
+            cast(Sequence[JSONValue], value)
+            if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray))
+            else (value,)
+        )
         for entry in entries:
             if entry is None:
                 continue
-            if isinstance(entry, (str, Path)) and str(entry) in self.literal_values:
-                resolved = str(entry)
-            else:
-                resolved = str(_resolve_path(ctx.root, entry))
+            entry_text = str(entry)
+            resolved = (
+                entry_text
+                if isinstance(entry, (str, Path)) and entry_text in self.literal_values
+                else str(_resolve_path(ctx.root, entry))
+            )
             _append_flagged(command, resolved, self.flag)
+
+    def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
+        """Delegate callable invocation to :meth:`extend_command`.
+
+        Args:
+            ctx: Tool execution context forwarded to ``extend_command``.
+            command: Mutable command list forwarded to the behaviour.
+            value: Option value forwarded unchanged.
+        """
+
+        self.extend_command(ctx, command, value)
 
 
 @dataclass(slots=True, frozen=True)
@@ -139,14 +163,21 @@ class _ValueOptionBehavior:
             ctx: Tool execution context (unused for scalar values).
             command: Mutable command list to mutate.
             value: Raw option value to append.
-
-        Returns:
-            None: The command list is updated in place.
-
         """
 
         del ctx
         _append_flagged(command, str(value), self.flag)
+
+    def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
+        """Delegate callable invocation to :meth:`extend_command`.
+
+        Args:
+            ctx: Tool execution context forwarded to ``extend_command``.
+            command: Mutable command list forwarded to the behaviour.
+            value: Option value forwarded unchanged.
+        """
+
+        self.extend_command(ctx, command, value)
 
 
 @dataclass(slots=True, frozen=True)
@@ -163,22 +194,25 @@ class _FlagOptionBehavior:
             ctx: Tool execution context (unused for flag behaviour).
             command: Mutable command list.
             value: Raw option value controlling flag emission.
-
-        Returns:
-            None: Flags are appended directly to ``command``.
-
         """
 
         del ctx
-        bool_value = _as_bool(value)
-        if bool_value is None:
-            bool_value = bool(value)
-        if bool_value:
-            if self.flag:
-                command.append(self.flag)
-            return
-        if self.negate_flag:
-            command.append(self.negate_flag)
+        coerced_value = _as_bool(value)
+        should_enable = bool(value) if coerced_value is None else coerced_value
+        selected_flag = self.flag if should_enable else self.negate_flag
+        if selected_flag:
+            command.append(selected_flag)
+
+    def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
+        """Delegate callable invocation to :meth:`extend_command`.
+
+        Args:
+            ctx: Tool execution context forwarded to ``extend_command``.
+            command: Mutable command list forwarded to the behaviour.
+            value: Option value forwarded unchanged.
+        """
+
+        self.extend_command(ctx, command, value)
 
 
 @dataclass(slots=True, frozen=True)
@@ -195,19 +229,26 @@ class _RepeatFlagBehavior:
             ctx: Tool execution context (unused for repeat flag behaviour).
             command: Mutable command list.
             value: Raw option value defining the repeat count.
-
-        Returns:
-            None: The command list is updated with repeated flags.
-
         """
 
         del ctx
         count = _coerce_repeat_count(value)
-        if count == 0:
-            if self.negate_flag:
-                command.append(self.negate_flag)
+        if count > 0:
+            command.extend([self.flag] * count)
             return
-        command.extend([self.flag] * count)
+        if self.negate_flag:
+            command.append(self.negate_flag)
+
+    def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
+        """Delegate callable invocation to :meth:`extend_command`.
+
+        Args:
+            ctx: Tool execution context forwarded to ``extend_command``.
+            command: Mutable command list forwarded to the behaviour.
+            value: Option value forwarded unchanged.
+        """
+
+        self.extend_command(ctx, command, value)
 
 
 @dataclass(slots=True, frozen=True)
@@ -254,10 +295,6 @@ class OptionMapping:
             ctx: Execution context providing catalog settings and defaults.
             command: Mutable sequence representing the command under
                 construction.
-
-        Returns:
-            None: The command list is mutated in place.
-
         """
 
         value = self._resolve_value(ctx)
@@ -706,7 +743,7 @@ def _transform_strictness_is_strict(value: JSONValue, ctx: ToolContext) -> JSONV
     """
     del ctx
     if isinstance(value, str):
-        return value.strip().lower() == "strict"
+        return value.strip().lower() == _STRICT_PROFILE_LABEL
     if isinstance(value, bool):
         return value
     return bool(value)
@@ -725,7 +762,7 @@ def _transform_strictness_is_lenient(value: JSONValue, ctx: ToolContext) -> JSON
     """
     del ctx
     if isinstance(value, str):
-        return value.strip().lower() == "lenient"
+        return value.strip().lower() == _LENIENT_PROFILE_LABEL
     return False
 
 

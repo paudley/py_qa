@@ -11,6 +11,14 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
+CLI_ARGS = sys.argv[1:]
+if "--install" in CLI_ARGS:
+    TARGET_COMMAND = "install"
+    FORWARDED_ARGS = [arg for arg in CLI_ARGS if arg != "--install"]
+else:
+    TARGET_COMMAND = "lint"
+    FORWARDED_ARGS = CLI_ARGS
+
 try:
     from pyqa.cli import app
 except ModuleNotFoundError:
@@ -22,10 +30,14 @@ except ModuleNotFoundError:
             str(PROJECT_ROOT),
             "run",
             "pyqa",
-            "lint",
-            *sys.argv[1:],
+            TARGET_COMMAND,
+            *FORWARDED_ARGS,
         ],
     )
+else:
+    if TARGET_COMMAND == "install":
+        # Remap the --install flag to the actual Typer subcommand.
+        sys.argv = [sys.argv[0], TARGET_COMMAND, *FORWARDED_ARGS]
 
 if __name__ == "__main__":
     app()

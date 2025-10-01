@@ -5,7 +5,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from enum import StrEnum
+from typing import Any, Final
 
 from ..models import RawDiagnostic
 from ..tools.base import ToolContext
@@ -14,12 +15,39 @@ from .loader import CatalogIntegrityError
 __all__ = ["JsonDiagnosticExtractor"]
 
 
+_PATH_SEPARATOR: Final[str] = "."
+_BRACKET_OPEN: Final[str] = "["
+_BRACKET_CLOSE: Final[str] = "]"
+_WILDCARD_SYMBOL: Final[str] = "*"
+_ROOT_TOKENS: Final[tuple[str, ...]] = ("", "$")
+_QUOTE_CHAR: Final[str] = '"'
+_MIN_QUOTED_LENGTH: Final[int] = 2
+_DEFAULT_INDEX: Final[int] = 0
+
+
+class PathTokenKind(StrEnum):
+    """Enumerate path component flavours allowed in mappings."""
+
+    KEY = "key"
+    INDEX = "index"
+    WILDCARD = "wildcard"
+
+
 @dataclass(frozen=True)
 class PathComponent:
     """Single navigation step within a dotted/array JSON path."""
 
-    kind: Literal["key", "index", "wildcard"]
+    kind: PathTokenKind
     value: str | int | None
+
+
+class FieldConfigKey(StrEnum):
+    """Supported keys when defining diagnostic field mappings."""
+
+    PATH = "path"
+    VALUE = "value"
+    DEFAULT = "default"
+    MAP = "map"
 
 
 @dataclass(slots=True)
@@ -40,16 +68,15 @@ class FieldSpec:
         if self.has_value:
             return self.value
         value = _extract_path(entry, self.path) if self.path is not None else None
-        if value is None and self.has_default:
-            return self.default
         if value is None:
-            return None
-        if self.remap:
-            mapped = self._apply_remap(value)
-            if mapped is not None:
-                return mapped
-            if self.has_default:
-                return self.default
+            return self.default if self.has_default else None
+        if not self.remap:
+            return value
+        mapped = self._apply_remap(value)
+        if mapped is not None:
+            return mapped
+        if self.has_default:
+            return self.default
         return value
 
     def _apply_remap(self, value: Any) -> Any | None:
@@ -182,7 +209,7 @@ class JsonDiagnosticExtractor:
                 f"parser_json_diagnostics: mapping for field '{name}' must be a string or object",
             )
 
-        path_value = raw_spec.get("path")
+        path_value = raw_spec.get(FieldConfigKey.PATH)
         if path_value is None:
             path_tokens: tuple[PathComponent, ...] | None = None
         elif isinstance(path_value, str):
@@ -192,13 +219,13 @@ class JsonDiagnosticExtractor:
                 f"parser_json_diagnostics: field '{name}' has non-string 'path' configuration",
             )
 
-        const_value = raw_spec.get("value")
-        has_const = "value" in raw_spec
+        const_value = raw_spec.get(FieldConfigKey.VALUE)
+        has_const = FieldConfigKey.VALUE in raw_spec
 
-        default_value = raw_spec.get("default")
-        has_default = "default" in raw_spec
+        default_value = raw_spec.get(FieldConfigKey.DEFAULT)
+        has_default = FieldConfigKey.DEFAULT in raw_spec
 
-        map_value = raw_spec.get("map")
+        map_value = raw_spec.get(FieldConfigKey.MAP)
         remap: dict[str, Any] = {}
         if map_value is not None:
             if not isinstance(map_value, Mapping):
@@ -227,22 +254,43 @@ class JsonDiagnosticExtractor:
 def _descend(nodes: Iterable[Any], token: PathComponent) -> Iterator[Any]:
     """Yield nodes after applying a path ``token`` to *nodes*."""
 
-    if token.kind == "key":
-        key = token.value
-        for node in nodes:
-            if isinstance(node, Mapping) and isinstance(key, str):
-                if key in node:
-                    yield node[key]
-    elif token.kind == "index":
-        index = int(token.value) if token.value is not None else 0
-        for node in nodes:
-            if isinstance(node, Sequence) and not isinstance(node, (str, bytes, bytearray)):
-                if -len(node) <= index < len(node):
-                    yield node[index]
-    elif token.kind == "wildcard":
-        for node in nodes:
-            if isinstance(node, Sequence) and not isinstance(node, (str, bytes, bytearray)):
-                yield from node
+    if token.kind is PathTokenKind.KEY:
+        yield from _descend_by_key(nodes, token)
+        return
+    if token.kind is PathTokenKind.INDEX:
+        yield from _descend_by_index(nodes, token)
+        return
+    if token.kind is PathTokenKind.WILDCARD:
+        yield from _descend_by_wildcard(nodes)
+
+
+def _descend_by_key(nodes: Iterable[Any], token: PathComponent) -> Iterator[Any]:
+    """Yield values by resolving *token* as a dictionary key."""
+
+    key = token.value
+    if not isinstance(key, str):
+        return
+    for node in nodes:
+        if isinstance(node, Mapping) and key in node:
+            yield node[key]
+
+
+def _descend_by_index(nodes: Iterable[Any], token: PathComponent) -> Iterator[Any]:
+    """Yield values by resolving *token* as a positional index."""
+
+    index = int(token.value) if token.value is not None else _DEFAULT_INDEX
+    for node in nodes:
+        if isinstance(node, Sequence) and not isinstance(node, (str, bytes, bytearray)):
+            if -len(node) <= index < len(node):
+                yield node[index]
+
+
+def _descend_by_wildcard(nodes: Iterable[Any]) -> Iterator[Any]:
+    """Yield flattened sequence members for wildcard traversal."""
+
+    for node in nodes:
+        if isinstance(node, Sequence) and not isinstance(node, (str, bytes, bytearray)):
+            yield from node
 
 
 def _extract_path(entry: Mapping[str, Any], path: tuple[PathComponent, ...] | None) -> Any | None:
@@ -253,7 +301,7 @@ def _extract_path(entry: Mapping[str, Any], path: tuple[PathComponent, ...] | No
 
     current: Any = entry
     for token in path:
-        if token.kind == "key":
+        if token.kind is PathTokenKind.KEY:
             if not isinstance(current, Mapping):
                 break
             key = token.value
@@ -261,10 +309,10 @@ def _extract_path(entry: Mapping[str, Any], path: tuple[PathComponent, ...] | No
                 break
             current = current[key]
             continue
-        if token.kind == "index":
+        if token.kind is PathTokenKind.INDEX:
             if not isinstance(current, Sequence) or isinstance(current, (str, bytes, bytearray)):
                 break
-            index = int(token.value) if token.value is not None else 0
+            index = int(token.value) if token.value is not None else _DEFAULT_INDEX
             if index >= len(current) or index < -len(current):
                 break
             current = current[index]
@@ -284,33 +332,31 @@ def _tokenize_path(path: str, *, allow_wildcards: bool) -> tuple[PathComponent, 
 
     tokens: list[PathComponent] = []
     buffer: list[str] = []
-    index = 0
-    length = len(trimmed)
-    while index < length:
-        char = trimmed[index]
-        if char == ".":
-            _flush_buffer_as_key(buffer, tokens)
-            index += 1
+    skip_until = -1
+    for index, char in enumerate(trimmed):
+        if index <= skip_until:
             continue
-        if char == "[":
+        if char == _PATH_SEPARATOR:
             _flush_buffer_as_key(buffer, tokens)
-            closing = trimmed.find("]", index)
+            continue
+        if char == _BRACKET_OPEN:
+            _flush_buffer_as_key(buffer, tokens)
+            closing = trimmed.find(_BRACKET_CLOSE, index)
             if closing == -1:
                 raise CatalogIntegrityError(
                     f"parser_json_diagnostics: unmatched '[' in path '{path}'",
                 )
             segment = trimmed[index + 1 : closing].strip()
             _append_bracket_segment(tokens, segment, allow_wildcards, path)
-            index = closing + 1
+            skip_until = closing
             continue
         buffer.append(char)
-        index += 1
 
     _flush_buffer_as_key(buffer, tokens)
 
     filtered: list[PathComponent] = []
     for token in tokens:
-        if token.kind == "key" and isinstance(token.value, str) and token.value in {"", "$"}:
+        if token.kind is PathTokenKind.KEY and isinstance(token.value, str) and token.value in _ROOT_TOKENS:
             continue
         filtered.append(token)
     return tuple(filtered)
@@ -324,7 +370,7 @@ def _flush_buffer_as_key(buffer: list[str], tokens: list[PathComponent]) -> None
     key = "".join(buffer).strip()
     buffer.clear()
     if key:
-        tokens.append(PathComponent("key", key))
+        tokens.append(PathComponent(PathTokenKind.KEY, key))
 
 
 def _append_bracket_segment(
@@ -335,21 +381,21 @@ def _append_bracket_segment(
 ) -> None:
     """Append bracket segment tokens, enforcing wildcard policy."""
 
-    if segment in {"", "*"}:
+    if segment in {"", _WILDCARD_SYMBOL}:
         if not allow_wildcards:
             raise CatalogIntegrityError(
                 "parser_json_diagnostics: wildcards are not permitted " f"in field paths ('{path}')",
             )
-        tokens.append(PathComponent("wildcard", None))
+        tokens.append(PathComponent(PathTokenKind.WILDCARD, None))
         return
 
     cleaned = segment
-    if segment.startswith('"') and segment.endswith('"') and len(segment) >= 2:
+    if segment.startswith(_QUOTE_CHAR) and segment.endswith(_QUOTE_CHAR) and len(segment) >= _MIN_QUOTED_LENGTH:
         cleaned = segment[1:-1]
     if cleaned.lstrip("-").isdigit():
-        tokens.append(PathComponent("index", int(cleaned)))
+        tokens.append(PathComponent(PathTokenKind.INDEX, int(cleaned)))
         return
-    tokens.append(PathComponent("key", cleaned))
+    tokens.append(PathComponent(PathTokenKind.KEY, cleaned))
 
 
 def _coerce_int(value: Any | None) -> int | None:

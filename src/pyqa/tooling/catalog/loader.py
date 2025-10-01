@@ -9,29 +9,24 @@ import importlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, Literal
+from types import ModuleType
+from typing import Final, Literal, cast
 
 from .checksum import compute_catalog_checksum
 from .errors import CatalogIntegrityError, CatalogValidationError
 from .io import load_document
-from .models import (
-    CatalogFragment,
-    CatalogSnapshot,
-    StrategyDefinition,
-    ToolDefinition,
-)
+from .model_catalog import CatalogFragment, CatalogSnapshot
+from .model_strategy import StrategyDefinition
+from .model_tool import ToolDefinition
 from .resolver import resolve_tool_mapping, to_plain_json
 from .scanner import CatalogScanner
 from .schema import SchemaRepository
 from .types import JSONValue
 from .utils import expect_mapping
 
-if TYPE_CHECKING:  # pragma: no cover - import-time typing helpers
-    from jsonschema import exceptions as jsonschema_exceptions
-else:  # pragma: no cover - fallback when typing information is unavailable
-    import jsonschema
-
-    jsonschema_exceptions = jsonschema.exceptions
+jsonschema_module = importlib.import_module("jsonschema")
+jsonschema_exceptions: ModuleType = cast(ModuleType, jsonschema_module.exceptions)
+JsonSchemaValidationError = cast(type[Exception], getattr(jsonschema_exceptions, "ValidationError"))
 
 ValidatorKind = Literal["tool", "strategy"]
 TOOL_VALIDATOR: Final[ValidatorKind] = "tool"
@@ -148,8 +143,8 @@ class ToolCatalogLoader:
             raise ValueError(f"unknown validator kind '{validator}'")
         try:
             schema_validator.validate(document)
-        except jsonschema_exceptions.ValidationError as exc:
-            raise CatalogValidationError(f"{path}: {exc.message}") from exc
+        except JsonSchemaValidationError as exc:
+            raise CatalogValidationError(f"{path}: {exc}") from exc
 
 
 __all__ = ["ToolCatalogLoader"]
@@ -160,8 +155,10 @@ def _validate_strategy_implementation(definition: StrategyDefinition) -> None:
     try:
         _resolve_strategy_attribute(definition)
     except (ImportError, AttributeError, ValueError) as exc:
+        implementation = definition.implementation
+        source = definition.source
         raise CatalogIntegrityError(
-            f"{definition.source}: unable to import strategy implementation '{definition.implementation}'",
+            f"{source}: unable to import strategy implementation '{implementation}'",
         ) from exc
 
 
@@ -174,8 +171,9 @@ def _resolve_strategy_attribute(definition: StrategyDefinition) -> object:
 
     module_path, _, attribute_name = definition.implementation.rpartition(".")
     if not module_path:
+        implementation = definition.implementation
         raise ValueError(
-            f"{definition.source}: implementation '{definition.implementation}' must include a module path",
+            f"{definition.source}: implementation '{implementation}' must include a module path",
         )
     module = importlib.import_module(module_path)
     return getattr(module, attribute_name)

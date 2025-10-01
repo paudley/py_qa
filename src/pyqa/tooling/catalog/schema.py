@@ -5,18 +5,32 @@
 
 from __future__ import annotations
 
+import importlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Protocol, cast, runtime_checkable
 
 from .io import load_schema
+from .types import JSONValue
 
-if TYPE_CHECKING:  # pragma: no cover - typing-only import
-    from jsonschema import Draft202012Validator
-else:  # pragma: no cover - runtime import without stubs
-    import jsonschema
 
-    Draft202012Validator = jsonschema.Draft202012Validator
+@runtime_checkable
+class SchemaValidator(Protocol):
+    """Protocol describing the minimal interface exposed by jsonschema validators."""
+
+    def validate(self, instance: JSONValue) -> None:
+        """Validate ``instance`` against the bound schema."""
+
+    def iter_errors(self, instance: JSONValue) -> object:
+        """Yield validation errors for ``instance`` without raising immediately."""
+
+
+SchemaValidatorFactory = Callable[[JSONValue], SchemaValidator]
+
+
+jsonschema_module = importlib.import_module("jsonschema")
+Draft202012Validator = cast(SchemaValidatorFactory, jsonschema_module.Draft202012Validator)
 
 
 @dataclass(slots=True)
@@ -24,8 +38,8 @@ class SchemaRepository:
     """Container for catalog JSON schema validators."""
 
     schema_root: Path
-    tool_validator: Draft202012Validator
-    strategy_validator: Draft202012Validator
+    tool_validator: SchemaValidator
+    strategy_validator: SchemaValidator
 
     @classmethod
     def load(cls, *, catalog_root: Path, schema_root: Path | None = None) -> SchemaRepository:
