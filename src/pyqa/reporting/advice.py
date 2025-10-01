@@ -76,6 +76,8 @@ MIN_DOC_FINDINGS: Final[int] = 3
 MIN_TYPE_FINDINGS: Final[int] = 3
 MIN_MAGIC_OCCURRENCES: Final[int] = 2
 FOCUS_THRESHOLD: Final[int] = 8
+MISSING_LINE_SENTINEL: Final[int] = -1
+MISSING_CODE_SENTINEL: Final[str] = "-"
 MIN_TEST_HYGIENE_DIAGNOSTICS: Final[int] = 5
 MAX_COMPLEXITY_SUMMARIES: Final[int] = 5
 TEST_TOKENS: Final[tuple[str, ...]] = ("tests",)
@@ -89,6 +91,7 @@ COMPLEXITY_CODES: Final[frozenset[tuple[str, str]]] = frozenset(
 )
 DOC_RUFF_CODES: Final[frozenset[str]] = frozenset({"D401", "D402"})
 PRIVATE_IMPORT_CODES: Final[frozenset[str]] = frozenset({"SLF001", "TID252"})
+PYRIGHT_PRIVATE_IMPORT_CODE: Final[str] = "REPORTPRIVATEIMPORTUSAGE"
 DEBUG_CODES: Final[frozenset[str]] = frozenset({"T201", "ERA001"})
 ASSERT_CODES: Final[frozenset[str]] = frozenset({"S101", "B101"})
 MAGIC_NUMBER_CODE: Final[str] = "PLR2004"
@@ -98,6 +101,7 @@ PYRIGHT_TOOL: Final[str] = "pyright"
 MYPY_TOOL: Final[str] = "mypy"
 PYLINT_TOOL: Final[str] = "pylint"
 INHERITANCE_OVERRIDE_CODE: Final[str] = "REPORTMETHODOVERRIDESIGNATURE"
+STUB_OVERRIDE_LABEL: Final[str] = "override"
 IMP_NAMESPACE_CODE: Final[str] = "INP001"
 
 
@@ -190,9 +194,9 @@ def _normalise_entries(
 
     records: list[DiagnosticRecord] = []
     for file_path, line, function, tool, code, message in entries:
-        normalised_line = line if line >= 0 else None
+        normalised_line = line if line != MISSING_LINE_SENTINEL else None
         normalised_tool = (tool or "").lower()
-        normalised_code = "" if code == "-" else code.upper()
+        normalised_code = "" if code == MISSING_CODE_SENTINEL else code.upper()
         record = DiagnosticRecord(
             file_path=file_path or None,
             line=normalised_line,
@@ -399,7 +403,7 @@ def _append_stub_guidance(
             record.tool == PYRIGHT_TOOL
             and record.file_path
             and (
-                "override" in record.message.lower()
+                STUB_OVERRIDE_LABEL in record.message.lower()
                 or record.code.startswith("REPORTINCOMPATIBLE")
                 or record.code == INHERITANCE_OVERRIDE_CODE
             )
@@ -408,7 +412,7 @@ def _append_stub_guidance(
     if stub_files and override_files:
         accumulator.add(
             AdviceCategory.TYPING,
-            ("align stubs with implementations—keep signatures in sync as upstream changes land."),
+            "Align stubs with implementations—keep signatures in sync as upstream changes land.",
         )
 
 
@@ -426,7 +430,7 @@ def _append_packaging_guidance(
         location = location or "."
         accumulator.add(
             AdviceCategory.PACKAGING,
-            (f"add an __init__.py to {location} so imports stay predictable and tooling can" " locate modules."),
+            f"Add an __init__.py to {location} so imports stay predictable and tooling can locate modules.",
         )
         break
 
@@ -442,16 +446,16 @@ def _append_encapsulation_guidance(
         if record.code in PRIVATE_IMPORT_CODES:
             accumulator.add(
                 AdviceCategory.ENCAPSULATION,
-                ("expose public APIs instead of importing internal members; re-export the pieces" " callers need."),
+                "Expose public APIs instead of importing internal members; re-export the pieces callers need.",
             )
             return
         if record.tool == PYRIGHT_TOOL and (
-            record.code == "REPORTPRIVATEIMPORTUSAGE"
+            record.code == PYRIGHT_PRIVATE_IMPORT_CODE
             or any(keyword in record.message.lower() for keyword in private_keywords)
         ):
             accumulator.add(
                 AdviceCategory.ENCAPSULATION,
-                ("expose public APIs instead of importing internal members; re-export the pieces" " callers need."),
+                "Expose public APIs instead of importing internal members; re-export the pieces callers need.",
             )
             return
 
@@ -477,7 +481,7 @@ def _append_magic_number_guidance(
     if summary:
         accumulator.add(
             AdviceCategory.CONSTANTS,
-            (f"move magic numbers in {summary} into named constants or configuration objects for" " clarity."),
+            f"Move magic numbers in {summary} into named constants or configuration objects for clarity.",
         )
 
 
@@ -490,7 +494,7 @@ def _append_debug_guidance(
     if any(record.code in DEBUG_CODES for record in diagnostics):
         accumulator.add(
             AdviceCategory.LOGGING,
-            ("replace debugging prints or commented blocks with structured logging or tests " "before merging."),
+            "Replace debugging prints or commented blocks with structured logging or tests before merging.",
         )
 
 
@@ -504,7 +508,7 @@ def _append_runtime_assertion_guidance(
         if record.code in ASSERT_CODES and not _is_test_path(record.file_path):
             accumulator.add(
                 AdviceCategory.RUNTIME_SAFETY,
-                ("swap bare assert with explicit checks or exceptions " "to keep optimized builds safe."),
+                "Swap bare assert with explicit checks or exceptions to keep optimized builds safe.",
             )
             return
 
@@ -519,10 +523,7 @@ def _append_test_guidance(
     if len(test_diagnostics) >= MIN_TEST_HYGIENE_DIAGNOSTICS:
         accumulator.add(
             AdviceCategory.TEST_HYGIENE,
-            (
-                "refactor noisy tests to shared helpers or fixtures and split long assertions so"
-                " failures isolate quickly."
-            ),
+            "Refactor noisy tests to shared helpers or fixtures and split long assertions so failures isolate quickly.",
         )
 
 
@@ -657,9 +658,14 @@ def _estimate_function_scale(path: Path, function: str) -> tuple[int | None, int
     return (count if count else None, complexity if complexity else None)
 
 
+ANNOTATION_SPAN_STYLE: Final[str] = "ansi256:213"
+
+
 def _infer_annotation_targets(message: str, engine: AnnotationEngine) -> int:
+    """Return the number of highlighted annotation spans within *message*."""
+
     spans = engine.message_spans(message)
-    return sum(1 for span in spans if span.style == "ansi256:213")
+    return sum(1 for span in spans if span.style == ANNOTATION_SPAN_STYLE)
 
 
 __all__ = [
