@@ -14,6 +14,7 @@ from ..annotations import HighlightKind
 from ..models import Diagnostic, RunResult
 from ..serialization import serialize_outcome
 from ..severity import Severity, severity_to_sarif
+from ..utils.bool_utils import coerce_bool_literal
 from .advice import AdviceBuilder, AdviceEntry
 
 SARIF_VERSION = "2.1.0"
@@ -157,12 +158,10 @@ def _coerce_bool(value: object, default: bool, name: str) -> bool:
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"1", "true", "yes", "on"}:
-            return True
-        if normalized in {"0", "false", "no", "off"}:
-            return False
-        raise ValueError(f"{name} must be a boolean string literal")
+        try:
+            return coerce_bool_literal(value)
+        except ValueError as exc:
+            raise ValueError(f"{name} must be a boolean string literal") from exc
     raise TypeError(f"{name} must be a boolean value")
 
 

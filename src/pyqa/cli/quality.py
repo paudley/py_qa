@@ -14,6 +14,7 @@ from ..constants import PY_QA_DIR_NAME
 from ..logging import fail, ok, warn
 from ..quality import (
     QualityChecker,
+    QualityCheckerOptions,
     QualityCheckResult,
     QualityIssueLevel,
     check_commit_message,
@@ -126,10 +127,12 @@ def main(
     checker = QualityChecker(
         root=root,
         quality=config.quality,
-        license_overrides=config.license,
-        files=files,
-        checks=selected_checks,
-        staged=staged,
+        options=QualityCheckerOptions(
+            license_overrides=config.license,
+            files=files,
+            checks=selected_checks,
+            staged=staged,
+        ),
     )
     result = checker.run(fix=fix)
     _render_result(result, root, emoji)

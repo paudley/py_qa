@@ -17,10 +17,11 @@ from pyqa.cli.app import app
 from pyqa.cli.options import LintOptions
 from pyqa.cli.typer_ext import _primary_option_name
 from pyqa.config import Config
+from pyqa.config_loader import ConfigLoader
 from pyqa.models import RunResult, ToolOutcome
+from pyqa.quality import QualityCheckResult, QualityChecker, QualityCheckerOptions, check_commit_message
+from pyqa.tools.registry import DEFAULT_REGISTRY
 from pyqa.tool_env.models import PreparedCommand
-
-
 def test_lint_warns_when_py_qa_path_outside_workspace(tmp_path: Path, monkeypatch) -> None:
     runner = CliRunner()
 
@@ -197,6 +198,53 @@ def test_lint_no_lint_tests_flag(monkeypatch, tmp_path: Path) -> None:
     assert isinstance(config, Config)
     resolved_tests = (tmp_path / "tests").resolve()
     assert any(path == resolved_tests for path in config.file_discovery.excludes)
+
+
+def test_append_quality_checks_adds_outcome(tmp_path: Path) -> None:
+    target = tmp_path / "module.py"
+    target.write_text("print('hello')\n", encoding="utf-8")
+
+    config_path = tmp_path / "pyproject.toml"
+    config_path.write_text(
+        """
+[tool.pyqa.quality]
+checks = ["license"]
+
+[tool.pyqa.license]
+spdx = "MIT"
+year = "2025"
+copyright = "Blackcat"
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    loader = ConfigLoader.for_root(tmp_path)
+    load_result = loader.load_with_trace()
+    config = load_result.config
+    config.severity.sensitivity = "maximum"
+
+    run_result = RunResult(
+        root=tmp_path,
+        files=[target],
+        outcomes=[],
+        tool_versions={},
+    )
+
+    lint_module._append_internal_quality_checks(
+        config=config,
+        root=tmp_path,
+        run_result=run_result,
+    )
+
+    quality_outcomes = [outcome for outcome in run_result.outcomes if outcome.tool == "quality"]
+    assert quality_outcomes
+    assert any("license" in outcome.action for outcome in quality_outcomes)
+    assert any(
+        "SPDX" in line or "license" in line.lower() or "copyright" in line.lower()
+        for outcome in quality_outcomes
+        for line in outcome.stdout
+    )
 
 
 

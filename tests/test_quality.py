@@ -13,7 +13,7 @@ from typer.testing import CliRunner
 from pyqa.cli.app import app
 from pyqa.cli.utils import filter_py_qa_paths
 from pyqa.config_loader import ConfigLoader
-from pyqa.quality import QualityChecker, check_commit_message
+from pyqa.quality import QualityChecker, QualityCheckerOptions, check_commit_message
 from pyqa.tools.settings import tool_setting_schema_as_dict
 
 
@@ -70,9 +70,11 @@ def test_quality_checker_missing_spdx(tmp_path: Path) -> None:
     checker = QualityChecker(
         root=tmp_path,
         quality=config.quality,
-        license_overrides=config.license,
-        files=[target],
-        checks={"license"},
+        options=QualityCheckerOptions(
+            license_overrides=config.license,
+            files=[target],
+            checks={"license"},
+        ),
     )
     result = checker.run()
 
@@ -95,9 +97,11 @@ print('ok')
     checker = QualityChecker(
         root=tmp_path,
         quality=config.quality,
-        license_overrides=config.license,
-        files=[target],
-        checks={"license"},
+        options=QualityCheckerOptions(
+            license_overrides=config.license,
+            files=[target],
+            checks={"license"},
+        ),
     )
     result = checker.run()
 
@@ -113,9 +117,11 @@ def test_quality_checker_fix_mode_adds_headers(tmp_path: Path) -> None:
     checker = QualityChecker(
         root=tmp_path,
         quality=config.quality,
-        license_overrides=config.license,
-        files=[target],
-        checks={"license"},
+        options=QualityCheckerOptions(
+            license_overrides=config.license,
+            files=[target],
+            checks={"license"},
+        ),
     )
     result = checker.run(fix=True)
 
@@ -144,9 +150,11 @@ console.log('test');
     checker = QualityChecker(
         root=tmp_path,
         quality=config.quality,
-        license_overrides=config.license,
-        files=[target],
-        checks={"license"},
+        options=QualityCheckerOptions(
+            license_overrides=config.license,
+            files=[target],
+            checks={"license"},
+        ),
     )
     result = checker.run(fix=True)
 
@@ -165,9 +173,11 @@ def test_schema_check_reports_outdated_file(tmp_path: Path) -> None:
     checker = QualityChecker(
         root=tmp_path,
         quality=config.quality,
-        license_overrides=config.license,
-        files=[],
-        checks={"schema"},
+        options=QualityCheckerOptions(
+            license_overrides=config.license,
+            files=[],
+            checks={"schema"},
+        ),
     )
     result = checker.run()
 
@@ -247,9 +257,11 @@ def test_license_check_skips_json_and_txt(tmp_path: Path) -> None:
     checker = QualityChecker(
         root=tmp_path,
         quality=config.quality,
-        license_overrides=config.license,
-        files=[json_target, text_target],
-        checks={"license"},
+        options=QualityCheckerOptions(
+            license_overrides=config.license,
+            files=[json_target, text_target],
+            checks={"license"},
+        ),
     )
     result = checker.run()
 

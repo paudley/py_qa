@@ -18,6 +18,7 @@ from typing import Final, Protocol, cast
 from ..filesystem.paths import normalize_path
 from ..models import RawDiagnostic
 from ..severity import Severity
+from ..utils.bool_utils import interpret_optional_bool
 from .base import ToolContext
 
 __all__ = [
@@ -118,17 +119,7 @@ def _resolve_path(root: Path, value: object) -> Path:
 
 def _as_bool(value: object | None) -> bool | None:
     """Interpret arbitrary values as optional booleans."""
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"1", "true", "yes", "on"}:
-            return True
-        if normalized in {"0", "false", "no", "off"}:
-            return False
-    return bool(value)
+    return interpret_optional_bool(value)
 
 
 @dataclass(frozen=True)

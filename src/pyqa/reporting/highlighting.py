@@ -19,6 +19,7 @@ CODE_TINT: Final[str] = "ansi256:105"
 LITERAL_TINT: Final[str] = "ansi256:208"
 ANNOTATION_SPAN_STYLE: Final[str] = "ansi256:213"
 LOCATION_SEPARATOR: Final[str] = ":"
+EMPTY_CODE_PLACEHOLDER: Final[str] = "-"
 _LITERAL_PATTERN = re.compile(r"''(.*?)''")
 
 
@@ -145,8 +146,8 @@ def highlight_for_output(
 def format_code_value(code: str, color_enabled: bool) -> str:
     """Return a colourised diagnostic code for concise output."""
 
-    clean = code.strip() or "-"
-    if clean == "-":
+    clean = code.strip() or EMPTY_CODE_PLACEHOLDER
+    if clean == EMPTY_CODE_PLACEHOLDER:
         return clean
     return colorize(clean, CODE_TINT, color_enabled)
 

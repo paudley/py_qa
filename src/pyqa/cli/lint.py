@@ -20,14 +20,15 @@ from rich.progress import (
 from rich.table import Table
 from rich.text import Text
 
-from ..config import Config, ConfigError, default_parallel_jobs
+from ..config import Config, ConfigError, SensitivityLevel, default_parallel_jobs
 from ..console import console_manager, is_tty
 from ..constants import PY_QA_DIR_NAME
 from ..discovery import build_default_discovery
 from ..execution.orchestrator import FetchEvent, Orchestrator, OrchestratorHooks
 from ..filesystem.paths import normalize_path
 from ..logging import info, warn
-from ..models import RunResult
+from ..models import RunResult, ToolOutcome
+from ..quality import QualityChecker, QualityCheckerOptions
 from ..reporting.emitters import write_json_report, write_pr_summary, write_sarif_report
 from ..reporting.formatters import render
 from ..tool_env.models import PreparedCommand
@@ -664,12 +665,22 @@ def lint_command(
     final_summary: Text | None = None
     if progress is not None:
         result = orchestrator.run(config, root=root)
+        _append_internal_quality_checks(
+            config=config,
+            root=root,
+            run_result=result,
+        )
         advance_rendering_phase()
         final_summary = _finalise_progress(not result.failed)
         if progress_started:
             progress.stop()
     else:
         result = orchestrator.run(config, root=root)
+        _append_internal_quality_checks(
+            config=config,
+            root=root,
+            run_result=result,
+        )
 
     if final_summary and progress_console is not None:
         progress_console.print(final_summary)
@@ -703,6 +714,47 @@ def _handle_reporting(
             min_severity=config.output.pr_summary_min_severity,
             template=config.output.pr_summary_template,
         )
+
+
+def _append_internal_quality_checks(
+    *,
+    config: Config,
+    root: Path,
+    run_result: RunResult,
+) -> None:
+    """Run additional quality checks and append results when sensitivity is maximum."""
+
+    if config.severity.sensitivity != SensitivityLevel.MAXIMUM.value:
+        return
+    if not run_result.files:
+        return
+
+    checker = QualityChecker(
+        root=root,
+        quality=config.quality,
+        options=QualityCheckerOptions(
+            license_overrides=config.license,
+            files=run_result.files,
+            checks={"license"},
+        ),
+    )
+    quality_result = checker.run(fix=False)
+    if not quality_result.issues:
+        return
+
+    added_outcomes = []
+    for issue in quality_result.issues:
+        added_outcomes.append(
+            ToolOutcome(
+                tool="quality",
+                action="license",
+                returncode=0,
+                stdout=[issue.message],
+                stderr=[],
+                diagnostics=[],
+            ),
+        )
+    run_result.outcomes.extend(added_outcomes)
 
 
 def _collect_provided_flags(
