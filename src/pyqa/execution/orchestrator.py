@@ -34,7 +34,7 @@ from ..logging import info, warn
 from ..metrics import FileMetrics, compute_file_metrics
 from ..models import Diagnostic, RunResult, ToolOutcome
 from ..severity import SeverityRuleView
-from ..tool_env import CommandPreparer, PreparedCommand
+from ..tool_env import CommandPreparationRequest, CommandPreparer, PreparedCommand
 from ..tool_versions import load_versions, save_versions
 from ..tools import Tool, ToolAction, ToolContext
 from ..tools.registry import ToolRegistry
@@ -478,14 +478,15 @@ class Orchestrator:
             self._apply_installers(tool, context, installed_tools)
             base_cmd = list(action.build_command(context))
             try:
-                prepared = self._cmd_preparer.prepare(
+                request = CommandPreparationRequest(
                     tool=tool,
-                    base_cmd=base_cmd,
+                    command=tuple(base_cmd),
                     root=root_path,
                     cache_dir=cache_dir,
                     system_preferred=system_preferred,
                     use_local_override=use_local_override,
                 )
+                prepared = self._invoke_preparer(request)
                 results.append((tool.name, action.name, prepared, None))
                 if callback:
                     callback(
@@ -508,6 +509,21 @@ class Orchestrator:
                         str(exc),
                     )
         return results
+
+    def _invoke_preparer(self, request: CommandPreparationRequest) -> PreparedCommand:
+        """Invoke the command preparer with backwards compatibility support."""
+
+        try:
+            return self._cmd_preparer.prepare(request)
+        except TypeError:
+            return self._cmd_preparer.prepare(
+                tool=request.tool,
+                base_cmd=list(request.command),
+                root=request.root,
+                cache_dir=request.cache_dir,
+                system_preferred=request.system_preferred,
+                use_local_override=request.use_local_override,
+            )
 
     def _prepare_runtime(self, root: Path | None) -> Path:
         resolved = root or Path.cwd()
@@ -561,14 +577,15 @@ class Orchestrator:
         for action in tool.actions:
             if not self._should_run_action(cfg, action):
                 continue
-            prepared = self._cmd_preparer.prepare(
+            preparation_request = CommandPreparationRequest(
                 tool=tool,
-                base_cmd=list(action.build_command(context)),
+                command=tuple(action.build_command(context)),
                 root=root,
                 cache_dir=cfg.execution.cache_dir,
                 system_preferred=not cfg.execution.use_local_linters,
                 use_local_override=cfg.execution.use_local_linters,
             )
+            prepared = self._invoke_preparer(preparation_request)
             self._update_tool_version(cache_ctx, tool.name, prepared.version)
             cached_entry = self._load_cached_outcome(
                 cache_ctx,

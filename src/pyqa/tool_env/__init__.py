@@ -28,7 +28,7 @@ from .constants import (
     UV_CACHE_DIR,
 )
 from .models import PreparedCommand
-from .preparer import CommandPreparer
+from .preparer import CommandPreparationRequest, CommandPreparer
 from .runtimes.go import GoRuntime
 from .runtimes.lua import LuaRuntime
 from .runtimes.npm import NpmRuntime
@@ -60,6 +60,7 @@ __all__ = [
     "RUST_META_DIR",
     "RUST_WORK_DIR",
     "UV_CACHE_DIR",
+    "CommandPreparationRequest",
     "CommandPreparer",
     "GoRuntime",
     "LuaRuntime",

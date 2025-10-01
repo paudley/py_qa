@@ -7,8 +7,8 @@ from __future__ import annotations
 import json
 import os
 import shlex
-import shutil
-from collections.abc import Mapping, Sequence
+import shutil as _shutil
+from collections.abc import Mapping
 from pathlib import Path
 
 from ...environments import inject_node_defaults
@@ -17,7 +17,9 @@ from ...tools.base import Tool
 from .. import constants as tool_constants
 from ..models import PreparedCommand
 from ..utils import _slugify, _split_package_spec, desired_version
-from .base import RuntimeHandler
+from .base import RuntimeContext, RuntimeHandler
+
+shutil = _shutil
 
 
 class NpmRuntime(RuntimeHandler):
@@ -25,46 +27,23 @@ class NpmRuntime(RuntimeHandler):
 
     META_FILE = ".pyqa-meta.json"
 
-    def _try_system(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand | None:
-        executable = shutil.which(base_cmd[0])
-        if not executable:
-            return None
-        version = None
-        if tool.version_command:
-            version = self._versions.capture(tool.version_command)
-        if not self._versions.is_compatible(version, target_version):
-            return None
-        return PreparedCommand.from_parts(cmd=base_cmd, env=None, version=version, source="system")
+    def _try_project(self, context: RuntimeContext) -> PreparedCommand | None:
+        """Use a project-local Node binary located under ``node_modules/.bin``."""
 
-    def _try_project(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand | None:
-        bin_dir = root / "node_modules" / ".bin"
-        executable = bin_dir / base_cmd[0]
+        bin_dir = context.root / "node_modules" / ".bin"
+        executable = bin_dir / context.executable
         if not executable.exists():
             return None
-        env_overrides = self._project_env(bin_dir, root)
+        env_overrides = self._project_env(bin_dir, context.root)
         version = None
-        if tool.version_command:
+        if context.tool.version_command:
             version = self._versions.capture(
-                tool.version_command,
+                context.tool.version_command,
                 env=self._merge_env(env_overrides),
             )
-        if not self._versions.is_compatible(version, target_version):
+        if not self._versions.is_compatible(version, context.target_version):
             return None
-        cmd = list(base_cmd)
+        cmd = context.command_list()
         cmd[0] = str(executable)
         return PreparedCommand.from_parts(
             cmd=cmd,
@@ -73,23 +52,18 @@ class NpmRuntime(RuntimeHandler):
             source="project",
         )
 
-    def _prepare_local(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand:
-        prefix, cached_version = self._ensure_local_package(tool)
+    def _prepare_local(self, context: RuntimeContext) -> PreparedCommand:
+        """Install npm packages into the cache and return the local command."""
+
+        prefix, cached_version = self._ensure_local_package(context.tool)
         bin_dir = prefix / "node_modules" / ".bin"
-        executable = bin_dir / base_cmd[0]
-        cmd = list(base_cmd)
+        executable = bin_dir / context.executable
+        cmd = context.command_list()
         cmd[0] = str(executable)
-        env = self._local_env(bin_dir, prefix, root)
+        env = self._local_env(bin_dir, prefix, context.root)
         version = cached_version
-        if version is None and tool.version_command:
-            version = self._versions.capture(tool.version_command, env=self._merge_env(env))
+        if version is None and context.tool.version_command:
+            version = self._versions.capture(context.tool.version_command, env=self._merge_env(env))
         return PreparedCommand.from_parts(cmd=cmd, env=env, version=version, source="local")
 
     def _ensure_local_package(self, tool: Tool) -> tuple[Path, str | None]:
@@ -102,12 +76,9 @@ class NpmRuntime(RuntimeHandler):
         meta_path = prefix / self.META_FILE
         bin_dir = prefix / "node_modules" / ".bin"
         if meta_path.is_file() and bin_dir.exists():
-            try:
-                data = json.loads(meta_path.read_text(encoding="utf-8"))
-                if data.get("requirement") == requirement:
-                    return prefix, data.get("version")
-            except json.JSONDecodeError:
-                pass
+            data = self._load_json(meta_path)
+            if data and data.get("requirement") == requirement:
+                return prefix, data.get("version")
 
         prefix.mkdir(parents=True, exist_ok=True)
         env = os.environ.copy()
@@ -156,9 +127,8 @@ class NpmRuntime(RuntimeHandler):
             )
         except (OSError, SubprocessExecutionError):
             return None
-        try:
-            payload = json.loads(result.stdout)
-        except json.JSONDecodeError:
+        payload = self._parse_json(result.stdout)
+        if payload is None:
             return None
         deps = payload.get("dependencies") or {}
         entry = deps.get(package_name)

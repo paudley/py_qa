@@ -5,10 +5,8 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import stat
-from collections.abc import Sequence
 from pathlib import Path
 
 from ...process_utils import run_command
@@ -16,71 +14,33 @@ from ...tools.base import Tool
 from .. import constants as tool_constants
 from ..models import PreparedCommand
 from ..utils import _slugify, _split_package_spec
-from .base import RuntimeHandler
+from .base import RuntimeContext, RuntimeHandler
 
 
 class LuaRuntime(RuntimeHandler):
     """Provision Lua tooling using luarocks."""
 
-    def _try_system(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand | None:
-        executable = shutil.which(base_cmd[0])
-        if not executable:
-            return None
-        version = None
-        if tool.version_command:
-            version = self._versions.capture(tool.version_command)
-        if not self._versions.is_compatible(version, target_version):
-            return None
-        return PreparedCommand.from_parts(cmd=base_cmd, env=None, version=version, source="system")
+    def _try_project(self, context: RuntimeContext) -> PreparedCommand | None:
+        """Select project-local Lua binary when present."""
 
-    def _try_project(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand | None:
-        del cache_dir, target_version
-        binary_name = Path(base_cmd[0]).name
-        candidate = root / "bin" / binary_name
-        if not candidate.exists():
-            return None
-        cmd = list(base_cmd)
-        cmd[0] = str(candidate)
-        return PreparedCommand.from_parts(
-            cmd=cmd,
-            env=None,
-            version=None,
-            source="project",
-        )
+        return self._project_binary(context)
 
-    def _prepare_local(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand:
-        binary_name = Path(base_cmd[0]).name
-        binary_path = self._ensure_local_tool(tool, binary_name)
-        cmd = list(base_cmd)
+    def _prepare_local(self, context: RuntimeContext) -> PreparedCommand:
+        """Install Lua tooling via luarocks into the shared cache."""
+
+        binary_name = Path(context.executable).name
+        binary_path = self._ensure_local_tool(context.tool, binary_name)
+        cmd = context.command_list()
         cmd[0] = str(binary_path)
-        env = self._lua_env(root)
+        env = self._lua_env(context.root)
         version = None
-        if tool.version_command:
-            version = self._versions.capture(tool.version_command, env=self._merge_env(env))
+        if context.tool.version_command:
+            version = self._versions.capture(context.tool.version_command, env=self._merge_env(env))
         return PreparedCommand.from_parts(cmd=cmd, env=env, version=version, source="local")
 
     def _ensure_local_tool(self, tool: Tool, binary_name: str) -> Path:
+        """Ensure ``binary_name`` is installed for ``tool`` using luarocks."""
+
         package, version = self._package_spec(tool)
         if not shutil.which("luarocks"):
             raise RuntimeError("luarocks is required to install Lua-based linters")
@@ -91,12 +51,9 @@ class LuaRuntime(RuntimeHandler):
         binary = tool_constants.LUA_BIN_DIR / binary_name
 
         if binary.exists() and meta_file.exists():
-            try:
-                meta = json.loads(meta_file.read_text(encoding="utf-8"))
-                if meta.get("package") == package and meta.get("version") == version:
-                    return binary
-            except json.JSONDecodeError:
-                pass
+            meta = self._load_json(meta_file)
+            if meta and meta.get("package") == package and meta.get("version") == version:
+                return binary
 
         prefix.mkdir(parents=True, exist_ok=True)
         tool_constants.LUA_META_DIR.mkdir(parents=True, exist_ok=True)
@@ -128,6 +85,7 @@ class LuaRuntime(RuntimeHandler):
 
     @staticmethod
     def _package_spec(tool: Tool) -> tuple[str, str | None]:
+        """Return LuaRocks package and version tuple derived from ``tool``."""
         if tool.package:
             package, version = _split_package_spec(tool.package)
             return package, version
@@ -135,14 +93,8 @@ class LuaRuntime(RuntimeHandler):
 
     @staticmethod
     def _lua_env(root: Path) -> dict[str, str]:
-        path_value = os.environ.get("PATH", "")
-        entries = [str(tool_constants.LUA_BIN_DIR)]
-        if path_value:
-            entries.append(path_value)
-        return {
-            "PATH": os.pathsep.join(entries),
-            "PWD": str(root),
-        }
+        """Return environment variables required to execute Lua tools."""
+        return RuntimeHandler._prepend_path_environment(bin_dir=tool_constants.LUA_BIN_DIR, root=root)
 
 
 __all__ = ["LuaRuntime"]
