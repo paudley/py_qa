@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Helpers for catalog-configured JSON diagnostic extraction."""
 
 from __future__ import annotations

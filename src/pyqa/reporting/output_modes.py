@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Specialised renderers for quiet, pretty, and raw output modes."""
 
 from __future__ import annotations
@@ -32,11 +34,7 @@ def render_pretty_mode(result: RunResult, cfg: OutputConfig) -> None:
     root_display = colorize(str(Path(result.root).resolve()), "blue", cfg.color)
     print(f"Root: {root_display}")
     for outcome in result.outcomes:
-        status = (
-            colorize("PASS", "green", cfg.color)
-            if outcome.ok
-            else colorize("FAIL", "red", cfg.color)
-        )
+        status = colorize("PASS", "green", cfg.color) if outcome.ok else colorize("FAIL", "red", cfg.color)
         print(f"\n{outcome.tool}:{outcome.action} — {status}")
         if outcome.stdout:
             print(colorize("stdout:", "cyan", cfg.color))

@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Project scanner strategy construction utilities."""
 
 from __future__ import annotations

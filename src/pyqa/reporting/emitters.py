@@ -483,11 +483,7 @@ def _filter_diagnostics(
         list[tuple[Diagnostic, str]]: Diagnostics meeting the severity cut-off.
     """
 
-    filtered = [
-        pair
-        for pair in diagnostics
-        if SEVERITY_ORDER.get(pair[0].severity, UNKNOWN_SEVERITY_RANK) <= min_rank
-    ]
+    filtered = [pair for pair in diagnostics if SEVERITY_ORDER.get(pair[0].severity, UNKNOWN_SEVERITY_RANK) <= min_rank]
     filtered.sort(
         key=lambda item: (
             SEVERITY_ORDER.get(item[0].severity, UNKNOWN_SEVERITY_RANK),
@@ -515,11 +511,7 @@ def _build_summary_entries(
     entries: list[_SummaryEntry] = []
     for diagnostic, tool in diagnostics:
         location = _format_location(diagnostic)
-        highlighted = (
-            _highlight_markdown(diagnostic.message)
-            if config.needs_highlight
-            else diagnostic.message
-        )
+        highlighted = _highlight_markdown(diagnostic.message) if config.needs_highlight else diagnostic.message
         entries.append(
             _SummaryEntry(
                 diagnostic=diagnostic,

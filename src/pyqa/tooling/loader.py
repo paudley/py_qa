@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Compatibility shim exposing catalog loader primitives."""
 
 from __future__ import annotations

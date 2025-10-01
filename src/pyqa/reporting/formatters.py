@@ -439,11 +439,7 @@ def _tool_tinter(result: RunResult, cfg: OutputConfig) -> Callable[[str], str]:
         return lambda tool: tool
 
     tools = sorted(
-        {
-            diag.tool or outcome.tool
-            for outcome in result.outcomes
-            for diag in outcome.diagnostics
-        },
+        {diag.tool or outcome.tool for outcome in result.outcomes for diag in outcome.diagnostics},
     )
     tint_map: dict[str, str] = {}
     palette = [255, 254, 253, 252, 251, 250, 249, 248]
@@ -488,7 +484,6 @@ def _normalise_symbol(value: str | None) -> str:
     if len(sanitized) > MAX_SYMBOL_LENGTH:
         sanitized = f"{sanitized[:ELLIPSIS_CUTOFF]}{ELLIPSIS}"
     return sanitized
-
 
 
 def _summarize_duplicate_code(message: str, root: Path) -> str:

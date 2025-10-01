@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Render refactor navigator panels for concise output."""
 
 from __future__ import annotations

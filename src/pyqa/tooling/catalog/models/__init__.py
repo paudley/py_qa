@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Public export surface for catalog model primitives.
 
 This package aggregates the most commonly consumed catalog constructs into a

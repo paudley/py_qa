@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Rich panel rendering for lint statistics."""
 
 from __future__ import annotations
@@ -59,8 +61,7 @@ def compute_stats_snapshot(result: RunResult, diagnostics_count: int) -> StatsSn
     metrics = _gather_metrics(result)
     loc_count = sum(metric.line_count for metric in metrics.values())
     suppression_counts = {
-        label: sum(metric.suppressions.get(label, 0) for metric in metrics.values())
-        for label in SUPPRESSION_LABELS
+        label: sum(metric.suppressions.get(label, 0) for metric in metrics.values()) for label in SUPPRESSION_LABELS
     }
     warnings_per_loc = diagnostics_count / loc_count if loc_count else 0.0
     return StatsSnapshot(

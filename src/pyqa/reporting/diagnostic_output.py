@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Helpers for rendering diagnostics across output modes."""
 
 from __future__ import annotations
@@ -97,9 +99,7 @@ def format_diagnostic_line(
         cfg.color,
     )
     code_value = (diagnostic.code or "").strip()
-    code_display = (
-        f" [{format_code_value(code_value, cfg.color)}]" if code_value else ""
-    )
+    code_display = f" [{format_code_value(code_value, cfg.color)}]" if code_value else ""
     padded_location = location.ljust(location_width) if location_width else location
     padding = " " if padded_location else ""
     message = clean_message(code_value, diagnostic.message)
