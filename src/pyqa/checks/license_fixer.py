@@ -5,84 +5,170 @@
 from __future__ import annotations
 
 import re
+import sys
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
+from importlib import import_module
 from pathlib import Path
+from types import ModuleType
+from typing import Final
 
-from .licenses import (
-    LicensePolicy,
-    expected_notice,
-    extract_spdx_identifiers,
-    normalise_notice,
-)
 
-_HASH_STYLE_EXTS: Sequence[str] = (
-    ".py",
-    ".pyi",
-    ".pyw",
-    ".sh",
-    ".bash",
-    ".zsh",
-    ".rb",
-    ".pl",
-    ".pm",
-    ".ps1",
-    ".psm1",
-    ".toml",
-    ".yaml",
-    ".yml",
-    ".ini",
-    ".cfg",
-    ".conf",
-)
+def _load_licenses_module() -> ModuleType:
+    """Return the licenses module, extending ``sys.path`` when necessary.
 
-_SLASH_STYLE_EXTS: Sequence[str] = (
-    ".c",
-    ".h",
-    ".cc",
-    ".hh",
-    ".cpp",
-    ".hpp",
-    ".cxx",
-    ".hxx",
-    ".java",
-    ".cs",
-    ".js",
-    ".jsx",
-    ".ts",
-    ".tsx",
-    ".go",
-    ".rs",
-    ".swift",
-    ".kt",
-    ".kts",
-    ".dart",
-    ".proto",
-)
+    Returns:
+        ModuleType: Imported ``pyqa.checks.licenses`` module.
+    """
 
-_HTML_STYLE_EXTS: Sequence[str] = (
-    ".html",
-    ".htm",
-    ".xml",
-    ".xhtml",
-    ".svg",
-    ".md",
-    ".markdown",
-    ".vue",
-)
+    try:
+        return import_module("pyqa.checks.licenses")
+    except ModuleNotFoundError:
+        project_root = Path(__file__).resolve().parents[2]
+        if str(project_root) not in sys.path:
+            sys.path.insert(0, str(project_root))
+        return import_module("pyqa.checks.licenses")
 
-_RST_STYLE_EXTS: Sequence[str] = (".rst",)
 
-_DASH_STYLE_EXTS: Sequence[str] = (".sql", ".psql", ".pgsql")
+_licenses = _load_licenses_module()
 
-_NAME_STYLE_OVERRIDES = {
-    "Dockerfile": "hash",
-    "Makefile": "hash",
-    "BUILD": "hash",
+LicensePolicy = _licenses.LicensePolicy
+expected_notice = _licenses.expected_notice
+extract_spdx_identifiers = _licenses.extract_spdx_identifiers
+normalise_notice = _licenses.normalise_notice
+
+
+class CommentStyle(str, Enum):
+    """Enumerate supported comment styles for license headers."""
+
+    HASH = "hash"
+    SLASH = "slash"
+    HTML = "html"
+    RST = "rst"
+    DASH = "dash"
+
+    def render(self, text: str) -> str:
+        """Return ``text`` formatted according to the comment style.
+
+        Args:
+            text: Comment payload to render.
+
+        Returns:
+            str: Comment line using this style.
+        """
+        prefix, suffix, empty_value = RENDER_TOKENS[self]
+        if not text:
+            return empty_value
+        return f"{prefix}{text}{suffix}"
+
+    def extract(self, line: str) -> str | None:
+        """Extract the comment payload from ``line`` for the comment style.
+
+        Args:
+            line: Source line being analysed.
+
+        Returns:
+            str | None: Extracted comment text or ``None`` when the line does
+            not contain a comment of this style.
+        """
+
+        stripped = line.strip()
+        result: str | None = None
+        if stripped:
+            if self is CommentStyle.HASH:
+                if stripped.startswith("#") and not stripped.startswith("#!"):
+                    result = stripped[1:].lstrip()
+            elif self is CommentStyle.SLASH:
+                if stripped.startswith("//"):
+                    result = stripped[2:].lstrip()
+            elif self is CommentStyle.HTML:
+                if stripped.startswith("<!--") and stripped.endswith("-->"):
+                    result = stripped[4:-3].strip()
+            elif self is CommentStyle.RST:
+                if stripped.startswith(".."):
+                    result = stripped[2:].lstrip()
+            elif self is CommentStyle.DASH:
+                if stripped.startswith("--"):
+                    result = stripped[2:].lstrip()
+        return result
+
+
+STYLE_EXTENSIONS: Final[dict[CommentStyle, tuple[str, ...]]] = {
+    CommentStyle.HASH: (
+        ".py",
+        ".pyi",
+        ".pyw",
+        ".sh",
+        ".bash",
+        ".zsh",
+        ".rb",
+        ".pl",
+        ".pm",
+        ".ps1",
+        ".psm1",
+        ".toml",
+        ".yaml",
+        ".yml",
+        ".ini",
+        ".cfg",
+        ".conf",
+    ),
+    CommentStyle.SLASH: (
+        ".c",
+        ".h",
+        ".cc",
+        ".hh",
+        ".cpp",
+        ".hpp",
+        ".cxx",
+        ".hxx",
+        ".java",
+        ".cs",
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".go",
+        ".rs",
+        ".swift",
+        ".kt",
+        ".kts",
+        ".dart",
+        ".proto",
+    ),
+    CommentStyle.HTML: (
+        ".html",
+        ".htm",
+        ".xml",
+        ".xhtml",
+        ".svg",
+        ".md",
+        ".markdown",
+        ".vue",
+    ),
+    CommentStyle.RST: (".rst",),
+    CommentStyle.DASH: (".sql", ".psql", ".pgsql"),
 }
 
-_ENCODING_PATTERN = re.compile(r"#.*coding[:=]")
+
+NAME_STYLE_OVERRIDES: Final[dict[str, CommentStyle]] = {
+    "Dockerfile": CommentStyle.HASH,
+    "Makefile": CommentStyle.HASH,
+    "BUILD": CommentStyle.HASH,
+}
+
+
+_ENCODING_PATTERN: Final[re.Pattern[str]] = re.compile(r"#.*coding[:=]")
+_SPDX_PREFIX: Final[str] = "spdx-license-identifier:"
+RENDER_TOKENS: Final[dict[CommentStyle, tuple[str, str, str]]] = {
+    CommentStyle.HASH: ("# ", "", "#"),
+    CommentStyle.SLASH: ("// ", "", "//"),
+    CommentStyle.HTML: ("<!-- ", " -->", "<!--  -->"),
+    CommentStyle.RST: (".. ", "", ".."),
+    CommentStyle.DASH: ("-- ", "", "--"),
+}
 
 
 class LicenseFixError(RuntimeError):
@@ -97,11 +183,23 @@ class ConflictingLicenseError(LicenseFixError):
     """Raised when an existing conflicting SPDX identifier is discovered."""
 
     def __init__(self, identifiers: Iterable[str]) -> None:
+        """Initialise the error with the conflicting SPDX identifiers.
+
+        Args:
+            identifiers: Collection of identifiers detected in the file.
+        """
+
         formatted = ", ".join(sorted({identifier for identifier in identifiers if identifier}))
         super().__init__(f"Conflicting SPDX identifier(s) present: {formatted}")
 
 
 def _default_year() -> int:
+    """Return the current calendar year.
+
+    Returns:
+        int: Calendar year derived from the active system clock.
+    """
+
     return datetime.now().year
 
 
@@ -113,6 +211,17 @@ class LicenseHeaderFixer:
     current_year: int = field(default_factory=_default_year)
 
     def apply(self, path: Path, content: str) -> str | None:
+        """Return updated content with repaired license header when needed.
+
+        Args:
+            path: Path to the file being evaluated.
+            content: Current text content of the file.
+
+        Returns:
+            str | None: Newly generated content including the corrected
+            header, or ``None`` when no modifications are required.
+        """
+
         style = _style_for_path(path)
         if not style:
             suffix = path.suffix or path.name
@@ -120,7 +229,8 @@ class LicenseHeaderFixer:
 
         identifiers = extract_spdx_identifiers(content)
         if self.policy.spdx_id:
-            allowed = {spdx for spdx in (self.policy.spdx_id, *(self.policy.allow_alternate_spdx or ())) if spdx}
+            alternate_ids = self.policy.allow_alternate_spdx or ()
+            allowed = {spdx for spdx in (self.policy.spdx_id, *alternate_ids) if spdx}
             conflicting = [identifier for identifier in identifiers if identifier not in allowed]
             if conflicting:
                 raise ConflictingLicenseError(conflicting)
@@ -136,6 +246,15 @@ class LicenseHeaderFixer:
         return updated
 
     def _build_spdx_line(self, identifiers: set[str]) -> str | None:
+        """Return the SPDX header line when one should be inserted.
+
+        Args:
+            identifiers: Existing SPDX identifiers discovered in the file.
+
+        Returns:
+            str | None: SPDX header line, or ``None`` when no line is required.
+        """
+
         if not (self.policy.require_spdx and self.policy.spdx_id):
             return None
         if self.policy.spdx_id in identifiers:
@@ -143,6 +262,16 @@ class LicenseHeaderFixer:
         return f"SPDX-License-Identifier: {self.policy.spdx_id}"
 
     def _build_notice_line(self, content: str) -> str | None:
+        """Return the expected copyright notice line when needed.
+
+        Args:
+            content: File content under inspection.
+
+        Returns:
+            str | None: Canonical copyright notice to insert, or ``None`` when
+            no notice change is required.
+        """
+
         if not self.policy.require_notice:
             return None
         observed = self.policy.match_notice(content)
@@ -154,26 +283,46 @@ class LicenseHeaderFixer:
         return expected
 
 
-def _style_for_path(path: Path) -> str | None:
-    explicit = _NAME_STYLE_OVERRIDES.get(path.name)
-    if explicit:
+def _style_for_path(path: Path) -> CommentStyle | None:
+    """Return the comment style associated with *path*.
+
+    Args:
+        path: File path being analysed.
+
+    Returns:
+        CommentStyle | None: Comment style for the file, or ``None`` when the
+        file is unsupported.
+    """
+
+    explicit = NAME_STYLE_OVERRIDES.get(path.name)
+    if explicit is not None:
         return explicit
 
     suffix = path.suffix.lower()
-    if suffix in _HASH_STYLE_EXTS:
-        return "hash"
-    if suffix in _SLASH_STYLE_EXTS:
-        return "slash"
-    if suffix in _HTML_STYLE_EXTS:
-        return "html"
-    if suffix in _RST_STYLE_EXTS:
-        return "rst"
-    if suffix in _DASH_STYLE_EXTS:
-        return "dash"
+    for style, extensions in STYLE_EXTENSIONS.items():
+        if suffix in extensions:
+            return style
     return None
 
 
-def _inject_header(content: str, style: str, spdx_line: str | None, notice_line: str | None) -> str:
+def _inject_header(
+    content: str,
+    style: CommentStyle,
+    spdx_line: str | None,
+    notice_line: str | None,
+) -> str:
+    """Insert or update the license header using the provided comment style.
+
+    Args:
+        content: Original file content.
+        style: Comment style used to render comment lines.
+        spdx_line: SPDX identifier line, when present.
+        notice_line: Copyright notice line, when present.
+
+    Returns:
+        str: File content with the appropriate header inserted.
+    """
+
     header_lines = [_format_comment(style, entry) for entry in (spdx_line, notice_line) if entry]
     if not header_lines:
         return content
@@ -207,107 +356,163 @@ def _inject_header(content: str, style: str, spdx_line: str | None, notice_line:
     return new_body
 
 
-def _insertion_index(style: str, lines: list[str], *, keep_existing_spdx: bool) -> int:
+def _insertion_index(
+    style: CommentStyle,
+    lines: Sequence[str],
+    *,
+    keep_existing_spdx: bool,
+) -> int:
+    """Return the index where a header should be inserted.
+
+    Args:
+        style: Comment style used for the header.
+        lines: Current file lines.
+        keep_existing_spdx: Whether existing SPDX lines should remain.
+
+    Returns:
+        int: Index suitable for inserting the new header.
+    """
+
     if not lines:
         return 0
 
-    index = 0
-    if style == "hash":
-        while index < len(lines):
-            stripped = lines[index].lstrip()
+    start_index = _first_content_index(style, lines)
+    if not keep_existing_spdx:
+        return start_index
+
+    return _skip_existing_spdx(style, lines, start_index)
+
+
+def _first_content_index(style: CommentStyle, lines: Sequence[str]) -> int:
+    """Return the index of the first meaningful line for the given style.
+
+    Args:
+        style: Comment style guiding which prelude lines to ignore.
+        lines: File lines inspected for the header position.
+
+    Returns:
+        int: Index of the first line that should precede a header.
+    """
+
+    if style is CommentStyle.HASH:
+        for index, line in enumerate(lines):
+            stripped = line.lstrip()
             if stripped.startswith("#!"):
-                index += 1
                 continue
             if _ENCODING_PATTERN.match(stripped):
-                index += 1
                 continue
             if not stripped:
-                index += 1
                 continue
-            break
-    else:
-        while index < len(lines) and not lines[index].strip():
-            index += 1
+            return index
+        return len(lines)
 
-    if keep_existing_spdx:
-        while index < len(lines):
-            comment = _extract_comment(style, lines[index])
-            if comment and comment.lower().startswith("spdx-license-identifier:"):
-                index += 1
-                continue
-            break
+    for index, line in enumerate(lines):
+        if line.strip():
+            return index
+    return len(lines)
+
+
+def _skip_existing_spdx(style: CommentStyle, lines: Sequence[str], start_index: int) -> int:
+    """Advance past contiguous SPDX comment lines starting at *start_index*.
+
+    Args:
+        style: Comment style used to extract comment payloads.
+        lines: File lines inspected for SPDX metadata.
+        start_index: Index from which to begin scanning.
+
+    Returns:
+        int: Updated insertion index after skipping existing SPDX lines.
+    """
+
+    index = start_index
+    for line in lines[start_index:]:
+        comment = style.extract(line)
+        if comment and comment.lower().startswith(_SPDX_PREFIX):
+            index += 1
+            continue
+        break
     return index
 
 
 def _prune_existing_header(
     lines: list[str],
     start: int,
-    style: str,
+    style: CommentStyle,
     *,
     remove_spdx: bool,
     remove_notice: bool,
 ) -> int:
-    removed = False
-    index = start
-    while index < len(lines):
-        comment = _extract_comment(style, lines[index])
+    """Remove conflicting header lines and return the next insertion index.
+
+    Args:
+        lines: Mutable list of file lines.
+        start: Starting index for pruning operations.
+        style: Comment style used to interpret existing lines.
+        remove_spdx: When ``True`` remove existing SPDX lines.
+        remove_notice: When ``True`` remove existing copyright notices.
+
+    Returns:
+        int: Index at which a new header should be inserted after pruning.
+    """
+
+    indices_to_remove: list[int] = []
+    scan_index = start
+
+    for index in range(start, len(lines)):
+        comment = style.extract(lines[index])
         if comment is None:
             break
         lowered = comment.lower()
-        if lowered.startswith("spdx-license-identifier:"):
+        if lowered.startswith(_SPDX_PREFIX):
             if remove_spdx:
-                lines.pop(index)
-                removed = True
+                indices_to_remove.append(index)
                 continue
-            index += 1
+            scan_index = index + 1
             continue
         if lowered.startswith("copyright"):
             if remove_notice:
-                lines.pop(index)
-                removed = True
+                indices_to_remove.append(index)
                 continue
             break
         break
 
-    if removed and index < len(lines) and not lines[index].strip():
+    for index in reversed(indices_to_remove):
         lines.pop(index)
-    return index
+        if index < scan_index:
+            scan_index -= 1
+
+    if indices_to_remove:
+        scan_index = max(scan_index, start)
+        if scan_index < len(lines) and not lines[scan_index].strip():
+            lines.pop(scan_index)
+
+    return scan_index
 
 
-def _format_comment(style: str, text: str) -> str:
-    if style == "hash":
-        return f"# {text}" if text else "#"
-    if style == "slash":
-        return f"// {text}" if text else "//"
-    if style == "html":
-        return f"<!-- {text} -->"
-    if style == "rst":
-        return f".. {text}" if text else ".."
-    if style == "dash":
-        return f"-- {text}" if text else "--"
-    raise ValueError(f"Unknown comment style: {style}")
+def _format_comment(style: CommentStyle, text: str) -> str:
+    """Format ``text`` according to the provided comment ``style``.
+
+    Args:
+        style: Comment style used to render the text.
+        text: Comment payload to format.
+
+    Returns:
+        str: Comment line using the requested style.
+    """
+
+    return style.render(text)
 
 
-def _extract_comment(style: str, line: str) -> str | None:
-    stripped = line.strip()
-    if style == "hash":
-        if stripped.startswith("#") and not stripped.startswith("#!"):
-            return stripped[1:].lstrip()
-        return None
-    if style == "slash":
-        if stripped.startswith("//"):
-            return stripped[2:].lstrip()
-        return None
-    if style == "html":
-        if stripped.startswith("<!--") and stripped.endswith("-->"):
-            return stripped[4:-3].strip()
-        return None
-    if style == "rst":
-        if stripped.startswith(".."):
-            return stripped[2:].lstrip()
-        return None
-    if style == "dash":
-        if stripped.startswith("--"):
-            return stripped[2:].lstrip()
-        return None
-    return None
+def _extract_comment(style: CommentStyle, line: str) -> str | None:
+    """Extract the comment payload for ``line`` using ``style``.
+
+    Args:
+        style: Comment style used to interpret the line.
+        line: Source line being inspected.
+
+    Returns:
+        str | None: Comment payload or ``None`` when the line does not match
+        the provided style.
+    """
+
+    return style.extract(line)

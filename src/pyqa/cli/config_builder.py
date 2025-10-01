@@ -4,11 +4,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from enum import Enum
 from functools import partial
 from pathlib import Path
-from typing import Callable, Final, Literal, TypeVar, cast
+from typing import Final, Literal, TypeVar, cast
 
 from pydantic import BaseModel
 
@@ -22,9 +22,9 @@ from ..config import (
     SensitivityLevel,
     StrictnessLevel,
 )
+from ..config_loader import ConfigLoader
 from ..config_utils import _existing_unique_paths as shared_existing_unique_paths
 from ..config_utils import _unique_paths as shared_unique_paths
-from ..config_loader import ConfigLoader
 from ..filesystem.paths import normalize_path
 from ..testing.suppressions import flatten_test_suppressions
 from ..tools.catalog_metadata import catalog_general_suppressions
@@ -136,9 +136,7 @@ def _build_default_tool_filters() -> dict[str, list[str]]:
         patterns de-duplicated across all sources.
     """
 
-    merged: dict[str, list[str]] = {
-        tool: list(patterns) for tool, patterns in _BASE_TOOL_FILTERS.items()
-    }
+    merged: dict[str, list[str]] = {tool: list(patterns) for tool, patterns in _BASE_TOOL_FILTERS.items()}
     for tool, patterns in flatten_test_suppressions().items():
         merged.setdefault(tool, []).extend(patterns)
     for tool, patterns in catalog_general_suppressions().items():
@@ -201,9 +199,7 @@ def build_config(options: LintOptions) -> Config:
         "execution": execution_cfg,
         "dedupe": dedupe_cfg,
         "severity_rules": list(base_config.severity_rules),
-        "tool_settings": {
-            tool: dict(settings) for tool, settings in base_config.tool_settings.items()
-        },
+        "tool_settings": {tool: dict(settings) for tool, settings in base_config.tool_settings.items()},
     }
     config = base_config.model_copy(update=config_updates, deep=True)
 
@@ -410,8 +406,7 @@ def _resolved_roots(
 
     if _is_option_provided(LintOptionKey.DIRS, provided=options.provided):
         resolved_dirs = (
-            directory if directory.is_absolute() else (project_root / directory)
-            for directory in options.dirs
+            directory if directory.is_absolute() else (project_root / directory) for directory in options.dirs
         )
         roots.extend(path.resolve() for path in resolved_dirs)
 
@@ -443,9 +438,7 @@ def _resolved_explicit_files(
 
     if _is_option_provided(LintOptionKey.PATHS, provided=options.provided):
         for path in options.paths:
-            resolved_path = (
-                path if path.is_absolute() else project_root / path
-            ).resolve()
+            resolved_path = (path if path.is_absolute() else project_root / path).resolve()
             if resolved_path.is_dir():
                 roots.append(resolved_path)
                 user_dirs.append(resolved_path)
@@ -454,11 +447,7 @@ def _resolved_explicit_files(
                 if resolved_path not in explicit_files:
                     explicit_files.append(resolved_path)
 
-    boundaries = shared_unique_paths(
-        boundary
-        for boundary in _derive_boundaries(user_dirs, user_files)
-        if boundary
-    )
+    boundaries = shared_unique_paths(boundary for boundary in _derive_boundaries(user_dirs, user_files) if boundary)
     if not boundaries:
         return explicit_files, []
 
@@ -598,66 +587,42 @@ def _build_output(current: OutputConfig, options: LintOptions, project_root: Pat
         partial(_is_option_provided, provided=provided),
     )
 
-    tool_filters: ToolFilters = {
-        tool: patterns.copy() for tool, patterns in DEFAULT_TOOL_FILTERS.items()
-    }
+    tool_filters: ToolFilters = {tool: patterns.copy() for tool, patterns in DEFAULT_TOOL_FILTERS.items()}
     for tool, patterns in current.tool_filters.items():
         tool_filters.setdefault(tool, []).extend(patterns)
     if has_option(LintOptionKey.FILTERS):
         parsed = _parse_filters(options.filters)
         for tool, patterns in parsed.items():
             tool_filters.setdefault(tool, []).extend(patterns)
-    normalised_filters: ToolFilters = {
-        tool: list(dict.fromkeys(patterns)) for tool, patterns in tool_filters.items()
-    }
+    normalised_filters: ToolFilters = {tool: list(dict.fromkeys(patterns)) for tool, patterns in tool_filters.items()}
 
     quiet_value = options.quiet if has_option(LintOptionKey.QUIET) else current.quiet
 
-    show_passing_value = (
-        options.show_passing if has_option(LintOptionKey.SHOW_PASSING) else current.show_passing
-    )
-    show_stats_value = (
-        (not options.no_stats) if has_option(LintOptionKey.NO_STATS) else current.show_stats
-    )
+    show_passing_value = options.show_passing if has_option(LintOptionKey.SHOW_PASSING) else current.show_passing
+    show_stats_value = (not options.no_stats) if has_option(LintOptionKey.NO_STATS) else current.show_stats
     if quiet_value:
         show_passing_value = False
         show_stats_value = False
 
     output_updates: dict[str, object | None] = {
         "tool_filters": normalised_filters,
-        "verbose": (
-            options.verbose if has_option(LintOptionKey.VERBOSE) else current.verbose
-        ),
+        "verbose": (options.verbose if has_option(LintOptionKey.VERBOSE) else current.verbose),
         "quiet": quiet_value,
-        "color": (
-            (not options.no_color)
-            if has_option(LintOptionKey.NO_COLOR)
-            else current.color
-        ),
-        "emoji": (
-            (not options.no_emoji)
-            if has_option(LintOptionKey.NO_EMOJI)
-            else current.emoji
-        ),
+        "color": ((not options.no_color) if has_option(LintOptionKey.NO_COLOR) else current.color),
+        "emoji": ((not options.no_emoji) if has_option(LintOptionKey.NO_EMOJI) else current.emoji),
         "output": (
-            _normalize_output_mode(options.output_mode)
-            if has_option(LintOptionKey.OUTPUT_MODE)
-            else current.output
+            _normalize_output_mode(options.output_mode) if has_option(LintOptionKey.OUTPUT_MODE) else current.output
         ),
         "show_passing": show_passing_value,
         "show_stats": show_stats_value,
-        "advice": (
-            options.advice if has_option(LintOptionKey.ADVICE) else current.advice
-        ),
+        "advice": (options.advice if has_option(LintOptionKey.ADVICE) else current.advice),
         "pr_summary_out": (
             _resolve_optional_path(project_root, options.pr_summary_out)
             if has_option(LintOptionKey.PR_SUMMARY_OUT)
             else current.pr_summary_out
         ),
         "pr_summary_limit": (
-            options.pr_summary_limit
-            if has_option(LintOptionKey.PR_SUMMARY_LIMIT)
-            else current.pr_summary_limit
+            options.pr_summary_limit if has_option(LintOptionKey.PR_SUMMARY_LIMIT) else current.pr_summary_limit
         ),
         "pr_summary_min_severity": (
             _normalize_min_severity(options.pr_summary_min_severity)
@@ -703,53 +668,25 @@ def _build_execution(
         jobs_value = 1
 
     execution_updates: dict[str, object | list[str] | Path | None] = {
-        "only": (
-            list(options.only)
-            if has_option(LintOptionKey.ONLY)
-            else list(current.only)
-        ),
-        "languages": (
-            list(options.language)
-            if has_option(LintOptionKey.LANGUAGE)
-            else list(current.languages)
-        ),
-        "fix_only": (
-            options.fix_only if has_option(LintOptionKey.FIX_ONLY) else current.fix_only
-        ),
-        "check_only": (
-            options.check_only if has_option(LintOptionKey.CHECK_ONLY) else current.check_only
-        ),
+        "only": (list(options.only) if has_option(LintOptionKey.ONLY) else list(current.only)),
+        "languages": (list(options.language) if has_option(LintOptionKey.LANGUAGE) else list(current.languages)),
+        "fix_only": (options.fix_only if has_option(LintOptionKey.FIX_ONLY) else current.fix_only),
+        "check_only": (options.check_only if has_option(LintOptionKey.CHECK_ONLY) else current.check_only),
         "bail": bail_value,
         "jobs": jobs_value,
-        "cache_enabled": (
-            (not options.no_cache)
-            if has_option(LintOptionKey.NO_CACHE)
-            else current.cache_enabled
-        ),
+        "cache_enabled": ((not options.no_cache) if has_option(LintOptionKey.NO_CACHE) else current.cache_enabled),
         "cache_dir": (
             _resolve_path(project_root, options.cache_dir).resolve()
             if has_option(LintOptionKey.CACHE_DIR)
             else current.cache_dir
         ),
         "use_local_linters": (
-            options.use_local_linters
-            if has_option(LintOptionKey.USE_LOCAL_LINTERS)
-            else current.use_local_linters
+            options.use_local_linters if has_option(LintOptionKey.USE_LOCAL_LINTERS) else current.use_local_linters
         ),
-        "line_length": (
-            options.line_length
-            if has_option(LintOptionKey.LINE_LENGTH)
-            else current.line_length
-        ),
-        "sql_dialect": (
-            options.sql_dialect
-            if has_option(LintOptionKey.SQL_DIALECT)
-            else current.sql_dialect
-        ),
+        "line_length": (options.line_length if has_option(LintOptionKey.LINE_LENGTH) else current.line_length),
+        "sql_dialect": (options.sql_dialect if has_option(LintOptionKey.SQL_DIALECT) else current.sql_dialect),
         "python_version": (
-            options.python_version
-            if has_option(LintOptionKey.PYTHON_VERSION)
-            else current.python_version
+            options.python_version if has_option(LintOptionKey.PYTHON_VERSION) else current.python_version
         ),
     }
 
@@ -856,11 +793,7 @@ def _parse_filters(specs: Iterable[str]) -> ToolFilters:
         tool_key = tool.strip()
         if not tool_key:
             raise ValueError(f"Invalid filter '{spec}'. Tool identifier cannot be empty")
-        chunks = [
-            chunk.strip()
-            for chunk in expressions.split(FILTER_PATTERN_SEPARATOR)
-            if chunk.strip()
-        ]
+        chunks = [chunk.strip() for chunk in expressions.split(FILTER_PATTERN_SEPARATOR) if chunk.strip()]
         if not chunks:
             continue
         filters.setdefault(tool_key, []).extend(chunks)

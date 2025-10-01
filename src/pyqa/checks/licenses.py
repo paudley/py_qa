@@ -5,22 +5,78 @@
 from __future__ import annotations
 
 import re
+import sys
 import tomllib
-from collections.abc import Mapping, MutableMapping, Sequence
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from fnmatch import fnmatch
+from importlib import import_module
 from pathlib import Path
+from types import ModuleType
 from typing import Final
 
-from pyqa.config import LicenseConfig
-from pyqa.constants import ALWAYS_EXCLUDE_DIRS
+
+def _load_pyqa_module(module: str) -> ModuleType:
+    """Return a ``pyqa`` submodule, updating ``sys.path`` if required.
+
+    Args:
+        module: Dotted suffix of the module to import relative to ``pyqa``.
+
+    Returns:
+        ModuleType: Imported module instance.
+    """
+
+    candidates = [f"pyqa.{module}"]
+    if __package__:
+        base = __package__.split(".", maxsplit=1)[0]
+        candidates.append(f"{base}.{module}")
+    for candidate in candidates:
+        try:
+            return import_module(candidate)
+        except ModuleNotFoundError:
+            continue
+    project_root = Path(__file__).resolve().parents[2]
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+    return import_module(f"pyqa.{module}")
+
+
+_config = _load_pyqa_module("config")
+_constants = _load_pyqa_module("constants")
+
+LicenseConfig = _config.LicenseConfig
+ALWAYS_EXCLUDE_DIRS = _constants.ALWAYS_EXCLUDE_DIRS
 
 KNOWN_LICENSE_SNIPPETS: Final[Mapping[str, str]] = {
     "MIT": "Permission is hereby granted, free of charge",
     "Apache-2.0": "Licensed under the Apache License, Version 2.0",
     "BSD-3-Clause": "Redistribution and use in source and binary forms",
 }
+
+PYPROJECT_FILENAME: Final[str] = "pyproject.toml"
+PROJECT_TABLE_KEY: Final[str] = "project"
+LICENSE_FIELD_KEY: Final[str] = "license"
+LICENSE_TEXT_KEY: Final[str] = "text"
+LICENSE_FILE_KEY: Final[str] = "file"
+AUTHORS_KEY: Final[str] = "authors"
+SPDX_TAG_LABEL: Final[str] = "SPDX-License-Identifier"
+SPDX_TAG_PREFIX: Final[str] = f"{SPDX_TAG_LABEL.lower()}:"
+HTML_COMMENT_START: Final[str] = "<!--"
+HTML_COMMENT_END: Final[str] = "-->"
+C_BLOCK_COMMENT_START: Final[str] = "/*"
+C_BLOCK_COMMENT_END: Final[str] = "*/"
+RST_COMMENT_PREFIX: Final[str] = ".."
+COMMENT_PREFIXES: Final[tuple[str, ...]] = (
+    "#",
+    "//",
+    C_BLOCK_COMMENT_START,
+    "*",
+    "--",
+    ";",
+    HTML_COMMENT_START,
+    RST_COMMENT_PREFIX,
+)
 
 
 _COPYRIGHT_PATTERN: Final[re.Pattern[str]] = re.compile(
@@ -43,8 +99,10 @@ _YEAR_RANGE: Final[re.Pattern[str]] = re.compile(
 )
 
 
-@dataclass
+@dataclass(slots=True)
 class LicenseMetadata:
+    """Aggregate license metadata resolved from repository configuration."""
+
     spdx_id: str | None
     copyright_notice: str | None
     license_text: str | None
@@ -64,6 +122,16 @@ class LicensePolicy:
     allow_alternate_spdx: tuple[str, ...] = field(default_factory=tuple)
 
     def should_skip(self, path: Path, root: Path) -> bool:
+        """Return whether *path* should be skipped under this policy.
+
+        Args:
+            path: Absolute path to the file under review.
+            root: Repository root directory used for relative comparisons.
+
+        Returns:
+            bool: ``True`` when the file should not be evaluated for licensing.
+        """
+
         try:
             relative = path.resolve().relative_to(root.resolve())
         except ValueError:
@@ -74,6 +142,15 @@ class LicensePolicy:
         return any(fnmatch(relative_str, pattern) for pattern in self.skip_globs)
 
     def match_notice(self, content: str) -> str | None:
+        """Return the first copyright notice discovered in *content*.
+
+        Args:
+            content: File contents inspected for a notice.
+
+        Returns:
+            str | None: Matched copyright notice, or ``None`` when absent.
+        """
+
         for line in content.splitlines():
             match = _COPYRIGHT_PATTERN.search(line)
             if match:
@@ -82,8 +159,17 @@ class LicensePolicy:
 
 
 def load_project_license(root: Path) -> LicenseMetadata:
-    """Attempt to load license metadata from pyproject.toml or fallback."""
-    pyproject = root / "pyproject.toml"
+    """Return license metadata derived from project configuration files.
+
+    Args:
+        root: Repository root directory.
+
+    Returns:
+        LicenseMetadata: Aggregated metadata from ``pyproject.toml`` and
+        conventional license files.
+    """
+
+    pyproject = root / PYPROJECT_FILENAME
     spdx_id: str | None = None
     copyright_str: str | None = None
     overrides: Mapping[str, object] = {}
@@ -91,9 +177,10 @@ def load_project_license(root: Path) -> LicenseMetadata:
 
     if pyproject.exists():
         data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-        project = data.get("project", {})
-        spdx_id = _extract_project_license(project)
-        copyright_str = _extract_authors(project)
+        project = data.get(PROJECT_TABLE_KEY, {})
+        if isinstance(project, Mapping):
+            spdx_id = _extract_project_license(project)
+            copyright_str = _extract_authors(project)
         overrides = _extract_license_overrides(data)
 
     license_file = _resolve_license_file(root)
@@ -117,7 +204,15 @@ def load_license_policy(
     root: Path,
     overrides: LicenseConfig | Mapping[str, object] | None = None,
 ) -> LicensePolicy:
-    """Derive a license enforcement policy from project metadata and overrides."""
+    """Derive a license enforcement policy from project metadata and overrides.
+
+    Args:
+        root: Repository root directory.
+        overrides: Optional configuration overriding metadata-derived values.
+
+    Returns:
+        LicensePolicy: Policy describing enforcement expectations.
+    """
     metadata = load_project_license(root)
     if isinstance(overrides, LicenseConfig):
         config: dict[str, object] = _license_config_to_mapping(overrides)
@@ -157,19 +252,37 @@ def load_license_policy(
 
 
 def _extract_project_license(project: Mapping[str, object]) -> str | None:
-    license_field = project.get("license")
+    """Return the SPDX identifier derived from the project's license field.
+
+    Args:
+        project: ``[project]`` table loaded from ``pyproject.toml``.
+
+    Returns:
+        str | None: SPDX identifier when one can be resolved; otherwise ``None``.
+    """
+
+    license_field = project.get(LICENSE_FIELD_KEY)
     if isinstance(license_field, str):
         return license_field.strip()
     if isinstance(license_field, Mapping):
-        if "text" in license_field:
-            return _infer_license_id(str(license_field["text"]))
-        if "file" in license_field:
+        if LICENSE_TEXT_KEY in license_field:
+            return _infer_license_id(str(license_field[LICENSE_TEXT_KEY]))
+        if LICENSE_FILE_KEY in license_field:
             return None  # to be extracted via file
     return None
 
 
 def _extract_authors(project: Mapping[str, object]) -> str | None:
-    authors = project.get("authors")
+    """Return the first author name declared in project metadata.
+
+    Args:
+        project: ``[project]`` table from ``pyproject.toml``.
+
+    Returns:
+        str | None: Author name when available.
+    """
+
+    authors = project.get(AUTHORS_KEY)
     if isinstance(authors, list) and authors:
         first = authors[0]
         if isinstance(first, Mapping):
@@ -180,6 +293,16 @@ def _extract_authors(project: Mapping[str, object]) -> str | None:
 
 
 def _resolve_license_file(root: Path) -> Path | None:
+    """Return the path to a known license file within *root*.
+
+    Args:
+        root: Repository root directory.
+
+    Returns:
+        Path | None: Path to the first recognised license file, or ``None``
+        when no file exists.
+    """
+
     for candidate in ("LICENSE", "LICENSE.txt", "LICENSE.md"):
         path = root / candidate
         if path.exists():
@@ -188,6 +311,15 @@ def _resolve_license_file(root: Path) -> Path | None:
 
 
 def _infer_license_id(text: str) -> str | None:
+    """Infer an SPDX identifier from license *text* content.
+
+    Args:
+        text: License text body.
+
+    Returns:
+        str | None: Resolved SPDX identifier, or ``None`` when heuristics fail.
+    """
+
     lower = text.lower()
     for spdx, snippet in KNOWN_LICENSE_SNIPPETS.items():
         if snippet.lower() in lower:
@@ -196,10 +328,19 @@ def _infer_license_id(text: str) -> str | None:
 
 
 def _extract_license_copyright(text: str) -> str | None:
-    for line in text.splitlines():
-        line = line.strip()
-        if line.lower().startswith("copyright"):
-            return line
+    """Return the first copyright notice discovered in license *text*.
+
+    Args:
+        text: License file contents.
+
+    Returns:
+        str | None: Matched copyright notice, or ``None`` when absent.
+    """
+
+    for raw_line in text.splitlines():
+        candidate = raw_line.strip()
+        if candidate.lower().startswith("copyright"):
+            return candidate
     return None
 
 
@@ -211,78 +352,165 @@ def verify_file_license(
     *,
     current_year: int | None = None,
 ) -> list[str]:
-    """Return list of issues detected for *path* under the provided *policy*."""
+    """Return lint findings for *path* under the provided licensing *policy*.
+
+    Args:
+        path: File path associated with ``content``.
+        content: Text content of the file under inspection.
+        policy: Licensing policy derived for the repository.
+        root: Repository root directory.
+        current_year: Optional override for the current calendar year.
+
+    Returns:
+        list[str]: Human-readable issues describing detected policy violations.
+    """
+
     if policy.should_skip(path, root):
         return []
 
-    issues: list[str] = []
-    lower_content = content.lower()
     year = current_year or datetime.now().year
+    lower_content = content.lower()
 
-    if policy.require_spdx:
-        identifiers = extract_spdx_identifiers(content)
-        expected_id = policy.spdx_id
-        expected_tag = f"SPDX-License-Identifier: {expected_id}" if expected_id else None
-        allowed = {spdx for spdx in (expected_id, *(policy.allow_alternate_spdx or ())) if spdx}
+    issues = _collect_spdx_issues(content, lower_content, policy)
+    issues.extend(_collect_notice_issues(content, policy, year))
+    return issues
 
-        if expected_id:
-            conflicting = sorted(identifier for identifier in identifiers if identifier not in allowed)
-            if conflicting:
-                formatted = ", ".join(conflicting)
-                issues.append(
-                    f"Found SPDX license identifier(s) {formatted}; expected '{expected_id}'.",
-                )
-            elif not identifiers.intersection(allowed) and not _matches_snippet(
-                lower_content,
-                policy.license_snippet,
-            ):
-                issues.append(f"Missing SPDX license tag '{expected_tag}'")
-        elif not identifiers and not _matches_snippet(lower_content, policy.license_snippet):
-            issues.append(
-                "Missing SPDX license tag; configure a project SPDX identifier or header snippet.",
-            )
 
-    if policy.require_notice:
-        observed = policy.match_notice(content)
-        expected = expected_notice(policy, observed, current_year=year)
-        if not observed:
-            if expected:
-                issues.append(f"Missing copyright notice '{expected}'")
-            elif policy.canonical_notice:
-                issues.append(f"Missing copyright notice '{policy.canonical_notice}'")
-            else:
-                issues.append("Missing copyright notice")
-        elif expected and not _notices_equal(observed, expected):
-            issues.append(
-                f"Mismatched copyright notice. Found '{observed}' but expected '{expected}'.",
-            )
+def _collect_spdx_issues(content: str, lower_content: str, policy: LicensePolicy) -> list[str]:
+    """Return SPDX-related issues for *content* under *policy*.
+
+    Args:
+        content: Original file content.
+        lower_content: Lower-cased version of ``content`` for snippet search.
+        policy: Licensing policy describing expected identifiers.
+
+    Returns:
+        list[str]: SPDX-related policy violations.
+    """
+
+    issues: list[str] = []
+    if not policy.require_spdx:
+        return issues
+
+    identifiers = extract_spdx_identifiers(content)
+    expected_id = policy.spdx_id
+    alternate_spdx = policy.allow_alternate_spdx or ()
+    allowed = {spdx for spdx in (expected_id, *alternate_spdx) if spdx}
+    snippet = policy.license_snippet
+
+    if expected_id:
+        conflicting = sorted(identifier for identifier in identifiers if identifier not in allowed)
+        if conflicting:
+            formatted = ", ".join(conflicting)
+            message = "Found SPDX license identifier(s) " f"{formatted}; expected '{expected_id}'."
+            issues.append(message)
+        if not identifiers.intersection(allowed) and not _matches_snippet(lower_content, snippet):
+            expected_tag = f"{SPDX_TAG_LABEL}: {expected_id}"
+            issues.append(f"Missing SPDX license tag '{expected_tag}'")
+        return issues
+
+    if not identifiers and not _matches_snippet(lower_content, snippet):
+        issues.append(
+            "Missing SPDX license tag; configure a project SPDX identifier or header snippet.",
+        )
+    return issues
+
+
+def _collect_notice_issues(content: str, policy: LicensePolicy, current_year: int) -> list[str]:
+    """Return notice-related issues for *content* under *policy*.
+
+    Args:
+        content: File content inspected for notice text.
+        policy: Licensing policy describing notice expectations.
+        current_year: Calendar year used when synthesising expected notices.
+
+    Returns:
+        list[str]: Policy violations involving copyright notices.
+    """
+
+    issues: list[str] = []
+    if not policy.require_notice:
+        return issues
+
+    observed = policy.match_notice(content)
+    expected = expected_notice(policy, observed, current_year=current_year)
+
+    if not observed:
+        if expected:
+            issues.append(f"Missing copyright notice '{expected}'")
+        if policy.canonical_notice:
+            issues.append(f"Missing copyright notice '{policy.canonical_notice}'")
+        if not issues:
+            issues.append("Missing copyright notice")
+        return issues
+
+    if expected and not _notices_equal(observed, expected):
+        issues.append(
+            f"Mismatched copyright notice. Found '{observed}' but expected '{expected}'.",
+        )
 
     return issues
 
 
 def _matches_snippet(lower_content: str, snippet: str | None) -> bool:
+    """Return whether ``lower_content`` contains the provided license snippet.
+
+    Args:
+        lower_content: Content lowered to simplify substring detection.
+        snippet: Optional snippet expected to appear in the content.
+
+    Returns:
+        bool: ``True`` when the snippet is present.
+    """
+
     if not snippet:
         return False
     return snippet.lower() in lower_content
 
 
 def _notices_equal(left: str, right: str) -> bool:
+    """Return whether two notices are equivalent after normalisation.
+
+    Args:
+        left: First notice string.
+        right: Second notice string.
+
+    Returns:
+        bool: ``True`` when both notices are equivalent.
+    """
+
     return normalise_notice(left) == normalise_notice(right)
 
 
 def normalise_notice(value: str) -> str:
+    """Return a canonical form of a copyright notice.
+
+    Args:
+        value: Original notice string.
+
+    Returns:
+        str: Lower-cased, whitespace-normalised notice text.
+    """
+
     stripped = _strip_comment_prefix(value)
     return re.sub(r"\s+", " ", stripped).strip().lower()
 
 
 def extract_spdx_identifiers(content: str) -> set[str]:
-    """Return SPDX identifiers found in comment lines within *content*."""
+    """Return SPDX identifiers found in comment lines within *content*.
+
+    Args:
+        content: File content searched for SPDX headers.
+
+    Returns:
+        set[str]: Unique SPDX identifiers discovered in the content.
+    """
     identifiers: set[str] = set()
     for line in content.splitlines():
         payload = _comment_payload(line)
         if payload is None:
             stripped = line.lstrip()
-            if not stripped.lower().startswith("spdx-license-identifier:"):
+            if not stripped.lower().startswith(SPDX_TAG_PREFIX):
                 continue
             payload = stripped
         match = _SPDX_PATTERN.search(payload)
@@ -295,22 +523,34 @@ def extract_spdx_identifiers(content: str) -> set[str]:
 
 
 def _comment_payload(line: str) -> str | None:
+    """Return the comment payload extracted from ``line`` when possible.
+
+    Args:
+        line: Source line inspected for a comment payload.
+
+    Returns:
+        str | None: Comment payload with surrounding delimiters removed.
+    """
+
     stripped = line.lstrip()
     if not stripped:
         return None
-    for prefix in ("#", "//", "/*", "*", "--", ";", "<!--", ".."):
-        if stripped.startswith(prefix):
-            payload = stripped[len(prefix) :].lstrip()
-            if prefix == "<!--" and payload.endswith("-->"):
-                payload = payload[:-3].rstrip()
-            if prefix == "/*" and payload.endswith("*/"):
-                payload = payload[:-2].rstrip()
-            return payload
+    for prefix in COMMENT_PREFIXES:
+        if not stripped.startswith(prefix):
+            continue
+        payload = stripped[len(prefix) :].lstrip()
+        if prefix == HTML_COMMENT_START and payload.endswith(HTML_COMMENT_END):
+            payload = payload[: -len(HTML_COMMENT_END)].rstrip()
+        if prefix == C_BLOCK_COMMENT_START and payload.endswith(C_BLOCK_COMMENT_END):
+            payload = payload[: -len(C_BLOCK_COMMENT_END)].rstrip()
+        return payload
     return None
 
 
 @dataclass(frozen=True)
 class _NoticeParts:
+    """Structured representation of the components of a notice string."""
+
     start: int | None
     end: int | None
     owner: str | None
@@ -322,7 +562,16 @@ def expected_notice(
     *,
     current_year: int | None = None,
 ) -> str | None:
-    """Build the canonical notice string expected for a file under *policy*."""
+    """Return the canonical notice string expected for a file under *policy*.
+
+    Args:
+        policy: Licensing policy describing notice expectations.
+        observed_notice: Existing notice detected within the file.
+        current_year: Year used when constructing notice ranges.
+
+    Returns:
+        str | None: Canonical notice or ``None`` when no notice is required.
+    """
     if not policy.require_notice:
         return None
 
@@ -344,12 +593,13 @@ def expected_notice(
     else:
         start_year = year
 
-    end_candidates = [value for value in (observed.end, baseline.end) if value]
+    end_candidates = [value for value in (observed.end, baseline.end) if value is not None]
     end_year = max(end_candidates) if end_candidates else None
     if end_year is not None and end_year < start_year:
         end_year = start_year
 
-    latest = max(filter(None, (end_year, year)), default=year)
+    latest_candidates = [candidate for candidate in (end_year, year) if candidate is not None]
+    latest = max(latest_candidates) if latest_candidates else year
     latest = max(latest, start_year)
 
     if latest == start_year:
@@ -361,6 +611,15 @@ def expected_notice(
 
 
 def _parse_notice(value: str | None) -> _NoticeParts:
+    """Return structured components extracted from a notice string.
+
+    Args:
+        value: Notice string to parse.
+
+    Returns:
+        _NoticeParts: Parsed year range and owner metadata.
+    """
+
     if not value:
         return _NoticeParts(None, None, None)
 
@@ -391,6 +650,16 @@ def _build_canonical_notice(
     config: MutableMapping[str, object],
     metadata: LicenseMetadata,
 ) -> str | None:
+    """Return the canonical notice derived from configuration and metadata.
+
+    Args:
+        config: Mutable configuration mapping used to resolve overrides.
+        metadata: Metadata discovered from project configuration or files.
+
+    Returns:
+        str | None: Canonical notice string when derivable.
+    """
+
     explicit_notice = _coerce_optional_str(config.pop("notice", None))
     if explicit_notice:
         return explicit_notice.strip()
@@ -412,6 +681,15 @@ def _build_canonical_notice(
 
 
 def _extract_year(notice: str) -> str | None:
+    """Return the year or year range extracted from a notice string.
+
+    Args:
+        notice: Copyright notice string.
+
+    Returns:
+        str | None: Extracted year expression when present.
+    """
+
     year_match = re.search(r"(\d{4}(?:\s*[-–]\s*\d{4}|\s*\+?|\s*present)?)", notice)
     if year_match:
         return year_match.group(1).replace("  ", " ").strip()
@@ -419,6 +697,15 @@ def _extract_year(notice: str) -> str | None:
 
 
 def _extract_license_overrides(data: Mapping[str, object]) -> Mapping[str, object]:
+    """Return license override configuration embedded within *data*.
+
+    Args:
+        data: Parsed ``pyproject.toml`` payload.
+
+    Returns:
+        Mapping[str, object]: Extracted override mapping or an empty mapping.
+    """
+
     tool = data.get("tool")
     if isinstance(tool, Mapping):
         pyqa = tool.get("pyqa")
@@ -430,6 +717,18 @@ def _extract_license_overrides(data: Mapping[str, object]) -> Mapping[str, objec
 
 
 def _coerce_optional_str(value: object) -> str | None:
+    """Return a stripped string when ``value`` is a string, otherwise ``None``.
+
+    Args:
+        value: Value to normalise.
+
+    Returns:
+        str | None: Stripped string or ``None`` when ``value`` is falsy.
+
+    Raises:
+        ValueError: If ``value`` is neither ``None`` nor a string.
+    """
+
     if value is None:
         return None
     if isinstance(value, str):
@@ -437,27 +736,47 @@ def _coerce_optional_str(value: object) -> str | None:
     raise ValueError("Expected string value")
 
 
-def _coerce_str_list(value: object) -> Sequence[str]:
+def _coerce_str_list(value: object) -> tuple[str, ...]:
+    """Return a tuple of stripped strings derived from ``value``.
+
+    Args:
+        value: Candidate sequence of strings.
+
+    Returns:
+        tuple[str, ...]: Tuple containing non-empty, stripped string values.
+
+    Raises:
+        ValueError: If ``value`` is not ``None`` and not an iterable of strings.
+    """
+
     if value is None:
         return ()
     if isinstance(value, (list, tuple, set)):
         result: list[str] = []
-        for item in value:
-            if not isinstance(item, str):
+        for entry in value:
+            if not isinstance(entry, str):
                 raise ValueError("Expected string in list")
-            item = item.strip()
-            if item:
-                result.append(item)
+            trimmed = entry.strip()
+            if trimmed:
+                result.append(trimmed)
         return tuple(result)
     raise ValueError("Expected list of strings")
 
 
 def _strip_comment_prefix(line: str) -> str:
+    """Return ``line`` stripped of leading comment syntax and adornments.
+
+    Args:
+        line: Source line potentially containing comment delimiters.
+
+    Returns:
+        str: Line contents with surrounding comment delimiters removed.
+    """
+
     cleaned = line.lstrip()
-    patterns = ("#", "//", "/*", "*", "--", ";", "<!--")
-    for token in patterns:
-        if cleaned.startswith(token):
-            cleaned = cleaned[len(token) :].lstrip(" -*#/")
+    for prefix in COMMENT_PREFIXES:
+        if cleaned.startswith(prefix):
+            cleaned = cleaned[len(prefix) :].lstrip(" -*#/")
             break
     if cleaned.startswith('"') and ":" in cleaned:
         _, remainder = cleaned.split(":", 1)
@@ -466,14 +785,22 @@ def _strip_comment_prefix(line: str) -> str:
             cleaned = cleaned[:-1].rstrip()
         if cleaned.startswith('"') and cleaned.endswith('"'):
             cleaned = cleaned[1:-1]
-    if cleaned.endswith("*/"):
-        cleaned = cleaned[:-2].rstrip()
-    if cleaned.endswith("-->"):
-        cleaned = cleaned[:-3].rstrip()
+    if cleaned.endswith(C_BLOCK_COMMENT_END):
+        cleaned = cleaned[: -len(C_BLOCK_COMMENT_END)].rstrip()
+    if cleaned.endswith(HTML_COMMENT_END):
+        cleaned = cleaned[: -len(HTML_COMMENT_END)].rstrip()
     return cleaned.strip()
 
 
 def _license_config_to_mapping(config: LicenseConfig) -> dict[str, object]:
+    """Return a mapping representation of ``config`` with empty values pruned.
+
+    Args:
+        config: License configuration model to serialise.
+
+    Returns:
+        dict[str, object]: Mapping containing only truthy configuration values.
+    """
+
     payload = config.model_dump(mode="python")
-    # Drop keys with falsy values to reduce noise when merging defaults
     return {key: value for key, value in payload.items() if value not in (None, [], "")}
