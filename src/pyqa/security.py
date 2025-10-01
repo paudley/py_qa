@@ -8,13 +8,12 @@ import json
 import re
 import shutil
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from subprocess import CompletedProcess
 from typing import Final
-from collections.abc import Iterator
 
 from .logging import fail, info, ok, warn
 from .process_utils import run_command
