@@ -65,7 +65,7 @@ class NavigatorDiagnosticEntry:
     line: int | None
     severity: str
 
-    def to_payload(self) -> "NavigatorDiagnosticPayload":
+    def to_payload(self) -> NavigatorDiagnosticPayload:
         """Return a serialisable mapping for the diagnostic entry."""
 
         return NavigatorDiagnosticPayload(
@@ -111,7 +111,7 @@ class NavigatorBucket:
 
         return sum(self.issue_tags.values())
 
-    def to_payload(self) -> "NavigatorPayload":
+    def to_payload(self) -> NavigatorPayload:
         """Return a serialisable payload representing this bucket."""
 
         return NavigatorPayload(
@@ -159,9 +159,7 @@ def build_refactor_navigator(result: RunResult, engine: AnnotationEngine) -> Non
             f"{bucket.file}::{bucket.function}",
         ),
     )
-    result.analysis["refactor_navigator"] = [
-        bucket.to_payload() for bucket in summary[:MAX_NAVIGATOR_ENTRIES]
-    ]
+    result.analysis["refactor_navigator"] = [bucket.to_payload() for bucket in summary[:MAX_NAVIGATOR_ENTRIES]]
 
 
 def _issue_tag(diag: Diagnostic, engine: AnnotationEngine) -> IssueTag | None:
