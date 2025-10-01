@@ -7,8 +7,11 @@ from __future__ import annotations
 import os
 from collections.abc import MutableMapping
 from pathlib import Path
+from typing import Final
 
-NODE_ENV_DEFAULTS: dict[str, str] = {
+WINDOWS_OS_NAME: Final[str] = "nt"
+
+NODE_ENV_DEFAULTS: Final[dict[str, str]] = {
     "CI": "1",
     "npm_config_yes": "true",
     "npm_config_fund": "false",
@@ -31,7 +34,7 @@ def find_venv_bin(root: Path | None = None) -> Path | None:
             venv_dir = candidate / name
             if not venv_dir.is_dir():
                 continue
-            bin_dir = venv_dir / ("Scripts" if os.name == "nt" else "bin")
+            bin_dir = venv_dir / ("Scripts" if os.name == WINDOWS_OS_NAME else "bin")
             if bin_dir.is_dir():
                 return bin_dir
     return None

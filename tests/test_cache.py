@@ -4,7 +4,7 @@
 
 from pathlib import Path
 
-from pyqa.execution.cache import ResultCache
+from pyqa.execution.cache import CacheRequest, ResultCache
 from pyqa.metrics import compute_file_metrics, normalise_path_key
 from pyqa.models import Diagnostic, ToolOutcome
 from pyqa.severity import Severity
@@ -40,25 +40,23 @@ def test_result_cache_roundtrip(tmp_path: Path) -> None:
     outcome = make_outcome()
     cmd = ["demo", str(source)]
 
+    request = CacheRequest(
+        tool="demo",
+        action="lint",
+        command=tuple(cmd),
+        files=(source,),
+        token="token",
+    )
+
     metrics = {normalise_path_key(source): compute_file_metrics(source)}
 
     cache.store(
-        tool="demo",
-        action="lint",
-        cmd=cmd,
-        files=[source],
-        token="token",
+        request,
         outcome=outcome,
         file_metrics=metrics,
     )
 
-    loaded = cache.load(
-        tool="demo",
-        action="lint",
-        cmd=cmd,
-        files=[source],
-        token="token",
-    )
+    loaded = cache.load(request)
 
     assert loaded is not None
     assert loaded.outcome.tool == outcome.tool
@@ -79,12 +77,16 @@ def test_result_cache_miss_on_modified_file(tmp_path: Path) -> None:
 
     metrics = {normalise_path_key(source): compute_file_metrics(source)}
 
-    cache.store(
+    request = CacheRequest(
         tool="demo",
         action="lint",
-        cmd=cmd,
-        files=[source],
+        command=tuple(cmd),
+        files=(source,),
         token="token",
+    )
+
+    cache.store(
+        request,
         outcome=outcome,
         file_metrics=metrics,
     )
@@ -92,13 +94,4 @@ def test_result_cache_miss_on_modified_file(tmp_path: Path) -> None:
     # Modify file to invalidate cache
     source.write_text("print('bye')\n", encoding="utf-8")
 
-    assert (
-        cache.load(
-            tool="demo",
-            action="lint",
-            cmd=cmd,
-            files=[source],
-            token="token",
-        )
-        is None
-    )
+    assert cache.load(request) is None

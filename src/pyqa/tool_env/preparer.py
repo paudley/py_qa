@@ -127,5 +127,17 @@ class CommandPreparer:
         tool_constants.PERL_BIN_DIR.mkdir(parents=True, exist_ok=True)
         tool_constants.PERL_META_DIR.mkdir(parents=True, exist_ok=True)
 
+    def prepare_request(self, request: CommandPreparationRequest) -> PreparedCommand:
+        """Prepare a command described by ``request``.
+
+        Args:
+            request: Fully normalised command preparation request.
+
+        Returns:
+            PreparedCommand: Command ready for execution.
+        """
+
+        return self.prepare(request=request)
+
 
 __all__ = ["CommandPreparationRequest", "CommandPreparer"]
