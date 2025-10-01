@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from functools import partial
 from pathlib import Path
 from typing import Any, Final, Protocol, cast
 
@@ -86,12 +87,13 @@ class _ArgsOptionBehavior:
         values = _settings_list(value)
         if not values:
             return
+        append_value = partial(_append_flagged, command, flag=self.flag)
         if self.join_separator is not None:
             combined = self.join_separator.join(str(entry) for entry in values)
-            _append_flagged(command, combined, self.flag)
+            append_value(combined)
             return
         for entry in values:
-            _append_flagged(command, str(entry), self.flag)
+            append_value(str(entry))
 
     def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
         """Delegate callable invocation to :meth:`extend_command`.
@@ -127,6 +129,7 @@ class _PathOptionBehavior:
             if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray))
             else (value,)
         )
+        append_value = partial(_append_flagged, command, flag=self.flag)
         for entry in entries:
             if entry is None:
                 continue
@@ -136,7 +139,7 @@ class _PathOptionBehavior:
                 if isinstance(entry, (str, Path)) and entry_text in self.literal_values
                 else str(_resolve_path(ctx.root, entry))
             )
-            _append_flagged(command, resolved, self.flag)
+            append_value(resolved)
 
     def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
         """Delegate callable invocation to :meth:`extend_command`.
@@ -166,7 +169,8 @@ class _ValueOptionBehavior:
         """
 
         del ctx
-        _append_flagged(command, str(value), self.flag)
+        append_value = partial(_append_flagged, command, flag=self.flag)
+        append_value(str(value))
 
     def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
         """Delegate callable invocation to :meth:`extend_command`.
@@ -301,7 +305,7 @@ class OptionMapping:
         if value is None:
             return
         adjusted = self._apply_transform(value, ctx) if self.defaults.transform else value
-        self.behavior.extend_command(ctx, command, adjusted)
+        self.behavior(ctx, command, adjusted)
 
     def _resolve_value(self, ctx: ToolContext) -> JSONValue | None:
         """Resolve the value backing this option, honouring defaults.

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Final, cast
 
@@ -341,6 +342,7 @@ def _parse_project_target_plan(entry: Any) -> _ProjectTargetPlan:
     )
 
 
+@lru_cache(maxsize=512)
 def _normalise_path_requirement(raw: str) -> tuple[str, ...]:
     """Convert requirement string into normalised path segments."""
 
@@ -368,6 +370,7 @@ def _path_matches_requirements(
     return all(_has_path_sequence(parts, requirement) for requirement in requirements)
 
 
+@lru_cache(maxsize=1024)
 def _candidate_parts(candidate: Path, root: Path) -> tuple[str, ...]:
     """Return normalised path components for *candidate* relative to *root*.
 
