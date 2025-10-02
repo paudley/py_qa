@@ -4,43 +4,73 @@
 
 from __future__ import annotations
 
-import os
+from dataclasses import dataclass
 from pathlib import Path
-from threading import Lock
+from typing import Annotated
 
 import typer
-from rich import box
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
-from rich.table import Table
-from rich.text import Text
+from rich.progress import Progress
 
-from ..config import Config, ConfigError, SensitivityLevel, default_parallel_jobs
-from ..console import console_manager, is_tty
-from ..constants import PY_QA_DIR_NAME
+from ..config import Config, ConfigError
+from ..console import is_tty
 from ..discovery import build_default_discovery
-from ..execution.orchestrator import FetchEvent, Orchestrator, OrchestratorHooks
-from ..filesystem.paths import normalize_path
-from ..logging import info, warn
-from ..models import RunResult, ToolOutcome
-from ..quality import QualityChecker, QualityCheckerOptions
-from ..reporting.emitters import write_json_report, write_pr_summary, write_sarif_report
-from ..reporting.formatters import render
-from ..tool_env.models import PreparedCommand
+from ..execution.orchestrator import Orchestrator, OrchestratorHooks
 from ..tooling.catalog.errors import CatalogIntegrityError, CatalogValidationError
+from ..tooling.catalog.model_catalog import CatalogSnapshot
 from ..tools.builtin_registry import initialize_registry
 from ..tools.registry import DEFAULT_REGISTRY
-from ..workspace import is_py_qa_workspace
+from ._lint_cli_models import (
+    ADVICE_HELP,
+    BANDIT_CONFIDENCE_HELP,
+    BANDIT_SEVERITY_HELP,
+    CACHE_DIR_HELP,
+    FETCH_ALL_TOOLS_HELP,
+    FILTER_HELP,
+    JOBS_HELP,
+    LINE_LENGTH_HELP,
+    MAX_ARGUMENTS_HELP,
+    MAX_COMPLEXITY_HELP,
+    NORMAL_PRESET_HELP,
+    OUTPUT_MODE_CONCISE,
+    OUTPUT_MODE_HELP,
+    PR_SUMMARY_MIN_SEVERITY_HELP,
+    PR_SUMMARY_OUT_HELP,
+    PR_SUMMARY_TEMPLATE_HELP,
+    PYLINT_FAIL_UNDER_HELP,
+    REPORT_JSON_HELP,
+    SARIF_HELP,
+    SENSITIVITY_HELP,
+    SQL_DIALECT_HELP,
+    TOOL_INFO_HELP,
+    TYPE_CHECKING_HELP,
+    STRICT_CONFIG_HELP,
+    USE_LOCAL_LINTERS_HELP,
+    VALIDATE_SCHEMA_HELP,
+    LintCLIInputs,
+    PathArgument,
+    RootOption,
+    _build_advanced_group,
+    _build_execution_group,
+    _execution_runtime_dependency,
+    _build_output_group,
+    _build_target_group,
+    _git_params_dependency,
+    _meta_params_dependency,
+    _output_params_dependency,
+    _override_params_dependency,
+    _path_params_dependency,
+    _reporting_params_dependency,
+    _selection_params_dependency,
+    _severity_params_dependency,
+    _summary_params_dependency,
+)
+from ._lint_preparation import PreparedLintState, prepare_lint_state
+from ._lint_fetch import render_fetch_all_tools
+from ._lint_progress import ExecutionProgressController
+from ._lint_reporting import append_internal_quality_checks, handle_reporting
 from .config_builder import build_config
 from .doctor import run_doctor
-from .options import LintOptions
 from .tool_info import run_tool_info
-from .utils import filter_py_qa_paths
 
 PHASE_SORT_ORDER: tuple[str, ...] = (
     "lint",
@@ -53,237 +83,223 @@ PHASE_SORT_ORDER: tuple[str, ...] = (
 )
 
 
+@dataclass(slots=True)
+class LintRuntimeContext:
+    """Bundle runtime dependencies for lint execution."""
+
+    state: PreparedLintState
+    config: Config
+    orchestrator: Orchestrator
+    hooks: OrchestratorHooks
+    catalog_snapshot: CatalogSnapshot
+
 def lint_command(
     ctx: typer.Context,
-    paths: list[Path] | None = typer.Argument(
-        None,
-        metavar="[PATH]",
-        help="Specific files or directories to lint.",
-    ),
-    root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    changed_only: bool = typer.Option(False, help="Limit to files changed according to git."),
-    diff_ref: str = typer.Option("HEAD", help="Git ref for change detection."),
-    include_untracked: bool = typer.Option(
-        True,
-        help="Include untracked files during git discovery.",
-    ),
-    base_branch: str | None = typer.Option(None, help="Base branch for merge-base diffing."),
-    paths_from_stdin: bool = typer.Option(False, help="Read file paths from stdin."),
-    dirs: list[Path] = typer.Option(
-        [],
-        "--dir",
-        help="Add directory to discovery roots (repeatable).",
-    ),
-    exclude: list[Path] = typer.Option([], help="Exclude specific paths or globs."),
-    normal: bool = typer.Option(
-        False,
-        "-n",
-        "--normal",
-        help="Apply the built-in 'normal' lint preset (concise output, advice, no tests, local linters).",
-    ),
-    no_lint_tests: bool = typer.Option(
-        False,
-        "--no-lint-tests",
-        help="Exclude paths containing 'tests' from linting.",
-    ),
-    filters: list[str] = typer.Option(
-        [],
-        "--filter",
-        help="Filter stdout/stderr from TOOL using regex (TOOL:pattern).",
-    ),
-    only: list[str] = typer.Option([], help="Run only the selected tool(s)."),
-    language: list[str] = typer.Option([], help="Filter tools by language."),
-    fix_only: bool = typer.Option(False, help="Run only fix-capable actions."),
-    check_only: bool = typer.Option(False, help="Run only check actions."),
-    verbose: bool = typer.Option(False, help="Verbose output."),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="Minimal output."),
-    no_color: bool = typer.Option(False, help="Disable ANSI colour output."),
-    no_emoji: bool = typer.Option(False, help="Disable emoji output."),
-    output_mode: str = typer.Option(
-        "concise",
-        "--output",
-        help="Output mode: concise, pretty, or raw.",
-    ),
-    show_passing: bool = typer.Option(False, help="Include successful diagnostics in output."),
-    no_stats: bool = typer.Option(False, help="Suppress summary statistics."),
-    report_json: Path | None = typer.Option(None, help="Write JSON report to the provided path."),
-    sarif_out: Path | None = typer.Option(
-        None,
-        help="Write SARIF 2.1.0 report to the provided path.",
-    ),
-    pr_summary_out: Path | None = typer.Option(
-        None,
-        help="Write a Markdown PR summary of diagnostics.",
-    ),
-    pr_summary_limit: int = typer.Option(
-        100,
-        "--pr-summary-limit",
-        help="Maximum diagnostics in PR summary.",
-    ),
-    pr_summary_min_severity: str = typer.Option(
-        "warning",
-        "--pr-summary-min-severity",
-        help="Lowest severity for PR summary (error, warning, notice, note).",
-    ),
-    pr_summary_template: str = typer.Option(
-        "- **{severity}** `{tool}` {message} ({location})",
-        "--pr-summary-template",
-        help="Custom format string for PR summary entries.",
-    ),
-    jobs: int | None = typer.Option(
-        None,
-        "--jobs",
-        "-j",
-        min=1,
-        help="Max parallel jobs (defaults to 75% of available CPU cores).",
-    ),
-    bail: bool = typer.Option(False, "--bail", help="Exit on first tool failure."),
-    no_cache: bool = typer.Option(False, help="Disable on-disk result caching."),
-    cache_dir: Path = typer.Option(
-        Path(".lint-cache"),
-        "--cache-dir",
-        help="Cache directory for tool results.",
-    ),
-    use_local_linters: bool = typer.Option(
-        False,
-        "--use-local-linters",
-        help="Force vendored linters even if compatible system versions exist.",
-    ),
-    strict_config: bool = typer.Option(
-        False,
-        "--strict-config",
-        help="Treat configuration warnings (unknown keys, etc.) as errors.",
-    ),
-    line_length: int = typer.Option(
-        120,
-        "--line-length",
-        help="Global preferred maximum line length applied to supported tools.",
-    ),
-    max_complexity: int | None = typer.Option(
-        None,
-        "--max-complexity",
-        min=1,
-        help="Override maximum cyclomatic complexity shared across supported tools.",
-    ),
-    max_arguments: int | None = typer.Option(
-        None,
-        "--max-arguments",
-        min=1,
-        help="Override maximum function arguments shared across supported tools.",
-    ),
-    type_checking: str | None = typer.Option(
-        None,
-        "--type-checking",
-        case_sensitive=False,
-        help="Override type-checking strictness (lenient, standard, or strict).",
-    ),
-    bandit_severity: str | None = typer.Option(
-        None,
-        "--bandit-severity",
-        case_sensitive=False,
-        help="Override Bandit's minimum severity (low, medium, high).",
-    ),
-    bandit_confidence: str | None = typer.Option(
-        None,
-        "--bandit-confidence",
-        case_sensitive=False,
-        help="Override Bandit's minimum confidence (low, medium, high).",
-    ),
-    pylint_fail_under: float | None = typer.Option(
-        None,
-        "--pylint-fail-under",
-        help="Override pylint fail-under score (0-10).",
-    ),
-    sensitivity: str | None = typer.Option(
-        None,
-        "--sensitivity",
-        case_sensitive=False,
-        help="Overall sensitivity (low, medium, high, maximum) to cascade severity tweaks.",
-    ),
-    sql_dialect: str = typer.Option(
-        "postgresql",
-        "--sql-dialect",
-        help="Default SQL dialect for dialect-aware tools (e.g. sqlfluff).",
-    ),
-    doctor: bool = typer.Option(False, "--doctor", help="Run environment diagnostics and exit."),
-    tool_info: str | None = typer.Option(
-        None,
-        "--tool-info",
-        metavar="TOOL",
-        help="Display detailed information for TOOL and exit.",
-    ),
-    fetch_all_tools: bool = typer.Option(
-        False,
-        "--fetch-all-tools",
-        help="Download or prepare runtimes for every registered tool and exit.",
-    ),
-    advice: bool = typer.Option(
-        False,
-        "--advice",
-        help="Provide SOLID-aligned refactoring suggestions alongside diagnostics.",
-    ),
-    validate_schema: bool = typer.Option(
-        False,
-        "--validate-schema",
-        help="Validate catalog definitions against bundled schemas and exit.",
-    ),
+    paths: PathArgument,
+    root: RootOption,
+    changed_only: Annotated[bool, typer.Option(False, help="Limit to files changed according to git.")],
+    diff_ref: Annotated[str, typer.Option("HEAD", help="Git ref for change detection.")],
+    include_untracked: Annotated[bool, typer.Option(True, help="Include untracked files during git discovery.")],
+    base_branch: Annotated[str | None, typer.Option(None, help="Base branch for merge-base diffing.")],
+    paths_from_stdin: Annotated[bool, typer.Option(False, help="Read file paths from stdin.")],
+    dirs: Annotated[list[Path], typer.Option([], "--dir", help="Add directory to discovery roots (repeatable).")],
+    exclude: Annotated[list[Path], typer.Option([], help="Exclude specific paths or globs.")],
+    normal: Annotated[bool, typer.Option(False, "-n", "--normal", help=NORMAL_PRESET_HELP)],
+    no_lint_tests: Annotated[
+        bool,
+        typer.Option(
+            False,
+            "--no-lint-tests",
+            help="Exclude paths containing 'tests' from linting.",
+        ),
+    ],
+    filters: Annotated[list[str], typer.Option([], "--filter", help=FILTER_HELP)],
+    only: Annotated[list[str], typer.Option([], help="Run only the selected tool(s).")],
+    language: Annotated[list[str], typer.Option([], help="Filter tools by language.")],
+    fix_only: Annotated[bool, typer.Option(False, help="Run only fix-capable actions.")],
+    check_only: Annotated[bool, typer.Option(False, help="Run only check actions.")],
+    verbose: Annotated[bool, typer.Option(False, help="Verbose output.")],
+    quiet: Annotated[bool, typer.Option(False, "--quiet", "-q", help="Minimal output.")],
+    no_color: Annotated[bool, typer.Option(False, help="Disable ANSI colour output.")],
+    no_emoji: Annotated[bool, typer.Option(False, help="Disable emoji output.")],
+    output_mode: Annotated[
+        str,
+        typer.Option(OUTPUT_MODE_CONCISE, "--output", help=OUTPUT_MODE_HELP),
+    ],
+    show_passing: Annotated[bool, typer.Option(False, help="Include successful diagnostics in output.")],
+    no_stats: Annotated[bool, typer.Option(False, help="Suppress summary statistics.")],
+    report_json: Annotated[Path | None, typer.Option(None, help=REPORT_JSON_HELP)],
+    sarif_out: Annotated[Path | None, typer.Option(None, help=SARIF_HELP)],
+    pr_summary_out: Annotated[Path | None, typer.Option(None, help=PR_SUMMARY_OUT_HELP)],
+    pr_summary_limit: Annotated[
+        int,
+        typer.Option(100, "--pr-summary-limit", help="Maximum diagnostics in PR summary."),
+    ],
+    pr_summary_min_severity: Annotated[
+        str,
+        typer.Option("warning", "--pr-summary-min-severity", help=PR_SUMMARY_MIN_SEVERITY_HELP),
+    ],
+    pr_summary_template: Annotated[
+        str,
+        typer.Option(
+            "- **{severity}** `{tool}` {message} ({location})",
+            "--pr-summary-template",
+            help=PR_SUMMARY_TEMPLATE_HELP,
+        ),
+    ],
+    jobs: Annotated[int | None, typer.Option(None, "--jobs", "-j", min=1, help=JOBS_HELP)],
+    bail: Annotated[bool, typer.Option(False, "--bail", help="Exit on first tool failure.")],
+    no_cache: Annotated[bool, typer.Option(False, help="Disable on-disk result caching.")],
+    cache_dir: Annotated[Path, typer.Option(Path(".lint-cache"), "--cache-dir", help=CACHE_DIR_HELP)],
+    use_local_linters: Annotated[bool, typer.Option(False, "--use-local-linters", help=USE_LOCAL_LINTERS_HELP)],
+    strict_config: Annotated[bool, typer.Option(False, "--strict-config", help=STRICT_CONFIG_HELP)],
+    line_length: Annotated[int, typer.Option(120, "--line-length", help=LINE_LENGTH_HELP)],
+    max_complexity: Annotated[
+        int | None,
+        typer.Option(None, "--max-complexity", min=1, help=MAX_COMPLEXITY_HELP),
+    ],
+    max_arguments: Annotated[
+        int | None,
+        typer.Option(None, "--max-arguments", min=1, help=MAX_ARGUMENTS_HELP),
+    ],
+    type_checking: Annotated[
+        str | None,
+        typer.Option(
+            None,
+            "--type-checking",
+            case_sensitive=False,
+            help=TYPE_CHECKING_HELP,
+        ),
+    ],
+    bandit_severity: Annotated[
+        str | None,
+        typer.Option(
+            None,
+            "--bandit-severity",
+            case_sensitive=False,
+            help=BANDIT_SEVERITY_HELP,
+        ),
+    ],
+    bandit_confidence: Annotated[
+        str | None,
+        typer.Option(
+            None,
+            "--bandit-confidence",
+            case_sensitive=False,
+            help=BANDIT_CONFIDENCE_HELP,
+        ),
+    ],
+    pylint_fail_under: Annotated[
+        float | None,
+        typer.Option(None, "--pylint-fail-under", help=PYLINT_FAIL_UNDER_HELP),
+    ],
+    sensitivity: Annotated[
+        str | None,
+        typer.Option(
+            None,
+            "--sensitivity",
+            case_sensitive=False,
+            help=SENSITIVITY_HELP,
+        ),
+    ],
+    sql_dialect: Annotated[str, typer.Option("postgresql", "--sql-dialect", help=SQL_DIALECT_HELP)],
+    doctor: Annotated[bool, typer.Option(False, "--doctor", help="Run environment diagnostics and exit.")],
+    tool_info: Annotated[str | None, typer.Option(None, "--tool-info", metavar="TOOL", help=TOOL_INFO_HELP)],
+    fetch_all_tools: Annotated[bool, typer.Option(False, "--fetch-all-tools", help=FETCH_ALL_TOOLS_HELP)],
+    advice: Annotated[bool, typer.Option(False, "--advice", help=ADVICE_HELP)],
+    validate_schema: Annotated[bool, typer.Option(False, "--validate-schema", help=VALIDATE_SCHEMA_HELP)],
 ) -> None:
-    """Entry point for the ``pyqa lint`` CLI command."""
-    if doctor and tool_info:
-        raise typer.BadParameter("--doctor and --tool-info cannot be combined")
-    if doctor and fetch_all_tools:
-        raise typer.BadParameter("--doctor and --fetch-all-tools cannot be combined")
-    if tool_info and fetch_all_tools:
-        raise typer.BadParameter("--tool-info and --fetch-all-tools cannot be combined")
-    if validate_schema and doctor:
-        raise typer.BadParameter("--validate-schema and --doctor cannot be combined")
-    if validate_schema and tool_info:
-        raise typer.BadParameter("--validate-schema and --tool-info cannot be combined")
-    if validate_schema and fetch_all_tools:
-        raise typer.BadParameter("--validate-schema and --fetch-all-tools cannot be combined")
+    """Typer entry point for the ``pyqa lint`` command."""
 
-    if fix_only and check_only:
-        raise typer.BadParameter("--fix-only and --check-only are mutually exclusive")
-    if verbose and quiet:
-        raise typer.BadParameter("--verbose and --quiet cannot be combined")
+    path_params = _path_params_dependency(paths, root, paths_from_stdin, dirs, exclude)
+    git_params = _git_params_dependency(changed_only, diff_ref, include_untracked, base_branch, no_lint_tests)
+    selection_params = _selection_params_dependency(filters, only, language, fix_only, check_only)
+    runtime_params = _execution_runtime_dependency(jobs, bail, no_cache, cache_dir, use_local_linters)
+    output_params = _output_params_dependency(verbose, quiet, no_color, no_emoji, output_mode)
+    reporting_params = _reporting_params_dependency(show_passing, no_stats, report_json, sarif_out, pr_summary_out)
+    summary_params = _summary_params_dependency(pr_summary_limit, pr_summary_min_severity, pr_summary_template, advice)
+    override_params = _override_params_dependency(line_length, sql_dialect, max_complexity, max_arguments, type_checking)
+    severity_params = _severity_params_dependency(bandit_severity, bandit_confidence, pylint_fail_under, sensitivity)
+    meta_params = _meta_params_dependency(doctor, tool_info, fetch_all_tools, validate_schema, normal)
 
-    invocation_cwd = Path.cwd()
-    provided_paths = list(paths or [])
-    normalized_paths = [normalize_path(arg, base_dir=invocation_cwd) for arg in provided_paths]
+    inputs = LintCLIInputs(
+        targets=_build_target_group(path_params, git_params),
+        execution=_build_execution_group(selection_params, runtime_params, strict_config),
+        output=_build_output_group(output_params, reporting_params, summary_params),
+        advanced=_build_advanced_group(override_params, severity_params, meta_params),
+    )
 
-    dirs = [normalize_path(directory, base_dir=invocation_cwd) for directory in dirs]
-    exclude = [normalize_path(entry, base_dir=invocation_cwd) for entry in exclude]
-    cache_dir = normalize_path(cache_dir, base_dir=invocation_cwd)
-    report_json = normalize_path(report_json, base_dir=invocation_cwd) if report_json is not None else None
-    sarif_out = normalize_path(sarif_out, base_dir=invocation_cwd) if sarif_out is not None else None
-    pr_summary_out = normalize_path(pr_summary_out, base_dir=invocation_cwd) if pr_summary_out is not None else None
+    _execute_lint(ctx, inputs)
 
-    root_source = _parameter_source_name(ctx, "root")
-    root = normalize_path(root, base_dir=invocation_cwd)
-    if root_source in {"DEFAULT", "DEFAULT_MAP"} and normalized_paths:
-        derived_root = _derive_default_root(normalized_paths)
-        if derived_root is not None:
-            root = derived_root
 
-    is_py_qa_root = is_py_qa_workspace(root)
-    ignored_py_qa: list[str] = []
-    if not is_py_qa_root and normalized_paths:
-        normalized_paths, ignored_py_qa = filter_py_qa_paths(normalized_paths, root)
-        if ignored_py_qa:
-            unique = ", ".join(dict.fromkeys(ignored_py_qa))
-            warn(
-                (
-                    f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
-                    "unless lint runs inside the py_qa workspace."
-                ),
-                use_emoji=not no_emoji,
-            )
+def _execute_lint(ctx: typer.Context, inputs: LintCLIInputs) -> None:
+    """Resolve CLI arguments into structured inputs and run the pipeline."""
 
-    if doctor:
-        exit_code = run_doctor(root)
+    _validate_cli_combinations(inputs)
+    state = prepare_lint_state(ctx, inputs)
+    _run_early_meta_actions(state)
+    runtime = _build_runtime_context(state)
+    exit_code = _dispatch_meta_commands(runtime)
+    if exit_code is not None:
+        raise typer.Exit(code=exit_code)
+    _run_lint_pipeline(runtime)
+
+
+def _validate_cli_combinations(inputs: LintCLIInputs) -> None:
+    """Guard against unsupported flag combinations before heavy processing."""
+
+    meta = inputs.advanced.meta
+    selection = inputs.execution.selection
+    rendering = inputs.output.rendering
+
+    conflicts = (
+        (
+            meta.doctor and meta.tool_info is not None,
+            "--doctor and --tool-info cannot be combined",
+        ),
+        (
+            meta.doctor and meta.fetch_all_tools,
+            "--doctor and --fetch-all-tools cannot be combined",
+        ),
+        (
+            meta.tool_info is not None and meta.fetch_all_tools,
+            "--tool-info and --fetch-all-tools cannot be combined",
+        ),
+        (
+            meta.validate_schema and meta.doctor,
+            "--validate-schema and --doctor cannot be combined",
+        ),
+        (
+            meta.validate_schema and meta.tool_info is not None,
+            "--validate-schema and --tool-info cannot be combined",
+        ),
+        (
+            meta.validate_schema and meta.fetch_all_tools,
+            "--validate-schema and --fetch-all-tools cannot be combined",
+        ),
+        (
+            selection.fix_only and selection.check_only,
+            "--fix-only and --check-only are mutually exclusive",
+        ),
+        (
+            rendering.verbose and rendering.quiet,
+            "--verbose and --quiet cannot be combined",
+        ),
+    )
+    for condition, message in conflicts:
+        if condition:
+            raise typer.BadParameter(message)
+
+
+def _run_early_meta_actions(state: PreparedLintState) -> None:
+    """Handle early-exit meta commands before configuration work."""
+
+    meta = state.meta
+    if meta.doctor:
+        exit_code = run_doctor(state.root)
         raise typer.Exit(code=exit_code)
 
-    if validate_schema:
+    if meta.validate_schema:
         try:
             initialize_registry(registry=DEFAULT_REGISTRY)
         except (CatalogValidationError, CatalogIntegrityError) as exc:
@@ -292,569 +308,83 @@ def lint_command(
         typer.echo("Catalog validation succeeded")
         raise typer.Exit(code=0)
 
-    effective_jobs = jobs if jobs is not None else default_parallel_jobs()
 
-    if type_checking is not None:
-        normalized_strictness = type_checking.lower()
-        if normalized_strictness not in {"lenient", "standard", "strict"}:
-            raise typer.BadParameter("--type-checking must be one of: lenient, standard, strict")
-        type_checking = normalized_strictness
-
-    def _normalise_bandit(value: str | None, option: str) -> str | None:
-        if value is None:
-            return None
-        normalized = value.lower()
-        if normalized not in {"low", "medium", "high"}:
-            raise typer.BadParameter(f"{option} must be one of: low, medium, high")
-        return normalized
-
-    bandit_severity = _normalise_bandit(bandit_severity, "--bandit-severity")
-    bandit_confidence = _normalise_bandit(bandit_confidence, "--bandit-confidence")
-
-    if pylint_fail_under is not None and not (0 <= pylint_fail_under <= 10):
-        raise typer.BadParameter("--pylint-fail-under must be between 0 and 10")
-
-    if sensitivity is not None:
-        sensitivity_normalized = sensitivity.lower()
-        if sensitivity_normalized not in {"low", "medium", "high", "maximum"}:
-            raise typer.BadParameter("--sensitivity must be one of: low, medium, high, maximum")
-        sensitivity = sensitivity_normalized
-
-    provided = _collect_provided_flags(
-        ctx,
-        paths_provided=bool(normalized_paths),
-        dirs=dirs,
-        exclude=exclude,
-        filters=filters,
-        only=only,
-        language=language,
-    )
-
-    if normal:
-        if "output_mode" not in provided:
-            output_mode = "concise"
-        advice = True
-        no_lint_tests = True
-        use_local_linters = True
-        provided.update({"output_mode", "advice", "exclude", "use_local_linters", "no_lint_tests"})
-
-    exclude_paths = list(exclude)
-    if no_lint_tests:
-        tests_path = Path("tests")
-        if tests_path not in exclude_paths:
-            exclude_paths.append(tests_path)
-        provided.add("exclude")
-
-    options = LintOptions(
-        paths=list(normalized_paths),
-        root=root,
-        changed_only=changed_only,
-        diff_ref=diff_ref,
-        include_untracked=include_untracked,
-        base_branch=base_branch,
-        paths_from_stdin=paths_from_stdin,
-        dirs=list(dirs),
-        exclude=exclude_paths,
-        filters=list(filters),
-        only=list(only),
-        language=list(language),
-        fix_only=fix_only,
-        check_only=check_only,
-        verbose=verbose,
-        quiet=quiet,
-        no_color=no_color,
-        no_emoji=no_emoji,
-        no_stats=no_stats,
-        no_lint_tests=no_lint_tests,
-        output_mode=output_mode,
-        show_passing=show_passing,
-        jobs=effective_jobs,
-        bail=bail,
-        no_cache=no_cache,
-        cache_dir=cache_dir,
-        pr_summary_out=pr_summary_out,
-        pr_summary_limit=pr_summary_limit,
-        pr_summary_min_severity=pr_summary_min_severity,
-        pr_summary_template=pr_summary_template,
-        use_local_linters=use_local_linters,
-        strict_config=strict_config,
-        line_length=line_length,
-        sql_dialect=sql_dialect,
-        max_complexity=max_complexity,
-        max_arguments=max_arguments,
-        type_checking=type_checking,
-        bandit_severity=bandit_severity,
-        bandit_confidence=bandit_confidence,
-        pylint_fail_under=pylint_fail_under,
-        sensitivity=sensitivity,
-        advice=advice,
-        provided=provided,
-    )
+def _build_runtime_context(state: PreparedLintState) -> LintRuntimeContext:
+    """Materialise runtime dependencies for lint execution."""
 
     try:
-        config = build_config(options)
-    except (ValueError, ConfigError) as exc:  # invalid option combinations
+        config = build_config(state.options)
+    except (ValueError, ConfigError) as exc:
         raise typer.BadParameter(str(exc)) from exc
 
     catalog_snapshot = initialize_registry(registry=DEFAULT_REGISTRY)
-
     hooks = OrchestratorHooks()
     orchestrator = Orchestrator(
         registry=DEFAULT_REGISTRY,
         discovery=build_default_discovery(),
         hooks=hooks,
     )
-
-    if tool_info:
-        exit_code = run_tool_info(
-            tool_info,
-            root=root,
-            cfg=config,
-            catalog_snapshot=catalog_snapshot,
-        )
-        raise typer.Exit(code=exit_code)
-    if fetch_all_tools:
-        total_actions = sum(len(tool.actions) for tool in DEFAULT_REGISTRY.tools())
-        progress_enabled = total_actions > 0 and not quiet and config.output.color and is_tty()
-        console = console_manager.get(color=config.output.color, emoji=config.output.emoji)
-        results: list[tuple[str, str, PreparedCommand | None, str | None]]
-
-        if progress_enabled:
-            progress = Progress(
-                SpinnerColumn(),
-                TextColumn("{task.description}"),
-                BarColumn(bar_width=None),
-                TimeElapsedColumn(),
-                console=console,
-                transient=not verbose,
-            )
-            task_id = progress.add_task("Preparing tools", total=total_actions)
-
-            def progress_callback(
-                event: FetchEvent,
-                tool_name: str,
-                action_name: str,
-                index: int,
-                total: int,
-                message: str | None,
-            ) -> None:
-                description = f"{tool_name}:{action_name}"
-                if event == "start":
-                    status = "Preparing"
-                    completed = index - 1
-                elif event == "completed":
-                    status = "Prepared"
-                    completed = index
-                else:
-                    status = "Error"
-                    completed = index
-                    if message and verbose:
-                        console.print(f"[red]{description} failed: {message}[/red]")
-                progress.update(
-                    task_id,
-                    completed=completed,
-                    total=total,
-                    description=f"{status} {description}",
-                )
-
-            with progress:
-                results = orchestrator.fetch_all_tools(
-                    config,
-                    root=root,
-                    callback=progress_callback,
-                )
-        else:
-            results = orchestrator.fetch_all_tools(config, root=root)
-        tool_lookup = {tool.name: tool for tool in DEFAULT_REGISTRY.tools()}
-        phase_rank = {
-            name: (PHASE_SORT_ORDER.index(tool.phase) if tool.phase in PHASE_SORT_ORDER else len(PHASE_SORT_ORDER))
-            for name, tool in tool_lookup.items()
-        }
-        results.sort(
-            key=lambda item: (
-                phase_rank.get(item[0], len(PHASE_SORT_ORDER)),
-                item[0],
-                item[1],
-            ),
-        )
-
-        if not quiet:
-            table = Table(
-                title="Tool Preparation",
-                box=box.ROUNDED,
-                show_header=True,
-                header_style="bold" if config.output.color else None,
-            )
-            table.add_column("Tool", style="cyan" if config.output.color else None)
-            table.add_column("Action", style="cyan" if config.output.color else None)
-            table.add_column("Phase", style="cyan" if config.output.color else None)
-            table.add_column("Status", style="magenta" if config.output.color else None)
-            table.add_column("Source", style="magenta" if config.output.color else None)
-            table.add_column("Version", style="green" if config.output.color else None)
-            failures: list[tuple[str, str, str]] = []
-            for tool_name, action_name, prepared, error in results:
-                phase = getattr(tool_lookup.get(tool_name), "phase", "-")
-                if prepared is None:
-                    status = "error"
-                    source = "-"
-                    version = "-"
-                    failures.append((tool_name, action_name, error or "unknown error"))
-                else:
-                    status = "ready"
-                    source = prepared.source
-                    version = prepared.version or "unknown"
-                table.add_row(tool_name, action_name, phase, status, source, version)
-            console.print(table)
-            info(
-                f"Prepared {len(results)} tool action(s) without execution.",
-                use_emoji=config.output.emoji,
-                use_color=config.output.color,
-            )
-            for tool_name, action_name, message in failures:
-                warn(
-                    f"Failed to prepare {tool_name}:{action_name} — {message}",
-                    use_emoji=config.output.emoji,
-                    use_color=config.output.color,
-                )
-        raise typer.Exit(code=0)
-    progress_enabled = (
-        config.output.output == "concise" and not quiet and not config.output.quiet and config.output.color and is_tty()
+    return LintRuntimeContext(
+        state=state,
+        config=config,
+        orchestrator=orchestrator,
+        hooks=hooks,
+        catalog_snapshot=catalog_snapshot,
     )
 
-    extra_phases = 2  # post-processing + rendering
-    progress: Progress | None = None
-    progress_task_id: int | None = None
-    progress_lock = Lock()
-    progress_console = None
-    progress_total = extra_phases
-    progress_completed = 0
-    progress_started = False
 
-    if progress_enabled:
-        console = console_manager.get(color=config.output.color, emoji=config.output.emoji)
-        progress_console = console
-        console_width = getattr(console.size, "width", 100)
-        reserved_columns = 40
-        bar_available = max(10, console_width - reserved_columns)
-        bar_width = max(20, int(bar_available * 0.8))
+def _dispatch_meta_commands(runtime: LintRuntimeContext) -> int | None:
+    """Execute meta commands that rely on configuration and registry state."""
 
-        progress = Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=bar_width),
-            TextColumn("{task.completed}/{task.total}"),
-            TimeElapsedColumn(),
-            TextColumn("{task.fields[current_status]}", justify="right"),
-            console=console,
-            transient=True,
+    meta = runtime.state.meta
+    if meta.tool_info is not None:
+        return run_tool_info(
+            meta.tool_info,
+            root=runtime.state.root,
+            cfg=runtime.config,
+            catalog_snapshot=runtime.catalog_snapshot,
         )
-        progress_task_id = progress.add_task(
-            "Linting",
-            total=progress_total,
-            current_status="[cyan]waiting[/]" if config.output.color else "waiting",
-        )
+    if meta.fetch_all_tools:
+        return render_fetch_all_tools(runtime, phase_order=PHASE_SORT_ORDER)
+    return None
 
-        def ensure_started() -> None:
-            nonlocal progress_started
-            if progress is None or progress_started:
-                return
-            progress.start()
-            progress_started = True
 
-        def before_tool(tool_name: str) -> None:
-            if progress is None or progress_task_id is None:
-                return
-            with progress_lock:
-                ensure_started()
-                progress.update(
-                    progress_task_id,
-                    description=f"Linting {tool_name}",
-                    current_status="[cyan]running[/]" if config.output.color else "running",
-                )
+def _run_lint_pipeline(runtime: LintRuntimeContext) -> None:
+    """Execute linting via the orchestrator and manage reporting."""
 
-        def after_tool(outcome) -> None:  # noqa: ANN001
-            if progress is None or progress_task_id is None:
-                return
-            nonlocal progress_completed
-            status = "[green]ok[/]" if outcome.ok and config.output.color else ("ok" if outcome.ok else "issues")
-            if not outcome.ok and config.output.color:
-                status = "[red]issues[/]"
-            label = f"{outcome.tool}:{outcome.action}"
-            with progress_lock:
-                ensure_started()
-                progress.advance(progress_task_id, advance=1)
-                progress_completed += 1
-                progress.update(
-                    progress_task_id,
-                    current_status=f"{label} {status}",
-                )
+    config = runtime.config
+    controller = ExecutionProgressController(
+        runtime,
+        is_terminal=is_tty(),
+        progress_factory=Progress,
+    )
+    controller.install(runtime.hooks)
 
-        def after_discovery(file_count: int) -> None:
-            if progress is None or progress_task_id is None:
-                return
-            with progress_lock:
-                ensure_started()
-                status = "[cyan]queued[/]" if config.output.color else "queued"
-                progress.update(
-                    progress_task_id,
-                    description=f"Linting ({file_count} files)",
-                    current_status=status,
-                )
+    result = runtime.orchestrator.run(config, root=runtime.state.root)
+    append_internal_quality_checks(
+        config=config,
+        root=runtime.state.root,
+        run_result=result,
+    )
 
-        def after_execution_hook(_result: RunResult) -> None:
-            if progress is None or progress_task_id is None:
-                return
-            nonlocal progress_completed
-            with progress_lock:
-                ensure_started()
-                progress.advance(progress_task_id, advance=1)
-                progress_completed += 1
-                status = "[cyan]post-processing[/]" if config.output.color else "post-processing"
-                progress.update(
-                    progress_task_id,
-                    current_status=status,
-                )
+    controller.advance_rendering_phase()
 
-        def advance_rendering_phase() -> None:
-            if progress is None or progress_task_id is None:
-                return
-            nonlocal progress_completed
-            with progress_lock:
-                ensure_started()
-                progress.advance(progress_task_id, advance=1)
-                progress_completed += 1
-                status = "[cyan]rendering output[/]" if config.output.color else "rendering output"
-                progress.update(
-                    progress_task_id,
-                    current_status=status,
-                )
+    final_summary = controller.finalize(not result.failed)
+    if final_summary and controller.console is not None:
+        controller.console.print(final_summary)
+    controller.stop()
 
-        hooks.before_tool = before_tool
-        hooks.after_tool = after_tool
-        hooks.after_discovery = after_discovery
-        hooks.after_execution = after_execution_hook
-
-        def after_plan_hook(total_actions: int) -> None:
-            if progress is None or progress_task_id is None:
-                return
-            nonlocal progress_total
-            with progress_lock:
-                ensure_started()
-                progress_total = total_actions + extra_phases
-                progress.update(progress_task_id, total=progress_total)
-
-        hooks.after_plan = after_plan_hook
-
-    def _finalise_progress(success: bool) -> Text | None:
-        if progress is None or progress_task_id is None:
-            return None
-        status_text = (
-            "[green]done[/]"
-            if success and config.output.color
-            else ("[red]issues detected[/]" if config.output.color else ("done" if success else "issues detected"))
-        )
-        with progress_lock:
-            total = max(progress_total, progress_completed)
-            progress.update(
-                progress_task_id,
-                total=total,
-                current_status=status_text,
-            )
-        return None
-
-    final_summary: Text | None = None
-    if progress is not None:
-        result = orchestrator.run(config, root=root)
-        _append_internal_quality_checks(
-            config=config,
-            root=root,
-            run_result=result,
-        )
-        advance_rendering_phase()
-        final_summary = _finalise_progress(not result.failed)
-        if progress_started:
-            progress.stop()
-    else:
-        result = orchestrator.run(config, root=root)
-        _append_internal_quality_checks(
-            config=config,
-            root=root,
-            run_result=result,
-        )
-
-    if final_summary and progress_console is not None:
-        progress_console.print(final_summary)
-    _handle_reporting(
+    handle_reporting(
         result,
         config,
-        report_json,
-        sarif_out,
-        pr_summary_out,
+        runtime.state.artifacts.report_json,
+        runtime.state.artifacts.sarif_out,
+        runtime.state.artifacts.pr_summary_out,
     )
     raise typer.Exit(code=1 if result.failed else 0)
 
 
-def _handle_reporting(
-    result: RunResult,
-    config: Config,
-    report_json: Path | None,
-    sarif_out: Path | None,
-    pr_summary_out: Path | None,
-) -> None:
-    render(result, config.output)
-    if report_json:
-        write_json_report(result, report_json)
-    if sarif_out:
-        write_sarif_report(result, sarif_out)
-    if pr_summary_out:
-        write_pr_summary(
-            result,
-            pr_summary_out,
-            limit=config.output.pr_summary_limit,
-            min_severity=config.output.pr_summary_min_severity,
-            template=config.output.pr_summary_template,
-        )
+# Backwards compatibility ------------------------------------------------------
 
-
-def _append_internal_quality_checks(
-    *,
-    config: Config,
-    root: Path,
-    run_result: RunResult,
-) -> None:
-    """Run additional quality checks and append results when sensitivity is maximum."""
-
-    if config.severity.sensitivity != SensitivityLevel.MAXIMUM.value:
-        return
-    if not run_result.files:
-        return
-
-    checker = QualityChecker(
-        root=root,
-        quality=config.quality,
-        options=QualityCheckerOptions(
-            license_overrides=config.license,
-            files=run_result.files,
-            checks={"license"},
-        ),
-    )
-    quality_result = checker.run(fix=False)
-    if not quality_result.issues:
-        return
-
-    added_outcomes = []
-    for issue in quality_result.issues:
-        added_outcomes.append(
-            ToolOutcome(
-                tool="quality",
-                action="license",
-                returncode=0,
-                stdout=[issue.message],
-                stderr=[],
-                diagnostics=[],
-            ),
-        )
-    run_result.outcomes.extend(added_outcomes)
-
-
-def _collect_provided_flags(
-    ctx: typer.Context,
-    *,
-    paths_provided: bool,
-    dirs: list[Path],
-    exclude: list[Path],
-    filters: list[str],
-    only: list[str],
-    language: list[str],
-) -> set[str]:
-    tracked = {
-        "changed_only",
-        "diff_ref",
-        "include_untracked",
-        "base_branch",
-        "paths_from_stdin",
-        "dirs",
-        "exclude",
-        "filters",
-        "only",
-        "language",
-        "normal",
-        "fix_only",
-        "check_only",
-        "verbose",
-        "quiet",
-        "no_color",
-        "no_emoji",
-        "no_stats",
-        "output_mode",
-        "show_passing",
-        "jobs",
-        "bail",
-        "no_cache",
-        "cache_dir",
-        "pr_summary_out",
-        "pr_summary_limit",
-        "pr_summary_min_severity",
-        "pr_summary_template",
-        "use_local_linters",
-        "line_length",
-        "max_complexity",
-        "max_arguments",
-        "type_checking",
-        "bandit_severity",
-        "bandit_confidence",
-        "pylint_fail_under",
-        "sensitivity",
-        "sql_dialect",
-        "advice",
-    }
-    provided: set[str] = set()
-    for name in tracked:
-        source = _parameter_source_name(ctx, name)
-        if source not in {"DEFAULT", "DEFAULT_MAP", None}:
-            provided.add(name)
-    if paths_provided:
-        provided.add("paths")
-    if dirs:
-        provided.add("dirs")
-    if exclude:
-        provided.add("exclude")
-    if filters:
-        provided.add("filters")
-    if only:
-        provided.add("only")
-    if language:
-        provided.add("language")
-    return provided
-
-
-def _display_path(path: Path, root: Path) -> str:
-    try:
-        normalised = normalize_path(path, base_dir=root)
-    except (ValueError, OSError):
-        return str(path)
-    return normalised.as_posix()
-
-
-def _derive_default_root(paths: list[Path]) -> Path | None:
-    if not paths:
-        return None
-    candidates = [path if path.is_dir() else path.parent for path in paths]
-    if not candidates:
-        return None
-    common = Path(os.path.commonpath([str(candidate) for candidate in candidates]))
-    return common.resolve()
-
-
-def _parameter_source_name(ctx: typer.Context, name: str) -> str | None:
-    getter = getattr(ctx, "get_parameter_source", None)
-    if not callable(getter):
-        return None
-    try:
-        source = getter(name)
-    except TypeError:
-        return None
-    if source is None:
-        return None
-    label = getattr(source, "name", None)
-    return label if isinstance(label, str) else str(source)
+_append_internal_quality_checks = append_internal_quality_checks
+_handle_reporting = handle_reporting

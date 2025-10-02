@@ -290,17 +290,13 @@ def _collect_tool_summaries(config: Config) -> list[ToolSummary]:
 
 
 def _collect_grammar_statuses() -> list[GrammarStatus]:
+    """Return the availability and version status for bundled Tree-sitter grammars."""
+
     resolver = TreeSitterContextResolver()
     statuses: list[GrammarStatus] = []
     for language, grammar in sorted(resolver.grammar_modules().items()):
         module_name = f"tree_sitter_{grammar.replace('-', '_')}"
-        try:
-            module = importlib.import_module(module_name)
-            available = True
-            version = _grammar_version(module_name, module)
-        except ModuleNotFoundError:
-            available = False
-            version = None
+        available, version = _resolve_grammar_module(module_name)
         statuses.append(
             GrammarStatus(
                 language=language,
@@ -310,6 +306,17 @@ def _collect_grammar_statuses() -> list[GrammarStatus]:
             ),
         )
     return statuses
+
+
+def _resolve_grammar_module(module_name: str) -> tuple[bool, str | None]:
+    """Return availability flag and version for the requested grammar module."""
+
+    try:
+        module = importlib.import_module(module_name)
+    except ModuleNotFoundError:
+        return False, None
+    version = _grammar_version(module_name, module)
+    return True, version
 
 
 def _grammar_version(module_name: str, module: object) -> str | None:

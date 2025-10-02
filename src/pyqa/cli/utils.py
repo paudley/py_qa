@@ -100,21 +100,35 @@ def check_tool_status(tool: Tool) -> ToolStatus:
             check=False,
         )
     except FileNotFoundError:
-        availability = ToolAvailability.VENDORED if tool.runtime != BINARY_RUNTIME else ToolAvailability.UNINSTALLED
-        runtime_note = (
-            f"Runtime '{tool.runtime}' can vend this tool on demand." if tool.runtime != BINARY_RUNTIME else ""
+        availability = (
+            ToolAvailability.VENDORED
+            if tool.runtime != BINARY_RUNTIME
+            else ToolAvailability.UNINSTALLED
         )
-        notes = f"Executable '{version_cmd[0]}' not found on PATH. {runtime_note}".strip()
+        runtime_note = (
+            f"Runtime '{tool.runtime}' can vend this tool on demand."
+            if tool.runtime != BINARY_RUNTIME
+            else ""
+        )
+        notes = (
+            f"Executable '{version_cmd[0]}' not found on PATH. {runtime_note}"
+        ).strip()
         return ToolStatus(
             name=tool.name,
             availability=availability,
             notes=notes,
             version=ToolVersionStatus(detected=None, minimum=tool.min_version),
-            execution=ToolExecutionDetails(executable=version_cmd[0], path=None, returncode=None),
+            execution=ToolExecutionDetails(
+                executable=version_cmd[0],
+                path=None,
+                returncode=None,
+            ),
             raw_output=None,
         )
 
-    output = (completed.stdout or "") + ("\n" + completed.stderr if completed.stderr else "")
+    output = (completed.stdout or "") + (
+        "\n" + completed.stderr if completed.stderr else ""
+    )
     output = output.strip()
     version = resolver.normalize(output.splitlines()[0] if output else None)
 
@@ -155,7 +169,12 @@ def filter_py_qa_paths(paths: Iterable[Path], root: Path) -> tuple[list[Path], l
     """
     root_resolved = root.resolve()
     if is_py_qa_workspace(root_resolved):
-        return [(_maybe_resolve(path)) for path in paths], []
+        resolved_paths = [
+            resolved
+            for resolved in (_maybe_resolve(path) for path in paths)
+            if resolved
+        ]
+        return resolved_paths, []
 
     kept: list[Path] = []
     ignored_display: list[str] = []

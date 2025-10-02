@@ -1,31 +1,35 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2025 Blackcat Informatics® Inc.
 """CLI entry points for repository quality checks."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 import typer
 
-from ..config_loader import ConfigError, ConfigLoader
-from ..constants import PY_QA_DIR_NAME
-from ..logging import fail, ok, warn
-from ..quality import (
-    QualityChecker,
-    QualityCheckerOptions,
-    QualityCheckResult,
-    QualityIssueLevel,
-    check_commit_message,
-    ensure_branch_protection,
-)
-from ..workspace import is_py_qa_workspace
+from ..config import QualityConfigSection
+from ..logging import ok
+from ..quality import check_commit_message, ensure_branch_protection
 from .typer_ext import create_typer
-from .utils import filter_py_qa_paths
+from ._quality_cli_models import QualityCLIOptions
+from ._quality_cli_rendering import render_py_qa_skip_warning, render_quality_result
+from ._quality_cli_services import (
+    build_quality_checker,
+    determine_checks,
+    load_quality_context,
+    render_config_warnings,
+    resolve_target_files,
+)
 
-ROOT_OPTION = Annotated[Path, typer.Option(Path.cwd(), "--root", "-r", help="Project root.")]
-EMOJI_OPTION = Annotated[bool, typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output.")]
+ROOT_OPTION = Annotated[
+    Path,
+    typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
+]
+EMOJI_OPTION = Annotated[
+    bool,
+    typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji in output."),
+]
 
 quality_app = create_typer(
     name="check-quality",
@@ -34,7 +38,7 @@ quality_app = create_typer(
 )
 
 
-@quality_app.callback()
+@quality_app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
     root: ROOT_OPTION,
@@ -46,7 +50,10 @@ def main(
     staged: bool = typer.Option(
         False,
         "--staged/--no-staged",
-        help="Use staged files instead of discovering all tracked files when no PATHS are provided.",
+        help=(
+            "Use staged files instead of discovering all tracked files when no "
+            "PATHS are provided."
+        ),
     ),
     fix: bool = typer.Option(
         False,
@@ -77,65 +84,39 @@ def main(
 
     Returns:
         None: The command exits via :func:`typer.Exit` after rendering results.
-
     """
 
     if ctx.invoked_subcommand:
         return
 
-    root = root.resolve()
-    loader = ConfigLoader.for_root(root)
-    try:
-        load_result = loader.load_with_trace()
-    except ConfigError as exc:
-        fail(f"Configuration invalid: {exc}", use_emoji=emoji)
-        raise typer.Exit(code=1) from exc
-
-    config = load_result.config
-    quality_config = config.quality
-    license_config = config.license
-    if not is_py_qa_workspace(root):
-        extra_skip = f"{PY_QA_DIR_NAME}/**"
-        if extra_skip not in quality_config.skip_globs:
-            quality_config.skip_globs.append(extra_skip)
-        if extra_skip not in license_config.exceptions:
-            license_config.exceptions.append(extra_skip)
-    for warning in load_result.warnings:
-        warn(warning, use_emoji=emoji)
-
-    selected_checks = set(check or config.quality.checks)
-    if no_schema and "schema" in selected_checks:
-        selected_checks.remove("schema")
-
-    provided_paths = list(paths or [])
-    resolved_explicit = [path if path.is_absolute() else (root / path) for path in provided_paths]
-    kept_paths, ignored_py_qa = filter_py_qa_paths(resolved_explicit, root)
-    if ignored_py_qa:
-        unique = ", ".join(dict.fromkeys(ignored_py_qa))
-        warn(
-            (
-                f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
-                "unless check-quality runs inside the py_qa workspace."
-            ),
-            use_emoji=emoji,
-        )
-    if provided_paths and not kept_paths:
-        ok("No files to check.", use_emoji=emoji)
-        raise typer.Exit(code=0)
-    files = kept_paths or None
-
-    checker = QualityChecker(
+    options = QualityCLIOptions.from_cli(
         root=root,
-        quality=config.quality,
-        options=QualityCheckerOptions(
-            license_overrides=config.license,
-            files=files,
-            checks=selected_checks,
-            staged=staged,
-        ),
+        paths=tuple(paths or []),
+        staged=staged,
+        fix=fix,
+        requested_checks=tuple(check or []),
+        include_schema=not no_schema,
+        emoji=emoji,
     )
-    result = checker.run(fix=fix)
-    _render_result(result, root, emoji)
+
+    context = load_quality_context(options)
+    render_config_warnings(context)
+
+    quality_settings = cast(QualityConfigSection, context.config.quality)
+    checks = determine_checks(
+        available_checks=quality_settings.checks,
+        requested_checks=context.options.requested_checks,
+        include_schema=context.options.include_schema,
+    )
+
+    targets = resolve_target_files(context)
+    render_py_qa_skip_warning(targets.ignored_py_qa, emoji=context.options.emoji)
+    if targets.had_explicit_paths and targets.files is None:
+        raise typer.Exit(code=0)
+
+    checker = build_quality_checker(context, files=targets.files, checks=checks)
+    result = checker.run(fix=context.options.fix)
+    render_quality_result(result, root=context.root, use_emoji=context.options.emoji)
     raise typer.Exit(code=result.exit_code())
 
 
@@ -154,11 +135,11 @@ def commit_msg(
 
     Returns:
         None: The command exits via :func:`typer.Exit` with the check result.
-
     """
 
-    result = check_commit_message(root, message_file)
-    _render_result(result, root, emoji)
+    resolved_root = root.resolve()
+    result = check_commit_message(resolved_root, message_file)
+    render_quality_result(result, root=resolved_root, use_emoji=emoji)
     raise typer.Exit(code=result.exit_code())
 
 
@@ -175,62 +156,27 @@ def branch_guard(
 
     Returns:
         None: The command exits via :func:`typer.Exit` after reporting status.
-
     """
 
-    loader = ConfigLoader.for_root(root)
-    try:
-        load_result = loader.load_with_trace()
-    except ConfigError as exc:
-        fail(f"Configuration invalid: {exc}", use_emoji=emoji)
-        raise typer.Exit(code=1) from exc
+    options = QualityCLIOptions.from_cli(
+        root=root,
+        paths=(),
+        staged=False,
+        fix=False,
+        requested_checks=(),
+        include_schema=True,
+        emoji=emoji,
+    )
+    context = load_quality_context(options)
+    quality_settings = cast(QualityConfigSection, context.config.quality)
 
-    result = ensure_branch_protection(root, load_result.config.quality)
+    result = ensure_branch_protection(context.root, quality_settings)
     if not result.issues:
         ok("Branch check passed", use_emoji=emoji)
         raise typer.Exit(code=0)
-    _render_result(result, root, emoji)
+
+    render_quality_result(result, root=context.root, use_emoji=emoji)
     raise typer.Exit(code=1)
-
-
-def _render_result(result: QualityCheckResult, root: Path, use_emoji: bool) -> None:
-    if not result.issues:
-        ok("Quality checks passed", use_emoji=use_emoji)
-        return
-
-    for issue in result.issues:
-        prefix = fail if issue.level is QualityIssueLevel.ERROR else warn
-        location = ""
-        if issue.path is not None:
-            path_obj = _to_path(issue.path)
-            if path_obj is not None:
-                try:
-                    relative = path_obj.resolve().relative_to(root.resolve())
-                    location = f" [{relative}]"
-                except ValueError:
-                    location = f" [{path_obj}]"
-            else:
-                location = f" [{issue.path}]"
-        prefix(f"{issue.message}{location}", use_emoji=use_emoji)
-
-    if result.errors:
-        fail(
-            f"Quality checks failed with {len(result.errors)} error(s)",
-            use_emoji=use_emoji,
-        )
-    else:
-        warn(
-            f"Quality checks completed with {len(result.warnings)} warning(s)",
-            use_emoji=use_emoji,
-        )
-
-
-def _to_path(value: object) -> Path | None:
-    if isinstance(value, Path):
-        return value
-    if isinstance(value, str):
-        return Path(value)
-    return None
 
 
 __all__ = ["quality_app"]

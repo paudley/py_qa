@@ -136,12 +136,17 @@ def _build_default_tool_filters() -> dict[str, list[str]]:
         patterns de-duplicated across all sources.
     """
 
-    merged: dict[str, list[str]] = {tool: list(patterns) for tool, patterns in _BASE_TOOL_FILTERS.items()}
+    merged: dict[str, list[str]] = {
+        tool: list(patterns) for tool, patterns in _BASE_TOOL_FILTERS.items()
+    }
     for tool, patterns in flatten_test_suppressions().items():
         merged.setdefault(tool, []).extend(patterns)
     for tool, patterns in catalog_general_suppressions().items():
         merged.setdefault(tool, []).extend(patterns)
-    return {tool: list(dict.fromkeys(patterns)) for tool, patterns in merged.items()}
+    return {
+        tool: list(dict.fromkeys(patterns))
+        for tool, patterns in merged.items()
+    }
 
 
 DEFAULT_TOOL_FILTERS: Final[dict[str, list[str]]] = _build_default_tool_filters()
@@ -199,7 +204,10 @@ def build_config(options: LintOptions) -> Config:
         "execution": execution_cfg,
         "dedupe": dedupe_cfg,
         "severity_rules": list(base_config.severity_rules),
-        "tool_settings": {tool: dict(settings) for tool, settings in base_config.tool_settings.items()},
+        "tool_settings": {
+            tool: dict(settings)
+            for tool, settings in base_config.tool_settings.items()
+        },
     }
     config = base_config.model_copy(update=config_updates, deep=True)
 
@@ -228,52 +236,81 @@ def _apply_cli_overrides(config: Config, options: LintOptions) -> Config:
         partial(_is_option_provided, provided=options.provided),
     )
 
-    severity_updates: dict[str, object] = {}
-    complexity_updates: dict[str, int | None] = {}
-    strictness_updates: dict[str, StrictnessLevel] = {}
+    updates: dict[str, object] = {}
 
+    severity_updates = _resolve_severity_overrides(options, has_option)
+    if severity_updates:
+        updates["severity"] = config.severity.model_copy(update=severity_updates)
+
+    complexity_updates = _resolve_complexity_overrides(options, has_option)
+    if complexity_updates:
+        updates["complexity"] = config.complexity.model_copy(update=complexity_updates)
+
+    strictness_updates = _resolve_strictness_overrides(options, has_option)
+    if strictness_updates:
+        updates["strictness"] = config.strictness.model_copy(update=strictness_updates)
+
+    return config.model_copy(update=updates) if updates else config
+
+
+def _resolve_severity_overrides(
+    options: LintOptions,
+    has_option: Callable[[LintOptionKey], bool],
+) -> dict[str, object]:
+    """Return severity updates derived from CLI arguments."""
+
+    updates: dict[str, object] = {}
     if has_option(LintOptionKey.SENSITIVITY) and options.sensitivity:
-        severity_updates["sensitivity"] = _coerce_enum_value(
+        updates["sensitivity"] = _coerce_enum_value(
             options.sensitivity,
             SensitivityLevel,
             "--sensitivity",
         )
-    if has_option(LintOptionKey.MAX_COMPLEXITY) and options.max_complexity is not None:
-        complexity_updates["max_complexity"] = options.max_complexity
-    if has_option(LintOptionKey.MAX_ARGUMENTS) and options.max_arguments is not None:
-        complexity_updates["max_arguments"] = options.max_arguments
-    if has_option(LintOptionKey.TYPE_CHECKING) and options.type_checking:
-        strictness_updates["type_checking"] = _coerce_enum_value(
-            options.type_checking,
-            StrictnessLevel,
-            "--type-checking",
-        )
     if has_option(LintOptionKey.BANDIT_SEVERITY) and options.bandit_severity:
-        severity_updates["bandit_level"] = _coerce_enum_value(
+        updates["bandit_level"] = _coerce_enum_value(
             options.bandit_severity,
             BanditLevel,
             "--bandit-severity",
         )
     if has_option(LintOptionKey.BANDIT_CONFIDENCE) and options.bandit_confidence:
-        severity_updates["bandit_confidence"] = _coerce_enum_value(
+        updates["bandit_confidence"] = _coerce_enum_value(
             options.bandit_confidence,
             BanditConfidence,
             "--bandit-confidence",
         )
     if has_option(LintOptionKey.PYLINT_FAIL_UNDER) and options.pylint_fail_under is not None:
-        severity_updates["pylint_fail_under"] = options.pylint_fail_under
+        updates["pylint_fail_under"] = options.pylint_fail_under
+    return updates
 
-    updates: dict[str, object] = {}
-    if complexity_updates:
-        updates["complexity"] = config.complexity.model_copy(update=complexity_updates)
-    if strictness_updates:
-        updates["strictness"] = config.strictness.model_copy(update=strictness_updates)
-    if severity_updates:
-        updates["severity"] = config.severity.model_copy(update=severity_updates)
 
-    if updates:
-        config = config.model_copy(update=updates)
-    return config
+def _resolve_complexity_overrides(
+    options: LintOptions,
+    has_option: Callable[[LintOptionKey], bool],
+) -> dict[str, int | None]:
+    """Return complexity overrides derived from CLI arguments."""
+
+    updates: dict[str, int | None] = {}
+    if has_option(LintOptionKey.MAX_COMPLEXITY) and options.max_complexity is not None:
+        updates["max_complexity"] = options.max_complexity
+    if has_option(LintOptionKey.MAX_ARGUMENTS) and options.max_arguments is not None:
+        updates["max_arguments"] = options.max_arguments
+    return updates
+
+
+def _resolve_strictness_overrides(
+    options: LintOptions,
+    has_option: Callable[[LintOptionKey], bool],
+) -> dict[str, StrictnessLevel]:
+    """Return strictness overrides derived from CLI arguments."""
+
+    updates: dict[str, StrictnessLevel] = {}
+    if has_option(LintOptionKey.TYPE_CHECKING) and options.type_checking:
+        updates["type_checking"] = _coerce_enum_value(
+            options.type_checking,
+            StrictnessLevel,
+            "--type-checking",
+        )
+    return updates
 
 
 def _is_option_provided(key: LintOptionKey, *, provided: set[str]) -> bool:
@@ -400,13 +437,16 @@ def _resolved_roots(
         list[Path]: Ordered list of unique root paths.
     """
 
-    roots = shared_unique_paths(_ensure_abs(project_root, path) for path in current.roots)
+    roots = shared_unique_paths(
+        _ensure_abs(project_root, path) for path in current.roots
+    )
     if project_root not in roots:
         roots.insert(0, project_root)
 
     if _is_option_provided(LintOptionKey.DIRS, provided=options.provided):
         resolved_dirs = (
-            directory if directory.is_absolute() else (project_root / directory) for directory in options.dirs
+            directory if directory.is_absolute() else (project_root / directory)
+            for directory in options.dirs
         )
         roots.extend(path.resolve() for path in resolved_dirs)
 
@@ -438,7 +478,9 @@ def _resolved_explicit_files(
 
     if _is_option_provided(LintOptionKey.PATHS, provided=options.provided):
         for path in options.paths:
-            resolved_path = (path if path.is_absolute() else project_root / path).resolve()
+            resolved_path = (
+                path if path.is_absolute() else project_root / path
+            ).resolve()
             if resolved_path.is_dir():
                 roots.append(resolved_path)
                 user_dirs.append(resolved_path)
@@ -447,12 +489,18 @@ def _resolved_explicit_files(
                 if resolved_path not in explicit_files:
                     explicit_files.append(resolved_path)
 
-    boundaries = shared_unique_paths(boundary for boundary in _derive_boundaries(user_dirs, user_files) if boundary)
+    boundaries = shared_unique_paths(
+        boundary
+        for boundary in _derive_boundaries(user_dirs, user_files)
+        if boundary
+    )
     if not boundaries:
         return explicit_files, []
 
     filtered_roots = _filter_roots_within_boundaries(roots, boundaries)
-    filtered_files = [path for path in explicit_files if _is_within_any(path, boundaries)]
+    filtered_files = [
+        path for path in explicit_files if _is_within_any(path, boundaries)
+    ]
     roots.clear()
     roots.extend(filtered_roots)
     return filtered_files, boundaries
@@ -476,7 +524,9 @@ def _filter_roots_within_boundaries(
     matching = [path for path in roots if _is_within_any(path, boundaries)]
     if matching:
         merged = list(matching)
-        merged.extend(path for path in boundaries if path not in matching and path.is_dir())
+        merged.extend(
+            path for path in boundaries if path not in matching and path.is_dir()
+        )
         return shared_unique_paths(merged)
     boundary_dirs = [path for path in boundaries if path.is_dir()]
     return shared_unique_paths(boundary_dirs)
@@ -587,42 +637,67 @@ def _build_output(current: OutputConfig, options: LintOptions, project_root: Pat
         partial(_is_option_provided, provided=provided),
     )
 
-    tool_filters: ToolFilters = {tool: patterns.copy() for tool, patterns in DEFAULT_TOOL_FILTERS.items()}
+    tool_filters: ToolFilters = {
+        tool: patterns.copy() for tool, patterns in DEFAULT_TOOL_FILTERS.items()
+    }
     for tool, patterns in current.tool_filters.items():
         tool_filters.setdefault(tool, []).extend(patterns)
     if has_option(LintOptionKey.FILTERS):
         parsed = _parse_filters(options.filters)
         for tool, patterns in parsed.items():
             tool_filters.setdefault(tool, []).extend(patterns)
-    normalised_filters: ToolFilters = {tool: list(dict.fromkeys(patterns)) for tool, patterns in tool_filters.items()}
+    normalised_filters: ToolFilters = {
+        tool: list(dict.fromkeys(patterns))
+        for tool, patterns in tool_filters.items()
+    }
 
     quiet_value = options.quiet if has_option(LintOptionKey.QUIET) else current.quiet
 
-    show_passing_value = options.show_passing if has_option(LintOptionKey.SHOW_PASSING) else current.show_passing
-    show_stats_value = (not options.no_stats) if has_option(LintOptionKey.NO_STATS) else current.show_stats
+    show_passing_value = (
+        options.show_passing if has_option(LintOptionKey.SHOW_PASSING) else current.show_passing
+    )
+    show_stats_value = (
+        (not options.no_stats) if has_option(LintOptionKey.NO_STATS) else current.show_stats
+    )
     if quiet_value:
         show_passing_value = False
         show_stats_value = False
 
     output_updates: dict[str, object | None] = {
         "tool_filters": normalised_filters,
-        "verbose": (options.verbose if has_option(LintOptionKey.VERBOSE) else current.verbose),
+        "verbose": (
+            options.verbose if has_option(LintOptionKey.VERBOSE) else current.verbose
+        ),
         "quiet": quiet_value,
-        "color": ((not options.no_color) if has_option(LintOptionKey.NO_COLOR) else current.color),
-        "emoji": ((not options.no_emoji) if has_option(LintOptionKey.NO_EMOJI) else current.emoji),
+        "color": (
+            (not options.no_color)
+            if has_option(LintOptionKey.NO_COLOR)
+            else current.color
+        ),
+        "emoji": (
+            (not options.no_emoji)
+            if has_option(LintOptionKey.NO_EMOJI)
+            else current.emoji
+        ),
         "output": (
-            _normalize_output_mode(options.output_mode) if has_option(LintOptionKey.OUTPUT_MODE) else current.output
+            _normalize_output_mode(options.output_mode)
+            if has_option(LintOptionKey.OUTPUT_MODE)
+            else current.output
         ),
         "show_passing": show_passing_value,
         "show_stats": show_stats_value,
-        "advice": (options.advice if has_option(LintOptionKey.ADVICE) else current.advice),
+        "advice": (
+            options.advice if has_option(LintOptionKey.ADVICE) else current.advice
+        ),
         "pr_summary_out": (
             _resolve_optional_path(project_root, options.pr_summary_out)
             if has_option(LintOptionKey.PR_SUMMARY_OUT)
             else current.pr_summary_out
         ),
         "pr_summary_limit": (
-            options.pr_summary_limit if has_option(LintOptionKey.PR_SUMMARY_LIMIT) else current.pr_summary_limit
+            options.pr_summary_limit
+            if has_option(LintOptionKey.PR_SUMMARY_LIMIT)
+            else current.pr_summary_limit
         ),
         "pr_summary_min_severity": (
             _normalize_min_severity(options.pr_summary_min_severity)
@@ -668,25 +743,47 @@ def _build_execution(
         jobs_value = 1
 
     execution_updates: dict[str, object | list[str] | Path | None] = {
-        "only": (list(options.only) if has_option(LintOptionKey.ONLY) else list(current.only)),
-        "languages": (list(options.language) if has_option(LintOptionKey.LANGUAGE) else list(current.languages)),
-        "fix_only": (options.fix_only if has_option(LintOptionKey.FIX_ONLY) else current.fix_only),
-        "check_only": (options.check_only if has_option(LintOptionKey.CHECK_ONLY) else current.check_only),
+        "only": (
+            list(options.only) if has_option(LintOptionKey.ONLY) else list(current.only)
+        ),
+        "languages": (
+            list(options.language)
+            if has_option(LintOptionKey.LANGUAGE)
+            else list(current.languages)
+        ),
+        "fix_only": (
+            options.fix_only if has_option(LintOptionKey.FIX_ONLY) else current.fix_only
+        ),
+        "check_only": (
+            options.check_only if has_option(LintOptionKey.CHECK_ONLY) else current.check_only
+        ),
         "bail": bail_value,
         "jobs": jobs_value,
-        "cache_enabled": ((not options.no_cache) if has_option(LintOptionKey.NO_CACHE) else current.cache_enabled),
+        "cache_enabled": (
+            (not options.no_cache)
+            if has_option(LintOptionKey.NO_CACHE)
+            else current.cache_enabled
+        ),
         "cache_dir": (
             _resolve_path(project_root, options.cache_dir).resolve()
             if has_option(LintOptionKey.CACHE_DIR)
             else current.cache_dir
         ),
         "use_local_linters": (
-            options.use_local_linters if has_option(LintOptionKey.USE_LOCAL_LINTERS) else current.use_local_linters
+            options.use_local_linters
+            if has_option(LintOptionKey.USE_LOCAL_LINTERS)
+            else current.use_local_linters
         ),
-        "line_length": (options.line_length if has_option(LintOptionKey.LINE_LENGTH) else current.line_length),
-        "sql_dialect": (options.sql_dialect if has_option(LintOptionKey.SQL_DIALECT) else current.sql_dialect),
+        "line_length": (
+            options.line_length if has_option(LintOptionKey.LINE_LENGTH) else current.line_length
+        ),
+        "sql_dialect": (
+            options.sql_dialect if has_option(LintOptionKey.SQL_DIALECT) else current.sql_dialect
+        ),
         "python_version": (
-            options.python_version if has_option(LintOptionKey.PYTHON_VERSION) else current.python_version
+            options.python_version
+            if has_option(LintOptionKey.PYTHON_VERSION)
+            else current.python_version
         ),
     }
 
@@ -752,23 +849,19 @@ def _ensure_abs(root: Path, path: Path) -> Path:
 
 
 def _is_within_any(path: Path, bounds: Iterable[Path]) -> bool:
-    """Return whether ``path`` resides within any boundary path.
+    """Return whether ``path`` resides within any boundary path."""
 
-    Args:
-        path: Candidate path to evaluate.
-        bounds: Iterable of boundary directories.
+    return any(_is_within(path, bound) for bound in bounds)
 
-    Returns:
-        bool: ``True`` when the path is contained within a boundary.
-    """
 
-    for bound in bounds:
-        try:
-            path.relative_to(bound)
-            return True
-        except ValueError:
-            continue
-    return False
+def _is_within(path: Path, bound: Path) -> bool:
+    """Return whether ``path`` resides within ``bound``."""
+
+    try:
+        path.relative_to(bound)
+    except ValueError:
+        return False
+    return True
 
 
 def _parse_filters(specs: Iterable[str]) -> ToolFilters:
@@ -785,7 +878,9 @@ def _parse_filters(specs: Iterable[str]) -> ToolFilters:
         tool identifier is blank.
     """
 
-    filters: ToolFilters = {tool: list(patterns) for tool, patterns in DEFAULT_TOOL_FILTERS.items()}
+    filters: ToolFilters = {
+        tool: list(patterns) for tool, patterns in DEFAULT_TOOL_FILTERS.items()
+    }
     for spec in specs:
         if FILTER_SPEC_SEPARATOR not in spec:
             raise ValueError(f"Invalid filter '{spec}'. Expected {FILTER_SPEC_FORMAT}")
@@ -793,7 +888,11 @@ def _parse_filters(specs: Iterable[str]) -> ToolFilters:
         tool_key = tool.strip()
         if not tool_key:
             raise ValueError(f"Invalid filter '{spec}'. Tool identifier cannot be empty")
-        chunks = [chunk.strip() for chunk in expressions.split(FILTER_PATTERN_SEPARATOR) if chunk.strip()]
+        chunks = [
+            chunk.strip()
+            for chunk in expressions.split(FILTER_PATTERN_SEPARATOR)
+            if chunk.strip()
+        ]
         if not chunks:
             continue
         filters.setdefault(tool_key, []).extend(chunks)
