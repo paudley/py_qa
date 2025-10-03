@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Annotated, Any, Final
+from typing import Annotated, Any, Final, Literal, cast
 
 import click
 import typer
@@ -30,6 +30,27 @@ from .shared import Depends
 from .typer_ext import create_typer
 
 update_app = create_typer(name="update", help="Update dependencies across detected workspaces.")
+
+ManagerNameLiteral = Literal["go", "rust", "yarn", "npm", "pnpm", "python"]
+
+_KNOWN_MANAGER_VALUES: Final[tuple[ManagerNameLiteral, ...]] = (
+    "go",
+    "rust",
+    "yarn",
+    "npm",
+    "pnpm",
+    "python",
+)
+
+VALID_MANAGERS: Final[frozenset[ManagerNameLiteral]] = frozenset(_KNOWN_MANAGER_VALUES)
+
+_REGISTERED_MANAGERS = {strategy.kind.value for strategy in DEFAULT_STRATEGIES}
+if not _REGISTERED_MANAGERS <= set(VALID_MANAGERS):  # pragma: no cover - defensive
+    missing = ", ".join(sorted(_REGISTERED_MANAGERS - set(VALID_MANAGERS)))
+    raise RuntimeError(
+        "DEFAULT_STRATEGIES defines manager kinds missing from ManagerNameLiteral: "
+        f"{missing}. Update src/pyqa/cli/update.py."
+    )
 
 
 def _default_runner(args: Sequence[str], cwd: Path | None) -> Any:
@@ -69,9 +90,6 @@ def main(
         return
 
     _run_update(options)
-
-
-VALID_MANAGERS: Final[set[str]] = {strategy.kind.value for strategy in DEFAULT_STRATEGIES}
 
 
 def _run_update(options: UpdateOptions) -> None:
@@ -132,7 +150,10 @@ def _load_update_configuration(root: Path, use_emoji: bool) -> ConfigLoadResult:
         raise typer.Exit(code=1) from exc
 
 
-def _normalise_cli_managers(values: list[str] | None, use_emoji: bool) -> set[str] | None:
+def _normalise_cli_managers(
+    values: list[str] | None,
+    use_emoji: bool,
+) -> set[ManagerNameLiteral] | None:
     """Normalise manager names provided via CLI options.
 
     Args:
@@ -156,7 +177,7 @@ def _normalise_cli_managers(values: list[str] | None, use_emoji: bool) -> set[st
         message = f"Unknown manager(s): {', '.join(invalid)}. Valid managers: {valid}"
         fail(message, use_emoji=use_emoji)
         raise typer.Exit(code=1)
-    return normalized
+    return {cast(ManagerNameLiteral, value) for value in normalized}
 
 
 def _discover_workspaces(
@@ -191,7 +212,7 @@ def _resolve_enabled_managers(
     config_values: Sequence[str] | None,
     *,
     use_emoji: bool,
-) -> set[str] | None:
+) -> set[ManagerNameLiteral] | None:
     """Resolve enabled managers by combining CLI and configuration input.
 
     Args:
@@ -228,7 +249,10 @@ def _resolve_enabled_managers(
     return intersection
 
 
-def _normalise_config_managers(values: Sequence[str] | None, use_emoji: bool) -> set[str] | None:
+def _normalise_config_managers(
+    values: Sequence[str] | None,
+    use_emoji: bool,
+) -> set[ManagerNameLiteral] | None:
     """Normalise manager names sourced from configuration files.
 
     Args:
@@ -253,7 +277,7 @@ def _normalise_config_managers(values: Sequence[str] | None, use_emoji: bool) ->
             use_emoji=use_emoji,
         )
         raise typer.Exit(code=1)
-    return normalized
+    return {cast(ManagerNameLiteral, value) for value in normalized}
 
 
 def _emit_update_summary(result: UpdateResult, *, dry_run: bool, use_emoji: bool) -> None:

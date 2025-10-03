@@ -25,7 +25,7 @@ def test_tool_info_option(monkeypatch) -> None:
         print(f"tool info for {tool_name} at {root}")
         return 0
 
-    monkeypatch.setattr("pyqa.cli.lint.run_tool_info", fake_run_tool_info)
+    monkeypatch.setattr("pyqa.cli._lint_meta.run_tool_info", fake_run_tool_info)
 
     result = runner.invoke(app, ["lint", "--tool-info", "ruff"])
 

@@ -7,8 +7,152 @@ from pathlib import Path
 import pytest
 
 from pyqa.cli.config_builder import DEFAULT_TOOL_FILTERS, build_config
-from pyqa.cli.options import LintOptions
+from pyqa.cli.options import (
+    ExecutionFormattingOptions,
+    ExecutionRuntimeOptions,
+    LintComplexityOptions,
+    LintDisplayOptions,
+    LintExecutionOptions,
+    LintGitOptions,
+    LintOptions,
+    LintOverrideOptions,
+    LintSelectionOptions,
+    LintSeverityOptions,
+    LintStrictnessOptions,
+    LintSummaryOptions,
+    LintTargetOptions,
+    LintOutputBundle,
+)
 from pyqa.config import Config
+
+
+def _build_options(
+    root: Path,
+    *,
+    provided: set[str] | None = None,
+    paths: list[Path] | None = None,
+    dirs: list[Path] | None = None,
+    exclude: list[Path] | None = None,
+    paths_from_stdin: bool = False,
+    changed_only: bool = False,
+    diff_ref: str = "HEAD",
+    include_untracked: bool = True,
+    base_branch: str | None = None,
+    no_lint_tests: bool = False,
+    filters: list[str] | None = None,
+    only: list[str] | None = None,
+    language: list[str] | None = None,
+    fix_only: bool = False,
+    check_only: bool = False,
+    verbose: bool = False,
+    quiet: bool = False,
+    no_color: bool = False,
+    no_emoji: bool = False,
+    output_mode: str = "concise",
+    advice: bool = False,
+    show_passing: bool = False,
+    no_stats: bool = False,
+    pr_summary_out: Path | None = None,
+    pr_summary_limit: int = 100,
+    pr_summary_min_severity: str = "warning",
+    pr_summary_template: str = "- {message}",
+    jobs: int | None = None,
+    bail: bool = False,
+    no_cache: bool = False,
+    cache_dir: Path | None = None,
+    use_local_linters: bool = False,
+    strict_config: bool = False,
+    line_length: int = 120,
+    sql_dialect: str = "postgresql",
+    python_version: str | None = None,
+    max_complexity: int | None = None,
+    max_arguments: int | None = None,
+    type_checking: str | None = None,
+    bandit_severity: str | None = None,
+    bandit_confidence: str | None = None,
+    pylint_fail_under: float | None = None,
+    sensitivity: str | None = None,
+) -> LintOptions:
+    target = LintTargetOptions(
+        root=root,
+        paths=list(paths or []),
+        dirs=list(dirs or []),
+        exclude=list(exclude or []),
+        paths_from_stdin=paths_from_stdin,
+    )
+    git = LintGitOptions(
+        changed_only=changed_only,
+        diff_ref=diff_ref,
+        include_untracked=include_untracked,
+        base_branch=base_branch,
+        no_lint_tests=no_lint_tests,
+    )
+    selection = LintSelectionOptions(
+        filters=list(filters or []),
+        only=list(only or []),
+        language=list(language or []),
+        fix_only=fix_only,
+        check_only=check_only,
+    )
+    display = LintDisplayOptions(
+        verbose=verbose,
+        quiet=quiet,
+        no_color=no_color,
+        no_emoji=no_emoji,
+        output_mode=output_mode,
+        advice=advice,
+    )
+    summary = LintSummaryOptions(
+        show_passing=show_passing,
+        no_stats=no_stats,
+        pr_summary_out=pr_summary_out,
+        pr_summary_limit=pr_summary_limit,
+        pr_summary_min_severity=pr_summary_min_severity,
+        pr_summary_template=pr_summary_template,
+    )
+    output = LintOutputBundle(display=display, summary=summary)
+
+    runtime = ExecutionRuntimeOptions(
+        jobs=jobs,
+        bail=bail,
+        no_cache=no_cache,
+        cache_dir=cache_dir or root / ".lint-cache",
+        use_local_linters=use_local_linters,
+        strict_config=strict_config,
+    )
+    formatting = ExecutionFormattingOptions(
+        line_length=line_length,
+        sql_dialect=sql_dialect,
+        python_version=python_version,
+    )
+    execution = LintExecutionOptions(runtime=runtime, formatting=formatting)
+
+    complexity = LintComplexityOptions(
+        max_complexity=max_complexity,
+        max_arguments=max_arguments,
+    )
+    strictness = LintStrictnessOptions(type_checking=type_checking)
+    severity = LintSeverityOptions(
+        bandit_severity=bandit_severity,
+        bandit_confidence=bandit_confidence,
+        pylint_fail_under=pylint_fail_under,
+        sensitivity=sensitivity,
+    )
+    overrides = LintOverrideOptions(
+        complexity=complexity,
+        strictness=strictness,
+        severity=severity,
+    )
+
+    return LintOptions(
+        targets=target,
+        git=git,
+        selection=selection,
+        output=output,
+        execution=execution,
+        overrides=overrides,
+        provided=provided or set(),
+    )
 
 
 def test_build_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -17,36 +161,12 @@ def test_build_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     home_dir.mkdir()
     monkeypatch.setattr(Path, "home", lambda: home_dir)
 
-    options = LintOptions(
-        paths=[],
-        root=tmp_path,
-        changed_only=False,
-        diff_ref="HEAD",
-        include_untracked=True,
-        base_branch=None,
-        paths_from_stdin=False,
-        dirs=[],
-        exclude=[],
-        filters=[],
-        only=[],
-        language=[],
-        fix_only=False,
-        check_only=False,
-        verbose=False,
-        quiet=False,
-        no_color=False,
-        no_emoji=False,
-        output_mode="concise",
-        show_passing=False,
+    options = _build_options(
+        tmp_path,
         jobs=2,
-        bail=False,
         no_cache=True,
         cache_dir=tmp_path / ".cache",
-        pr_summary_out=None,
-        pr_summary_limit=100,
-        pr_summary_min_severity="warning",
         pr_summary_template="- {message}",
-        use_local_linters=False,
         provided={"jobs", "no_cache", "cache_dir", "pr_summary_template"},
     )
 
@@ -98,14 +218,8 @@ def test_build_config_cli_overrides_complexity_and_strictness(
     home_dir.mkdir()
     monkeypatch.setattr(Path, "home", lambda: home_dir)
 
-    options = LintOptions(
-        paths=[],
-        root=tmp_path,
-        changed_only=False,
-        diff_ref="HEAD",
-        include_untracked=True,
-        base_branch=None,
-        paths_from_stdin=False,
+    options = _build_options(
+        tmp_path,
         max_complexity=7,
         max_arguments=4,
         type_checking="lenient",
@@ -153,16 +267,10 @@ def test_sensitivity_low_adjusts_shared_knobs(
     home_dir.mkdir()
     monkeypatch.setattr(Path, "home", lambda: home_dir)
 
-    options = LintOptions(
-        paths=[],
-        root=tmp_path,
-        changed_only=False,
-        diff_ref="HEAD",
-        include_untracked=True,
-        base_branch=None,
-        paths_from_stdin=False,
-        provided={"sensitivity"},
+    options = _build_options(
+        tmp_path,
         sensitivity="low",
+        provided={"sensitivity"},
     )
 
     cfg = build_config(options)
@@ -191,16 +299,10 @@ def test_sensitivity_maximum_sets_ruff_select_all(
     home_dir.mkdir()
     monkeypatch.setattr(Path, "home", lambda: home_dir)
 
-    options = LintOptions(
-        paths=[],
-        root=tmp_path,
-        changed_only=False,
-        diff_ref="HEAD",
-        include_untracked=True,
-        base_branch=None,
-        paths_from_stdin=False,
-        provided={"sensitivity"},
+    options = _build_options(
+        tmp_path,
         sensitivity="maximum",
+        provided={"sensitivity"},
     )
 
     cfg = build_config(options)
@@ -229,17 +331,11 @@ def test_sensitivity_respects_explicit_line_length_override(
     home_dir.mkdir()
     monkeypatch.setattr(Path, "home", lambda: home_dir)
 
-    options = LintOptions(
-        paths=[],
-        root=tmp_path,
-        changed_only=False,
-        diff_ref="HEAD",
-        include_untracked=True,
-        base_branch=None,
-        paths_from_stdin=False,
+    options = _build_options(
+        tmp_path,
         line_length=150,
-        provided={"sensitivity", "line_length"},
         sensitivity="maximum",
+        provided={"sensitivity", "line_length"},
     )
 
     cfg = build_config(options)
@@ -264,15 +360,7 @@ def test_python_version_from_python_version_file(
 
     (tmp_path / ".python-version").write_text("3.11.4\n", encoding="utf-8")
 
-    options = LintOptions(
-        paths=[],
-        root=tmp_path,
-        changed_only=False,
-        diff_ref="HEAD",
-        include_untracked=True,
-        base_branch=None,
-        paths_from_stdin=False,
-    )
+    options = _build_options(tmp_path)
 
     cfg = build_config(options)
     assert cfg.execution.python_version == "3.11"
@@ -295,15 +383,7 @@ requires-python = ">=3.12"
         encoding="utf-8",
     )
 
-    options = LintOptions(
-        paths=[],
-        root=tmp_path,
-        changed_only=False,
-        diff_ref="HEAD",
-        include_untracked=True,
-        base_branch=None,
-        paths_from_stdin=False,
-    )
+    options = _build_options(tmp_path)
 
     cfg = build_config(options)
     assert cfg.execution.python_version == "3.12"

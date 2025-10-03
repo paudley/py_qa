@@ -80,6 +80,7 @@ dependencies = [
     "vulture>=2.14",
     "bandit>=1.8.6",
     "yamllint>=1.37.1",
+    "pytest-bdd>=8.1.0",
 ]
 
 [project.scripts]

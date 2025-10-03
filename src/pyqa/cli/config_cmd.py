@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import typer
 from pydantic import BaseModel, ConfigDict
@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict
 from ..config_loader import ConfigLoadResult, FieldUpdate
 from ._config_cmd_services import (
     JSON_FORMAT,
+    SchemaFormatLiteral,
     UnknownConfigLayerError,
     build_config_diff,
     build_tool_schema_payload,
@@ -30,6 +31,8 @@ from ._config_cmd_services import (
 from .shared import CLIError, build_cli_logger, register_command
 from .typer_ext import create_typer
 
+SchemaFormatLiteral = Literal["json", "json-tools", "markdown", "md"]
+
 config_app = create_typer(help="Inspect, validate, and document configuration layers.")
 
 
@@ -41,7 +44,7 @@ config_app = create_typer(help="Inspect, validate, and document configuration la
 def config_show(
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
     trace: bool = typer.Option(True, help="Show which source last set each field."),
-    output_format: str = typer.Option(
+    output_format: SchemaFormatLiteral = typer.Option(
         JSON_FORMAT,
         "--format",
         "-f",
@@ -101,7 +104,7 @@ def config_validate(
     help_text="Emit a machine-readable description of configuration fields.",
 )
 def config_schema(
-    output_format: str = typer.Option(
+    output_format: SchemaFormatLiteral = typer.Option(
         JSON_FORMAT,
         "--format",
         "-f",

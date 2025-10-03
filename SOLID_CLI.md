@@ -53,6 +53,6 @@
 
 ## Outstanding Lint Follow-ups
 
-- [x] Resolve ``__all__`` export mismatches in `src/pyqa/__init__.py` flagged by pylint/pyright.
+- [x] Resolve `__all__` export mismatches in `src/pyqa/__init__.py` flagged by pylint/pyright.
 - [x] Normalise magic value comparisons in `src/pyqa/analysis/suppression.py` and related helpers.
-- [x] Continue decomposing long-running annotations helpers to eliminate broad ``try`` blocks and invalid constant names.
+- [x] Continue decomposing long-running annotations helpers to eliminate broad `try` blocks and invalid constant names.

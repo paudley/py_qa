@@ -99,6 +99,8 @@ def _install_dependency_support(original_get_click_param: Callable[[Any], tuple[
                         dependency_info = meta
                     elif isinstance(meta, ParameterInfo):
                         parameter_info = meta
+            if isinstance(param.default, ParameterInfo) and parameter_info is None:
+                parameter_info = param.default
             if inspect.isclass(annotation) and issubclass(annotation, click.Context):
                 context_param_name = param_name
                 continue
@@ -176,17 +178,26 @@ def _install_dependency_support(original_get_click_param: Callable[[Any], tuple[
         use_convertors = convertors or {}
         parameters = get_params_from_function(callback)
 
+        def _default_for_parameter(meta: Any) -> Any:
+            default_candidate = getattr(meta, "default", None)
+            return getattr(default_candidate, "default", default_candidate)
+
+        defaults = {name: _default_for_parameter(meta) for name, meta in parameters.items()}
+
         def wrapper(*call_args: Any, **kwargs: Any) -> Any:
             context = call_args[0] if call_args else click.get_current_context()
             if call_args[1:]:  # pragma: no cover - defensive guard for unexpected usage
                 raise TypeError("Positional arguments beyond the Typer context are not supported.")
 
-            values: dict[str, Any] = {name: None for name in parameters}
+            values: dict[str, Any] = dict(defaults)
             for key, value in kwargs.items():
                 if key in use_convertors:
-                    values[key] = use_convertors[key](value)
+                    if value is None:
+                        values[key] = values.get(key)
+                    else:
+                        values[key] = use_convertors[key](value)
                 else:
-                    values[key] = value
+                    values[key] = value if value is not None else values.get(key)
             if context_param_name:
                 values[context_param_name] = context
             _resolve_dependencies(callback, values, context)

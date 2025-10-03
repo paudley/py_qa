@@ -8,6 +8,14 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from ._lint_cli_models import (
+    BanditLevelLiteral,
+    OutputModeLiteral,
+    PRSummarySeverityLiteral,
+    SensitivityLiteral,
+    StrictnessLiteral,
+)
+
 
 @dataclass(slots=True)
 class LintTargetOptions:
@@ -42,7 +50,7 @@ class LintDisplayOptions:
     quiet: bool
     no_color: bool
     no_emoji: bool
-    output_mode: str
+    output_mode: OutputModeLiteral
     advice: bool
 
 
@@ -52,7 +60,7 @@ class LintSummaryOptions:
     no_stats: bool
     pr_summary_out: Path | None
     pr_summary_limit: int
-    pr_summary_min_severity: str
+    pr_summary_min_severity: PRSummarySeverityLiteral
     pr_summary_template: str
 
 
@@ -93,15 +101,15 @@ class LintComplexityOptions:
 
 @dataclass(slots=True)
 class LintStrictnessOptions:
-    type_checking: str | None
+    type_checking: StrictnessLiteral | None
 
 
 @dataclass(slots=True)
 class LintSeverityOptions:
-    bandit_severity: str | None
-    bandit_confidence: str | None
+    bandit_severity: BanditLevelLiteral | None
+    bandit_confidence: BanditLevelLiteral | None
     pylint_fail_under: float | None
-    sensitivity: str | None
+    sensitivity: SensitivityLiteral | None
 
 
 @dataclass(slots=True)

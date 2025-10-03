@@ -47,6 +47,7 @@ DocLike = Iterable[TokenLike]
 if TYPE_CHECKING:  # pragma: no cover - type checking aid only
     from spacy.language import Language as SpacyLanguage
 else:
+
     class SpacyLanguage(Protocol):
         """Callable NLP pipeline contract used at runtime."""
 
@@ -155,7 +156,7 @@ class AnnotationEngine:
                 return self._nlp
             try:
                 self._nlp = _SPACY_MODULE.load(self._model_name)
-            except (OSError, IOError):  # pragma: no cover - spaCy optional
+            except OSError:  # pragma: no cover - spaCy optional
                 should_retry = False
                 if not self._download_attempted:
                     self._download_attempted = True
@@ -163,7 +164,7 @@ class AnnotationEngine:
                 if should_retry:
                     try:
                         self._nlp = _SPACY_MODULE.load(self._model_name)
-                    except (OSError, IOError):
+                    except OSError:
                         self._nlp = None
                 else:
                     self._nlp = None

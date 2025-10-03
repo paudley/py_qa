@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ from typer.main import get_group
 from typer.testing import CliRunner
 
 import pyqa.cli.lint as lint_module
+from pyqa.cli import _lint_runtime as lint_runtime
 from pyqa.cli.app import app
 from pyqa.cli.options import LintOptions
 from pyqa.cli.typer_ext import _primary_option_name
@@ -35,7 +37,7 @@ def test_lint_warns_when_py_qa_path_outside_workspace(tmp_path: Path, monkeypatc
         assert tool_name == "ruff"
         return 0
 
-    monkeypatch.setattr("pyqa.cli.lint.run_tool_info", fake_run_tool_info)
+    monkeypatch.setattr("pyqa.cli._lint_meta.run_tool_info", fake_run_tool_info)
 
     result = runner.invoke(
         app,
@@ -60,14 +62,28 @@ def test_lint_fetch_all_tools_flag(monkeypatch, tmp_path: Path) -> None:
     prepared = PreparedCommand.from_parts(cmd=["demo"], env={}, version="1.2.3", source="local")
     calls: list[tuple] = []
 
-    def fake_fetch(self, cfg, root, callback=None):  # noqa: ANN001
-        if callback:
-            callback("start", "demo", "lint", 1, 1, None)
-            callback("completed", "demo", "lint", 1, 1, None)
-        calls.append((cfg, root))
-        return [("demo", "lint", prepared, None)]
+    class FakeOrchestrator:
+        def __init__(self, hooks):
+            self._hooks = hooks
 
-    monkeypatch.setattr("pyqa.cli.lint.Orchestrator.fetch_all_tools", fake_fetch)
+        def fetch_all_tools(self, cfg, root, callback=None):  # noqa: ANN001
+            if callback:
+                callback("start", "demo", "lint", 1, 1, None)
+                callback("completed", "demo", "lint", 1, 1, None)
+            calls.append((cfg, root))
+            return [("demo", "lint", prepared, None)]
+
+        def run(self, config, root):  # pragma: no cover - not used in this test
+            raise AssertionError("unexpected orchestrator.run call")
+
+    monkeypatch.setattr(
+        lint_runtime,
+        "DEFAULT_LINT_DEPENDENCIES",
+        replace(
+            lint_runtime.DEFAULT_LINT_DEPENDENCIES,
+            orchestrator_factory=lambda registry, discovery, hooks: FakeOrchestrator(hooks),
+        ),
+    )
     monkeypatch.setattr("pyqa.cli.lint.is_tty", lambda: False)
 
     result = runner.invoke(
@@ -138,12 +154,30 @@ def test_lint_no_stats_flag(monkeypatch, tmp_path: Path) -> None:
         captured["options"] = options
         return original_build_config(options)
 
-    def fake_run(self, config, root):  # noqa: ANN001
+    monkeypatch.setattr(lint_module, "build_config", fake_build_config)
+
+    def _run(config, root):
         captured["config"] = config
         return RunResult(root=root, files=[], outcomes=[], tool_versions={})
 
-    monkeypatch.setattr(lint_module, "build_config", fake_build_config)
-    monkeypatch.setattr(lint_module.Orchestrator, "run", fake_run)
+    class FakeOrchestrator:
+        def __init__(self, hooks):
+            self._hooks = hooks
+
+        def run(self, config, root):
+            return _run(config, root)
+
+        def fetch_all_tools(self, config, root, callback=None):  # pragma: no cover - unused
+            return []
+
+    monkeypatch.setattr(
+        lint_runtime,
+        "DEFAULT_LINT_DEPENDENCIES",
+        replace(
+            lint_runtime.DEFAULT_LINT_DEPENDENCIES,
+            orchestrator_factory=lambda registry, discovery, hooks: FakeOrchestrator(hooks),
+        ),
+    )
 
     result = runner.invoke(
         app,
@@ -168,7 +202,7 @@ def test_lint_no_lint_tests_flag(monkeypatch, tmp_path: Path) -> None:
         captured["options"] = options
         return original_build_config(options)
 
-    def fake_run(self, config, root):  # noqa: ANN001
+    def _run(config, root):
         captured["config"] = config
         return RunResult(root=root, files=[], outcomes=[], tool_versions={})
 
@@ -176,7 +210,25 @@ def test_lint_no_lint_tests_flag(monkeypatch, tmp_path: Path) -> None:
     tests_dir.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(lint_module, "build_config", fake_build_config)
-    monkeypatch.setattr(lint_module.Orchestrator, "run", fake_run)
+
+    class FakeRunOrchestrator:
+        def __init__(self, hooks):
+            self._hooks = hooks
+
+        def run(self, config, root):
+            return _run(config, root)
+
+        def fetch_all_tools(self, config, root, callback=None):  # pragma: no cover - unused
+            return []
+
+    monkeypatch.setattr(
+        lint_runtime,
+        "DEFAULT_LINT_DEPENDENCIES",
+        replace(
+            lint_runtime.DEFAULT_LINT_DEPENDENCIES,
+            orchestrator_factory=lambda registry, discovery, hooks: FakeRunOrchestrator(hooks),
+        ),
+    )
 
     result = runner.invoke(
         app,
@@ -257,15 +309,33 @@ def test_lint_meta_normal_applies_defaults(monkeypatch, tmp_path: Path) -> None:
         captured["options"] = options
         return original_build_config(options)
 
-    def fake_run(self, config, root):  # noqa: ANN001
-        captured["config"] = config
-        return RunResult(root=root, files=[], outcomes=[], tool_versions={})
-
     tests_dir = tmp_path / "tests"
     tests_dir.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(lint_module, "build_config", fake_build_config)
-    monkeypatch.setattr(lint_module.Orchestrator, "run", fake_run)
+
+    def _run(config, root):
+        captured["config"] = config
+        return RunResult(root=root, files=[], outcomes=[], tool_versions={})
+
+    class FakeOrchestrator:
+        def __init__(self, hooks):
+            self._hooks = hooks
+
+        def run(self, config, root):
+            return _run(config, root)
+
+        def fetch_all_tools(self, config, root, callback=None):  # pragma: no cover - unused
+            return []
+
+    monkeypatch.setattr(
+        lint_runtime,
+        "DEFAULT_LINT_DEPENDENCIES",
+        replace(
+            lint_runtime.DEFAULT_LINT_DEPENDENCIES,
+            orchestrator_factory=lambda registry, discovery, hooks: FakeOrchestrator(hooks),
+        ),
+    )
 
     result = runner.invoke(
         app,
@@ -363,11 +433,19 @@ def test_concise_mode_renders_progress_status(monkeypatch, tmp_path: Path) -> No
                 completed=task["completed"],
             )
 
-    def fake_run(self, config, root):  # noqa: ANN001
-        if self._hooks.after_discovery:
-            self._hooks.after_discovery(1)
-        if self._hooks.before_tool:
-            self._hooks.before_tool("ruff")
+    monkeypatch.setattr(lint_module, "Progress", _FakeProgress)
+    monkeypatch.setattr(lint_module, "is_tty", lambda: True)
+
+    orchestrator_state: dict[str, _HookingOrchestrator | None] = {"instance": None}
+
+    def _run(config, root):
+        orchestrator = orchestrator_state["instance"]
+        assert orchestrator is not None
+        hooks = orchestrator._hooks
+        if hooks.after_discovery:
+            hooks.after_discovery(1)
+        if hooks.before_tool:
+            hooks.before_tool("ruff")
         outcome_check = ToolOutcome(
             tool="ruff",
             action="lint",
@@ -384,22 +462,41 @@ def test_concise_mode_renders_progress_status(monkeypatch, tmp_path: Path) -> No
             stderr="",
             diagnostics=[],
         )
-        if self._hooks.after_tool:
-            self._hooks.after_tool(outcome_check)
-            self._hooks.after_tool(outcome_fix)
+        if hooks.after_tool:
+            hooks.after_tool(outcome_check)
+            hooks.after_tool(outcome_fix)
         result = RunResult(
             root=root,
             files=[],
             outcomes=[outcome_check, outcome_fix],
             tool_versions={},
         )
-        if self._hooks.after_execution:
-            self._hooks.after_execution(result)
+        if hooks.after_execution:
+            hooks.after_execution(result)
         return result
 
-    monkeypatch.setattr(lint_module, "Progress", _FakeProgress)
-    monkeypatch.setattr(lint_module, "is_tty", lambda: True)
-    monkeypatch.setattr(lint_module.Orchestrator, "run", fake_run)
+    class _HookingOrchestrator:
+        def __init__(self, hooks):
+            self._hooks = hooks
+
+        def run(self, config, root):
+            return _run(config, root)
+
+        def fetch_all_tools(self, config, root, callback=None):  # pragma: no cover - unused
+            return []
+
+    def _factory(registry, discovery, hooks):
+        orchestrator_state["instance"] = _HookingOrchestrator(hooks)
+        return orchestrator_state["instance"]
+
+    monkeypatch.setattr(
+        lint_runtime,
+        "DEFAULT_LINT_DEPENDENCIES",
+        replace(
+            lint_runtime.DEFAULT_LINT_DEPENDENCIES,
+            orchestrator_factory=_factory,
+        ),
+    )
 
     result = runner.invoke(
         app,

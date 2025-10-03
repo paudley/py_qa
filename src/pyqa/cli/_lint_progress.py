@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final, Literal
 
 from rich.progress import (
     BarColumn,
@@ -18,6 +18,24 @@ from rich.progress import (
 from rich.text import Text
 
 from ..console import console_manager
+
+ProgressStatusLiteral = Literal[
+    "waiting",
+    "running",
+    "queued",
+    "post-processing",
+    "rendering output",
+    "done",
+    "issues detected",
+]
+
+STATUS_WAITING: Final[ProgressStatusLiteral] = "waiting"
+STATUS_RUNNING: Final[ProgressStatusLiteral] = "running"
+STATUS_QUEUED: Final[ProgressStatusLiteral] = "queued"
+STATUS_POST_PROCESSING: Final[ProgressStatusLiteral] = "post-processing"
+STATUS_RENDERING: Final[ProgressStatusLiteral] = "rendering output"
+STATUS_DONE: Final[ProgressStatusLiteral] = "done"
+STATUS_ISSUES: Final[ProgressStatusLiteral] = "issues detected"
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from rich.console import Console
@@ -71,7 +89,7 @@ class ExecutionProgressController:
         self.task_id = self.progress.add_task(
             "Linting",
             total=self.extra_phases,
-            current_status="waiting",
+            current_status=STATUS_WAITING,
         )
         self.lock = Lock()
         self.total = self.extra_phases
@@ -103,25 +121,25 @@ class ExecutionProgressController:
                 progress.update(
                     task_id,
                     description=f"Linting {tool_name}",
-                    current_status="running",
+                    current_status=STATUS_RUNNING,
                 )
 
         def after_tool(outcome: ToolOutcome) -> None:
             with lock:
                 ensure_started()
                 self._advance(1)
-                status = "ok" if outcome.ok else "issues"
+                status_markup = "ok" if outcome.ok else "issues"
                 if self.runtime.config.output.color:
-                    status = "[green]ok[/]" if outcome.ok else "[red]issues[/]"
+                    status_markup = "[green]ok[/]" if outcome.ok else "[red]issues[/]"
                 progress.update(
                     task_id,
-                    current_status=f"{outcome.tool}:{outcome.action} {status}",
+                    current_status=f"{outcome.tool}:{outcome.action} {status_markup}",
                 )
 
         def after_discovery(file_count: int) -> None:
             with lock:
                 ensure_started()
-                status = "queued"
+                status = STATUS_QUEUED
                 if self.runtime.config.output.color:
                     status = "[cyan]queued[/]"
                 progress.update(
@@ -134,7 +152,7 @@ class ExecutionProgressController:
             with lock:
                 ensure_started()
                 self._advance(1)
-                status = "post-processing"
+                status = STATUS_POST_PROCESSING
                 if self.runtime.config.output.color:
                     status = "[cyan]post-processing[/]"
                 progress.update(task_id, current_status=status)
@@ -161,7 +179,7 @@ class ExecutionProgressController:
             return
         with lock:
             self._advance(1)
-            status = "rendering output"
+            status = STATUS_RENDERING
             if self.runtime.config.output.color:
                 status = "[cyan]rendering output[/]"
             progress.update(task_id, current_status=status)
@@ -175,7 +193,7 @@ class ExecutionProgressController:
         if progress is None or task_id is None or lock is None:
             return None
         with lock:
-            status_text = "done" if success else "issues detected"
+            status_text = STATUS_DONE if success else STATUS_ISSUES
             if self.runtime.config.output.color:
                 status_text = "[green]done[/]" if success else "[red]issues detected[/]"
             total = max(self.total, self.completed)

@@ -120,8 +120,8 @@
 
 ### Scenario Observations (2025-02-27)
 
-| Scenario | Command | Outcome |
-| --- | --- | --- |
-| Explicit override below minimum version | `PYQA_PYTHON=artifacts/fake_py311.py PYQA_UV=artifacts/fake_uv.sh ./lint --help` | Probe reports `(3, 11)`, launcher switches to uv fallback without touching the repo interpreter. |
-| Interpreter resolves modules outside repo | `PYQA_PYTHON=artifacts/fake_py_outside.py PYQA_UV=artifacts/fake_uv.sh ./lint --help` | Probe emits `outside`, launcher delegates to uv fallback to avoid stale environments. |
-| uv override missing | `PYQA_PYTHON=artifacts/fake_py_outside.py PYQA_UV=/does/not/exist ./lint --help` | Launcher aborts with `PYQA_UV executable not found` and exits non-zero, preventing silent failure. |
+| Scenario                                  | Command                                                                               | Outcome                                                                                            |
+| ----------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Explicit override below minimum version   | `PYQA_PYTHON=artifacts/fake_py311.py PYQA_UV=artifacts/fake_uv.sh ./lint --help`      | Probe reports `(3, 11)`, launcher switches to uv fallback without touching the repo interpreter.   |
+| Interpreter resolves modules outside repo | `PYQA_PYTHON=artifacts/fake_py_outside.py PYQA_UV=artifacts/fake_uv.sh ./lint --help` | Probe emits `outside`, launcher delegates to uv fallback to avoid stale environments.              |
+| uv override missing                       | `PYQA_PYTHON=artifacts/fake_py_outside.py PYQA_UV=/does/not/exist ./lint --help`      | Launcher aborts with `PYQA_UV executable not found` and exits non-zero, preventing silent failure. |

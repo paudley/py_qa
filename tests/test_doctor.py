@@ -32,7 +32,7 @@ def test_doctor_option(monkeypatch) -> None:
         print(f"doctor invoked for {root}")
         return 0
 
-    monkeypatch.setattr("pyqa.cli.lint.run_doctor", fake_run_doctor)
+    monkeypatch.setattr("pyqa.cli._lint_meta.run_doctor", fake_run_doctor)
 
     result = runner.invoke(app, ["lint", "--doctor"])
 

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Final, Literal
 
 import typer
 from rich.progress import Progress
@@ -24,7 +24,17 @@ from ._lint_runtime import LintRuntimeContext, build_lint_runtime_context
 from .config_builder import build_config
 from .shared import CLILogger, Depends, build_cli_logger
 
-PHASE_SORT_ORDER: tuple[str, ...] = (
+LintPhaseLiteral = Literal[
+    "lint",
+    "format",
+    "analysis",
+    "security",
+    "test",
+    "coverage",
+    "utility",
+]
+
+PHASE_SORT_ORDER: Final[tuple[LintPhaseLiteral, ...]] = (
     "lint",
     "format",
     "analysis",

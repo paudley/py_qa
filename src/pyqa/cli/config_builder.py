@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
-from typing import cast
+from typing import Final, cast
 
 from ..config import (
     BanditConfidence,
@@ -22,6 +22,9 @@ from ..config import (
 from ..config_loader import ConfigLoader
 from ._config_builder_constants import (
     DEDUPE_SECTION,
+)
+from ._config_builder_constants import DEFAULT_TOOL_FILTERS as _DEFAULT_TOOL_FILTERS
+from ._config_builder_constants import (
     EXECUTION_SECTION,
     FILE_DISCOVERY_SECTION,
     OUTPUT_SECTION,
@@ -49,6 +52,8 @@ from ._config_builder_overrides import (
 )
 from .options import LintOptions
 from .python_version_resolver import resolve_python_version
+
+DEFAULT_TOOL_FILTERS: Final = _DEFAULT_TOOL_FILTERS
 
 
 def build_config(options: LintOptions) -> Config:

@@ -7,7 +7,7 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Final, Literal
 
 import typer
 
@@ -22,9 +22,11 @@ from ..serialization import jsonify
 from ..tools.settings import TOOL_SETTING_SCHEMA, SettingField, tool_setting_schema_as_dict
 from .shared import CLIError, CLILogger
 
-JSON_FORMAT = "json"
-JSON_TOOLS_FORMAT = "json-tools"
-MARKDOWN_FORMATS = frozenset({"markdown", "md"})
+SchemaFormatLiteral = Literal["json", "json-tools", "markdown", "md"]
+
+JSON_FORMAT: Final[SchemaFormatLiteral] = "json"
+JSON_TOOLS_FORMAT: Final[SchemaFormatLiteral] = "json-tools"
+MARKDOWN_FORMATS: Final[frozenset[str]] = frozenset({"markdown", "md"})
 FINAL_LAYER_KEY = "final"
 TOOL_SETTINGS_KEY = "tool_settings"
 TYPE_KEY = "type"
@@ -103,7 +105,7 @@ def summarise_value(field_path: str, value: object) -> str:
     return json.dumps(jsonify(value), sort_keys=True)
 
 
-def render_schema(fmt: str) -> str:
+def render_schema(fmt: SchemaFormatLiteral) -> str:
     """Render the configuration schema in the requested format."""
 
     fmt_lower = fmt.lower()
@@ -171,7 +173,7 @@ def build_tool_schema_payload() -> dict[str, Any]:
 def collect_layer_snapshots(result: ConfigLoadResult) -> dict[str, dict[str, object]]:
     """Return snapshot mapping normalised to lower-case keys."""
 
-    snapshots: dict[str, dict[str, object]] = {key.lower(): dict(value) for key, value in result.snapshots.items()}
+    snapshots: dict[str, dict[str, object]] = {key.lower(): jsonify(value) for key, value in result.snapshots.items()}
     snapshots[FINAL_LAYER_KEY] = dict(render_config_mapping(result))
     return snapshots
 
@@ -179,6 +181,8 @@ def collect_layer_snapshots(result: ConfigLoadResult) -> dict[str, dict[str, obj
 def diff_snapshots(
     from_snapshot: Mapping[str, Any],
     to_snapshot: Mapping[str, Any],
+    *,
+    prefix: str = "",
 ) -> dict[str, Any]:
     """Return a structural diff between two configuration snapshots."""
 
@@ -189,12 +193,26 @@ def diff_snapshots(
         right = to_snapshot.get(key)
         if left == right:
             continue
+        key_path = f"{prefix}.{key}" if prefix else key
         if isinstance(left, Mapping) and isinstance(right, Mapping):
-            nested = diff_snapshots(left, right)
+            nested = diff_snapshots(left, right, prefix=key_path)
+            diff.update(nested)
+            continue
+        if isinstance(left, Mapping) or isinstance(right, Mapping):
+            left_mapping = left if isinstance(left, Mapping) else {}
+            right_mapping = right if isinstance(right, Mapping) else {}
+            nested = diff_snapshots(left_mapping, right_mapping, prefix=key_path)
             if nested:
-                diff[key] = nested
-        else:
-            diff[key] = {"from": left, "to": right}
+                diff.update(nested)
+            diff[key_path] = {
+                "from": jsonify(left),
+                "to": jsonify(right),
+            }
+            continue
+        diff[key_path] = {
+            "from": jsonify(left),
+            "to": jsonify(right),
+        }
     return diff
 
 
@@ -253,6 +271,7 @@ def build_config_diff(
 __all__ = [
     "JSON_FORMAT",
     "JSON_TOOLS_FORMAT",
+    "SchemaFormatLiteral",
     "FINAL_LAYER_KEY",
     "load_config_with_trace",
     "validate_config",

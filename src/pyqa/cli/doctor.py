@@ -10,7 +10,7 @@ import shutil
 from dataclasses import dataclass
 from importlib import metadata as importlib_metadata
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
 from rich import box
 from rich.console import Console
@@ -33,7 +33,7 @@ class EnvironmentCheck:
     """Represents the outcome of a doctor environment probe."""
 
     name: str
-    status: str
+    status: EnvironmentStatusLiteral
     ok: bool
     detail: str
 
@@ -238,7 +238,7 @@ def _collect_environment_checks() -> list[EnvironmentCheck]:
     checks.append(
         EnvironmentCheck(
             name="Python",
-            status="ok",
+            status=STATUS_OK,
             ok=True,
             detail=platform.python_version(),
         ),
@@ -254,8 +254,8 @@ def _probe_program(executable: str, required: bool) -> EnvironmentCheck:
     if path:
         version = _capture_version(executable)
         detail = version or path
-        return EnvironmentCheck(name=executable, status="ok", ok=True, detail=detail)
-    status = "missing" if required else "missing (optional)"
+        return EnvironmentCheck(name=executable, status=STATUS_OK, ok=True, detail=detail)
+    status = STATUS_MISSING if required else STATUS_MISSING_OPTIONAL
     return EnvironmentCheck(
         name=executable,
         status=status,
@@ -268,10 +268,10 @@ def _probe_module(module: str, optional: bool) -> EnvironmentCheck:
     try:
         importlib.import_module(module)
     except ImportError as exc:
-        status = "missing" if optional else "not ok"
+        status = STATUS_MISSING if optional else STATUS_NOT_OK
         detail = f"{type(exc).__name__}: {exc}"
         return EnvironmentCheck(name=module, status=status, ok=optional, detail=detail)
-    return EnvironmentCheck(name=module, status="ok", ok=True, detail="Import successful")
+    return EnvironmentCheck(name=module, status=STATUS_OK, ok=True, detail="Import successful")
 
 
 def _collect_tool_summaries(config: Config) -> list[ToolSummary]:
@@ -349,3 +349,9 @@ def _capture_version(executable: str) -> str | None:
 
 
 __all__ = ["EnvironmentCheck", "GrammarStatus", "ToolSummary", "run_doctor"]
+EnvironmentStatusLiteral = Literal["ok", "missing", "missing (optional)", "not ok"]
+
+STATUS_OK: Final[EnvironmentStatusLiteral] = "ok"
+STATUS_MISSING: Final[EnvironmentStatusLiteral] = "missing"
+STATUS_MISSING_OPTIONAL: Final[EnvironmentStatusLiteral] = "missing (optional)"
+STATUS_NOT_OK: Final[EnvironmentStatusLiteral] = "not ok"

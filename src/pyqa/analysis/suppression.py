@@ -12,6 +12,8 @@ from ..annotations import AnnotationEngine
 from ..models import Diagnostic, RunResult
 
 _TEST_PREFIXES: Final[tuple[str, ...]] = ("tests/", "test/")
+
+
 class SuppressionTool(StrEnum):
     """Tools that support inline suppressions handled by pyqa."""
 
