@@ -76,12 +76,8 @@ def collect_execution_overrides(
     )
 
     overrides: ExecutionOverrides = {
-        "only": tuple(options.only)
-        if has_option(LintOptionKey.ONLY)
-        else tuple(current.only),
-        "languages": tuple(options.language)
-        if has_option(LintOptionKey.LANGUAGE)
-        else tuple(current.languages),
+        "only": tuple(options.only) if has_option(LintOptionKey.ONLY) else tuple(current.only),
+        "languages": tuple(options.language) if has_option(LintOptionKey.LANGUAGE) else tuple(current.languages),
         "fix_only": select_flag(
             options.fix_only,
             current.fix_only,

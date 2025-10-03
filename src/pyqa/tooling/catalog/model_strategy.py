@@ -207,8 +207,7 @@ def parse_strategy_metadata(
     )
     if schema_version_value != STRATEGY_SCHEMA_VERSION:
         raise CatalogIntegrityError(
-            f"{context}: schemaVersion '{schema_version_value}' is not supported;"
-            f" expected '{STRATEGY_SCHEMA_VERSION}'",
+            f"{context}: schemaVersion '{schema_version_value}' is not supported; expected '{STRATEGY_SCHEMA_VERSION}'",
         )
     return StrategyMetadata(
         schema_version=schema_version_value,

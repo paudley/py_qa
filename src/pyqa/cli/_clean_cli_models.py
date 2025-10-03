@@ -3,9 +3,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Sequence
+from typing import Annotated
 
 import typer
 
@@ -59,6 +60,7 @@ class CleanCLIOptions:
     extra_trees: tuple[str, ...]
     dry_run: bool
     emoji: bool
+
 
 def _build_clean_path_options(
     pattern: PATTERN_OPTION,

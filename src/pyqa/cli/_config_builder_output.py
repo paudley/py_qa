@@ -9,15 +9,15 @@ from typing import TypedDict, cast
 
 from ..config import OutputConfig
 from ._config_builder_constants import (
+    _ALLOWED_OUTPUT_MODES,
+    _ALLOWED_SUMMARY_SEVERITIES,
+    DEFAULT_TOOL_FILTERS,
     FILTER_PATTERN_SEPARATOR,
     FILTER_SPEC_FORMAT,
     FILTER_SPEC_SEPARATOR,
     LintOptionKey,
     OutputMode,
     SummarySeverity,
-    _ALLOWED_OUTPUT_MODES,
-    _ALLOWED_SUMMARY_SEVERITIES,
-    DEFAULT_TOOL_FILTERS,
 )
 from ._config_builder_shared import resolve_optional_path, select_flag, select_value
 from .options import LintOptions, ToolFilters
@@ -105,9 +105,7 @@ def collect_output_overrides(
             provided,
         ),
         "output": (
-            normalize_output_mode(options.output_mode)
-            if has_option(LintOptionKey.OUTPUT_MODE)
-            else current.output
+            normalize_output_mode(options.output_mode) if has_option(LintOptionKey.OUTPUT_MODE) else current.output
         ),
         "show_passing": show_passing_value,
         "show_stats": show_stats_value,
@@ -158,18 +156,13 @@ def resolve_tool_filters(
         parsed = parse_filters(options.filters)
         for tool, patterns in parsed.items():
             filters.setdefault(tool, []).extend(patterns)
-    return {
-        tool: list(dict.fromkeys(patterns))
-        for tool, patterns in filters.items()
-    }
+    return {tool: list(dict.fromkeys(patterns)) for tool, patterns in filters.items()}
 
 
 def parse_filters(specs: Iterable[str]) -> ToolFilters:
     """Parse CLI filter specifications into a tool-to-pattern mapping."""
 
-    filters: ToolFilters = {
-        tool: list(patterns) for tool, patterns in DEFAULT_TOOL_FILTERS.items()
-    }
+    filters: ToolFilters = {tool: list(patterns) for tool, patterns in DEFAULT_TOOL_FILTERS.items()}
     for spec in specs:
         if FILTER_SPEC_SEPARATOR not in spec:
             raise ValueError(f"Invalid filter '{spec}'. Expected {FILTER_SPEC_FORMAT}")
@@ -177,11 +170,7 @@ def parse_filters(specs: Iterable[str]) -> ToolFilters:
         tool_key = tool.strip()
         if not tool_key:
             raise ValueError(f"Invalid filter '{spec}'. Tool identifier cannot be empty")
-        chunks = [
-            chunk.strip()
-            for chunk in expressions.split(FILTER_PATTERN_SEPARATOR)
-            if chunk.strip()
-        ]
+        chunks = [chunk.strip() for chunk in expressions.split(FILTER_PATTERN_SEPARATOR) if chunk.strip()]
         if not chunks:
             continue
         filters.setdefault(tool_key, []).extend(chunks)

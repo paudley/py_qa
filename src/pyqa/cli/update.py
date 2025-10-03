@@ -26,8 +26,8 @@ from ..update import (
     ensure_lint_install,
 )
 from ._update_cli_models import UpdateOptions, build_update_options
-from .typer_ext import create_typer
 from .shared import Depends
+from .typer_ext import create_typer
 
 update_app = create_typer(name="update", help="Update dependencies across detected workspaces.")
 

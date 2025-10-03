@@ -126,10 +126,7 @@ def build_default_tool_filters() -> ToolFilters:
         merged.setdefault(tool, []).extend(patterns)
     for tool, patterns in catalog_general_suppressions().items():
         merged.setdefault(tool, []).extend(patterns)
-    return {
-        tool: list(dict.fromkeys(patterns))
-        for tool, patterns in merged.items()
-    }
+    return {tool: list(dict.fromkeys(patterns)) for tool, patterns in merged.items()}
 
 
 DEFAULT_TOOL_FILTERS: Final[ToolFilters] = build_default_tool_filters()

@@ -174,8 +174,7 @@ class ToolDefinition:
         )
         if schema_version_value != TOOL_SCHEMA_VERSION:
             raise CatalogIntegrityError(
-                f"{context}: schemaVersion '{schema_version_value}' is not supported;"
-                f" expected '{TOOL_SCHEMA_VERSION}'",
+                f"{context}: schemaVersion '{schema_version_value}' is not supported; expected '{TOOL_SCHEMA_VERSION}'",
             )
 
         metadata = parse_tool_metadata(

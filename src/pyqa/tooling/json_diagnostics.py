@@ -388,7 +388,7 @@ def _append_bracket_segment(
     if segment in {"", _WILDCARD_SYMBOL}:
         if not allow_wildcards:
             raise CatalogIntegrityError(
-                "parser_json_diagnostics: wildcards are not permitted " f"in field paths ('{path}')",
+                f"parser_json_diagnostics: wildcards are not permitted in field paths ('{path}')",
             )
         tokens.append(PathComponent(PathTokenKind.WILDCARD, None))
         return

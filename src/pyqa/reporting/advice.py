@@ -376,7 +376,7 @@ def _append_annotation_guidance(
     if summary:
         accumulator.add(
             AdviceCategory.TYPES,
-            (f"introduce explicit annotations in {summary} to narrow interfaces and satisfy" " Interface Segregation."),
+            (f"introduce explicit annotations in {summary} to narrow interfaces and satisfy Interface Segregation."),
         )
 
 
@@ -562,7 +562,7 @@ def _append_interface_guidance(
             file_path = record.file_path or "this module"
             accumulator.add(
                 AdviceCategory.INTERFACE,
-                (f"reconcile module boundaries in {file_path}; define the missing attribute or" " export it."),
+                (f"reconcile module boundaries in {file_path}; define the missing attribute or export it."),
             )
             return
 

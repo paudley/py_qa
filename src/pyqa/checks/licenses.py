@@ -402,7 +402,7 @@ def _collect_spdx_issues(content: str, lower_content: str, policy: LicensePolicy
         conflicting = sorted(identifier for identifier in identifiers if identifier not in allowed)
         if conflicting:
             formatted = ", ".join(conflicting)
-            message = "Found SPDX license identifier(s) " f"{formatted}; expected '{expected_id}'."
+            message = f"Found SPDX license identifier(s) {formatted}; expected '{expected_id}'."
             issues.append(message)
         if not identifiers.intersection(allowed) and not _matches_snippet(lower_content, snippet):
             expected_tag = f"{SPDX_TAG_LABEL}: {expected_id}"

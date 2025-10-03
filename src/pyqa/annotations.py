@@ -13,21 +13,45 @@ from __future__ import annotations
 import os
 import subprocess
 import threading
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from shutil import which
-from typing import Literal
+from types import ModuleType
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from .context import TreeSitterContextResolver
 from .models import RunResult
 
 try:
-    import spacy  # type: ignore[import]
-    from spacy.language import Language
-except Exception:  # pragma: no cover - optional dependency may be missing
-    spacy = None
-    Language = None  # type: ignore
+    import spacy as _SPACY_MODULE
+except ImportError:  # pragma: no cover - spaCy optional dependency
+    _SPACY_MODULE: ModuleType | None = None
+else:  # pragma: no cover - executed only when spaCy installed
+    _SPACY_MODULE = _SPACY_MODULE
+
+
+class TokenLike(Protocol):
+    """Minimal protocol representing spaCy tokens used by pyqa."""
+
+    text: str
+    idx: int
+    is_stop: bool
+    pos_: str
+    lemma_: str
+
+
+DocLike = Iterable[TokenLike]
+
+
+if TYPE_CHECKING:  # pragma: no cover - type checking aid only
+    from spacy.language import Language as SpacyLanguage
+else:
+    class SpacyLanguage(Protocol):
+        """Callable NLP pipeline contract used at runtime."""
+
+        def __call__(self, text: str) -> DocLike:  # pragma: no cover - protocol
+            ...
 
 
 HighlightKind = Literal[
@@ -72,7 +96,7 @@ class AnnotationEngine:
 
     def __init__(self, model: str | None = None) -> None:
         self._model_name = model or os.getenv("PYQA_NLP_MODEL", "en_core_web_sm")
-        self._nlp: Language | None = None
+        self._nlp: SpacyLanguage | None = None
         self._nlp_lock = threading.Lock()
         self._resolver = TreeSitterContextResolver()
         self._download_attempted = False
@@ -121,8 +145,8 @@ class AnnotationEngine:
         signature = tuple(dict.fromkeys(token for token in signature_tokens if token))
         return MessageAnalysis(spans=tuple(spans), signature=signature)
 
-    def _get_nlp(self) -> Language | None:
-        if spacy is None:
+    def _get_nlp(self) -> SpacyLanguage | None:
+        if _SPACY_MODULE is None:
             return None
         if self._nlp is not None:
             return self._nlp
@@ -130,16 +154,16 @@ class AnnotationEngine:
             if self._nlp is not None:
                 return self._nlp
             try:
-                self._nlp = spacy.load(self._model_name)
-            except Exception:  # pragma: no cover - spaCy optional
+                self._nlp = _SPACY_MODULE.load(self._model_name)
+            except (OSError, IOError):  # pragma: no cover - spaCy optional
                 should_retry = False
                 if not self._download_attempted:
                     self._download_attempted = True
                     should_retry = _download_spacy_model(self._model_name)
                 if should_retry:
                     try:
-                        self._nlp = spacy.load(self._model_name)
-                    except Exception:
+                        self._nlp = _SPACY_MODULE.load(self._model_name)
+                    except (OSError, IOError):
                         self._nlp = None
                 else:
                     self._nlp = None
@@ -209,7 +233,7 @@ def _heuristic_spans(message: str) -> tuple[list[MessageSpan], list[str]]:
     return spans, tokens
 
 
-def _spacy_spans(doc) -> list[MessageSpan]:  # type: ignore[no-untyped-def]
+def _spacy_spans(doc: DocLike) -> list[MessageSpan]:
     spans: list[MessageSpan] = []
     for token in doc:
         if token.is_stop or not token.text.strip():
@@ -235,7 +259,7 @@ def _spacy_spans(doc) -> list[MessageSpan]:  # type: ignore[no-untyped-def]
     return spans
 
 
-def _signature_from_doc(doc) -> list[str]:  # type: ignore[no-untyped-def]
+def _signature_from_doc(doc: DocLike) -> list[str]:
     tokens: list[str] = []
     for token in doc:
         if token.is_stop or not token.text.strip():
@@ -278,13 +302,13 @@ def _overlap(left: MessageSpan, right: MessageSpan) -> bool:
 
 
 def _download_spacy_model(model_name: str) -> bool:
-    if spacy is None:
+    if _SPACY_MODULE is None:
         return False
     uv_path = which("uv")
     if not uv_path:
         return False
 
-    version = getattr(spacy, "__version__", None)
+    version = getattr(_SPACY_MODULE, "__version__", None)
     if not version:
         return False
 

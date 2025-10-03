@@ -38,66 +38,33 @@ PROGRESS_EVENT_START: Final[ProgressPhaseLiteral] = "start"
 PROGRESS_EVENT_COMPLETED: Final[ProgressPhaseLiteral] = "completed"
 
 NORMAL_PRESET_HELP: Final[str] = (
-    "Apply the built-in 'normal' lint preset "
-    "(concise output, advice, no tests, local linters)."
+    "Apply the built-in 'normal' lint preset (concise output, advice, no tests, local linters)."
 )
 FILTER_HELP: Final[str] = "Filter stdout/stderr from TOOL using regex (TOOL:pattern)."
 OUTPUT_MODE_HELP: Final[str] = "Output mode: concise, pretty, or raw."
 REPORT_JSON_HELP: Final[str] = "Write JSON report to the provided path."
 SARIF_HELP: Final[str] = "Write SARIF 2.1.0 report to the provided path."
 PR_SUMMARY_OUT_HELP: Final[str] = "Write a Markdown PR summary of diagnostics."
-PR_SUMMARY_MIN_SEVERITY_HELP: Final[str] = (
-    "Lowest severity for PR summary (error, warning, notice, note)."
-)
+PR_SUMMARY_MIN_SEVERITY_HELP: Final[str] = "Lowest severity for PR summary (error, warning, notice, note)."
 PR_SUMMARY_TEMPLATE_HELP: Final[str] = "Custom format string for PR summary entries."
-JOBS_HELP: Final[str] = (
-    "Max parallel jobs (defaults to 75% of available CPU cores)."
-)
+JOBS_HELP: Final[str] = "Max parallel jobs (defaults to 75% of available CPU cores)."
 CACHE_DIR_HELP: Final[str] = "Cache directory for tool results."
-USE_LOCAL_LINTERS_HELP: Final[str] = (
-    "Force vendored linters even if compatible system versions exist."
-)
-STRICT_CONFIG_HELP: Final[str] = (
-    "Treat configuration warnings (unknown keys, etc.) as errors."
-)
-LINE_LENGTH_HELP: Final[str] = (
-    "Global preferred maximum line length applied to supported tools."
-)
-MAX_COMPLEXITY_HELP: Final[str] = (
-    "Override maximum cyclomatic complexity shared across supported tools."
-)
-MAX_ARGUMENTS_HELP: Final[str] = (
-    "Override maximum function arguments shared across supported tools."
-)
-TYPE_CHECKING_HELP: Final[str] = (
-    "Override type-checking strictness (lenient, standard, or strict)."
-)
-BANDIT_SEVERITY_HELP: Final[str] = (
-    "Override Bandit's minimum severity (low, medium, high)."
-)
-BANDIT_CONFIDENCE_HELP: Final[str] = (
-    "Override Bandit's minimum confidence (low, medium, high)."
-)
+USE_LOCAL_LINTERS_HELP: Final[str] = "Force vendored linters even if compatible system versions exist."
+STRICT_CONFIG_HELP: Final[str] = "Treat configuration warnings (unknown keys, etc.) as errors."
+LINE_LENGTH_HELP: Final[str] = "Global preferred maximum line length applied to supported tools."
+MAX_COMPLEXITY_HELP: Final[str] = "Override maximum cyclomatic complexity shared across supported tools."
+MAX_ARGUMENTS_HELP: Final[str] = "Override maximum function arguments shared across supported tools."
+TYPE_CHECKING_HELP: Final[str] = "Override type-checking strictness (lenient, standard, or strict)."
+BANDIT_SEVERITY_HELP: Final[str] = "Override Bandit's minimum severity (low, medium, high)."
+BANDIT_CONFIDENCE_HELP: Final[str] = "Override Bandit's minimum confidence (low, medium, high)."
 PYLINT_FAIL_UNDER_HELP: Final[str] = "Override pylint fail-under score (0-10)."
-SENSITIVITY_HELP: Final[str] = (
-    "Overall sensitivity (low, medium, high, maximum) to cascade severity tweaks."
-)
-SQL_DIALECT_HELP: Final[str] = (
-    "Default SQL dialect for dialect-aware tools (e.g. sqlfluff)."
-)
+SENSITIVITY_HELP: Final[str] = "Overall sensitivity (low, medium, high, maximum) to cascade severity tweaks."
+SQL_DIALECT_HELP: Final[str] = "Default SQL dialect for dialect-aware tools (e.g. sqlfluff)."
 TOOL_INFO_HELP: Final[str] = "Display detailed information for TOOL and exit."
-FETCH_ALL_TOOLS_HELP: Final[str] = (
-    "Download or prepare runtimes for every registered tool and exit."
-)
-ADVICE_HELP: Final[str] = (
-    "Provide SOLID-aligned refactoring suggestions alongside diagnostics."
-)
-VALIDATE_SCHEMA_HELP: Final[str] = (
-    "Validate catalog definitions against bundled schemas and exit."
-)
-PYTHON_VERSION_HELP: Final[str] = (
-    "Override the Python interpreter version advertised to tools (e.g. 3.12)."
-)
+FETCH_ALL_TOOLS_HELP: Final[str] = "Download or prepare runtimes for every registered tool and exit."
+ADVICE_HELP: Final[str] = "Provide SOLID-aligned refactoring suggestions alongside diagnostics."
+VALIDATE_SCHEMA_HELP: Final[str] = "Validate catalog definitions against bundled schemas and exit."
+PYTHON_VERSION_HELP: Final[str] = "Override the Python interpreter version advertised to tools (e.g. 3.12)."
 
 
 @dataclass(slots=True)

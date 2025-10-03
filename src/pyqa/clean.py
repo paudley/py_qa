@@ -266,11 +266,7 @@ def _discover_py_qa_directories(root: Path) -> list[Path]:
         candidates = list(root.rglob(PY_QA_DIR_NAME))
     except OSError:
         return []
-    return [
-        candidate
-        for candidate in candidates
-        if candidate.is_dir() and candidate.is_relative_to(root)
-    ]
+    return [candidate for candidate in candidates if candidate.is_dir() and candidate.is_relative_to(root)]
 
 
 def _remove_path(path: Path) -> None:

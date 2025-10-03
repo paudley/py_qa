@@ -10,7 +10,6 @@ from typing import Annotated
 import typer
 
 from ..clean import sparkly_clean
-from .typer_ext import create_typer
 from ._clean_cli_models import CleanCLIOptions, build_clean_options
 from ._clean_cli_services import (
     emit_dry_run_summary,
@@ -18,6 +17,7 @@ from ._clean_cli_services import (
     load_clean_config,
 )
 from .shared import CLIError, Depends, build_cli_logger, register_callback
+from .typer_ext import create_typer
 
 clean_app = create_typer(
     name="sparkly-clean",

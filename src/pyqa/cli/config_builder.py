@@ -24,10 +24,10 @@ from ._config_builder_constants import (
     DEDUPE_SECTION,
     EXECUTION_SECTION,
     FILE_DISCOVERY_SECTION,
-    LintOptionKey,
     OUTPUT_SECTION,
     SEVERITY_RULES_KEY,
     TOOL_SETTINGS_KEY,
+    LintOptionKey,
 )
 from ._config_builder_execution import (
     apply_execution_overrides,
@@ -38,8 +38,6 @@ from ._config_builder_file_discovery import (
     collect_file_discovery_overrides,
 )
 from ._config_builder_output import apply_output_overrides, collect_output_overrides
-from .options import LintOptions
-from .python_version_resolver import resolve_python_version
 from ._config_builder_overrides import (
     ComplexityOverrides,
     SeverityOverrides,
@@ -49,7 +47,8 @@ from ._config_builder_overrides import (
     apply_strictness_overrides,
     coerce_enum_value,
 )
-
+from .options import LintOptions
+from .python_version_resolver import resolve_python_version
 
 
 def build_config(options: LintOptions) -> Config:
@@ -87,10 +86,7 @@ def build_config(options: LintOptions) -> Config:
         EXECUTION_SECTION: execution_cfg,
         DEDUPE_SECTION: dedupe_cfg,
         SEVERITY_RULES_KEY: list(base_config.severity_rules),
-        TOOL_SETTINGS_KEY: {
-            tool: dict(settings)
-            for tool, settings in base_config.tool_settings.items()
-        },
+        TOOL_SETTINGS_KEY: {tool: dict(settings) for tool, settings in base_config.tool_settings.items()},
     }
     config = base_config.model_copy(update=config_updates, deep=True)
 

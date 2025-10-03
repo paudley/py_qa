@@ -3,12 +3,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from ..config import Config
-from ..discovery.base import SupportsDiscovery
 from ..discovery import build_default_discovery
+from ..discovery.base import SupportsDiscovery
 from ..execution.orchestrator import Orchestrator, OrchestratorHooks
 from ..tooling.catalog.model_catalog import CatalogSnapshot
 from ..tools.builtin_registry import initialize_registry

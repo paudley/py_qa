@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 import typer
 
@@ -49,19 +50,12 @@ def build_cli_logger(*, emoji: bool) -> CLILogger:
 Callback = TypeVar("Callback", bound=Callable[..., object])
 
 
-try:  # pragma: no cover - attribute absent on older Typer builds
-    Depends = getattr(typer, "Depends")
-except AttributeError:  # pragma: no cover - exercised only on fallback path
-    @dataclass(slots=True)
-    class Depends:
-        """Fallback dependency marker compatible with Typer's ``Depends``."""
+@dataclass(slots=True)
+class Depends:
+    """Describe a dependency callable for Typer-compatible injection."""
 
-        dependency: Any
-
-        def resolve(self) -> Any:
-            """Return the stored dependency callable."""
-
-            return self.dependency
+    dependency: Callable[..., Any]
+    use_cache: bool = True
 
 
 def command_decorator(

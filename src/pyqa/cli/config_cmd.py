@@ -12,13 +12,12 @@ import typer
 from pydantic import BaseModel, ConfigDict
 
 from ..config_loader import ConfigLoadResult, FieldUpdate
-from .typer_ext import create_typer
 from ._config_cmd_services import (
     JSON_FORMAT,
-    build_config_diff,
-    diff_snapshots,
     UnknownConfigLayerError,
+    build_config_diff,
     build_tool_schema_payload,
+    diff_snapshots,
     load_config_with_trace,
     render_config_mapping,
     render_schema,
@@ -29,6 +28,7 @@ from ._config_cmd_services import (
     write_output,
 )
 from .shared import CLIError, build_cli_logger, register_command
+from .typer_ext import create_typer
 
 config_app = create_typer(help="Inspect, validate, and document configuration layers.")
 

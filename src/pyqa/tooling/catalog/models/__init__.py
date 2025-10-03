@@ -117,9 +117,7 @@ def _build_tool_model_exports() -> tuple[tuple[str, object], ...]:
         if expected is None:
             raise RuntimeError(f"model_tool.TOOL_MODEL_EXPORTS contains an unknown symbol: {name!r}")
         if expected is not obj:
-            raise RuntimeError(
-                f"model_tool.TOOL_MODEL_OBJECTS entry for {name!r} does not match the " "imported symbol."
-            )
+            raise RuntimeError(f"model_tool.TOOL_MODEL_OBJECTS entry for {name!r} does not match the imported symbol.")
         exports.append((name, obj))
     missing_symbols = set(_TOOL_MODEL_OBJECT_LOOKUP).difference(TOOL_MODEL_EXPORTS)
     if missing_symbols:

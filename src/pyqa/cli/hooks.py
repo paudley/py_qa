@@ -9,11 +9,10 @@ from typing import Annotated
 
 import typer
 
-from .typer_ext import create_typer
 from ._hooks_cli_models import Depends, HookCLIOptions, build_hook_options
 from ._hooks_cli_services import emit_hooks_summary, perform_installation
 from .shared import CLIError, build_cli_logger, register_callback
-
+from .typer_ext import create_typer
 
 hooks_app = create_typer(
     name="install-hooks",

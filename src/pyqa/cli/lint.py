@@ -12,15 +12,15 @@ from rich.progress import Progress
 from ..config import ConfigError
 from ..console import is_tty
 from ._lint_cli_models import LintCLIInputs, _build_lint_cli_inputs
-from ._lint_preparation import PreparedLintState, prepare_lint_state
-from ._lint_runtime import LintRuntimeContext, build_lint_runtime_context
-from ._lint_progress import ExecutionProgressController
-from ._lint_reporting import append_internal_quality_checks, handle_reporting
 from ._lint_meta import (
     MetaActionOutcome,
     handle_initial_meta_actions,
     handle_runtime_meta_actions,
 )
+from ._lint_preparation import PreparedLintState, prepare_lint_state
+from ._lint_progress import ExecutionProgressController
+from ._lint_reporting import append_internal_quality_checks, handle_reporting
+from ._lint_runtime import LintRuntimeContext, build_lint_runtime_context
 from .config_builder import build_config
 from .shared import CLILogger, Depends, build_cli_logger
 
@@ -33,6 +33,8 @@ PHASE_SORT_ORDER: tuple[str, ...] = (
     "coverage",
     "utility",
 )
+
+
 def lint_command(
     ctx: typer.Context,
     inputs: Annotated[LintCLIInputs, Depends(_build_lint_cli_inputs)],

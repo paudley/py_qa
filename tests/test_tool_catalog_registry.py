@@ -331,9 +331,5 @@ def test_register_catalog_tools_refreshes_cache_on_change(
     )
 
     assert load_calls == 1
-    command = (
-        registry.get("sample-tool")
-        .actions[0]
-        .build_command(ToolContext(cfg=Config(), root=tmp_path))
-    )
+    command = registry.get("sample-tool").actions[0].build_command(ToolContext(cfg=Config(), root=tmp_path))
     assert command[-2:] == ["echo", "two"]

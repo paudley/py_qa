@@ -52,7 +52,7 @@ class HookCLIOptions:
         *,
         dry_run: bool,
         emoji: bool,
-    ) -> "HookCLIOptions":
+    ) -> HookCLIOptions:
         """Return options parsed from CLI arguments."""
 
         resolved_root = root.resolve()

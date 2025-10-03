@@ -5,6 +5,7 @@ This guide documents the architecture, patterns, and best practices used across
 refactoring the command-line entrypoints.
 
 ## Architecture Overview
+
 - **Models vs Services vs Orchestration**: Each command module should expose
   structured input models (dataclasses or Typer dependencies), services that
   transform or enrich that data, and a thin orchestration function (Typer
@@ -19,6 +20,7 @@ refactoring the command-line entrypoints.
   modules.
 
 ## Key Modules
+
 - `lint.py`: Orchestrates lint execution by building structured inputs (`_lint_cli_models.py`), preparing state (`_lint_preparation.py`), and delegating to
   runtime services (`_lint_runtime.py`, `_lint_progress.py`, `_lint_reporting.py`, `_lint_meta.py`).
 - `config_cmd.py`: Provides inspection utilities using `_config_cmd_services.py`
@@ -29,26 +31,33 @@ refactoring the command-line entrypoints.
   `_tool_info_services.py`.
 
 ## Patterns & Best Practices
+
 1. **Single Responsibility Principle (SRP)**
+
    - Keep Typer commands thin; push preparation and business logic into services.
    - Group related helpers into focused modules (`_lint_preparation`, `_lint_runtime`, etc.).
 
-2. **Open/Closed Principle (OCP)**
+1. **Open/Closed Principle (OCP)**
+
    - Swapping or adding behaviours should be data-driven (e.g. catalog or config dataclasses) rather than editing orchestration logic.
    - Use factories or hooks for behaviours that may vary (progress controller, logging, runtime orchestrator).
 
-3. **Liskov Substitution Principle (LSP)**
+1. **Liskov Substitution Principle (LSP)**
+
    - When using interfaces (e.g. discovery matchers, runtime dependencies), ensure any implementation works with existing orchestration.
 
-4. **Interface Segregation Principle (ISP)**
+1. **Interface Segregation Principle (ISP)**
+
    - Provide narrow helper interfaces (e.g. registration decorators) instead of dumping large utility functions.
    - Depend on precise dataclasses or DTOs instead of untyped mappings.
 
-5. **Dependency Inversion Principle (DIP)**
+1. **Dependency Inversion Principle (DIP)**
+
    - Orchestration functions (`lint_command`, `config_show`, etc.) should depend on abstractions or simple factories, not concrete module-level singletons.
    - Lint runtime creation uses `build_lint_runtime_context` so tests can inject alternative orchestrators.
 
 ## Usage Tips
+
 - **Typer Registration**: Use `command_decorator` / `register_command` and
   `callback_decorator` / `register_callback` to keep registration consistent and lazily import heavy dependencies.
 - **Logging**: Always obtain a `CLILogger` via `build_cli_logger` so logging respects `--no-emoji`/`--no-color` flags.
@@ -57,8 +66,11 @@ refactoring the command-line entrypoints.
 - **Laziness**: The package-level `app` export in `pyqa.cli` is resolved lazily to avoid `runpy` warnings. External users should continue importing `pyqa.cli.app` normally.
 - **Backwards Compatibility**: `_build_config` remains as a compatibility shim (dataclass + service) to support legacy automation relying on keyword arguments.
 - **Wrappers**: Root-level launchers (e.g. `./lint`, `./tool-info`) all delegate through `scripts.cli_launcher.launch`, which handles interpreter selection, `PYTHONPATH`, and optional `uv` fallback.
+- **Wrapper troubleshooting**: When wrappers misbehave, enable `PYQA_WRAPPER_VERBOSE=1` to see interpreter detection, check `PYQA_PYTHON`/`PYQA_UV` overrides, and confirm `.lint-cache/uv` is writable for automatic downloads.
+- **Wrapper failure modes**: A successful probe requires Python ≥3.12 and imports resolving under `src/`; otherwise the launcher falls back to `uv --project … run python -m pyqa.cli.app`. Propagated exit codes make it safe to rely on wrappers within CI.
 
 ## Anti-Patterns
+
 - **Direct Registry/Orchestrator Construction**: Do not instantiate `Orchestrator`
   or tool registries directly inside commands. Use the runtime factory helpers so tests and future refactors remain resilient.
 - **Inline Option Parsing**: Avoid manual parsing of `ctx.args` or raw `sys.argv`
@@ -66,6 +78,7 @@ refactoring the command-line entrypoints.
 - **Suppression Comments**: The CLI package must not use lint-suppression comments (`# type: ignore`, `# noqa`) unless paired with a robust explanation and approval. Refactor instead.
 
 ## Future Enhancements
+
 - **Shebang & Tree-sitter Catalog Integration**: Expand language definitions in
   the catalog (`SHEBANG.md`) to include shebang matchers and Tree-sitter grammar metadata, keeping discovery and context resolution data-driven.
 - **Language-Level Defaults**: Consolidate per-language defaults (extensions,
@@ -73,6 +86,7 @@ refactoring the command-line entrypoints.
 - **Testing**: Strengthen CLI integration tests to cover new dependency factories and meta-command flows, especially once shebang detection is catalog-driven.
 
 ## References
+
 - [SOLID CLI Recovery Plan](../SOLID_CLI.md)
 - [Shebang Detection Plan](../SHEBANG.md)
 - `src/pyqa/cli/shared.py`, `src/pyqa/cli/typer_ext.py`

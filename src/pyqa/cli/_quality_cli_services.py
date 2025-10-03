@@ -10,13 +10,13 @@ from ..config_loader import ConfigError, ConfigLoader
 from ..constants import PY_QA_DIR_NAME
 from ..quality import QualityChecker, QualityCheckerOptions
 from ..workspace import is_py_qa_workspace
-from .utils import filter_py_qa_paths
 from ._quality_cli_models import (
     QualityCLIOptions,
     QualityConfigContext,
     QualityTargetResolution,
 )
 from .shared import CLIError, CLILogger
+from .utils import filter_py_qa_paths
 
 
 def load_quality_context(

@@ -3,14 +3,15 @@
 
 from __future__ import annotations
 
-from typing import Sequence, cast
+from collections.abc import Sequence
+from typing import cast
 
 from ..config import Config
 from ..config_loader import ConfigError, ConfigLoader, FieldUpdate
 from ..tooling import CatalogSnapshot, ToolDefinition
+from ..tools.base import Tool
 from ..tools.builtins import initialize_registry
 from ..tools.registry import DEFAULT_REGISTRY
-from ..tools.base import Tool
 from ._tool_info_models import ToolInfoConfigData, ToolInfoContext, ToolInfoInputs
 from .shared import CLIError, CLILogger
 from .utils import check_tool_status
@@ -153,11 +154,7 @@ def provenance_updates_for_tool(
         tuple[FieldUpdate, ...]: Filtered updates relevant to ``tool_name``.
     """
 
-    return tuple(
-        update
-        for update in updates
-        if update.section == "tool_settings" and update.field == tool_name
-    )
+    return tuple(update for update in updates if update.section == "tool_settings" and update.field == tool_name)
 
 
 __all__ = [

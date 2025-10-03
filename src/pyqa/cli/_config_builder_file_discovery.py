@@ -124,8 +124,7 @@ def resolve_roots(
 
     if LintOptionKey.DIRS.value in options.provided:
         resolved_dirs = (
-            directory if directory.is_absolute() else (project_root / directory)
-            for directory in options.dirs
+            directory if directory.is_absolute() else (project_root / directory) for directory in options.dirs
         )
         roots.extend(path.resolve() for path in resolved_dirs)
 
@@ -146,9 +145,7 @@ def resolve_explicit_files(
 
     if LintOptionKey.PATHS.value in options.provided:
         for raw_path in options.paths:
-            resolved_path = (
-                raw_path if raw_path.is_absolute() else project_root / raw_path
-            ).resolve()
+            resolved_path = (raw_path if raw_path.is_absolute() else project_root / raw_path).resolve()
             if resolved_path.is_dir():
                 roots.append(resolved_path)
                 user_dirs.append(resolved_path)
@@ -157,18 +154,12 @@ def resolve_explicit_files(
                 if resolved_path not in explicit_files:
                     explicit_files.append(resolved_path)
 
-    boundaries = shared_unique_paths(
-        boundary
-        for boundary in derive_boundaries(user_dirs, user_files)
-        if boundary
-    )
+    boundaries = shared_unique_paths(boundary for boundary in derive_boundaries(user_dirs, user_files) if boundary)
     if not boundaries:
         return explicit_files, []
 
     filtered_roots = _filter_roots_within_boundaries(roots, boundaries)
-    filtered_files = [
-        path for path in explicit_files if is_within_any(path, boundaries)
-    ]
+    filtered_files = [path for path in explicit_files if is_within_any(path, boundaries)]
     roots.clear()
     roots.extend(filtered_roots)
     return filtered_files, boundaries
@@ -216,9 +207,7 @@ def _filter_roots_within_boundaries(
     matching = [path for path in roots if is_within_any(path, boundaries)]
     if matching:
         merged = list(matching)
-        merged.extend(
-            path for path in boundaries if path not in matching and path.is_dir()
-        )
+        merged.extend(path for path in boundaries if path not in matching and path.is_dir())
         return shared_unique_paths(merged)
     boundary_dirs = [path for path in boundaries if path.is_dir()]
     return shared_unique_paths(boundary_dirs)

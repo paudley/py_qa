@@ -119,4 +119,3 @@ __all__ = [
     "apply_strictness_overrides",
     "coerce_enum_value",
 ]
-

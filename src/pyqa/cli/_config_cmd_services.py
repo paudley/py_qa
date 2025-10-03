@@ -6,15 +6,15 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
 from pathlib import Path
+from typing import Any
 
 import typer
 
 from ..config_loader import (
     ConfigError,
-    ConfigLoadResult,
     ConfigLoader,
+    ConfigLoadResult,
     FieldUpdate,
     generate_config_schema,
 )
@@ -78,12 +78,8 @@ def summarise_updates(updates: Sequence[FieldUpdate]) -> list[str]:
 
     rendered: list[str] = []
     for update in updates:
-        field_path = (
-            update.field if update.section == "root" else f"{update.section}.{update.field}"
-        )
-        rendered.append(
-            f"- {field_path} <- {update.source} -> {summarise_value(field_path, update.value)}"
-        )
+        field_path = update.field if update.section == "root" else f"{update.section}.{update.field}"
+        rendered.append(f"- {field_path} <- {update.source} -> {summarise_value(field_path, update.value)}")
     return rendered
 
 
@@ -175,9 +171,7 @@ def build_tool_schema_payload() -> dict[str, Any]:
 def collect_layer_snapshots(result: ConfigLoadResult) -> dict[str, dict[str, object]]:
     """Return snapshot mapping normalised to lower-case keys."""
 
-    snapshots: dict[str, dict[str, object]] = {
-        key.lower(): dict(value) for key, value in result.snapshots.items()
-    }
+    snapshots: dict[str, dict[str, object]] = {key.lower(): dict(value) for key, value in result.snapshots.items()}
     snapshots[FINAL_LAYER_KEY] = dict(render_config_mapping(result))
     return snapshots
 

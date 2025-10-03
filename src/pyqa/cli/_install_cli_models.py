@@ -10,6 +10,7 @@ from typing import Annotated
 import typer
 
 from .options import InstallOptions
+
 ROOT_OPTION = Annotated[
     Path,
     typer.Option(Path.cwd(), "--root", "-r", help="Project root to bootstrap."),

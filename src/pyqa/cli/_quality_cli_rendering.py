@@ -52,10 +52,8 @@ def render_py_qa_skip_warning(
         return
     unique = ", ".join(ignored)
     logger.warn(
-        (
-            f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
-            "unless check-quality runs inside the py_qa workspace."
-        )
+        f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
+        "unless check-quality runs inside the py_qa workspace."
     )
 
 

@@ -21,6 +21,7 @@ from ..console import console_manager
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from rich.console import Console
+
     from ..execution.orchestrator import OrchestratorHooks
     from ..models import RunResult, ToolOutcome
     from ._lint_runtime import LintRuntimeContext
@@ -30,14 +31,14 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only
 class ExecutionProgressController:
     """Manage orchestrator progress feedback for lint execution."""
 
-    runtime: "LintRuntimeContext"
+    runtime: LintRuntimeContext
     is_terminal: bool = True
     extra_phases: int = 2
     progress_factory: type[Progress] = Progress
     enabled: bool = field(init=False, default=False)
     progress: Progress | None = field(init=False, default=None)
     task_id: TaskID | None = field(init=False, default=None)
-    console: "Console | None" = field(init=False, default=None)
+    console: Console | None = field(init=False, default=None)
     lock: Lock | None = field(init=False, default=None)
     total: int = field(init=False, default=0)
     completed: int = field(init=False, default=0)
@@ -76,13 +77,13 @@ class ExecutionProgressController:
         self.total = self.extra_phases
 
     @staticmethod
-    def _determine_bar_width(console: "Console") -> int:
+    def _determine_bar_width(console: Console) -> int:
         width = getattr(console.size, "width", 100)
         reserved = 40
         available = max(10, width - reserved)
         return max(20, int(available * 0.8))
 
-    def install(self, hooks: "OrchestratorHooks") -> None:
+    def install(self, hooks: OrchestratorHooks) -> None:
         if not self.enabled:
             return
         progress = self.progress
@@ -105,7 +106,7 @@ class ExecutionProgressController:
                     current_status="running",
                 )
 
-        def after_tool(outcome: "ToolOutcome") -> None:
+        def after_tool(outcome: ToolOutcome) -> None:
             with lock:
                 ensure_started()
                 self._advance(1)
@@ -129,7 +130,7 @@ class ExecutionProgressController:
                     current_status=status,
                 )
 
-        def after_execution_hook(result: "RunResult") -> None:
+        def after_execution_hook(result: RunResult) -> None:
             with lock:
                 ensure_started()
                 self._advance(1)

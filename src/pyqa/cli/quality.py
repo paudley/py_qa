@@ -10,14 +10,12 @@ import typer
 
 from ..config import QualityConfigSection
 from ..quality import check_commit_message, ensure_branch_protection
-from .typer_ext import create_typer
 from ._quality_cli_models import (
     EMOJI_OPTION,
-    QualityCLIOptions,
     ROOT_OPTION,
+    QualityCLIOptions,
     build_quality_options,
 )
-from .shared import Depends
 from ._quality_cli_rendering import render_py_qa_skip_warning, render_quality_result
 from ._quality_cli_services import (
     build_quality_checker,
@@ -26,7 +24,8 @@ from ._quality_cli_services import (
     render_config_warnings,
     resolve_target_files,
 )
-from .shared import CLIError, build_cli_logger, register_callback
+from .shared import CLIError, Depends, build_cli_logger, register_callback
+from .typer_ext import create_typer
 
 quality_app = create_typer(
     name="check-quality",

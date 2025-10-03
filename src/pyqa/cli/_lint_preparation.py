@@ -4,46 +4,50 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 import typer
 
 from ..config import default_parallel_jobs
 from ..constants import PY_QA_DIR_NAME
-from ..workspace import is_py_qa_workspace
 from ..filesystem.paths import normalize_path
+from ..workspace import is_py_qa_workspace
 from ._lint_cli_models import (
+    OUTPUT_MODE_CONCISE,
     LintCLIInputs,
-    LintDisplayOptions as CLIDisplayOptions,
+)
+from ._lint_cli_models import LintDisplayOptions as CLIDisplayOptions
+from ._lint_cli_models import (
     LintExecutionRuntimeParams,
     LintMetaParams,
-    LintPathParams,
     LintOutputArtifacts,
     LintOutputParams,
-    OutputModeLiteral,
-    OUTPUT_MODE_CONCISE,
+    LintPathParams,
     LintReportingParams,
+    OutputModeLiteral,
 )
 from .options import (
-    LintOptions,
-    LintTargetOptions,
-    LintGitOptions,
-    LintSelectionOptions,
-    LintDisplayOptions as OptionsDisplayOptions,
-    LintSummaryOptions,
-    LintOutputBundle,
-    ExecutionRuntimeOptions,
     ExecutionFormattingOptions,
-    LintExecutionOptions,
+    ExecutionRuntimeOptions,
     LintComplexityOptions,
-    LintStrictnessOptions,
-    LintSeverityOptions,
-    LintOverrideOptions,
 )
-from .utils import filter_py_qa_paths
+from .options import LintDisplayOptions as OptionsDisplayOptions
+from .options import (
+    LintExecutionOptions,
+    LintGitOptions,
+    LintOptions,
+    LintOutputBundle,
+    LintOverrideOptions,
+    LintSelectionOptions,
+    LintSeverityOptions,
+    LintStrictnessOptions,
+    LintSummaryOptions,
+    LintTargetOptions,
+)
 from .shared import CLILogger
+from .utils import filter_py_qa_paths
 
 
 @dataclass(slots=True)

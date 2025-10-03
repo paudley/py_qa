@@ -29,10 +29,7 @@ STAGED_OPTION = Annotated[
     typer.Option(
         False,
         "--staged/--no-staged",
-        help=(
-            "Use staged files instead of discovering all tracked files when no "
-            "PATHS are provided."
-        ),
+        help=("Use staged files instead of discovering all tracked files when no PATHS are provided."),
     ),
 ]
 FIX_OPTION = Annotated[
@@ -98,7 +95,7 @@ class QualityCLIOptions:
         requested_checks: tuple[str, ...],
         include_schema: bool,
         emoji: bool,
-    ) -> "QualityCLIOptions":
+    ) -> QualityCLIOptions:
         """Return options parsed from Typer callback arguments.
 
         Args:

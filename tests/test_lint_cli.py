@@ -19,9 +19,9 @@ from pyqa.cli.typer_ext import _primary_option_name
 from pyqa.config import Config
 from pyqa.config_loader import ConfigLoader
 from pyqa.models import RunResult, ToolOutcome
-from pyqa.quality import QualityCheckResult, QualityChecker, QualityCheckerOptions, check_commit_message
-from pyqa.tools.registry import DEFAULT_REGISTRY
 from pyqa.tool_env.models import PreparedCommand
+
+
 def test_lint_warns_when_py_qa_path_outside_workspace(tmp_path: Path, monkeypatch) -> None:
     runner = CliRunner()
 
@@ -247,8 +247,6 @@ copyright = "Blackcat"
     )
 
 
-
-
 def test_lint_meta_normal_applies_defaults(monkeypatch, tmp_path: Path) -> None:
     runner = CliRunner()
     captured: dict[str, Any] = {}
@@ -294,6 +292,7 @@ def test_lint_meta_normal_applies_defaults(monkeypatch, tmp_path: Path) -> None:
     assert isinstance(config, Config)
     resolved_tests = (tmp_path / "tests").resolve()
     assert any(path == resolved_tests for path in config.file_discovery.excludes)
+
 
 def test_concise_mode_renders_progress_status(monkeypatch, tmp_path: Path) -> None:
     runner = CliRunner()
@@ -417,16 +416,12 @@ def test_concise_mode_renders_progress_status(monkeypatch, tmp_path: Path) -> No
     records = progress_instances[0].records
     assert any(event[0] == "start" for event in records)
     advances = [event for event in records if event[0] == "advance"]
-    assert len(advances) == 4, (
-        "two actions plus post-processing and rendering phases should advance"
-    )
+    assert len(advances) == 4, "two actions plus post-processing and rendering phases should advance"
     assert any(event[0] == "update" and event[2] == 4 for event in records), (
         "progress total should include tool actions and extra phases"
     )
     assert any(event[0] == "update" and event[1].startswith("Linting ruff") for event in records)
-    status_updates = [
-        event for event in records if event[0] == "update" and isinstance(event[3], dict)
-    ]
+    status_updates = [event for event in records if event[0] == "update" and isinstance(event[3], dict)]
     status_values = [event[3].get("current_status", "") for event in status_updates]
     assert any("queued" in status for status in status_values)
     assert any("post-processing" in status for status in status_values)

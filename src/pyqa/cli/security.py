@@ -23,9 +23,7 @@ def security_scan_command(
 ) -> None:
     """Run security scans across the project."""
     root_path = options.root
-    target_candidates = list(
-        _resolve_security_targets(options.files, root_path, options.staged)
-    )
+    target_candidates = list(_resolve_security_targets(options.files, root_path, options.staged))
     target_files, ignored_py_qa = filter_py_qa_paths(target_candidates, root_path)
     use_emoji = options.use_emoji
     if ignored_py_qa:
@@ -69,9 +67,7 @@ def _report_security_findings(result: SecurityScanResult, *, use_emoji: bool) ->
     if result.findings:
         if emitted_header or emitted_bandit:
             typer.echo("")
-        failure_message = (
-            f"{emoji('❌ ', use_emoji)}Security scan found {result.findings} potential issue(s)"
-        ).strip()
+        failure_message = (f"{emoji('❌ ', use_emoji)}Security scan found {result.findings} potential issue(s)").strip()
         typer.echo(failure_message)
         return 1
     success_message = f"{emoji('✅ ', use_emoji)}No security issues detected".strip()

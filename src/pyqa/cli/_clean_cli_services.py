@@ -7,8 +7,8 @@ from pathlib import Path
 
 from ..clean import CleanConfig, CleanResult
 from ..config_loader import ConfigError, ConfigLoader
-from ..filesystem.paths import display_relative_path
 from ..constants import PY_QA_DIR_NAME
+from ..filesystem.paths import display_relative_path
 from .shared import CLIError, CLILogger
 
 
@@ -52,10 +52,8 @@ def emit_py_qa_warning(result: CleanResult, root: Path, *, logger: CLILogger) ->
     ignored = [display_relative_path(path, root) for path in result.ignored_py_qa]
     unique = ", ".join(dict.fromkeys(ignored))
     logger.warn(
-        (
-            f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
-            "unless sparkly-clean runs inside the py_qa workspace."
-        )
+        f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
+        "unless sparkly-clean runs inside the py_qa workspace."
     )
 
 

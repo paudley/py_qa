@@ -26,7 +26,7 @@ FetchResult = list[tuple[str, str, PreparedCommand | None, str | None]]
 
 
 def render_fetch_all_tools(
-    runtime: "LintRuntimeContext",
+    runtime: LintRuntimeContext,
     *,
     phase_order: tuple[str, ...],
 ) -> int:
@@ -35,9 +35,7 @@ def render_fetch_all_tools(
     config = runtime.config
     state = runtime.state
     total_actions = sum(len(tool.actions) for tool in DEFAULT_REGISTRY.tools())
-    progress_enabled = (
-        total_actions > 0 and not state.display.quiet and config.output.color and is_tty()
-    )
+    progress_enabled = total_actions > 0 and not state.display.quiet and config.output.color and is_tty()
     console = console_manager.get(color=config.output.color, emoji=config.output.emoji)
     verbose = state.display.verbose
 
@@ -51,7 +49,7 @@ def render_fetch_all_tools(
 
 
 def _fetch_with_progress(
-    runtime: "LintRuntimeContext",
+    runtime: LintRuntimeContext,
     total_actions: int,
     console,
     verbose: bool,
@@ -123,11 +121,7 @@ def _render_fetch_summary(
     logger = state.logger
     tool_lookup = {tool.name: tool for tool in DEFAULT_REGISTRY.tools()}
     phase_rank = {
-        name: (
-            phase_order.index(tool.phase)
-            if tool.phase in phase_order
-            else len(phase_order)
-        )
+        name: (phase_order.index(tool.phase) if tool.phase in phase_order else len(phase_order))
         for name, tool in tool_lookup.items()
     }
     sorted_results = sorted(
@@ -179,9 +173,7 @@ def _format_fetch_row(
         status = "error"
         source = "-"
         version = "-"
-        failure_message = (
-            f"Failed to prepare {tool_name}:{action_name} — {error or 'unknown error'}"
-        )
+        failure_message = f"Failed to prepare {tool_name}:{action_name} — {error or 'unknown error'}"
     else:
         status = "ready"
         source = prepared.source
