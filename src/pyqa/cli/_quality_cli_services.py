@@ -6,11 +6,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
-import typer
-
 from ..config_loader import ConfigError, ConfigLoader
 from ..constants import PY_QA_DIR_NAME
-from ..logging import fail, ok, warn
 from ..quality import QualityChecker, QualityCheckerOptions
 from ..workspace import is_py_qa_workspace
 from .utils import filter_py_qa_paths
@@ -19,9 +16,14 @@ from ._quality_cli_models import (
     QualityConfigContext,
     QualityTargetResolution,
 )
+from .shared import CLIError, CLILogger
 
 
-def load_quality_context(options: QualityCLIOptions) -> QualityConfigContext:
+def load_quality_context(
+    options: QualityCLIOptions,
+    *,
+    logger: CLILogger,
+) -> QualityConfigContext:
     """Load project configuration and return a populated context.
 
     Args:
@@ -31,16 +33,15 @@ def load_quality_context(options: QualityCLIOptions) -> QualityConfigContext:
         QualityConfigContext: Loaded configuration and deferred warnings.
 
     Raises:
-        typer.Exit: Raised with status code ``1`` when configuration loading
-            fails. The user is notified through :func:`fail` before exiting.
+        CLIError: Raised when configuration loading fails.
     """
 
     loader = ConfigLoader.for_root(options.root)
     try:
         load_result = loader.load_with_trace()
     except ConfigError as exc:  # pragma: no cover - CLI path
-        fail(f"Configuration invalid: {exc}", use_emoji=options.emoji)
-        raise typer.Exit(code=1) from exc
+        logger.fail(f"Configuration invalid: {exc}")
+        raise CLIError(str(exc)) from exc
 
     context = QualityConfigContext(
         root=options.root,
@@ -52,7 +53,7 @@ def load_quality_context(options: QualityCLIOptions) -> QualityConfigContext:
     return context
 
 
-def render_config_warnings(context: QualityConfigContext) -> None:
+def render_config_warnings(context: QualityConfigContext, *, logger: CLILogger) -> None:
     """Emit configuration warnings gathered during loading.
 
     Args:
@@ -61,7 +62,7 @@ def render_config_warnings(context: QualityConfigContext) -> None:
     """
 
     for message in context.warnings:
-        warn(message, use_emoji=context.options.emoji)
+        logger.warn(message)
 
 
 def determine_checks(
@@ -89,7 +90,8 @@ def determine_checks(
 
 def resolve_target_files(
     context: QualityConfigContext,
-
+    *,
+    logger: CLILogger,
 ) -> QualityTargetResolution:
     """Return filtered target files and ignored py-qa paths.
 
@@ -106,7 +108,7 @@ def resolve_target_files(
     kept, ignored = filter_py_qa_paths(resolved, context.root)
     files = kept or None
     if provided and not kept:
-        ok("No files to check.", use_emoji=context.options.emoji)
+        logger.ok("No files to check.")
     return QualityTargetResolution(
         files=files,
         ignored_py_qa=tuple(dict.fromkeys(ignored)),

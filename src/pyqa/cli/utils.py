@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Final
 
 from ..constants import PY_QA_DIR_NAME
-from ..filesystem.paths import display_relative_path, normalize_path
+from ..filesystem.paths import display_relative_path, ensure_absolute_path
 from ..process_utils import run_command
 from ..tool_env import VersionResolver
 from ..tools.base import Tool
@@ -190,30 +190,12 @@ def filter_py_qa_paths(paths: Iterable[Path], root: Path) -> tuple[list[Path], l
 
 
 def _maybe_resolve(path: Path, root: Path | None = None) -> Path | None:
-    """Safely resolve ``path`` relative to ``root`` while handling errors.
+    """Safely resolve ``path`` relative to ``root`` while handling errors."""
 
-    Args:
-        path: Path candidate supplied by the caller.
-        root: Optional base directory for relative resolution.
-
-    Returns:
-        Path | None: Resolved path or ``None`` when resolution fails.
-
-    """
-    base = root.resolve() if root is not None else Path.cwd()
     try:
-        normalised = normalize_path(path, base_dir=base)
-    except (ValueError, OSError):
+        return ensure_absolute_path(path, base_dir=root)
+    except (TypeError, ValueError, OSError):
         try:
-            return path.resolve()
+            return Path(path).resolve()
         except OSError:
             return None
-    if normalised.is_absolute():
-        try:
-            return normalised.resolve()
-        except OSError:
-            return normalised
-    try:
-        return (base / normalised).resolve()
-    except OSError:
-        return (base / normalised).absolute()

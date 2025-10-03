@@ -1,0 +1,79 @@
+# CLI Module Guide
+
+This guide documents the architecture, patterns, and best practices used across
+`src/pyqa/cli`. It distils the SOLID recovery work and lessons learned while
+refactoring the command-line entrypoints.
+
+## Architecture Overview
+- **Models vs Services vs Orchestration**: Each command module should expose
+  structured input models (dataclasses or Typer dependencies), services that
+  transform or enrich that data, and a thin orchestration function (Typer
+  command) that wires everything together.
+- **Shared Infrastructure**: Common behaviours live in `cli/shared.py`
+  (logging adapter, CLIError, registration helpers) and `cli/typer_ext.py`
+  (sorted Typer wrappers). Prefer using these helpers instead of duplicating
+  behaviours.
+- **Catalog-Driven Configuration**: Tool metadata, language-specific settings,
+  and (planned) shebang/Tree-sitter configuration come from the JSON catalog in
+  `tooling/catalog`. Avoid embedding language-specific logic directly in the CLI
+  modules.
+
+## Key Modules
+- `lint.py`: Orchestrates lint execution by building structured inputs (`_lint_cli_models.py`), preparing state (`_lint_preparation.py`), and delegating to
+  runtime services (`_lint_runtime.py`, `_lint_progress.py`, `_lint_reporting.py`, `_lint_meta.py`).
+- `config_cmd.py`: Provides inspection utilities using `_config_cmd_services.py`
+  for reusable functionality (snapshot rendering, diffs, markdown output).
+- `quality.py`: Main command uses `build_quality_options` for CLI inputs and
+  service helpers for discovery, checks, and rendering.
+- `tool_info.py`: Renders catalog-driven tool metadata using services in
+  `_tool_info_services.py`.
+
+## Patterns & Best Practices
+1. **Single Responsibility Principle (SRP)**
+   - Keep Typer commands thin; push preparation and business logic into services.
+   - Group related helpers into focused modules (`_lint_preparation`, `_lint_runtime`, etc.).
+
+2. **Open/Closed Principle (OCP)**
+   - Swapping or adding behaviours should be data-driven (e.g. catalog or config dataclasses) rather than editing orchestration logic.
+   - Use factories or hooks for behaviours that may vary (progress controller, logging, runtime orchestrator).
+
+3. **Liskov Substitution Principle (LSP)**
+   - When using interfaces (e.g. discovery matchers, runtime dependencies), ensure any implementation works with existing orchestration.
+
+4. **Interface Segregation Principle (ISP)**
+   - Provide narrow helper interfaces (e.g. registration decorators) instead of dumping large utility functions.
+   - Depend on precise dataclasses or DTOs instead of untyped mappings.
+
+5. **Dependency Inversion Principle (DIP)**
+   - Orchestration functions (`lint_command`, `config_show`, etc.) should depend on abstractions or simple factories, not concrete module-level singletons.
+   - Lint runtime creation uses `build_lint_runtime_context` so tests can inject alternative orchestrators.
+
+## Usage Tips
+- **Typer Registration**: Use `command_decorator` / `register_command` and
+  `callback_decorator` / `register_callback` to keep registration consistent and lazily import heavy dependencies.
+- **Logging**: Always obtain a `CLILogger` via `build_cli_logger` so logging respects `--no-emoji`/`--no-color` flags.
+- **Options Containers**: Prefer annotated dependencies that return dataclasses
+  (e.g. `LintCLIInputs`, `QualityCLIOptions`) to keep type hints clear and limit the number of Typer parameters per function.
+- **Laziness**: The package-level `app` export in `pyqa.cli` is resolved lazily to avoid `runpy` warnings. External users should continue importing `pyqa.cli.app` normally.
+- **Backwards Compatibility**: `_build_config` remains as a compatibility shim (dataclass + service) to support legacy automation relying on keyword arguments.
+- **Wrappers**: Root-level launchers (e.g. `./lint`, `./tool-info`) all delegate through `scripts.cli_launcher.launch`, which handles interpreter selection, `PYTHONPATH`, and optional `uv` fallback.
+
+## Anti-Patterns
+- **Direct Registry/Orchestrator Construction**: Do not instantiate `Orchestrator`
+  or tool registries directly inside commands. Use the runtime factory helpers so tests and future refactors remain resilient.
+- **Inline Option Parsing**: Avoid manual parsing of `ctx.args` or raw `sys.argv`
+  in commands; rely on Typer dependencies or dedicated services (e.g. `_collect_provided_flags`).
+- **Suppression Comments**: The CLI package must not use lint-suppression comments (`# type: ignore`, `# noqa`) unless paired with a robust explanation and approval. Refactor instead.
+
+## Future Enhancements
+- **Shebang & Tree-sitter Catalog Integration**: Expand language definitions in
+  the catalog (`SHEBANG.md`) to include shebang matchers and Tree-sitter grammar metadata, keeping discovery and context resolution data-driven.
+- **Language-Level Defaults**: Consolidate per-language defaults (extensions,
+  config files) into catalog language records to reduce repetition in tool definitions.
+- **Testing**: Strengthen CLI integration tests to cover new dependency factories and meta-command flows, especially once shebang detection is catalog-driven.
+
+## References
+- [SOLID CLI Recovery Plan](../SOLID_CLI.md)
+- [Shebang Detection Plan](../SHEBANG.md)
+- `src/pyqa/cli/shared.py`, `src/pyqa/cli/typer_ext.py`
+- `tooling/catalog/languages/`

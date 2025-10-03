@@ -5,23 +5,39 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Annotated, Final
+
+import typer
+
+from .shared import Depends
 
 DEFAULT_HOOKS_DIR: Final[Path] = Path(".git/hooks")
+
+ROOT_OPTION = Annotated[
+    Path,
+    typer.Option(Path.cwd(), "--root", "-r", help="Repository root."),
+]
+HOOKS_DIR_OPTION = Annotated[
+    Path,
+    typer.Option(
+        DEFAULT_HOOKS_DIR,
+        "--hooks-dir",
+        help="Overrides the hooks directory.",
+    ),
+]
+DRY_RUN_OPTION = Annotated[
+    bool,
+    typer.Option(False, "--dry-run", help="Show actions without modifying files."),
+]
+EMOJI_OPTION = Annotated[
+    bool,
+    typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji output."),
+]
 
 
 @dataclass(slots=True)
 class HookCLIOptions:
-    """Capture CLI options for hook installation.
-
-    Attributes:
-        root: The repository root where hooks should be installed.
-        hooks_dir: Optional override for the hooks directory. ``None`` implies
-            the default directory returned by :data:`DEFAULT_HOOKS_DIR`.
-        dry_run: Indicates whether the installation should avoid filesystem
-            writes.
-        emoji: Indicates whether emoji output should be rendered.
-    """
+    """Capture CLI options for hook installation."""
 
     root: Path
     hooks_dir: Path | None
@@ -37,17 +53,7 @@ class HookCLIOptions:
         dry_run: bool,
         emoji: bool,
     ) -> "HookCLIOptions":
-        """Return options parsed from CLI arguments.
-
-        Args:
-            root: Repository root provided via the CLI.
-            hooks_dir: Hooks directory override supplied via ``--hooks-dir``.
-            dry_run: Whether to perform a dry-run installation.
-            emoji: Whether to emit emoji in logging helpers.
-
-        Returns:
-            A ``HookCLIOptions`` instance with normalized paths.
-        """
+        """Return options parsed from CLI arguments."""
 
         resolved_root = root.resolve()
         override = hooks_dir if hooks_dir != DEFAULT_HOOKS_DIR else None
@@ -59,4 +65,29 @@ class HookCLIOptions:
         )
 
 
-__all__ = ["DEFAULT_HOOKS_DIR", "HookCLIOptions"]
+def build_hook_options(
+    root: ROOT_OPTION,
+    hooks_dir: HOOKS_DIR_OPTION,
+    dry_run: DRY_RUN_OPTION,
+    emoji: EMOJI_OPTION,
+) -> HookCLIOptions:
+    """Construct ``HookCLIOptions`` from Typer callback parameters."""
+
+    return HookCLIOptions.from_cli(
+        root=root,
+        hooks_dir=hooks_dir,
+        dry_run=dry_run,
+        emoji=emoji,
+    )
+
+
+__all__ = [
+    "Depends",
+    "DEFAULT_HOOKS_DIR",
+    "ROOT_OPTION",
+    "HOOKS_DIR_OPTION",
+    "DRY_RUN_OPTION",
+    "EMOJI_OPTION",
+    "HookCLIOptions",
+    "build_hook_options",
+]

@@ -6,52 +6,56 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..constants import PY_QA_DIR_NAME
-from ..logging import fail, ok, warn
 from ..quality import QualityCheckResult, QualityIssueLevel
+from .shared import CLILogger
 
 
 def render_quality_result(
     result: QualityCheckResult,
     *,
     root: Path,
-    use_emoji: bool,
+    logger: CLILogger,
 ) -> None:
     """Render quality check results to the terminal."""
 
     if not result.issues:
-        ok("Quality checks passed", use_emoji=use_emoji)
+        logger.ok("Quality checks passed")
         return
 
     for issue in result.issues:
-        prefix = fail if issue.level is QualityIssueLevel.ERROR else warn
         location = _format_issue_location(issue.path, root)
-        prefix(f"{issue.message}{location}", use_emoji=use_emoji)
+        message = f"{issue.message}{location}"
+        if issue.level is QualityIssueLevel.ERROR:
+            logger.fail(message)
+        else:
+            logger.warn(message)
 
     summary = (
         f"Quality checks failed with {len(result.errors)} error(s)"
         if result.errors
         else f"Quality checks completed with {len(result.warnings)} warning(s)"
     )
-    reporter = fail if result.errors else warn
-    reporter(summary, use_emoji=use_emoji)
+    if result.errors:
+        logger.fail(summary)
+    else:
+        logger.warn(summary)
 
 
 def render_py_qa_skip_warning(
     ignored: tuple[str, ...],
     *,
-    emoji: bool,
+    logger: CLILogger,
 ) -> None:
     """Render a warning describing py-qa directories skipped during execution."""
 
     if not ignored:
         return
     unique = ", ".join(ignored)
-    warn(
+    logger.warn(
         (
             f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
             "unless check-quality runs inside the py_qa workspace."
-        ),
-        use_emoji=emoji,
+        )
     )
 
 

@@ -1,45 +1,23 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: MIT
-# Copyright (c) 2025 Blackcat Informatics® Inc.
-"""Legacy compatibility entry point for the Python security scan command."""
+"""Entry point for the security scan command."""
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-COMMAND = "security-scan"
-
-
-def _run_via_uv() -> None:
-    os.execvp(
-        "uv",
-        [
-            "uv",
-            "--project",
-            str(PROJECT_ROOT),
-            "run",
-            "pyqa",
-            COMMAND,
-            *sys.argv[1:],
-        ],
-    )
+from scripts.cli_launcher import launch
 
 
-try:
-    from pyqa.cli import app
-except ModuleNotFoundError:
-    _run_via_uv()
+def main() -> None:
+    """Launch the security-scan command."""
 
-
-def main() -> int:
-    sys.argv.insert(1, COMMAND)
-    return app()
+    launch("security-scan")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

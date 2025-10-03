@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from rich import box
 from rich.progress import (
@@ -16,12 +16,11 @@ from rich.progress import (
 from rich.table import Table
 
 from ..console import console_manager, is_tty
-from ..logging import info, warn
 from ..tool_env.models import PreparedCommand
 from ..tools.registry import DEFAULT_REGISTRY
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from .lint import LintRuntimeContext
+    from ._lint_runtime import LintRuntimeContext
 
 FetchResult = list[tuple[str, str, PreparedCommand | None, str | None]]
 
@@ -57,6 +56,7 @@ def _fetch_with_progress(
     console,
     verbose: bool,
 ) -> FetchResult:
+    logger = runtime.state.logger
     progress = Progress(
         SpinnerColumn(),
         TextColumn("{task.description}"),
@@ -67,14 +67,19 @@ def _fetch_with_progress(
     )
     task_id = progress.add_task("Preparing tools", total=total_actions)
 
-    def progress_callback(
-        event,
-        tool_name: str,
-        action_name: str,
-        index: int,
-        total: int,
-        message: str | None,
-    ) -> None:
+    def progress_callback(*payload: object) -> None:
+        if len(payload) != 6:
+            raise ValueError("unexpected progress payload")
+        typed_payload = cast(
+            tuple[str, str, str, int, int, str | None],
+            tuple(payload),
+        )
+        event = typed_payload[0]
+        tool_name = typed_payload[1]
+        action_name = typed_payload[2]
+        index = typed_payload[3]
+        total = typed_payload[4]
+        message = typed_payload[5]
         description = f"{tool_name}:{action_name}"
         if event == "start":
             status = "Preparing"
@@ -85,8 +90,10 @@ def _fetch_with_progress(
         else:
             status = "Error"
             completed = index
-            if message and verbose:
-                console.print(f"[red]{description} failed: {message}[/red]")
+            if message:
+                logger.warn(f"Failed to prepare {description}: {message}")
+                if verbose:
+                    console.print(f"[red]{description} failed: {message}[/red]")
         progress.update(
             task_id,
             completed=completed,
@@ -110,6 +117,10 @@ def _render_fetch_summary(
     results: FetchResult,
     phase_order: tuple[str, ...],
 ) -> None:
+    if state.display.quiet:
+        return
+
+    logger = state.logger
     tool_lookup = {tool.name: tool for tool in DEFAULT_REGISTRY.tools()}
     phase_rank = {
         name: (
@@ -119,16 +130,14 @@ def _render_fetch_summary(
         )
         for name, tool in tool_lookup.items()
     }
-    results.sort(
+    sorted_results = sorted(
+        results,
         key=lambda item: (
             phase_rank.get(item[0], len(phase_order)),
             item[0],
             item[1],
         ),
     )
-
-    if state.display.quiet:
-        return
 
     table = Table(
         title="Tool Preparation",
@@ -142,28 +151,43 @@ def _render_fetch_summary(
     table.add_column("Status", style="magenta" if config.output.color else None)
     table.add_column("Source", style="magenta" if config.output.color else None)
     table.add_column("Version", style="green" if config.output.color else None)
-    failures: list[tuple[str, str, str]] = []
-    for tool_name, action_name, prepared, error in results:
-        phase = getattr(tool_lookup.get(tool_name), "phase", "-")
-        if prepared is None:
-            status = "error"
-            source = "-"
-            version = "-"
-            failures.append((tool_name, action_name, error or "unknown error"))
-        else:
-            status = "ready"
-            source = prepared.source
-            version = prepared.version or "unknown"
-        table.add_row(tool_name, action_name, phase, status, source, version)
-    console.print(table)
-    info(
-        f"Prepared {len(results)} tool action(s) without execution.",
-        use_emoji=config.output.emoji,
-        use_color=config.output.color,
-    )
-    for tool_name, action_name, message in failures:
-        warn(
-            f"Failed to prepare {tool_name}:{action_name} — {message}",
-            use_emoji=config.output.emoji,
-            use_color=config.output.color,
+    failures: list[str] = []
+    for item in sorted_results:
+        row, failure = _format_fetch_row(
+            item,
+            tool_lookup=tool_lookup,
+            color_enabled=config.output.color,
         )
+        table.add_row(*row)
+        if failure:
+            failures.append(failure)
+    console.print(table)
+    logger.ok(f"Prepared {len(results)} tool action(s) without execution.")
+    for failure in failures:
+        logger.warn(failure)
+
+
+def _format_fetch_row(
+    item: tuple[str, str, PreparedCommand | None, str | None],
+    *,
+    tool_lookup,
+    color_enabled: bool,
+) -> tuple[tuple[str, str, str, str, str, str], str | None]:
+    tool_name, action_name, prepared, error = item
+    phase = getattr(tool_lookup.get(tool_name), "phase", "-")
+    if prepared is None:
+        status = "error"
+        source = "-"
+        version = "-"
+        failure_message = (
+            f"Failed to prepare {tool_name}:{action_name} — {error or 'unknown error'}"
+        )
+    else:
+        status = "ready"
+        source = prepared.source
+        version = prepared.version or "unknown"
+        failure_message = None
+    if color_enabled:
+        status = "[red]error[/]" if failure_message else "[green]ready[/]"
+    row = (tool_name, action_name, phase, status, source, version)
+    return row, failure_message

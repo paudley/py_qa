@@ -5,11 +5,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
-from typing import Any
+from typing import Any, TypeVar
 
 import typer
 import typer.main
-from click.core import Parameter
+from click.core import Context, Parameter
 from click.formatting import HelpFormatter
 from typer.core import TyperCommand, TyperGroup
 
@@ -47,13 +47,13 @@ class SortedTyperCommand(TyperCommand):
 
     def format_options(
         self,
-        ctx: typer.Context,
+        ctx: Context,
         formatter: HelpFormatter,
-    ) -> None:  # type: ignore[override]
+    ) -> None:
         """Render positional arguments and sorted options within CLI help.
 
         Args:
-            ctx: Typer context describing the application invocation.
+            ctx: Click context describing the application invocation.
             formatter: Click help formatter used to emit definition lists.
 
         Returns:
@@ -88,6 +88,8 @@ class SortedTyperGroup(TyperGroup):
 
     command_class = SortedTyperCommand
 
+CommandCallback = TypeVar("CommandCallback", bound=Callable[..., Any])
+
 
 class SortedTyper(typer.Typer):
     """Typer application that emits sorted option listings by default."""
@@ -114,7 +116,7 @@ class SortedTyper(typer.Typer):
         *,
         cls: type[TyperCommand] | None = None,
         **kwargs: Any,
-    ) -> Callable[[Callable[..., Any]], typer.Command]:  # type: ignore[override]
+    ) -> Callable[[CommandCallback], CommandCallback]:
         """Return a decorator that registers commands using sorted help output.
 
         Args:
@@ -125,8 +127,9 @@ class SortedTyper(typer.Typer):
                 :meth:`typer.Typer.command` implementation.
 
         Returns:
-            Callable[[Callable[..., Any]], typer.Command]: Decorator that
-            registers the wrapped callable as a Typer command.
+            Callable[[CommandCallback], CommandCallback]: Decorator that
+            registers the wrapped callable as a Typer command while
+            preserving the original callback signature.
 
         """
 

@@ -4,21 +4,46 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
+from pathlib import Path
+from typing import Annotated, Sequence
+
+import typer
+
+from .shared import Depends
+
+ROOT_OPTION = Annotated[
+    Path,
+    typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
+]
+PATTERN_OPTION = Annotated[
+    list[str] | None,
+    typer.Option(
+        None,
+        "--pattern",
+        "-p",
+        help="Additional glob pattern to remove (repeatable).",
+    ),
+]
+TREE_OPTION = Annotated[
+    list[str] | None,
+    typer.Option(
+        None,
+        "--tree",
+        help="Additional directory to clean recursively (repeatable).",
+    ),
+]
+DRY_RUN_OPTION = Annotated[
+    bool,
+    typer.Option(False, "--dry-run", help="Show what would be removed."),
+]
+EMOJI_OPTION = Annotated[
+    bool,
+    typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji output."),
+]
 
 
 def normalize_cli_values(values: Sequence[str] | None) -> tuple[str, ...]:
-    """Return sanitized CLI values.
-
-    Args:
-        values: Raw values passed from Typer when options are repeated. Typer
-            yields ``None`` when the option is not provided, otherwise a
-            sequence including potential blank strings.
-
-    Returns:
-        A tuple containing only the non-empty values while preserving the
-        original order provided by the CLI.
-    """
+    """Return sanitized CLI values preserving order."""
 
     if not values:
         return ()
@@ -27,50 +52,53 @@ def normalize_cli_values(values: Sequence[str] | None) -> tuple[str, ...]:
 
 @dataclass(slots=True)
 class CleanCLIOptions:
-    """Capture CLI overrides supplied to the sparkly-clean command.
+    """Capture CLI overrides supplied to the sparkly-clean command."""
 
-    Attributes:
-        extra_patterns: Additional glob patterns requested by the user.
-        extra_trees: Directory prefixes that should be removed recursively.
-        dry_run: Flag indicating the command should only log planned actions.
-        emoji: Flag indicating whether emoji output should be enabled.
-    """
-
+    root: Path
     extra_patterns: tuple[str, ...]
     extra_trees: tuple[str, ...]
     dry_run: bool
     emoji: bool
 
-    @classmethod
-    def from_cli(
-        cls,
-        patterns: Sequence[str] | None,
-        trees: Sequence[str] | None,
-        *,
-        dry_run: bool,
-        emoji: bool,
-    ) -> CleanCLIOptions:
-        """Return options parsed from CLI arguments.
+def _build_clean_path_options(
+    pattern: PATTERN_OPTION,
+    include_tree: TREE_OPTION,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Normalise pattern and tree option values."""
 
-        Args:
-            patterns: Optional tuple of additional glob patterns supplied on
-                the command line.
-            trees: Optional tuple of directory paths to clean recursively.
-            dry_run: Indicates whether the clean command should run in
-                inspection-only mode.
-            emoji: Indicates whether emoji output should be rendered.
-
-        Returns:
-            A fully populated ``CleanCLIOptions`` instance ready for
-            consumption by the orchestration layer.
-        """
-
-        return cls(
-            extra_patterns=normalize_cli_values(patterns),
-            extra_trees=normalize_cli_values(trees),
-            dry_run=dry_run,
-            emoji=emoji,
-        )
+    return normalize_cli_values(pattern), normalize_cli_values(include_tree)
 
 
-__all__ = ["CleanCLIOptions", "normalize_cli_values"]
+def build_clean_options(
+    root: ROOT_OPTION,
+    path_args: Annotated[
+        tuple[tuple[str, ...], tuple[str, ...]],
+        Depends(_build_clean_path_options),
+    ],
+    dry_run: DRY_RUN_OPTION,
+    emoji: EMOJI_OPTION,
+) -> CleanCLIOptions:
+    """Construct ``CleanCLIOptions`` from Typer callback parameters."""
+
+    patterns, trees = path_args
+    return CleanCLIOptions(
+        root=root.resolve(),
+        extra_patterns=patterns,
+        extra_trees=trees,
+        dry_run=dry_run,
+        emoji=emoji,
+    )
+
+
+__all__ = [
+    "Depends",
+    "ROOT_OPTION",
+    "PATTERN_OPTION",
+    "TREE_OPTION",
+    "DRY_RUN_OPTION",
+    "EMOJI_OPTION",
+    "CleanCLIOptions",
+    "normalize_cli_values",
+    "_build_clean_path_options",
+    "build_clean_options",
+]

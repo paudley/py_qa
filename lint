@@ -1,43 +1,28 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: MIT
-# Copyright (c) 2025 Blackcat Informatics® Inc.
-"""CLI entry point delegating to the pyqa package."""
+"""Entry point for the lint command, with install compatibility."""
+
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-CLI_ARGS = sys.argv[1:]
-if "--install" in CLI_ARGS:
-    TARGET_COMMAND = "install"
-    FORWARDED_ARGS = [arg for arg in CLI_ARGS if arg != "--install"]
-else:
-    TARGET_COMMAND = "lint"
-    FORWARDED_ARGS = CLI_ARGS
+from scripts.cli_launcher import launch
 
-try:
-    from pyqa.cli import app
-except ModuleNotFoundError:
-    os.execvp(
-        "uv",
-        [
-            "uv",
-            "--project",
-            str(PROJECT_ROOT),
-            "run",
-            "pyqa",
-            TARGET_COMMAND,
-            *FORWARDED_ARGS,
-        ],
-    )
-else:
-    if TARGET_COMMAND == "install":
-        # Remap the --install flag to the actual Typer subcommand.
-        sys.argv = [sys.argv[0], TARGET_COMMAND, *FORWARDED_ARGS]
+
+def main() -> None:
+    """Launch the lint command or its install shim."""
+
+    args = sys.argv[1:]
+    if "--install" in args:
+        filtered = [arg for arg in args if arg != "--install"]
+        launch("install", filtered)
+    else:
+        launch("lint", args)
+
 
 if __name__ == "__main__":
-    app()
+    main()

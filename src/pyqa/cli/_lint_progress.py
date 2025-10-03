@@ -7,7 +7,14 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import TYPE_CHECKING
 
-from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskID,
+    TextColumn,
+    TimeElapsedColumn,
+)
 from rich.text import Text
 
 from ..console import console_manager
@@ -15,8 +22,8 @@ from ..console import console_manager
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from rich.console import Console
     from ..execution.orchestrator import OrchestratorHooks
-    from ..reporting.formatters import OutputConfig
-    from .lint import LintRuntimeContext
+    from ..models import RunResult, ToolOutcome
+    from ._lint_runtime import LintRuntimeContext
 
 
 @dataclass(slots=True)
@@ -29,7 +36,7 @@ class ExecutionProgressController:
     progress_factory: type[Progress] = Progress
     enabled: bool = field(init=False, default=False)
     progress: Progress | None = field(init=False, default=None)
-    task_id: int | None = field(init=False, default=None)
+    task_id: TaskID | None = field(init=False, default=None)
     console: "Console | None" = field(init=False, default=None)
     lock: Lock | None = field(init=False, default=None)
     total: int = field(init=False, default=0)
@@ -76,64 +83,66 @@ class ExecutionProgressController:
         return max(20, int(available * 0.8))
 
     def install(self, hooks: "OrchestratorHooks") -> None:
-        if not self.enabled or not self.progress or self.task_id is None:
+        if not self.enabled:
+            return
+        progress = self.progress
+        task_id = self.task_id
+        lock = self.lock
+        if progress is None or task_id is None or lock is None:
             return
 
         def ensure_started() -> None:
             if not self.started:
-                self.progress.start()
+                progress.start()
                 self.started = True
 
         def before_tool(tool_name: str) -> None:
-            with self.lock:
+            with lock:
                 ensure_started()
-                self.progress.update(
-                    self.task_id,
+                progress.update(
+                    task_id,
                     description=f"Linting {tool_name}",
                     current_status="running",
                 )
 
-        def after_tool(outcome) -> None:  # noqa: ANN001
-            with self.lock:
+        def after_tool(outcome: "ToolOutcome") -> None:
+            with lock:
                 ensure_started()
                 self._advance(1)
                 status = "ok" if outcome.ok else "issues"
                 if self.runtime.config.output.color:
                     status = "[green]ok[/]" if outcome.ok else "[red]issues[/]"
-                self.progress.update(
-                    self.task_id,
+                progress.update(
+                    task_id,
                     current_status=f"{outcome.tool}:{outcome.action} {status}",
                 )
 
         def after_discovery(file_count: int) -> None:
-            with self.lock:
+            with lock:
                 ensure_started()
                 status = "queued"
                 if self.runtime.config.output.color:
                     status = "[cyan]queued[/]"
-                self.progress.update(
-                    self.task_id,
+                progress.update(
+                    task_id,
                     description=f"Linting ({file_count} files)",
                     current_status=status,
                 )
 
-        def after_execution_hook(_result) -> None:  # noqa: ANN001
-            with self.lock:
+        def after_execution_hook(result: "RunResult") -> None:
+            with lock:
                 ensure_started()
                 self._advance(1)
                 status = "post-processing"
                 if self.runtime.config.output.color:
                     status = "[cyan]post-processing[/]"
-                self.progress.update(
-                    self.task_id,
-                    current_status=status,
-                )
+                progress.update(task_id, current_status=status)
 
         def after_plan_hook(total_actions: int) -> None:
-            with self.lock:
+            with lock:
                 ensure_started()
                 self.total = total_actions + self.extra_phases
-                self.progress.update(self.task_id, total=self.total)
+                progress.update(task_id, total=self.total)
 
         hooks.before_tool = before_tool
         hooks.after_tool = after_tool
@@ -142,24 +151,34 @@ class ExecutionProgressController:
         hooks.after_plan = after_plan_hook
 
     def advance_rendering_phase(self) -> None:
-        if not self.enabled or not self.progress or self.task_id is None:
+        if not self.enabled:
             return
-        with self.lock:
+        progress = self.progress
+        task_id = self.task_id
+        lock = self.lock
+        if progress is None or task_id is None or lock is None:
+            return
+        with lock:
             self._advance(1)
             status = "rendering output"
             if self.runtime.config.output.color:
                 status = "[cyan]rendering output[/]"
-            self.progress.update(self.task_id, current_status=status)
+            progress.update(task_id, current_status=status)
 
     def finalize(self, success: bool) -> Text | None:
-        if not self.enabled or not self.progress or self.task_id is None:
+        if not self.enabled:
             return None
-        with self.lock:
+        progress = self.progress
+        task_id = self.task_id
+        lock = self.lock
+        if progress is None or task_id is None or lock is None:
+            return None
+        with lock:
             status_text = "done" if success else "issues detected"
             if self.runtime.config.output.color:
                 status_text = "[green]done[/]" if success else "[red]issues detected[/]"
             total = max(self.total, self.completed)
-            self.progress.update(self.task_id, total=total, current_status=status_text)
+            progress.update(task_id, total=total, current_status=status_text)
         return Text.from_markup(status_text) if self.runtime.config.output.color else Text(status_text)
 
     def stop(self) -> None:
@@ -169,9 +188,11 @@ class ExecutionProgressController:
             self.progress.stop()
 
     def _advance(self, amount: int) -> None:
-        if not self.progress or self.task_id is None:
+        progress = self.progress
+        task_id = self.task_id
+        if progress is None or task_id is None:
             return
-        self.progress.advance(self.task_id, advance=amount)
+        progress.advance(task_id, advance=amount)
         self.completed += amount
 
 

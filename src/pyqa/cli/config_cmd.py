@@ -14,24 +14,30 @@ from pydantic import BaseModel, ConfigDict
 from ..config_loader import ConfigLoadResult, FieldUpdate
 from .typer_ext import create_typer
 from ._config_cmd_services import (
-    FINAL_LAYER_KEY,
     JSON_FORMAT,
-    JSON_TOOLS_FORMAT,
-    collect_layer_snapshots,
+    build_config_diff,
     diff_snapshots,
-    load_config,
+    UnknownConfigLayerError,
+    build_tool_schema_payload,
     load_config_with_trace,
     render_config_mapping,
     render_schema,
+    schema_to_markdown,
     summarise_updates,
     summarise_value,
+    validate_config,
     write_output,
 )
+from .shared import CLIError, build_cli_logger, register_command
 
 config_app = create_typer(help="Inspect, validate, and document configuration layers.")
 
 
-@config_app.command("show")
+@register_command(
+    config_app,
+    name="show",
+    help_text="Print the effective configuration for the project.",
+)
 def config_show(
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
     trace: bool = typer.Option(True, help="Show which source last set each field."),
@@ -50,35 +56,50 @@ def config_show(
 ) -> None:
     """Print the effective configuration for the project."""
 
-    result = load_config_with_trace(root, strict=strict)
+    logger = build_cli_logger(emoji=True)
+    try:
+        result = load_config_with_trace(root, strict=strict, logger=logger)
+    except CLIError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
 
     if output_format.lower() != JSON_FORMAT:
         raise typer.BadParameter("Only JSON output is supported at the moment")
 
     payload = json.dumps(render_config_mapping(result), indent=2, sort_keys=True)
-    typer.echo(payload)
+    logger.echo(payload)
 
     if trace and result.updates:
-        typer.echo("\n# Overrides")
+        logger.echo("\n# Overrides")
         for update in summarise_updates(result.updates):
-            typer.echo(update)
+            logger.echo(update)
     if result.warnings:
-        typer.echo("\n# Warnings")
+        logger.echo("\n# Warnings")
         for warning in result.warnings:
-            typer.echo(f"- {warning}")
+            logger.warn(f"- {warning}")
 
 
-@config_app.command("validate")
+@register_command(
+    config_app,
+    name="validate",
+    help_text="Ensure the configuration loads successfully.",
+)
 def config_validate(
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
     strict: bool = typer.Option(False, "--strict", help="Treat configuration warnings as errors."),
 ) -> None:
     """Ensure the configuration loads successfully."""
+    logger = build_cli_logger(emoji=True)
+    try:
+        validate_config(root, strict=strict, logger=logger)
+    except CLIError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
 
-    load_config(root, strict=strict)
 
-
-@config_app.command("schema")
+@register_command(
+    config_app,
+    name="schema",
+    help_text="Emit a machine-readable description of configuration fields.",
+)
 def config_schema(
     output_format: str = typer.Option(
         JSON_FORMAT,
@@ -95,37 +116,56 @@ def config_schema(
 ) -> None:
     """Emit a machine-readable description of configuration fields."""
 
+    logger = build_cli_logger(emoji=True)
     content = render_schema(output_format)
-    write_output(content, out=out)
+    write_output(content, out=out, logger=logger)
 
 
-@config_app.command("diff")
+@register_command(
+    config_app,
+    name="diff",
+    help_text="Show the difference between two configuration layers.",
+)
 def config_diff(
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
     from_layer: str = typer.Option("defaults", "--from", help="Baseline layer."),
     to_layer: str = typer.Option("final", "--to", help="Comparison layer."),
-    out: Path | None = typer.Option(None, "--out", help="Write diff output to the provided path."),
+    out: Path | None = typer.Option(
+        None,
+        "--out",
+        help="Write diff output to the provided path.",
+    ),
 ) -> None:
     """Show the difference between two configuration layers."""
-
-    result = load_config_with_trace(root, strict=False)
-    snapshots = collect_layer_snapshots(result)
-    from_key = from_layer.lower()
-    to_key = to_layer.lower()
-    if from_key not in snapshots:
-        raise typer.BadParameter(
-            f"Unknown layer '{from_layer}'. Available: {', '.join(sorted(snapshots))}",
+    logger = build_cli_logger(emoji=True)
+    try:
+        result = load_config_with_trace(root, strict=False, logger=logger)
+    except CLIError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    try:
+        diff_result = build_config_diff(
+            result,
+            from_layer=from_layer,
+            to_layer=to_layer,
         )
-    if to_key not in snapshots:
+    except UnknownConfigLayerError as exc:
+        available = ", ".join(exc.available)
         raise typer.BadParameter(
-            f"Unknown layer '{to_layer}'. Available: {', '.join(sorted(snapshots))}",
-        )
+            f"Unknown layer '{exc.layer}'. Available: {available}",
+        ) from exc
 
-    diff = diff_snapshots(snapshots[from_key], snapshots[to_key])
-    write_output(json.dumps(diff, indent=2, sort_keys=True), out=out)
+    write_output(
+        json.dumps(diff_result.diff, indent=2, sort_keys=True),
+        out=out,
+        logger=logger,
+    )
 
 
-@config_app.command("export-tools")
+@register_command(
+    config_app,
+    name="export-tools",
+    help_text="Write the tool settings schema to disk.",
+)
 def config_export_tools(
     out: Path = typer.Argument(
         Path("tool-schema.json"),
@@ -140,29 +180,24 @@ def config_export_tools(
 ) -> None:
     """Write the tool settings schema to disk."""
 
-    from ..tools.settings import tool_setting_schema_as_dict  # local import
-
+    logger = build_cli_logger(emoji=True)
     out_path = out.resolve()
-    payload: dict[str, Any] = {
-        "_license": "SPDX-License-Identifier: MIT",
-        "_copyright": "Copyright (c) 2025 Blackcat Informatics® Inc.",
-    }
-    payload.update(tool_setting_schema_as_dict())
+    payload = build_tool_schema_payload()
     text = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     if check:
         if not out_path.exists():
-            typer.echo(f"{out_path} is missing", err=True)
+            logger.fail(f"{out_path} is missing")
             raise typer.Exit(code=1)
         existing = out_path.read_text(encoding="utf-8")
         if existing != text:
-            typer.echo(f"{out_path} is out of date", err=True)
+            logger.fail(f"{out_path} is out of date")
             raise typer.Exit(code=1)
-        typer.echo(str(out_path))
+        logger.echo(str(out_path))
         return
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(text, encoding="utf-8")
-    typer.echo(str(out_path))
+    logger.echo(str(out_path))
 
 
 def _config_to_mapping(result: ConfigLoadResult) -> Mapping[str, Any]:
@@ -195,8 +230,6 @@ def _diff_snapshots(
 def _schema_to_markdown(schema: Mapping[str, Any]) -> str:
     """Backwards compatible wrapper mirroring previous behaviour."""
 
-    from ._config_cmd_services import schema_to_markdown
-
     return schema_to_markdown(schema)
 
 
@@ -209,4 +242,3 @@ class ToolSettingsDoc(BaseModel):
 
 
 __all__ = ["config_app"]
-

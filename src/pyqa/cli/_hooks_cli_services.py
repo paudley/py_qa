@@ -3,25 +3,23 @@
 
 from __future__ import annotations
 
-import typer
-
 from ..hooks import InstallResult, install_hooks
-from ..logging import fail, warn
 from ._hooks_cli_models import HookCLIOptions
+from .shared import CLIError, CLILogger
 
 
-def perform_installation(options: HookCLIOptions) -> InstallResult:
+def perform_installation(options: HookCLIOptions, *, logger: CLILogger) -> InstallResult:
     """Install hooks for the provided options.
 
     Args:
         options: Normalized CLI options containing paths and runtime flags.
+        logger: Logger used to emit user-facing messages.
 
     Returns:
         The result reported by :func:`install_hooks`.
 
     Raises:
-        typer.Exit: Raised when the target repository cannot be located. The
-            error message is emitted via :func:`fail` before exiting.
+        CLIError: Raised when the target repository cannot be located.
     """
 
     try:
@@ -31,11 +29,16 @@ def perform_installation(options: HookCLIOptions) -> InstallResult:
             dry_run=options.dry_run,
         )
     except FileNotFoundError as exc:  # pragma: no cover - CLI path
-        fail(str(exc), use_emoji=options.emoji)
-        raise typer.Exit(code=1) from exc
+        logger.fail(str(exc))
+        raise CLIError(str(exc)) from exc
 
 
-def emit_hooks_summary(result: InstallResult, options: HookCLIOptions) -> None:
+def emit_hooks_summary(
+    result: InstallResult,
+    options: HookCLIOptions,
+    *,
+    logger: CLILogger,
+) -> None:
     """Emit summary warnings after attempting hook installation.
 
     Args:
@@ -48,10 +51,10 @@ def emit_hooks_summary(result: InstallResult, options: HookCLIOptions) -> None:
 
     if result.backups:
         backup_paths = ", ".join(str(path) for path in result.backups)
-        warn(f"Backed up existing hooks: {backup_paths}", use_emoji=options.emoji)
+        logger.warn(f"Backed up existing hooks: {backup_paths}")
     if options.dry_run and result.installed:
         planned = ", ".join(str(path) for path in result.installed)
-        warn(f"DRY RUN: would install {planned}", use_emoji=options.emoji)
+        logger.warn(f"DRY RUN: would install {planned}")
 
 
 __all__ = [

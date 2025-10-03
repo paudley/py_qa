@@ -11,16 +11,16 @@ from ..tooling import CatalogSnapshot, ToolDefinition
 from ..tools.builtins import initialize_registry
 from ..tools.registry import DEFAULT_REGISTRY
 from ..tools.base import Tool
-from ._tool_info_models import (
-    ToolInfoConfigData,
-    ToolInfoContext,
-    ToolInfoError,
-    ToolInfoInputs,
-)
+from ._tool_info_models import ToolInfoConfigData, ToolInfoContext, ToolInfoInputs
+from .shared import CLIError, CLILogger
 from .utils import check_tool_status
 
 
-def load_configuration(inputs: ToolInfoInputs) -> ToolInfoConfigData:
+def load_configuration(
+    inputs: ToolInfoInputs,
+    *,
+    logger: CLILogger,
+) -> ToolInfoConfigData:
     """Load configuration for tool-info rendering.
 
     Args:
@@ -41,7 +41,8 @@ def load_configuration(inputs: ToolInfoInputs) -> ToolInfoConfigData:
         load_result = loader.load_with_trace()
     except ConfigError as exc:  # pragma: no cover - CLI path
         message = f"Failed to load configuration: {exc}"
-        raise ToolInfoError(message) from exc
+        logger.fail(message)
+        raise CLIError(message) from exc
 
     return ToolInfoConfigData(
         config=load_result.config,
@@ -66,7 +67,7 @@ def resolve_catalog_snapshot(inputs: ToolInfoInputs) -> CatalogSnapshot:
     return initialize_registry(registry=DEFAULT_REGISTRY)
 
 
-def resolve_tool(inputs: ToolInfoInputs) -> Tool:
+def resolve_tool(inputs: ToolInfoInputs, *, logger: CLILogger) -> Tool:
     """Return the registry tool definition.
 
     Args:
@@ -81,7 +82,9 @@ def resolve_tool(inputs: ToolInfoInputs) -> Tool:
 
     tool = DEFAULT_REGISTRY.try_get(inputs.tool_name)
     if tool is None:
-        raise ToolInfoError(f"Unknown tool: {inputs.tool_name}")
+        message = f"Unknown tool: {inputs.tool_name}"
+        logger.fail(message)
+        raise CLIError(message)
     return tool
 
 
@@ -104,7 +107,7 @@ def find_catalog_tool(name: str, snapshot: CatalogSnapshot | None) -> ToolDefini
     return None
 
 
-def prepare_context(inputs: ToolInfoInputs) -> ToolInfoContext:
+def prepare_context(inputs: ToolInfoInputs, *, logger: CLILogger) -> ToolInfoContext:
     """Return a fully populated context for rendering tool information.
 
     Args:
@@ -114,9 +117,9 @@ def prepare_context(inputs: ToolInfoInputs) -> ToolInfoContext:
         ToolInfoContext: Context containing configuration, status, and metadata.
     """
 
-    config_data = load_configuration(inputs)
+    config_data = load_configuration(inputs, logger=logger)
     snapshot = resolve_catalog_snapshot(inputs)
-    tool = resolve_tool(inputs)
+    tool = resolve_tool(inputs, logger=logger)
     status = check_tool_status(tool)
     config_model = cast(Config, config_data.config)
     tool_settings_raw = getattr(config_model, "tool_settings")

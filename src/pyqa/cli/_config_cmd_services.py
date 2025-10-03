@@ -5,13 +5,22 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any
 from pathlib import Path
 
 import typer
 
-from ..config_loader import ConfigError, ConfigLoadResult, ConfigLoader, FieldUpdate
+from ..config_loader import (
+    ConfigError,
+    ConfigLoadResult,
+    ConfigLoader,
+    FieldUpdate,
+    generate_config_schema,
+)
 from ..serialization import jsonify
 from ..tools.settings import TOOL_SETTING_SCHEMA, SettingField, tool_setting_schema_as_dict
+from .shared import CLIError, CLILogger
 
 JSON_FORMAT = "json"
 JSON_TOOLS_FORMAT = "json-tools"
@@ -22,27 +31,32 @@ TYPE_KEY = "type"
 DEFAULT_KEY = "default"
 
 
-def load_config_with_trace(root: Path, *, strict: bool) -> ConfigLoadResult:
-    """Load configuration with provenance, exiting on failure."""
+def load_config_with_trace(
+    root: Path,
+    *,
+    strict: bool,
+    logger: CLILogger,
+) -> ConfigLoadResult:
+    """Load configuration with provenance, raising ``CLIError`` on failure."""
 
     loader = ConfigLoader.for_root(root)
     try:
         return loader.load_with_trace(strict=strict)
     except ConfigError as exc:  # pragma: no cover - CLI path
-        typer.echo(f"Configuration invalid: {exc}")
-        raise typer.Exit(code=1) from exc
+        logger.fail(f"Configuration invalid: {exc}")
+        raise CLIError(str(exc)) from exc
 
 
-def load_config(root: Path, *, strict: bool) -> None:
-    """Validate configuration loading, exiting with status codes."""
+def validate_config(root: Path, *, strict: bool, logger: CLILogger) -> None:
+    """Validate configuration loading, raising ``CLIError`` on failure."""
 
     loader = ConfigLoader.for_root(root)
     try:
         loader.load(strict=strict)
     except ConfigError as exc:  # pragma: no cover - CLI path
-        typer.echo(f"Configuration invalid: {exc}")
-        raise typer.Exit(code=1) from exc
-    typer.echo("Configuration is valid.")
+        logger.fail(f"Configuration invalid: {exc}")
+        raise CLIError(str(exc)) from exc
+    logger.ok("Configuration is valid.")
 
 
 def render_config_mapping(result: ConfigLoadResult) -> Mapping[str, object]:
@@ -98,15 +112,11 @@ def render_schema(fmt: str) -> str:
 
     fmt_lower = fmt.lower()
     if fmt_lower == JSON_FORMAT:
-        from ..config_loader import generate_config_schema  # local import to avoid cycles
-
         schema = generate_config_schema()
         return json.dumps(schema, indent=2, sort_keys=True)
     if fmt_lower == JSON_TOOLS_FORMAT:
         return json.dumps(tool_setting_schema_as_dict(), indent=2, sort_keys=True)
     if fmt_lower in MARKDOWN_FORMATS:
-        from ..config_loader import generate_config_schema  # local import to avoid cycles
-
         schema = generate_config_schema()
         return schema_to_markdown(schema)
     raise typer.BadParameter("Unknown schema format. Use 'json', 'json-tools', or 'markdown'.")
@@ -138,24 +148,37 @@ def schema_to_markdown(schema: Mapping[str, object]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def write_output(content: str, *, out: Path | None) -> None:
+def write_output(content: str, *, out: Path | None, logger: CLILogger) -> None:
     """Print or write ``content`` to a file, ensuring newline termination."""
 
     if out is None:
-        typer.echo(content)
+        logger.echo(content)
         return
     out_path = out.resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     text = content if content.endswith("\n") else f"{content}\n"
     out_path.write_text(text, encoding="utf-8")
-    typer.echo(str(out_path))
+    logger.echo(str(out_path))
 
 
-def collect_layer_snapshots(result: ConfigLoadResult) -> dict[str, Mapping[str, object]]:
+def build_tool_schema_payload() -> dict[str, Any]:
+    """Return a JSON-serialisable payload describing tool settings."""
+
+    payload: dict[str, Any] = {
+        "_license": "SPDX-License-Identifier: MIT",
+        "_copyright": "Copyright (c) 2025 Blackcat Informatics® Inc.",
+    }
+    payload.update(tool_setting_schema_as_dict())
+    return payload
+
+
+def collect_layer_snapshots(result: ConfigLoadResult) -> dict[str, dict[str, object]]:
     """Return snapshot mapping normalised to lower-case keys."""
 
-    snapshots = {key.lower(): value for key, value in result.snapshots.items()}
-    snapshots[FINAL_LAYER_KEY] = render_config_mapping(result)
+    snapshots: dict[str, dict[str, object]] = {
+        key.lower(): dict(value) for key, value in result.snapshots.items()
+    }
+    snapshots[FINAL_LAYER_KEY] = dict(render_config_mapping(result))
     return snapshots
 
 
@@ -181,17 +204,73 @@ def diff_snapshots(
     return diff
 
 
+@dataclass(slots=True)
+class ConfigDiffComputation:
+    """Result payload describing configuration diff metadata."""
+
+    diff: dict[str, Any]
+    available_layers: list[str]
+
+
+class UnknownConfigLayerError(ValueError):
+    """Raised when a requested configuration layer does not exist."""
+
+    def __init__(self, layer: str, *, available: list[str]) -> None:
+        super().__init__(layer)
+        self.layer = layer
+        self.available = available
+
+
+def build_config_diff(
+    result: ConfigLoadResult,
+    *,
+    from_layer: str,
+    to_layer: str,
+) -> ConfigDiffComputation:
+    """Compute a diff payload between two configuration layers.
+
+    Args:
+        result: Configuration load result containing all layer snapshots.
+        from_layer: Name of the baseline layer (case-insensitive).
+        to_layer: Name of the comparison layer (case-insensitive).
+
+    Returns:
+        ConfigDiffComputation: Diff mapping and sorted list of available layers.
+
+    Raises:
+        UnknownConfigLayerError: If either ``from_layer`` or ``to_layer`` is not
+            present in the snapshots.
+    """
+
+    snapshots = collect_layer_snapshots(result)
+    available_layers = sorted(snapshots)
+    from_key = from_layer.lower()
+    to_key = to_layer.lower()
+
+    if from_key not in snapshots:
+        raise UnknownConfigLayerError(from_layer, available=available_layers)
+    if to_key not in snapshots:
+        raise UnknownConfigLayerError(to_layer, available=available_layers)
+
+    diff_payload = diff_snapshots(snapshots[from_key], snapshots[to_key])
+    return ConfigDiffComputation(diff=diff_payload, available_layers=available_layers)
+
+
 __all__ = [
     "JSON_FORMAT",
     "JSON_TOOLS_FORMAT",
     "FINAL_LAYER_KEY",
     "load_config_with_trace",
-    "load_config",
+    "validate_config",
     "render_config_mapping",
     "render_schema",
     "summarise_updates",
     "summarise_value",
     "write_output",
+    "build_tool_schema_payload",
     "collect_layer_snapshots",
     "diff_snapshots",
+    "build_config_diff",
+    "ConfigDiffComputation",
+    "UnknownConfigLayerError",
 ]

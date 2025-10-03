@@ -12,15 +12,8 @@ from ..config import Config
 from ..config_loader import FieldUpdate
 from ..tooling import CatalogSnapshot, ToolDefinition
 from ..tools.base import Tool
+from .shared import CLIError
 from .utils import ToolStatus
-
-
-class ToolInfoError(RuntimeError):
-    """Base error for tool-info orchestration failures."""
-
-    def __init__(self, message: str, *, exit_code: int = 1) -> None:
-        super().__init__(message)
-        self.exit_code = exit_code
 
 
 @dataclass(slots=True)
@@ -56,9 +49,12 @@ class ToolInfoContext:
     catalog_tool: ToolDefinition | None
 
 
+ToolInfoError = CLIError
+
+
 __all__ = [
     "ToolInfoContext",
     "ToolInfoConfigData",
-    "ToolInfoError",
     "ToolInfoInputs",
+    "ToolInfoError",
 ]

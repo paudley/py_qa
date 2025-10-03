@@ -1,31 +1,39 @@
 # SOLID CLI Recovery Plan
 
 ## Phase 1: Shared Infrastructure
-- [ ] Introduce `cli/shared.py` with:
-  - [ ] Common CLI error class (`CLIError`) encapsulating exit codes/messages.
-  - [ ] Logging adapters honoring emoji/no-color preferences.
-  - [ ] Helper for registering Typer commands with consistent metadata.
-- [ ] Update `clean`, `hooks`, `quality`, `tool_info`, `config_cmd`, `lint` to use shared utilities for logging/errors.
-- [ ] Ensure backward compatibility exports remain for external callers.
+- [x] Introduce `cli/shared.py` with:
+  - [x] Common CLI error class (`CLIError`) encapsulating exit codes/messages.
+  - [x] Logging adapters honoring emoji/no-color preferences.
+  - [x] Helper for registering Typer commands with consistent metadata.
+- [x] Update `clean`, `hooks`, `quality`, `tool_info`, `config_cmd`, `lint`, `security`, `banned`, `install`, and `update` to use shared utilities for logging/errors.
+- [x] Ensure backward compatibility exports remain for external callers.
+- [x] Add dedicated override service modules for lint configuration (severity, complexity, strictness).
 
 ## Phase 2: Config Builder Decomposition
-- [ ] Replace magic values in `config_builder` with enums/Literal types where appropriate (sensitivity, max_complexity, etc.).
-- [ ] Extract config mutation helpers into dedicated service functions (e.g., `_apply_threshold_overrides`, `_apply_execution_overrides`).
-- [ ] Add dataclasses or structured containers for groups of related overrides.
-- [ ] Update docstrings and typing to reflect new structures.
+- [x] Replace magic values in `config_builder` helpers with enums/Literal types or named constants (e.g. serial job count, summary literals).
+- [x] Extract remaining config mutation helpers (file discovery/output/execution) fully into service modules.
+- [x] Add dataclasses or structured containers for groups of related overrides.
+- [x] Update docstrings and typing to reflect new structures across the builder helpers.
 
 ## Phase 3: Typer Entry Normalization
-- [ ] Adopt a uniform pattern for Typer app creation (consistent use of `create_typer` and callbacks).
-- [ ] Use the shared registration helper for all CLI modules to standardize help text and invocation style.
-- [ ] Ensure option definitions originate from single-source dataclasses/annotated types wherever feasible.
+- [x] Adopt a uniform pattern for Typer app creation (consistent use of `create_typer` and callbacks/registrations).
+- [x] Use the shared registration helper for all CLI modules to standardize help text and invocation style.
+- [x] Ensure option definitions originate from single-source dataclasses/annotated types wherever feasible (lint, quality, clean, hooks, config, update, install, security, banned, tool-info).
 
 ## Phase 4: Lint Pipeline Refinement
-- [ ] Extract progress controller lifecycle management into a dedicated service.
-- [ ] Move reporting dispatch (`handle_reporting`, quality append) into orchestrated helpers that accept simple DTOs.
-- [ ] Harmonize lint logging/output handling with shared logging adapters.
-- [ ] Revisit `_run_early_meta_actions` / `_dispatch_meta_commands` for further decomposition if necessary.
+- [x] Extract progress controller lifecycle management into dedicated service helpers.
+- [x] Move reporting dispatch (`handle_reporting`, quality append) into orchestrated helpers that accept simple DTOs and inject the shared logger.
+- [x] Harmonize lint logging/output handling with shared logging adapters across preparation/fetch/reporting.
+- [x] Decompose meta-command handling into `_lint_meta.py`, covering early and runtime actions with testable helpers.
 
 ## Phase 5: Final Cleanup & Validation
-- [ ] Review all CLI modules for consistent SOLID layering (models → services → orchestrator).
-- [ ] Update module-level docstrings and export lists to match new structure.
-- [ ] Perform a final static type check / lint (when allowed) to ensure integrity.
+- [x] Review all CLI modules for consistent SOLID layering (models → services → orchestration/execution).
+- [x] Update module-level docstrings and export lists to match the new structure (e.g., include new Typer command wrappers).
+- [x] Perform a final static type check / lint run (when allowed) covering the entire CLI package (`uv run pyright src/pyqa/cli`).
+
+## Phase 6: Runtime & Helper Refinements
+- [x] Introduce a dependency-invertible runtime builder for lint execution (factory abstraction instead of direct `Orchestrator` construction).
+- [x] Extract configuration diff orchestration into a `_config_cmd_services` helper consumed by the CLI entrypoint.
+- [x] Refresh documentation for `quality.main` to represent the new options container signature.
+- [x] Expand shared registration helpers to expose decorator factories without immediate side effects, keeping them single-purpose.
+

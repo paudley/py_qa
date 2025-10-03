@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -11,12 +12,11 @@ import typer
 
 from ..config import default_parallel_jobs
 from ..constants import PY_QA_DIR_NAME
-from ..logging import warn
 from ..workspace import is_py_qa_workspace
 from ..filesystem.paths import normalize_path
 from ._lint_cli_models import (
     LintCLIInputs,
-    LintDisplayOptions,
+    LintDisplayOptions as CLIDisplayOptions,
     LintExecutionRuntimeParams,
     LintMetaParams,
     LintPathParams,
@@ -26,8 +26,24 @@ from ._lint_cli_models import (
     OUTPUT_MODE_CONCISE,
     LintReportingParams,
 )
-from .options import LintOptions
+from .options import (
+    LintOptions,
+    LintTargetOptions,
+    LintGitOptions,
+    LintSelectionOptions,
+    LintDisplayOptions as OptionsDisplayOptions,
+    LintSummaryOptions,
+    LintOutputBundle,
+    ExecutionRuntimeOptions,
+    ExecutionFormattingOptions,
+    LintExecutionOptions,
+    LintComplexityOptions,
+    LintStrictnessOptions,
+    LintSeverityOptions,
+    LintOverrideOptions,
+)
 from .utils import filter_py_qa_paths
+from .shared import CLILogger
 
 
 @dataclass(slots=True)
@@ -39,7 +55,8 @@ class PreparedLintState:
     root: Path
     ignored_py_qa: list[str]
     artifacts: LintOutputArtifacts
-    display: LintDisplayOptions
+    display: CLIDisplayOptions
+    logger: CLILogger
 
 
 @dataclass(slots=True)
@@ -77,7 +94,12 @@ class NormalPresetState:
     provided_flags: set[str]
 
 
-def prepare_lint_state(ctx: typer.Context, inputs: LintCLIInputs) -> PreparedLintState:
+def prepare_lint_state(
+    ctx: typer.Context,
+    inputs: LintCLIInputs,
+    *,
+    logger: CLILogger,
+) -> PreparedLintState:
     """Normalise CLI inputs and construct the options dataclass."""
 
     targets = inputs.targets
@@ -97,7 +119,7 @@ def prepare_lint_state(ctx: typer.Context, inputs: LintCLIInputs) -> PreparedLin
         ctx,
         targets.path,
         invocation_cwd=invocation_cwd,
-        allow_emoji=not rendering.no_emoji,
+        logger=logger,
     )
     artifacts = _resolve_artifacts(reporting, invocation_cwd=invocation_cwd)
     display = _build_display_options(rendering)
@@ -127,48 +149,75 @@ def prepare_lint_state(ctx: typer.Context, inputs: LintCLIInputs) -> PreparedLin
     preset = _apply_normal_preset(meta=meta, state=preset_state)
 
     options = LintOptions(
-        paths=list(normalized_targets.paths),
-        root=normalized_targets.root,
-        changed_only=targets.git.changed_only,
-        diff_ref=targets.git.diff_ref,
-        include_untracked=targets.git.include_untracked,
-        base_branch=targets.git.base_branch,
-        paths_from_stdin=targets.path.paths_from_stdin,
-        dirs=list(normalized_targets.dirs),
-        exclude=preset.exclude_paths,
-        filters=list(execution.selection.filters),
-        only=list(execution.selection.only),
-        language=list(execution.selection.language),
-        fix_only=execution.selection.fix_only,
-        check_only=execution.selection.check_only,
-        verbose=display.verbose,
-        quiet=display.quiet,
-        no_color=rendering.no_color,
-        no_emoji=rendering.no_emoji,
-        no_stats=reporting.no_stats,
-        no_lint_tests=preset.no_lint_tests,
-        output_mode=preset.output_mode,
-        show_passing=reporting.show_passing,
-        jobs=effective_jobs,
-        bail=execution.runtime.bail,
-        no_cache=execution.runtime.no_cache,
-        cache_dir=cache_dir,
-        pr_summary_out=artifacts.pr_summary_out,
-        pr_summary_limit=summary.pr_summary_limit,
-        pr_summary_min_severity=summary.pr_summary_min_severity,
-        pr_summary_template=summary.pr_summary_template,
-        use_local_linters=preset.use_local_linters,
-        strict_config=execution.strict_config,
-        line_length=overrides.line_length,
-        sql_dialect=overrides.sql_dialect,
-        max_complexity=overrides.max_complexity,
-        max_arguments=overrides.max_arguments,
-        type_checking=overrides.type_checking,
-        bandit_severity=severity.bandit_severity,
-        bandit_confidence=severity.bandit_confidence,
-        pylint_fail_under=severity.pylint_fail_under,
-        sensitivity=severity.sensitivity,
-        advice=preset.advice,
+        targets=LintTargetOptions(
+            root=normalized_targets.root,
+            paths=list(normalized_targets.paths),
+            dirs=list(normalized_targets.dirs),
+            exclude=preset.exclude_paths,
+            paths_from_stdin=targets.path.paths_from_stdin,
+        ),
+        git=LintGitOptions(
+            changed_only=targets.git.changed_only,
+            diff_ref=targets.git.diff_ref,
+            include_untracked=targets.git.include_untracked,
+            base_branch=targets.git.base_branch,
+            no_lint_tests=preset.no_lint_tests,
+        ),
+        selection=LintSelectionOptions(
+            filters=list(execution.selection.filters),
+            only=list(execution.selection.only),
+            language=list(execution.selection.language),
+            fix_only=execution.selection.fix_only,
+            check_only=execution.selection.check_only,
+        ),
+        output=LintOutputBundle(
+            display=OptionsDisplayOptions(
+                verbose=display.verbose,
+                quiet=display.quiet,
+                no_color=rendering.no_color,
+                no_emoji=rendering.no_emoji,
+                output_mode=preset.output_mode,
+                advice=preset.advice,
+            ),
+            summary=LintSummaryOptions(
+                show_passing=reporting.show_passing,
+                no_stats=reporting.no_stats,
+                pr_summary_out=artifacts.pr_summary_out,
+                pr_summary_limit=summary.pr_summary_limit,
+                pr_summary_min_severity=summary.pr_summary_min_severity,
+                pr_summary_template=summary.pr_summary_template,
+            ),
+        ),
+        execution=LintExecutionOptions(
+            runtime=ExecutionRuntimeOptions(
+                jobs=effective_jobs,
+                bail=execution.runtime.bail,
+                no_cache=execution.runtime.no_cache,
+                cache_dir=cache_dir,
+                use_local_linters=preset.use_local_linters,
+                strict_config=execution.runtime.strict_config,
+            ),
+            formatting=ExecutionFormattingOptions(
+                line_length=overrides.line_length,
+                sql_dialect=overrides.sql_dialect,
+                python_version=overrides.python_version,
+            ),
+        ),
+        overrides=LintOverrideOptions(
+            complexity=LintComplexityOptions(
+                max_complexity=overrides.max_complexity,
+                max_arguments=overrides.max_arguments,
+            ),
+            strictness=LintStrictnessOptions(
+                type_checking=overrides.type_checking,
+            ),
+            severity=LintSeverityOptions(
+                bandit_severity=severity.bandit_severity,
+                bandit_confidence=severity.bandit_confidence,
+                pylint_fail_under=severity.pylint_fail_under,
+                sensitivity=severity.sensitivity,
+            ),
+        ),
         provided=preset.provided_flags,
     )
 
@@ -179,6 +228,7 @@ def prepare_lint_state(ctx: typer.Context, inputs: LintCLIInputs) -> PreparedLin
         ignored_py_qa=normalized_targets.ignored_py_qa,
         artifacts=artifacts,
         display=display,
+        logger=logger,
     )
 
 
@@ -190,7 +240,7 @@ def _normalize_targets(
     params: LintPathParams,
     *,
     invocation_cwd: Path,
-    allow_emoji: bool,
+    logger: CLILogger,
 ) -> NormalizedTargets:
     paths = _normalize_path_iter(params.paths, invocation_cwd)
     dirs = _normalize_path_iter(params.dirs, invocation_cwd)
@@ -212,7 +262,7 @@ def _normalize_targets(
                 f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
                 "unless lint runs inside the py_qa workspace."
             )
-            warn(warning_message, use_emoji=allow_emoji)
+            logger.warn(warning_message)
 
     return NormalizedTargets(
         root=root,
@@ -240,8 +290,8 @@ def _resolve_artifacts(
     )
 
 
-def _build_display_options(rendering: LintOutputParams) -> LintDisplayOptions:
-    return LintDisplayOptions(
+def _build_display_options(rendering: LintOutputParams) -> CLIDisplayOptions:
+    return CLIDisplayOptions(
         no_emoji=rendering.no_emoji,
         quiet=rendering.quiet,
         verbose=rendering.verbose,
@@ -301,6 +351,10 @@ def _validate_pylint_fail_under(value: float | None) -> None:
         return
     if not 0 <= value <= 10:
         raise typer.BadParameter("--pylint-fail-under must be between 0 and 10")
+
+
+def _normalize_path(path: Path, invocation_cwd: Path) -> Path:
+    return normalize_path(path, base_dir=invocation_cwd)
 
 
 def _normalize_path_iter(values: Iterable[Path], invocation_cwd: Path) -> list[Path]:
@@ -398,8 +452,6 @@ def _derive_default_root(paths: list[Path]) -> Path | None:
     candidates = [path if path.is_dir() else path.parent for path in paths]
     if not candidates:
         return None
-    import os
-
     common = Path(os.path.commonpath([str(candidate) for candidate in candidates]))
     return common.resolve()
 

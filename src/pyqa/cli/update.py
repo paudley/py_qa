@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Final
 
@@ -26,65 +25,11 @@ from ..update import (
     WorkspaceUpdater,
     ensure_lint_install,
 )
+from ._update_cli_models import UpdateOptions, build_update_options
 from .typer_ext import create_typer
+from .shared import Depends
 
 update_app = create_typer(name="update", help="Update dependencies across detected workspaces.")
-
-
-ROOT_OPTION = Annotated[
-    Path,
-    typer.Option(
-        Path.cwd(),
-        "--root",
-        "-r",
-        help="Project root to scan.",
-        show_default=False,
-    ),
-]
-
-MANAGER_OPTION = Annotated[
-    list[str] | None,
-    typer.Option(
-        None,
-        "--manager",
-        "-m",
-        help="Limit updates to specific managers (python, npm, pnpm, yarn, go, rust).",
-    ),
-]
-
-SKIP_LINT_OPTION = Annotated[
-    bool,
-    typer.Option(
-        False,
-        "--skip-lint-install",
-        help="Skip running the py-qa lint install bootstrap step.",
-    ),
-]
-
-DRY_RUN_OPTION = Annotated[
-    bool,
-    typer.Option(
-        False,
-        "--dry-run",
-        help="Print planned commands without executing.",
-    ),
-]
-
-EMOJI_OPTION = Annotated[
-    bool,
-    typer.Option(True, "--emoji/--no-emoji", help="Toggle emoji output."),
-]
-
-
-@dataclass(slots=True)
-class UpdateOptions:
-    """Capture CLI options guiding the update workflow."""
-
-    root: Path
-    managers: list[str] | None
-    skip_lint_install: bool
-    dry_run: bool
-    use_emoji: bool
 
 
 def _default_runner(args: Sequence[str], cwd: Path | None) -> Any:
@@ -104,11 +49,7 @@ def _default_runner(args: Sequence[str], cwd: Path | None) -> Any:
 
 @update_app.callback(invoke_without_command=True)
 def main(
-    root: ROOT_OPTION = Path.cwd(),
-    manager: MANAGER_OPTION = None,
-    skip_lint_install: SKIP_LINT_OPTION = False,
-    dry_run: DRY_RUN_OPTION = False,
-    emoji: EMOJI_OPTION = True,
+    options: Annotated[UpdateOptions, Depends(build_update_options)],
 ) -> None:
     """Execute dependency updates across discovered workspaces.
 
@@ -127,13 +68,6 @@ def main(
     if click.get_current_context().invoked_subcommand:
         return
 
-    options = UpdateOptions(
-        root=root.resolve(),
-        managers=manager,
-        skip_lint_install=skip_lint_install,
-        dry_run=dry_run,
-        use_emoji=emoji,
-    )
     _run_update(options)
 
 
@@ -218,10 +152,9 @@ def _normalise_cli_managers(values: list[str] | None, use_emoji: bool) -> set[st
     normalized = {value.lower() for value in values}
     invalid = sorted(normalized - VALID_MANAGERS)
     if invalid:
-        fail(
-            f"Unknown manager(s): {', '.join(invalid)}. Valid managers: {', '.join(sorted(VALID_MANAGERS))}",
-            use_emoji=use_emoji,
-        )
+        valid = ", ".join(sorted(VALID_MANAGERS))
+        message = f"Unknown manager(s): {', '.join(invalid)}. Valid managers: {valid}"
+        fail(message, use_emoji=use_emoji)
         raise typer.Exit(code=1)
     return normalized
 

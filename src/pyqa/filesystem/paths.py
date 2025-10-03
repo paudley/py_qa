@@ -34,6 +34,21 @@ def _best_effort_resolve(path: Path) -> Path:
         return path.absolute() if not path.is_absolute() else path
 
 
+def ensure_absolute_path(path: _Pathish, *, base_dir: _Pathish | None = None) -> Path:
+    """Return an absolute variant of ``path`` relative to ``base_dir`` when provided."""
+
+    if path is None:
+        raise ValueError("path must not be None")
+
+    candidate = Path(path).expanduser()
+    if candidate.is_absolute():
+        return _best_effort_resolve(candidate)
+
+    base = Path.cwd() if base_dir is None else Path(base_dir).expanduser()
+    base = _best_effort_resolve(base)
+    return _best_effort_resolve(base / candidate)
+
+
 def normalize_path(path: _Pathish, *, base_dir: _Pathish | None = None) -> Path:
     """Return ``path`` normalised relative to ``base_dir``.
 
@@ -68,6 +83,21 @@ def normalize_path(path: _Pathish, *, base_dir: _Pathish | None = None) -> Path:
             return Path(os.path.relpath(candidate, base))
         except ValueError:
             return candidate
+
+
+def try_ensure_absolute_path(
+    path: _Pathish | None,
+    *,
+    base_dir: _Pathish | None = None,
+) -> Path | None:
+    """Return :func:`ensure_absolute_path` result or ``None`` when coercion fails."""
+
+    if path is None:
+        return None
+    try:
+        return ensure_absolute_path(path, base_dir=base_dir)
+    except (TypeError, ValueError, OSError):
+        return None
 
 
 def normalize_path_key(path: _Pathish, *, base_dir: _Pathish | None = None) -> str:
@@ -148,7 +178,9 @@ normalise_path_key = normalize_path_key
 
 __all__ = (
     "display_relative_path",
+    "ensure_absolute_path",
     "normalise_path_key",
     "normalize_path",
     "normalize_path_key",
+    "try_ensure_absolute_path",
 )

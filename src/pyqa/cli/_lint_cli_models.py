@@ -9,6 +9,8 @@ from typing import Annotated, Final, Literal, cast
 
 import typer
 
+from .shared import Depends
+
 StrictnessLiteral = Literal["lenient", "standard", "strict"]
 BanditLevelLiteral = Literal["low", "medium", "high"]
 SensitivityLiteral = Literal["low", "medium", "high", "maximum"]
@@ -93,6 +95,9 @@ ADVICE_HELP: Final[str] = (
 VALIDATE_SCHEMA_HELP: Final[str] = (
     "Validate catalog definitions against bundled schemas and exit."
 )
+PYTHON_VERSION_HELP: Final[str] = (
+    "Override the Python interpreter version advertised to tools (e.g. 3.12)."
+)
 
 
 @dataclass(slots=True)
@@ -137,6 +142,7 @@ class LintExecutionRuntimeParams:
     no_cache: bool
     cache_dir: Path
     use_local_linters: bool
+    strict_config: bool
 
 
 @dataclass(slots=True)
@@ -180,6 +186,7 @@ class LintOverrideParams:
     max_complexity: int | None
     max_arguments: int | None
     type_checking: StrictnessLiteral | None
+    python_version: str | None
 
 
 @dataclass(slots=True)
@@ -217,7 +224,6 @@ class LintExecutionGroup:
 
     selection: LintSelectionParams
     runtime: LintExecutionRuntimeParams
-    strict_config: bool
 
 
 @dataclass(slots=True)
@@ -427,6 +433,10 @@ def _execution_runtime_dependency(
         bool,
         typer.Option(False, "--use-local-linters", help=USE_LOCAL_LINTERS_HELP),
     ],
+    strict_config: Annotated[
+        bool,
+        typer.Option(False, "--strict-config", help=STRICT_CONFIG_HELP),
+    ],
 ) -> LintExecutionRuntimeParams:
     return LintExecutionRuntimeParams(
         jobs=jobs,
@@ -434,6 +444,7 @@ def _execution_runtime_dependency(
         no_cache=no_cache,
         cache_dir=cache_dir,
         use_local_linters=use_local_linters,
+        strict_config=strict_config,
     )
 
 
@@ -525,13 +536,24 @@ def _override_params_dependency(
             help=TYPE_CHECKING_HELP,
         ),
     ],
+    python_version: Annotated[
+        str | None,
+        typer.Option(
+            None,
+            "--python-version",
+            help=PYTHON_VERSION_HELP,
+        ),
+    ],
 ) -> LintOverrideParams:
+    normalized_python_version = python_version.strip() if python_version else None
+
     return LintOverrideParams(
         line_length=line_length,
         sql_dialect=sql_dialect,
         max_complexity=max_complexity,
         max_arguments=max_arguments,
         type_checking=_coerce_optional_strictness(type_checking),
+        python_version=normalized_python_version,
     )
 
 
@@ -614,31 +636,23 @@ def _meta_params_dependency(
 
 
 def _build_target_group(
-    path_params: Annotated[LintPathParams, typer.Depends(_path_params_dependency)],
-    git_params: Annotated[LintGitParams, typer.Depends(_git_params_dependency)],
+    path_params: Annotated[LintPathParams, Depends(_path_params_dependency)],
+    git_params: Annotated[LintGitParams, Depends(_git_params_dependency)],
 ) -> LintTargetGroup:
     return LintTargetGroup(path=path_params, git=git_params)
 
 
 def _build_execution_group(
-    selection: Annotated[LintSelectionParams, typer.Depends(_selection_params_dependency)],
-    runtime: Annotated[LintExecutionRuntimeParams, typer.Depends(_execution_runtime_dependency)],
-    strict_config: Annotated[
-        bool,
-        typer.Option(False, "--strict-config", help=STRICT_CONFIG_HELP),
-    ],
+    selection: Annotated[LintSelectionParams, Depends(_selection_params_dependency)],
+    runtime: Annotated[LintExecutionRuntimeParams, Depends(_execution_runtime_dependency)],
 ) -> LintExecutionGroup:
-    return LintExecutionGroup(
-        selection=selection,
-        runtime=runtime,
-        strict_config=strict_config,
-    )
+    return LintExecutionGroup(selection=selection, runtime=runtime)
 
 
 def _build_output_group(
-    output_params: Annotated[LintOutputParams, typer.Depends(_output_params_dependency)],
-    reporting_params: Annotated[LintReportingParams, typer.Depends(_reporting_params_dependency)],
-    summary_params: Annotated[LintSummaryParams, typer.Depends(_summary_params_dependency)],
+    output_params: Annotated[LintOutputParams, Depends(_output_params_dependency)],
+    reporting_params: Annotated[LintReportingParams, Depends(_reporting_params_dependency)],
+    summary_params: Annotated[LintSummaryParams, Depends(_summary_params_dependency)],
 ) -> LintOutputGroup:
     return LintOutputGroup(
         rendering=output_params,
@@ -648,9 +662,9 @@ def _build_output_group(
 
 
 def _build_advanced_group(
-    overrides: Annotated[LintOverrideParams, typer.Depends(_override_params_dependency)],
-    severity: Annotated[LintSeverityParams, typer.Depends(_severity_params_dependency)],
-    meta: Annotated[LintMetaParams, typer.Depends(_meta_params_dependency)],
+    overrides: Annotated[LintOverrideParams, Depends(_override_params_dependency)],
+    severity: Annotated[LintSeverityParams, Depends(_severity_params_dependency)],
+    meta: Annotated[LintMetaParams, Depends(_meta_params_dependency)],
 ) -> LintAdvancedGroup:
     return LintAdvancedGroup(
         overrides=overrides,
@@ -660,10 +674,10 @@ def _build_advanced_group(
 
 
 def _build_lint_cli_inputs(
-    targets: Annotated[LintTargetGroup, typer.Depends(_build_target_group)],
-    execution: Annotated[LintExecutionGroup, typer.Depends(_build_execution_group)],
-    output: Annotated[LintOutputGroup, typer.Depends(_build_output_group)],
-    advanced: Annotated[LintAdvancedGroup, typer.Depends(_build_advanced_group)],
+    targets: Annotated[LintTargetGroup, Depends(_build_target_group)],
+    execution: Annotated[LintExecutionGroup, Depends(_build_execution_group)],
+    output: Annotated[LintOutputGroup, Depends(_build_output_group)],
+    advanced: Annotated[LintAdvancedGroup, Depends(_build_advanced_group)],
 ) -> LintCLIInputs:
     return LintCLIInputs(
         targets=targets,
@@ -706,6 +720,7 @@ __all__ = [
     "OUTPUT_MODE_CHOICES",
     "OUTPUT_MODE_CONCISE",
     "OUTPUT_MODE_HELP",
+    "PYTHON_VERSION_HELP",
     "PR_SUMMARY_MIN_SEVERITY_HELP",
     "PR_SUMMARY_OUT_HELP",
     "PR_SUMMARY_SEVERITIES",
