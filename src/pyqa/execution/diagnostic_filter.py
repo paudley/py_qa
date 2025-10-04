@@ -16,6 +16,9 @@ _DUPLICATE_PREFIX: Final[str] = "=="
 _TRAILING_SPAN = re.compile(r":(?P<start>\d+)(?::(?P<end>\d+))?\s*$")
 
 PYLINT_TOOL: Final[str] = "pylint"
+TOMBI_TOOL: Final[str] = "tombi"
+TOMBI_OUT_OF_ORDER_MSG: Final[str] = "defining tables out-of-order is discouraged"
+_INIT_BASENAMES: Final[frozenset[str]] = frozenset({"__init__.py", "__init__.pyi"})
 DUPLICATE_CODES: Final[frozenset[str]] = frozenset({"R0801", "DUPLICATE-CODE"})
 SUPPRESSED_TEST_CODES: Final[frozenset[str]] = DUPLICATE_CODES | {"W0613", "W0212"}
 TEST_PATH_FRAGMENT: Final[str] = "/tests/"
@@ -54,6 +57,10 @@ class DuplicateCodeDeduper:
         """
 
         entries = collect_duplicate_entries(diagnostic.message, self.root)
+        if any(_is_init_path(entry.path) for entry in entries):
+            return False
+        if not entries:
+            return False
         group_key = duplicate_group_key(entries)
         if group_key:
             if group_key in self.seen_groups:
@@ -106,6 +113,9 @@ def filter_diagnostics(
             if not deduper.keep(diagnostic):
                 continue
 
+        if _suppress_tombi_out_of_order(diagnostic, tool):
+            continue
+
         if (
             tool == PYLINT_TOOL
             and upper_code in SUPPRESSED_TEST_CODES
@@ -116,6 +126,24 @@ def filter_diagnostics(
 
         kept.append(diagnostic)
     return kept
+
+
+def _is_init_path(path: str) -> bool:
+    """Return ``True`` when ``path`` references a package ``__init__`` file."""
+
+    candidate = Path(path).name.lower()
+    return candidate in _INIT_BASENAMES
+
+
+def _suppress_tombi_out_of_order(diagnostic: Diagnostic, tool: str) -> bool:
+    """Return ``True`` when tombi should skip the out-of-order warning."""
+
+    if tool != TOMBI_TOOL or not diagnostic.file:
+        return False
+    if not diagnostic.file.lower().endswith("pyproject.toml"):
+        return False
+    message = diagnostic.message.lower()
+    return TOMBI_OUT_OF_ORDER_MSG in message
 
 
 def _candidate_signature(diagnostic: Diagnostic, tool: str) -> str:

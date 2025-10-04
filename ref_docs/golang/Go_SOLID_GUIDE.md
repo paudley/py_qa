@@ -331,7 +331,7 @@ default:\
 fmt.Println("Invalid vehicle type.")\
 return 0.0\
 }\
-return float64(vehicle.Duration) \* pricePerDay\
+return float64(vehicle.Duration) * pricePerDay\
 }
 
 func main() {\
@@ -380,21 +380,21 @@ CalculatePrice(duration int) float64\
 type CarPricer struct{}
 
 func (cp CarPricer) CalculatePrice(duration int) float64 {\
-return float64(duration) \* 50.0\
+return float64(duration) * 50.0\
 }
 
 // MotorcyclePricer is another concrete implementation for motorcycles.\
 type MotorcyclePricer struct{}
 
 func (mp MotorcyclePricer) CalculatePrice(duration int) float64 {\
-return float64(duration) \* 30.0\
+return float64(duration) * 30.0\
 }
 
 // TruckPricer is a third concrete implementation for trucks.\
 type TruckPricer struct{}
 
 func (tp TruckPricer) CalculatePrice(duration int) float64 {\
-return float64(duration) \* 100.0\
+return float64(duration) * 100.0\
 }
 
 // The main logic now depends on the abstraction, not the concrete types.\

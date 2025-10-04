@@ -33,21 +33,26 @@ refactoring the command-line entrypoints.
 ## Patterns & Best Practices
 
 1. **Single Responsibility Principle (SRP)**
+
    - Keep Typer commands thin; push preparation and business logic into services.
    - Group related helpers into focused modules (`_lint_preparation`, `_lint_runtime`, etc.).
 
 1. **Open/Closed Principle (OCP)**
+
    - Swapping or adding behaviours should be data-driven (e.g. catalog or config dataclasses) rather than editing orchestration logic.
    - Use factories or hooks for behaviours that may vary (progress controller, logging, runtime orchestrator).
 
 1. **Liskov Substitution Principle (LSP)**
+
    - When using interfaces (e.g. discovery matchers, runtime dependencies), ensure any implementation works with existing orchestration.
 
 1. **Interface Segregation Principle (ISP)**
+
    - Provide narrow helper interfaces (e.g. registration decorators) instead of dumping large utility functions.
    - Depend on precise dataclasses or DTOs instead of untyped mappings.
 
 1. **Dependency Inversion Principle (DIP)**
+
    - Orchestration functions (`lint_command`, `config_show`, etc.) should depend on abstractions or simple factories, not concrete module-level singletons.
    - Lint runtime creation uses `build_lint_runtime_context` so tests can inject alternative orchestrators.
 

@@ -11,28 +11,33 @@
 ## Functional Requirements
 
 1. **Exit Codes**
+
    - The wrapper must propagate the underlying command’s exit code to the shell
      without modification.
    - Failures in interpreter discovery or fallback mechanisms must yield
      non-zero exit codes with helpful diagnostics.
 
 1. **Output Cleanliness**
+
    - Avoid printing internal status messages (“falling back…”, uv internals)
      unless running in verbose/debug mode.
    - All normal output must come from the CLI command itself.
 
 1. **Interpreter Selection**
+
    - Respect an override environment variable (`PYQA_PYTHON`) when provided.
    - Otherwise, probe the current interpreter: if it meets version requirements (≥3.12), finds `pyqa.cli.app` importable, and the resolved module path lives under the repository `src` directory, reuse it directly.
    - If the probe fails (missing deps, wrong version, import outside the repo), fall back to `uv --project … run python -m pyqa.cli.app …`.
    - When no viable interpreter is discovered, exit with an informative message.
 
 1. **Repository Code Preference**
+
    - Ensure the repository’s `src/` directory is at the front of
      `PYTHONPATH` so local code always wins over globally installed packages.
    - Do not rely on system `pyqa` installations.
 
 1. **Environment Agnosticism**
+
    - Wrappers must function even when the user’s environment lacks pyqa’s
      dependencies; they bootstrap via `uv`, downloading the binary into a
      cache (e.g. `.lint-cache/uv`) when not already available, and executing
@@ -40,6 +45,7 @@
    - When running outside the repo, fail fast with a clear message.
 
 1. **Consistent Entry Point**
+
    - All CLI scripts should share the same launcher function to minimise
      divergence.
    - Support legacy entry points (e.g. `--install` shim for `lint`) via minimal
@@ -48,6 +54,7 @@
 ## Implementation Plan
 
 1. **Launcher Module**
+
    - Implement a `scripts/cli_launcher.py` module that:
      - Normalises `PYTHONPATH` to preferring the repo’s `src` directory.
      - Probes the active interpreter (`sys.executable` or `PYQA_PYTHON`) for compatibility (version ≥3.12, imports `pyqa.cli.app` from the repo).
@@ -57,15 +64,18 @@
        - Pass through exit codes.
 
 1. **Wrapper Scripts**
+
    - Convert each CLI script to a thin Python file that imports and invokes
      `launch(<command>, args)`.
 
 1. **Diagnostics & Logging**
+
    - Provide optional `PYQA_WRAPPER_VERBOSE=1` mode that prints interpreter
      selection details and fallback steps for debugging.
    - Default behaviour should be silent unless errors occur.
 
 1. **Testing**
+
    - Add wrapper tests covering scenarios:
      - Local dependencies installed (`pyqa.cli` importable).
      - Local dependencies missing, fallback via `uv`.
@@ -74,6 +84,7 @@
    - Verify exit codes in each scenario.
 
 1. **Documentation**
+
    - Update `cli/CLI_MODULE.md` with wrapper behaviour, environment variables,
      and troubleshooting steps.
    - Reference `WRAPPER.md` from developer docs for quick context.

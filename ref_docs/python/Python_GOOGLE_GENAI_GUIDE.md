@@ -4,7 +4,7 @@
 
 # **A Developer's and Agent's Guide to the google.genai Python SDK**
 
----
+______________________________________________________________________
 
 ## **1. Foundational Concepts and SDK Migration**
 
@@ -122,7 +122,7 @@ location="us-central1",\
 http_options=types.HttpOptions(api_version='v1')\
 )
 
----
+______________________________________________________________________
 
 ## **2. Core Scenarios: Generating Content**
 
@@ -283,7 +283,7 @@ print()
 if \_\_name\_\_ == "\_\_main\_\_":\
 asyncio.run(main())
 
----
+______________________________________________________________________
 
 ## **3. Advanced Capabilities and Workflows**
 
@@ -492,7 +492,7 @@ print(f"Preparation Time: {pancake_recipe.prep_time_minutes} minutes")
 
 When using structured output, it is a best practice to keep schemas as simple as possible. Overly complex schemas with deep nesting, long property names, or numerous optional fields can increase token usage and may lead to a 400 INVALID_ARGUMENT error.39
 
----
+______________________________________________________________________
 
 ## **4. Best Practices, Optimization, and Control**
 
@@ -635,7 +635,7 @@ contents=prompt\
 
 print(f"Total tokens in prompt: {token_count.total_tokens}")
 
----
+______________________________________________________________________
 
 ## **5. Error Handling and Troubleshooting**
 

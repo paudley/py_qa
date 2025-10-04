@@ -113,7 +113,7 @@ class OrderCalculator:\
 """Responsible solely for order-related calculations."""\
 @staticmethod\
 def calculate_total(order: Order) -> float:\
-price = sum(item['price'] \* item['quantity'] for item in order.items)\
+price = sum(item['price'] * item['quantity'] for item in order.items)\
 order.total_price = price\
 return price
 
@@ -207,13 +207,13 @@ pass
 class StudentDiscount(Discount):\
 """A concrete discount strategy for students."""\
 def apply(self, total: float) -> float:\
-return total \* 0.8 # 20% discount
+return total * 0.8 # 20% discount
 
 class BulkDiscount(Discount):\
 """A concrete discount strategy for bulk orders."""\
 def apply(self, total: float) -> float:\
 if total >= 100:\
-return total \* 0.9 # 10% discount\
+return total * 0.9 # 10% discount\
 return total
 
 class Order:\
@@ -232,7 +232,7 @@ def get\_final\_price(self) \-\> float:
 \# To add a new discount, we create a new class without modifying Order.\
 class HolidayDiscount(Discount):\
 def apply(self, total: float) -> float:\
-return total \* 0.95 # 5% holiday discount
+return total * 0.95 # 5% holiday discount
 
 With this design, the Order class is closed for modification but open for extension. New discount types can be added simply by creating new subclasses of Discount, promoting maintainability and seamless feature introduction.9
 
