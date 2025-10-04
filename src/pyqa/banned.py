@@ -7,8 +7,9 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Final
 
-DEFAULT_BANNED_TERMS = {
+DEFAULT_BANNED_TERMS: Final[set[str]] = {
     "password123",
     "secret_key",
     "api_key_here",
@@ -54,6 +55,13 @@ class BannedWordChecker:
     default_terms: Iterable[str] = field(default_factory=lambda: DEFAULT_BANNED_TERMS)
 
     def load_terms(self) -> list[str]:
+        """Return aggregated banned terms from personal, repo, and default lists.
+
+        Returns:
+            list[str]: Sorted set of case-insensitive banned terms.
+
+        """
+
         terms: set[str] = set()
         for source in (
             self.personal_list or Path.home() / ".banned-words",
@@ -64,6 +72,16 @@ class BannedWordChecker:
         return sorted(terms, key=lambda s: s.lower())
 
     def scan(self, lines: Sequence[str]) -> list[str]:
+        """Return banned terms discovered within ``lines``.
+
+        Args:
+            lines: Text lines to evaluate for banned content.
+
+        Returns:
+            list[str]: Terms that appear in the provided content.
+
+        """
+
         terms = self.load_terms()
         matches: list[str] = []
         joined = "\n".join(lines)
@@ -75,6 +93,16 @@ class BannedWordChecker:
 
 
 def _read_terms(path: Path) -> set[str]:
+    """Return banned terms read from ``path`` ignoring comments and blanks.
+
+    Args:
+        path: File containing newline-separated banned terms.
+
+    Returns:
+        set[str]: Unique banned terms sourced from the file.
+
+    """
+
     if not path.exists():
         return set()
     items: set[str] = set()

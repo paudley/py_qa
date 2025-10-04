@@ -199,11 +199,20 @@ def write_json_report(result: RunResult, path: Path) -> None:
         result: Completed orchestrator run result to serialise.
         path: Destination path that receives the JSON payload.
     """
+    total_actions = len(result.outcomes)
+    failed_actions = sum(1 for outcome in result.outcomes if not outcome.ok)
+    cached_actions = sum(1 for outcome in result.outcomes if outcome.cached)
+
     payload = {
         "root": str(result.root),
         "files": [str(p) for p in result.files],
         "outcomes": [serialize_outcome(outcome) for outcome in result.outcomes],
         "analysis": result.analysis,
+        "actions": {
+            "total": total_actions,
+            "failed": failed_actions,
+            "cached": cached_actions,
+        },
     }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 

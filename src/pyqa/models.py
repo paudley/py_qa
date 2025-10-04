@@ -100,6 +100,7 @@ class ToolOutcome(BaseModel):
     stdout: list[str] = Field(default_factory=list)
     stderr: list[str] = Field(default_factory=list)
     diagnostics: list[Diagnostic] = Field(default_factory=list)
+    cached: bool = False
 
     @field_validator("stdout", "stderr", mode="before")
     @classmethod

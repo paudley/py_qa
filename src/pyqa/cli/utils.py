@@ -118,22 +118,24 @@ def check_tool_status(tool: Tool) -> ToolStatus:
             raw_output=None,
         )
 
-    output = (completed.stdout or "") + ("\n" + completed.stderr if completed.stderr else "")
-    output = output.strip()
+    output_parts = [completed.stdout or ""]
+    if completed.stderr:
+        output_parts.append(f"\n{completed.stderr}")
+    output = "".join(output_parts).strip()
     version = resolver.normalize(output.splitlines()[0] if output else None)
 
-    availability = ToolAvailability.OK
+    availability_status: ToolAvailability = ToolAvailability.OK
     notes = output.splitlines()[0] if output else ""
     if completed.returncode != 0:
-        availability = ToolAvailability.NOT_OK
+        availability_status = ToolAvailability.NOT_OK
         notes = output or f"Exited with status {completed.returncode}."
     elif tool.min_version and version and not resolver.is_compatible(version, tool.min_version):
-        availability = ToolAvailability.OUTDATED
+        availability_status = ToolAvailability.OUTDATED
         notes = f"Detected {version}; requires ≥ {tool.min_version}."
 
     return ToolStatus(
         name=tool.name,
-        availability=availability,
+        availability=availability_status,
         notes=notes,
         version=ToolVersionStatus(detected=version, minimum=tool.min_version),
         execution=ToolExecutionDetails(

@@ -67,6 +67,7 @@ HTML_COMMENT_END: Final[str] = "-->"
 C_BLOCK_COMMENT_START: Final[str] = "/*"
 C_BLOCK_COMMENT_END: Final[str] = "*/"
 RST_COMMENT_PREFIX: Final[str] = ".."
+COLON_CHAR: Final[str] = ":"
 COMMENT_PREFIXES: Final[tuple[str, ...]] = (
     "#",
     "//",
@@ -588,10 +589,7 @@ def expected_notice(
 
     year = current_year or datetime.now().year
     start_candidates = [value for value in (observed.start, baseline.start) if value]
-    if start_candidates:
-        start_year = min(start_candidates)
-    else:
-        start_year = year
+    start_year = min(start_candidates) if start_candidates else year
 
     end_candidates = [value for value in (observed.end, baseline.end) if value is not None]
     end_year = max(end_candidates) if end_candidates else None
@@ -602,10 +600,7 @@ def expected_notice(
     latest = max(latest_candidates) if latest_candidates else year
     latest = max(latest, start_year)
 
-    if latest == start_year:
-        year_expression = f"{start_year}"
-    else:
-        year_expression = f"{start_year}-{latest}"
+    year_expression = f"{start_year}" if latest == start_year else f"{start_year}-{latest}"
 
     return f"Copyright (c) {year_expression} {owner}".strip()
 
@@ -778,8 +773,8 @@ def _strip_comment_prefix(line: str) -> str:
         if cleaned.startswith(prefix):
             cleaned = cleaned[len(prefix) :].lstrip(" -*#/")
             break
-    if cleaned.startswith('"') and ":" in cleaned:
-        _, remainder = cleaned.split(":", 1)
+    if cleaned.startswith('"') and COLON_CHAR in cleaned:
+        _, remainder = cleaned.split(COLON_CHAR, 1)
         cleaned = remainder.strip()
         if cleaned.endswith(","):
             cleaned = cleaned[:-1].rstrip()

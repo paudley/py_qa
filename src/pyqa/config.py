@@ -6,13 +6,15 @@ from __future__ import annotations
 
 import math
 import os
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .tools.catalog_metadata import catalog_duplicate_preference
 
 
 class ConfigError(Exception):
@@ -90,7 +92,8 @@ class ConfigOverrideKey(str, Enum):
         """
 
         if self is ConfigOverrideKey.LINE_LENGTH:
-            config.execution = config.execution.model_copy(update={"line_length": int(value)})
+            numeric_value = cast(int | float, value)
+            config.execution = config.execution.model_copy(update={"line_length": int(numeric_value)})
         elif self is ConfigOverrideKey.MAX_COMPLEXITY:
             config.complexity = config.complexity.model_copy(update={"max_complexity": cast(int | None, value)})
         elif self is ConfigOverrideKey.MAX_ARGUMENTS:
@@ -98,13 +101,13 @@ class ConfigOverrideKey(str, Enum):
         elif self is ConfigOverrideKey.TYPE_CHECKING:
             config.strictness = config.strictness.model_copy(update={"type_checking": cast(StrictnessLevel, value)})
         elif self is ConfigOverrideKey.BANDIT_LEVEL:
-            config._update_severity(bandit_level=cast(BanditLevel, value))
+            config.update_severity(bandit_level=cast(BanditLevel, value))
         elif self is ConfigOverrideKey.BANDIT_CONFIDENCE:
-            config._update_severity(bandit_confidence=cast(BanditConfidence, value))
+            config.update_severity(bandit_confidence=cast(BanditConfidence, value))
         elif self is ConfigOverrideKey.PYLINT_FAIL_UNDER:
-            config._update_severity(pylint_fail_under=cast(float | None, value))
+            config.update_severity(pylint_fail_under=cast(float | None, value))
         elif self is ConfigOverrideKey.MAX_WARNINGS:
-            config._update_severity(max_warnings=cast(int | None, value))
+            config.update_severity(max_warnings=cast(int | None, value))
 
 
 SensitivityOverrideValue = int | float | None | StrictnessLevel | BanditLevel | BanditConfidence
@@ -315,18 +318,15 @@ def _normalize_override_keys(
 
 
 def _load_duplicate_preference() -> tuple[str, ...]:
-    """Load duplicate preference metadata from the tool catalog.
+    """Return tool duplicate preference metadata when available.
 
     Returns:
         tuple[str, ...]: Ordered tool identifiers expressing duplicate
-        resolution preference. An empty tuple is returned when the catalog is
-        unavailable.
+        resolution preference. An empty tuple is returned when no preference is
+        defined.
+
     """
 
-    try:
-        from .tools.catalog_metadata import catalog_duplicate_preference
-    except ImportError:
-        return ()
     return catalog_duplicate_preference()
 
 
@@ -361,6 +361,7 @@ class SeverityConfig(BaseModel):
 
 UNSET: Final[object] = object()
 NO_BASELINE: Final[object] = object()
+MYPY_TOOL_KEY: Final[str] = "mypy"
 
 
 @dataclass(frozen=True, slots=True)
@@ -371,7 +372,7 @@ class ToolSpecificOverride:
     value: ToolOverrideValue
     skip_if_truthy: bool = False
 
-    def apply(self, tool_settings: dict[str, ToolOverrideValue]) -> None:
+    def apply(self, tool_settings: MutableMapping[str, object]) -> None:
         """Apply the configured override onto a tool-specific mapping.
 
         Args:
@@ -538,7 +539,7 @@ class SharedKnobSnapshot:
                 ),
             )
             return strictness is StrictnessLevel.STRICT
-        if tool == "mypy":
+        if tool == MYPY_TOOL_KEY:
             strictness = cast(
                 StrictnessLevel,
                 self.knob_values.get(
@@ -726,6 +727,31 @@ class Config(BaseModel):
         if duplicate_preference:
             self._merge_dedupe_preferences(duplicate_preference)
         self._apply_mypy_defaults(override=override, baseline=baseline)
+
+    def update_severity(
+        self,
+        *,
+        bandit_level: BanditLevel | object = UNSET,
+        bandit_confidence: BanditConfidence | object = UNSET,
+        pylint_fail_under: float | None | object = UNSET,
+        max_warnings: int | None | object = UNSET,
+    ) -> None:
+        """Apply targeted updates to the severity configuration section.
+
+        Args:
+            bandit_level: Optional override for Bandit's severity level.
+            bandit_confidence: Optional override for Bandit's confidence level.
+            pylint_fail_under: Optional override for Pylint's fail-under score.
+            max_warnings: Optional override for maximum tolerable warnings.
+
+        """
+
+        self._update_severity(
+            bandit_level=bandit_level,
+            bandit_confidence=bandit_confidence,
+            pylint_fail_under=pylint_fail_under,
+            max_warnings=max_warnings,
+        )
 
     def _update_severity(
         self,

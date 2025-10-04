@@ -3,40 +3,94 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from importlib import import_module, metadata
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Final, cast
 
-_ExportTarget = tuple[str, str]
 
-_EXPORT_NAME_TO_TARGET: Final[dict[str, _ExportTarget]] = {
-    "Config": ("pyqa.config", "Config"),
-    "ConfigError": ("pyqa.config", "ConfigError"),
-    "ConfigLoader": ("pyqa.config_loader", "ConfigLoader"),
-    "DedupeConfig": ("pyqa.config", "DedupeConfig"),
-    "ExecutionConfig": ("pyqa.config", "ExecutionConfig"),
-    "FileDiscoveryConfig": ("pyqa.config", "FileDiscoveryConfig"),
-    "Orchestrator": ("pyqa.execution.orchestrator", "Orchestrator"),
-    "OrchestratorHooks": ("pyqa.execution.orchestrator", "OrchestratorHooks"),
-    "OutputConfig": ("pyqa.config", "OutputConfig"),
-    "SecurityScanner": ("pyqa.security", "SecurityScanner"),
-    "build_default_discovery": ("pyqa.discovery", "build_default_discovery"),
-    "generate_config_schema": ("pyqa.config_loader", "generate_config_schema"),
-    "load_config": ("pyqa.config_loader", "load_config"),
+@dataclass(frozen=True, slots=True)
+class ExportTarget:
+    """Describe a lazily imported symbol exposed from the top-level package."""
+
+    module: str
+    attribute: str
+
+
+_EXPORT_NAME_TO_TARGET: Final[dict[str, ExportTarget]] = {
+    "Config": ExportTarget("pyqa.config", "Config"),
+    "ConfigError": ExportTarget("pyqa.config", "ConfigError"),
+    "ConfigLoader": ExportTarget("pyqa.config_loader", "ConfigLoader"),
+    "DedupeConfig": ExportTarget("pyqa.config", "DedupeConfig"),
+    "ExecutionConfig": ExportTarget("pyqa.config", "ExecutionConfig"),
+    "FileDiscoveryConfig": ExportTarget("pyqa.config", "FileDiscoveryConfig"),
+    "Orchestrator": ExportTarget("pyqa.execution.orchestrator", "Orchestrator"),
+    "OrchestratorHooks": ExportTarget("pyqa.execution.orchestrator", "OrchestratorHooks"),
+    "OutputConfig": ExportTarget("pyqa.config", "OutputConfig"),
+    "SecurityScanner": ExportTarget("pyqa.security", "SecurityScanner"),
+    "build_default_discovery": ExportTarget("pyqa.discovery", "build_default_discovery"),
+    "generate_config_schema": ExportTarget("pyqa.config_loader", "generate_config_schema"),
+    "load_config": ExportTarget("pyqa.config_loader", "load_config"),
 }
 
 _VERSION_ATTRIBUTE: Final[str] = "__version__"
 
-__all__ = tuple(_EXPORT_NAME_TO_TARGET)
+__all__ = [
+    "Config",
+    "ConfigError",
+    "ConfigLoader",
+    "DedupeConfig",
+    "ExecutionConfig",
+    "FileDiscoveryConfig",
+    "Orchestrator",
+    "OrchestratorHooks",
+    "OutputConfig",
+    "SecurityScanner",
+    "build_default_discovery",
+    "generate_config_schema",
+    "load_config",
+]
 
 if TYPE_CHECKING:  # pragma: no cover - import hints for static analysis only
-    from pyqa.config import Config, ConfigError, DedupeConfig, ExecutionConfig, FileDiscoveryConfig, OutputConfig
+    from pyqa.config import (
+        Config,
+        ConfigError,
+        DedupeConfig,
+        ExecutionConfig,
+        FileDiscoveryConfig,
+        OutputConfig,
+    )
     from pyqa.config_loader import ConfigLoader, generate_config_schema, load_config
     from pyqa.discovery import build_default_discovery
     from pyqa.execution.orchestrator import Orchestrator, OrchestratorHooks
     from pyqa.security import SecurityScanner
 
+    ExportedCallable = Callable[..., object]
+    ExportedValue = (
+        str
+        | Config
+        | ConfigError
+        | ConfigLoader
+        | DedupeConfig
+        | ExecutionConfig
+        | FileDiscoveryConfig
+        | Orchestrator
+        | OrchestratorHooks
+        | OutputConfig
+        | SecurityScanner
+        | ExportedCallable
+        | Mapping[str, object]
+    )
+    _TYPECHECK_EXPORTS = (
+        generate_config_schema,
+        load_config,
+        build_default_discovery,
+    )
+else:  # pragma: no cover - runtime fallback uses ``object`` for short-circuit typing
+    ExportedValue = object
 
-def __getattr__(name: str) -> Any:
+
+def __getattr__(name: str) -> ExportedValue:
     """Return lazily imported exports for the top-level ``pyqa`` package.
 
     Args:
@@ -59,14 +113,18 @@ def __getattr__(name: str) -> Any:
     target = _EXPORT_NAME_TO_TARGET.get(name)
     if target is None:
         raise AttributeError(name) from None
-    module_name, attribute = target
-    module = import_module(module_name)
-    value = getattr(module, attribute)
+    module = import_module(target.module)
+    value = getattr(module, target.attribute)
     globals()[name] = value
-    return value
+    return cast(ExportedValue, value)
 
 
 def __dir__() -> list[str]:
-    """Return attributes exposed from the top-level package."""
+    """Return attributes exposed from the top-level package.
 
-    return [*_EXPORT_NAME_TO_TARGET, _VERSION_ATTRIBUTE]
+    Returns:
+        list[str]: Exported attribute names including the version sentinel.
+
+    """
+
+    return [*__all__, _VERSION_ATTRIBUTE]

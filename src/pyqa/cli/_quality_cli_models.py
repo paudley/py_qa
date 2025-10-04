@@ -85,66 +85,110 @@ class QualityCLIOptions:
     emoji: bool
 
     @classmethod
-    def from_cli(
-        cls,
-        *,
-        root: Path,
-        paths: tuple[Path, ...],
-        staged: bool,
-        fix: bool,
-        requested_checks: tuple[str, ...],
-        include_schema: bool,
-        emoji: bool,
-    ) -> QualityCLIOptions:
+    def from_cli(cls, params: QualityCLIInputParams) -> QualityCLIOptions:
         """Return options parsed from Typer callback arguments.
 
         Args:
-            root: Root path supplied by Typer.
-            paths: Tuple of path arguments passed on the command line.
-            staged: Indicates whether staged files should be preferred.
-            fix: Indicates whether automatic fixes should be applied.
-            requested_checks: Explicit subset of checks requested by the user.
-            include_schema: Flag indicating whether schema validation remains
-                enabled after accounting for ``--no-schema``.
-            emoji: Flag controlling whether emoji output should be rendered.
+            params: Structured CLI parameters collected from Typer dependencies.
 
         Returns:
             QualityCLIOptions: Normalized options with a resolved project root.
         """
 
         return cls(
-            root=root.resolve(),
-            raw_paths=paths,
-            staged=staged,
-            fix=fix,
-            requested_checks=requested_checks,
-            include_schema=include_schema,
-            emoji=emoji,
+            root=params.root.resolve(),
+            raw_paths=params.paths,
+            staged=params.staged,
+            fix=params.fix,
+            requested_checks=params.requested_checks,
+            include_schema=params.include_schema,
+            emoji=params.emoji,
         )
 
 
-def build_quality_options(
+@dataclass(slots=True)
+class QualityCLIInputParams:
+    """Container for raw CLI arguments prior to normalisation."""
+
+    root: Path
+    paths: tuple[Path, ...]
+    staged: bool
+    fix: bool
+    requested_checks: tuple[str, ...]
+    include_schema: bool
+    emoji: bool
+
+
+@dataclass(slots=True)
+class _QualityPathArgs:
+    """Path-related CLI arguments collected from Typer."""
+
+    root: Path
+    paths: tuple[Path, ...]
+    staged: bool
+
+
+@dataclass(slots=True)
+class _QualityFlagArgs:
+    """Flag-based CLI arguments collected from Typer."""
+
+    fix: bool
+    requested_checks: tuple[str, ...]
+    include_schema: bool
+    emoji: bool
+
+
+def _collect_quality_path_args(
     root: ROOT_OPTION,
     paths: PATHS_ARGUMENT,
     staged: STAGED_OPTION,
+) -> _QualityPathArgs:
+    """Return normalised path arguments used by the quality CLI."""
+
+    normalized_paths = tuple(paths or [])
+    return _QualityPathArgs(root=root, paths=normalized_paths, staged=staged)
+
+
+def _collect_quality_flag_args(
     fix: FIX_OPTION,
     check: CHECK_OPTION,
     no_schema: NO_SCHEMA_OPTION,
     emoji: EMOJI_OPTION,
-) -> QualityCLIOptions:
-    """Construct ``QualityCLIOptions`` from Typer callback arguments."""
+) -> _QualityFlagArgs:
+    """Return normalised flag arguments used by the quality CLI."""
 
-    normalized_paths = tuple(paths or [])
     requested_checks = tuple(check or [])
-    return QualityCLIOptions.from_cli(
-        root=root,
-        paths=normalized_paths,
-        staged=staged,
+    return _QualityFlagArgs(
         fix=fix,
         requested_checks=requested_checks,
         include_schema=not no_schema,
         emoji=emoji,
     )
+
+
+def _collect_quality_cli_params(
+    path_args: Annotated[_QualityPathArgs, Depends(_collect_quality_path_args)],
+    flag_args: Annotated[_QualityFlagArgs, Depends(_collect_quality_flag_args)],
+) -> QualityCLIInputParams:
+    """Collect raw CLI inputs before normalisation."""
+
+    return QualityCLIInputParams(
+        root=path_args.root,
+        paths=path_args.paths,
+        staged=path_args.staged,
+        fix=flag_args.fix,
+        requested_checks=flag_args.requested_checks,
+        include_schema=flag_args.include_schema,
+        emoji=flag_args.emoji,
+    )
+
+
+def build_quality_options(
+    params: Annotated[QualityCLIInputParams, Depends(_collect_quality_cli_params)],
+) -> QualityCLIOptions:
+    """Construct ``QualityCLIOptions`` from Typer callback arguments."""
+
+    return QualityCLIOptions.from_cli(params)
 
 
 @dataclass(slots=True)
@@ -181,6 +225,7 @@ __all__ = [
     "CHECK_OPTION",
     "NO_SCHEMA_OPTION",
     "EMOJI_OPTION",
+    "QualityCLIInputParams",
     "QualityCLIOptions",
     "QualityConfigContext",
     "QualityTargetResolution",

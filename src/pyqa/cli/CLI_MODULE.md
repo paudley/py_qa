@@ -64,7 +64,7 @@ refactoring the command-line entrypoints.
 - **Options Containers**: Prefer annotated dependencies that return dataclasses
   (e.g. `LintCLIInputs`, `QualityCLIOptions`) to keep type hints clear and limit the number of Typer parameters per function.
 - **Laziness**: The package-level `app` export in `pyqa.cli` is resolved lazily to avoid `runpy` warnings. External users should continue importing `pyqa.cli.app` normally.
-- **Backwards Compatibility**: `_build_config` remains as a compatibility shim (dataclass + service) to support legacy automation relying on keyword arguments.
+- **Backwards Compatibility**: `_build_config` now requires a pre-constructed `LintOptions` instance, avoiding the fragile keyword-based constructor that previously triggered lint errors.
 - **Wrappers**: Root-level launchers (e.g. `./lint`, `./tool-info`) all delegate through `scripts.cli_launcher.launch`, which handles interpreter selection, `PYTHONPATH`, and optional `uv` fallback.
 - **Wrapper troubleshooting**: When wrappers misbehave, enable `PYQA_WRAPPER_VERBOSE=1` to see interpreter detection, check `PYQA_PYTHON`/`PYQA_UV` overrides, and confirm `.lint-cache/uv` is writable for automatic downloads.
 - **Wrapper failure modes**: A successful probe requires Python ≥3.12 and imports resolving under `src/`; otherwise the launcher falls back to `uv --project … run python -m pyqa.cli.app`. Propagated exit codes make it safe to rely on wrappers within CI.

@@ -44,9 +44,8 @@ def emit_hooks_summary(
     Args:
         result: The installation result from :func:`perform_installation`.
         options: CLI options controlling dry-run behaviour and emoji output.
+        logger: Logger used to display summary warnings.
 
-    Returns:
-        None. The function performs logging side effects only.
     """
 
     if result.backups:

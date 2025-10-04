@@ -5,37 +5,35 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Final, Literal, cast
+from typing import Annotated, Final, cast
 
 import typer
 
+from ._lint_literals import (
+    BANDIT_LEVEL_CHOICES,
+    OUTPUT_MODE_CHOICES,
+    OUTPUT_MODE_CONCISE,
+    PR_SUMMARY_SEVERITIES,
+    PROGRESS_EVENT_COMPLETED,
+    PROGRESS_EVENT_START,
+    SENSITIVITY_CHOICES,
+    STRICTNESS_CHOICES,
+    BanditLevelLiteral,
+    OutputModeLiteral,
+    ProgressPhaseLiteral,
+    PRSummarySeverityLiteral,
+    SensitivityLiteral,
+    StrictnessLiteral,
+)
+from ._update_cli_models import ROOT_OPTION as UPDATE_ROOT_OPTION
+from .options import (
+    ExecutionRuntimeOptions,
+    LintDisplayToggles,
+    LintGitOptions,
+    LintSelectionOptions,
+    LintSeverityOptions,
+)
 from .shared import Depends
-
-StrictnessLiteral = Literal["lenient", "standard", "strict"]
-BanditLevelLiteral = Literal["low", "medium", "high"]
-SensitivityLiteral = Literal["low", "medium", "high", "maximum"]
-OutputModeLiteral = Literal["concise", "pretty", "raw"]
-PRSummarySeverityLiteral = Literal["error", "warning", "notice", "note"]
-ProgressPhaseLiteral = Literal["start", "completed", "error"]
-
-STRICTNESS_CHOICES: Final[tuple[StrictnessLiteral, ...]] = ("lenient", "standard", "strict")
-BANDIT_LEVEL_CHOICES: Final[tuple[BanditLevelLiteral, ...]] = ("low", "medium", "high")
-SENSITIVITY_CHOICES: Final[tuple[SensitivityLiteral, ...]] = (
-    "low",
-    "medium",
-    "high",
-    "maximum",
-)
-OUTPUT_MODE_CHOICES: Final[tuple[OutputModeLiteral, ...]] = ("concise", "pretty", "raw")
-OUTPUT_MODE_CONCISE: Final[OutputModeLiteral] = "concise"
-PR_SUMMARY_SEVERITIES: Final[tuple[PRSummarySeverityLiteral, ...]] = (
-    "error",
-    "warning",
-    "notice",
-    "note",
-)
-PROGRESS_EVENT_START: Final[ProgressPhaseLiteral] = "start"
-PROGRESS_EVENT_COMPLETED: Final[ProgressPhaseLiteral] = "completed"
 
 NORMAL_PRESET_HELP: Final[str] = (
     "Apply the built-in 'normal' lint preset (concise output, advice, no tests, local linters)."
@@ -78,49 +76,40 @@ class LintPathParams:
     exclude: list[Path]
 
 
-@dataclass(slots=True)
-class LintGitParams:
-    """Represent git-related discovery toggles."""
+LintGitParams = LintGitOptions
 
-    changed_only: bool
-    diff_ref: str
-    include_untracked: bool
-    base_branch: str | None
-    no_lint_tests: bool
+
+LintSelectionParams = LintSelectionOptions
+
+
+LintExecutionRuntimeParams = ExecutionRuntimeOptions
 
 
 @dataclass(slots=True)
-class LintSelectionParams:
-    """Capture tool selection filters and mode switches."""
-
-    filters: list[str]
-    only: list[str]
-    language: list[str]
-    fix_only: bool
-    check_only: bool
-
-
-@dataclass(slots=True)
-class LintExecutionRuntimeParams:
-    """Runtime tuning controls for orchestrator execution."""
-
-    jobs: int | None
-    bail: bool
-    no_cache: bool
-    cache_dir: Path
-    use_local_linters: bool
-    strict_config: bool
-
-
-@dataclass(slots=True)
-class LintOutputParams:
+class LintOutputParams(LintDisplayToggles):
     """Rendering preferences for user-facing output."""
 
-    verbose: bool
-    quiet: bool
-    no_color: bool
-    no_emoji: bool
-    output_mode: OutputModeLiteral
+    def as_dict(self) -> dict[str, bool | OutputModeLiteral]:
+        """Return the toggles as a serialisable dictionary."""
+
+        return {
+            "verbose": self.verbose,
+            "quiet": self.quiet,
+            "no_color": self.no_color,
+            "no_emoji": self.no_emoji,
+            "output_mode": self.output_mode,
+        }
+
+    def with_output_mode(self, output_mode: OutputModeLiteral) -> LintOutputParams:
+        """Return a copy of the toggles with ``output_mode`` replaced."""
+
+        return LintOutputParams(
+            verbose=self.verbose,
+            quiet=self.quiet,
+            no_color=self.no_color,
+            no_emoji=self.no_emoji,
+            output_mode=output_mode,
+        )
 
 
 @dataclass(slots=True)
@@ -157,13 +146,20 @@ class LintOverrideParams:
 
 
 @dataclass(slots=True)
-class LintSeverityParams:
-    """Severity-oriented override values for diagnostics."""
+class LintSeverityParams(LintSeverityOptions):
+    """Typed severity overrides returned by CLI dependencies."""
 
-    bandit_severity: BanditLevelLiteral | None
-    bandit_confidence: BanditLevelLiteral | None
-    pylint_fail_under: float | None
-    sensitivity: SensitivityLiteral | None
+    def as_tuple(
+        self,
+    ) -> tuple[BanditLevelLiteral | None, BanditLevelLiteral | None, float | None, SensitivityLiteral | None]:
+        """Return severity overrides as a tuple for hashing or comparisons."""
+
+        return (
+            self.bandit_severity,
+            self.bandit_confidence,
+            self.pylint_fail_under,
+            self.sensitivity,
+        )
 
 
 @dataclass(slots=True)
@@ -231,6 +227,47 @@ class LintOutputArtifacts:
 
 
 @dataclass(slots=True)
+class RuntimeConcurrencyParams:
+    """CLI inputs related to parallelism and local linter usage."""
+
+    jobs: int | None
+    bail: bool
+    use_local_linters: bool
+
+
+@dataclass(slots=True)
+class RuntimeCacheParams:
+    """CLI inputs describing cache toggles and locations."""
+
+    no_cache: bool
+    cache_dir: Path
+
+
+@dataclass(slots=True)
+class OverrideFormattingParams:
+    """Command-line inputs affecting formatting defaults."""
+
+    line_length: int
+    sql_dialect: str
+    python_version: str | None
+
+
+@dataclass(slots=True)
+class OverrideThresholdParams:
+    """Command-line thresholds for shared complexity limits."""
+
+    max_complexity: int | None
+    max_arguments: int | None
+
+
+@dataclass(slots=True)
+class OverrideStrictnessParams:
+    """Command-line strictness overrides for type checking."""
+
+    type_checking: StrictnessLiteral | None
+
+
+@dataclass(slots=True)
 class LintDisplayOptions:
     """Capture console toggles derived from CLI output flags."""
 
@@ -247,15 +284,7 @@ PathArgument = Annotated[
         help="Specific files or directories to lint.",
     ),
 ]
-RootOption = Annotated[
-    Path,
-    typer.Option(
-        Path.cwd(),
-        "--root",
-        "-r",
-        help="Project root.",
-    ),
-]
+RootOption = UPDATE_ROOT_OPTION
 
 
 def _coerce_choice(value: str, *, option_name: str, choices: tuple[str, ...]) -> str:
@@ -385,32 +414,44 @@ def _selection_params_dependency(
     )
 
 
-def _execution_runtime_dependency(
+def _runtime_concurrency_dependency(
     jobs: Annotated[
         int | None,
         typer.Option(None, "--jobs", "-j", min=1, help=JOBS_HELP),
     ],
     bail: Annotated[bool, typer.Option(False, "--bail", help="Exit on first tool failure.")],
+    use_local_linters: Annotated[
+        bool,
+        typer.Option(False, "--use-local-linters", help=USE_LOCAL_LINTERS_HELP),
+    ],
+) -> RuntimeConcurrencyParams:
+    return RuntimeConcurrencyParams(jobs=jobs, bail=bail, use_local_linters=use_local_linters)
+
+
+def _runtime_cache_dependency(
     no_cache: Annotated[bool, typer.Option(False, help="Disable on-disk result caching.")],
     cache_dir: Annotated[
         Path,
         typer.Option(Path(".lint-cache"), "--cache-dir", help=CACHE_DIR_HELP),
     ],
-    use_local_linters: Annotated[
-        bool,
-        typer.Option(False, "--use-local-linters", help=USE_LOCAL_LINTERS_HELP),
-    ],
+) -> RuntimeCacheParams:
+    return RuntimeCacheParams(no_cache=no_cache, cache_dir=cache_dir)
+
+
+def _execution_runtime_dependency(
+    concurrency: Annotated[RuntimeConcurrencyParams, Depends(_runtime_concurrency_dependency)],
+    cache: Annotated[RuntimeCacheParams, Depends(_runtime_cache_dependency)],
     strict_config: Annotated[
         bool,
         typer.Option(False, "--strict-config", help=STRICT_CONFIG_HELP),
     ],
 ) -> LintExecutionRuntimeParams:
     return LintExecutionRuntimeParams(
-        jobs=jobs,
-        bail=bail,
-        no_cache=no_cache,
-        cache_dir=cache_dir,
-        use_local_linters=use_local_linters,
+        jobs=concurrency.jobs,
+        bail=concurrency.bail,
+        no_cache=cache.no_cache,
+        cache_dir=cache.cache_dir,
+        use_local_linters=concurrency.use_local_linters,
         strict_config=strict_config,
     )
 
@@ -483,9 +524,23 @@ def _summary_params_dependency(
     )
 
 
-def _override_params_dependency(
+def _override_formatting_dependency(
     line_length: Annotated[int, typer.Option(120, "--line-length", help=LINE_LENGTH_HELP)],
     sql_dialect: Annotated[str, typer.Option("postgresql", "--sql-dialect", help=SQL_DIALECT_HELP)],
+    python_version: Annotated[
+        str | None,
+        typer.Option(None, "--python-version", help=PYTHON_VERSION_HELP),
+    ],
+) -> OverrideFormattingParams:
+    normalized_python_version = python_version.strip() if python_version else None
+    return OverrideFormattingParams(
+        line_length=line_length,
+        sql_dialect=sql_dialect,
+        python_version=normalized_python_version,
+    )
+
+
+def _override_threshold_dependency(
     max_complexity: Annotated[
         int | None,
         typer.Option(None, "--max-complexity", min=1, help=MAX_COMPLEXITY_HELP),
@@ -494,33 +549,36 @@ def _override_params_dependency(
         int | None,
         typer.Option(None, "--max-arguments", min=1, help=MAX_ARGUMENTS_HELP),
     ],
-    type_checking: Annotated[
-        str | None,
-        typer.Option(
-            None,
-            "--type-checking",
-            case_sensitive=False,
-            help=TYPE_CHECKING_HELP,
-        ),
-    ],
-    python_version: Annotated[
-        str | None,
-        typer.Option(
-            None,
-            "--python-version",
-            help=PYTHON_VERSION_HELP,
-        ),
-    ],
-) -> LintOverrideParams:
-    normalized_python_version = python_version.strip() if python_version else None
-
-    return LintOverrideParams(
-        line_length=line_length,
-        sql_dialect=sql_dialect,
+) -> OverrideThresholdParams:
+    return OverrideThresholdParams(
         max_complexity=max_complexity,
         max_arguments=max_arguments,
+    )
+
+
+def _override_strictness_dependency(
+    type_checking: Annotated[
+        str | None,
+        typer.Option(None, "--type-checking", case_sensitive=False, help=TYPE_CHECKING_HELP),
+    ],
+) -> OverrideStrictnessParams:
+    return OverrideStrictnessParams(
         type_checking=_coerce_optional_strictness(type_checking),
-        python_version=normalized_python_version,
+    )
+
+
+def _override_params_dependency(
+    formatting: Annotated[OverrideFormattingParams, Depends(_override_formatting_dependency)],
+    thresholds: Annotated[OverrideThresholdParams, Depends(_override_threshold_dependency)],
+    strictness: Annotated[OverrideStrictnessParams, Depends(_override_strictness_dependency)],
+) -> LintOverrideParams:
+    return LintOverrideParams(
+        line_length=formatting.line_length,
+        sql_dialect=formatting.sql_dialect,
+        max_complexity=thresholds.max_complexity,
+        max_arguments=thresholds.max_arguments,
+        type_checking=strictness.type_checking,
+        python_version=formatting.python_version,
     )
 
 

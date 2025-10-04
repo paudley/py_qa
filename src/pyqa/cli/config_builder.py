@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from functools import partial
 from pathlib import Path
 from typing import Final, cast
@@ -204,7 +204,7 @@ def _collect_strictness_overrides(
     return StrictnessOverrides(type_checking=type_checking)
 
 
-def _is_option_provided(key: LintOptionKey, *, provided: set[str]) -> bool:
+def _is_option_provided(key: LintOptionKey, *, provided: Collection[str]) -> bool:
     """Return whether a specific CLI option has been explicitly provided.
 
     Args:

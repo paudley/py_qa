@@ -7,6 +7,7 @@ import os
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 import typer
 
@@ -16,16 +17,22 @@ from ..filesystem.paths import normalize_path
 from ..workspace import is_py_qa_workspace
 from ._lint_cli_models import (
     OUTPUT_MODE_CONCISE,
+    LintAdvancedGroup,
     LintCLIInputs,
 )
 from ._lint_cli_models import LintDisplayOptions as CLIDisplayOptions
 from ._lint_cli_models import (
+    LintExecutionGroup,
     LintExecutionRuntimeParams,
+    LintGitParams,
     LintMetaParams,
     LintOutputArtifacts,
+    LintOutputGroup,
     LintOutputParams,
+    LintOverrideParams,
     LintPathParams,
     LintReportingParams,
+    LintSelectionParams,
     OutputModeLiteral,
 )
 from .options import (
@@ -37,6 +44,7 @@ from .options import LintDisplayOptions as OptionsDisplayOptions
 from .options import (
     LintExecutionOptions,
     LintGitOptions,
+    LintOptionBundles,
     LintOptions,
     LintOutputBundle,
     LintOverrideOptions,
@@ -48,6 +56,12 @@ from .options import (
 )
 from .shared import CLILogger
 from .utils import filter_py_qa_paths
+
+PROVIDED_FLAG_OUTPUT_MODE: Final[str] = "output_mode"
+PROVIDED_FLAG_ADVICE: Final[str] = "advice"
+PROVIDED_FLAG_EXCLUDE: Final[str] = "exclude"
+PROVIDED_FLAG_USE_LOCAL_LINTERS: Final[str] = "use_local_linters"
+PROVIDED_FLAG_NO_LINT_TESTS: Final[str] = "no_lint_tests"
 
 
 @dataclass(slots=True)
@@ -98,6 +112,53 @@ class NormalPresetState:
     provided_flags: set[str]
 
 
+@dataclass(slots=True)
+class _LintOptionBuildContext:
+    """Aggregate inputs required to construct ``LintOptions``."""
+
+    inputs: LintCLIInputs
+    normalized_targets: NormalizedTargets
+    preset: NormalPresetResult
+    display: CLIDisplayOptions
+    artifacts: LintOutputArtifacts
+    cache_dir: Path
+    effective_jobs: int
+
+
+def _build_lint_options(
+    context: _LintOptionBuildContext,
+) -> LintOptions:
+    """Materialise ``LintOptions`` from normalized CLI inputs.
+
+    Args:
+        context: Aggregated parameters required to build lint options.
+
+    Returns:
+        LintOptions: Fully populated options dataclass ready for config building.
+    """
+
+    targets = context.inputs.targets
+    execution = context.inputs.execution
+    output = context.inputs.output
+    advanced = context.inputs.advanced
+
+    bundles = LintOptionBundles(
+        targets=_build_target_options(context.normalized_targets, targets.path, context.preset),
+        git=_build_git_options(targets.git, context.preset.no_lint_tests),
+        selection=_build_selection_options(execution.selection),
+        output=_build_output_bundle(output, context.display, context.artifacts, context.preset),
+        execution=_build_execution_options(
+            execution,
+            advanced,
+            context.cache_dir,
+            context.preset.use_local_linters,
+            context.effective_jobs,
+        ),
+        overrides=_build_override_options(advanced),
+    )
+    return LintOptions(bundles=bundles, provided=context.preset.provided_flags)
+
+
 def prepare_lint_state(
     ctx: typer.Context,
     inputs: LintCLIInputs,
@@ -106,128 +167,53 @@ def prepare_lint_state(
 ) -> PreparedLintState:
     """Normalise CLI inputs and construct the options dataclass."""
 
-    targets = inputs.targets
-    execution = inputs.execution
-    output = inputs.output
-    advanced = inputs.advanced
-
-    rendering = output.rendering
-    reporting = output.reporting
-    summary = output.summary
-    overrides = advanced.overrides
-    severity = advanced.severity
-    meta = advanced.meta
-
     invocation_cwd = Path.cwd()
     normalized_targets = _normalize_targets(
         ctx,
-        targets.path,
+        inputs.targets.path,
         invocation_cwd=invocation_cwd,
         logger=logger,
     )
-    artifacts = _resolve_artifacts(reporting, invocation_cwd=invocation_cwd)
-    display = _build_display_options(rendering)
-    cache_dir = normalize_path(execution.runtime.cache_dir, base_dir=invocation_cwd)
-    effective_jobs = _effective_jobs(execution.runtime)
+    artifacts = _resolve_artifacts(inputs.output.reporting, invocation_cwd=invocation_cwd)
+    display = _build_display_options(inputs.output.rendering)
+    cache_dir = normalize_path(inputs.execution.runtime.cache_dir, base_dir=invocation_cwd)
+    effective_jobs = _effective_jobs(inputs.execution.runtime)
 
-    _validate_pylint_fail_under(severity.pylint_fail_under)
+    _validate_pylint_fail_under(inputs.advanced.severity.pylint_fail_under)
 
     provided = _collect_provided_flags(
         ctx,
         paths_provided=bool(normalized_targets.paths),
-        dirs=normalized_targets.dirs,
-        exclude=normalized_targets.exclude,
-        filters=execution.selection.filters,
-        only=execution.selection.only,
-        language=execution.selection.language,
+        exclusion_paths=normalized_targets.exclude,
+        selection=inputs.execution.selection,
+        directories=normalized_targets.dirs,
     )
 
     preset_state = NormalPresetState(
-        output_mode=rendering.output_mode,
-        advice=summary.advice,
-        no_lint_tests=targets.git.no_lint_tests,
-        use_local_linters=execution.runtime.use_local_linters,
+        output_mode=inputs.output.rendering.output_mode,
+        advice=inputs.output.summary.advice,
+        no_lint_tests=inputs.targets.git.no_lint_tests,
+        use_local_linters=inputs.execution.runtime.use_local_linters,
         exclude_paths=normalized_targets.exclude,
         provided_flags=provided,
     )
-    preset = _apply_normal_preset(meta=meta, state=preset_state)
+    preset = _apply_normal_preset(meta=inputs.advanced.meta, state=preset_state)
 
-    options = LintOptions(
-        targets=LintTargetOptions(
-            root=normalized_targets.root,
-            paths=list(normalized_targets.paths),
-            dirs=list(normalized_targets.dirs),
-            exclude=preset.exclude_paths,
-            paths_from_stdin=targets.path.paths_from_stdin,
+    options = _build_lint_options(
+        context=_LintOptionBuildContext(
+            inputs=inputs,
+            normalized_targets=normalized_targets,
+            preset=preset,
+            display=display,
+            artifacts=artifacts,
+            cache_dir=cache_dir,
+            effective_jobs=effective_jobs,
         ),
-        git=LintGitOptions(
-            changed_only=targets.git.changed_only,
-            diff_ref=targets.git.diff_ref,
-            include_untracked=targets.git.include_untracked,
-            base_branch=targets.git.base_branch,
-            no_lint_tests=preset.no_lint_tests,
-        ),
-        selection=LintSelectionOptions(
-            filters=list(execution.selection.filters),
-            only=list(execution.selection.only),
-            language=list(execution.selection.language),
-            fix_only=execution.selection.fix_only,
-            check_only=execution.selection.check_only,
-        ),
-        output=LintOutputBundle(
-            display=OptionsDisplayOptions(
-                verbose=display.verbose,
-                quiet=display.quiet,
-                no_color=rendering.no_color,
-                no_emoji=rendering.no_emoji,
-                output_mode=preset.output_mode,
-                advice=preset.advice,
-            ),
-            summary=LintSummaryOptions(
-                show_passing=reporting.show_passing,
-                no_stats=reporting.no_stats,
-                pr_summary_out=artifacts.pr_summary_out,
-                pr_summary_limit=summary.pr_summary_limit,
-                pr_summary_min_severity=summary.pr_summary_min_severity,
-                pr_summary_template=summary.pr_summary_template,
-            ),
-        ),
-        execution=LintExecutionOptions(
-            runtime=ExecutionRuntimeOptions(
-                jobs=effective_jobs,
-                bail=execution.runtime.bail,
-                no_cache=execution.runtime.no_cache,
-                cache_dir=cache_dir,
-                use_local_linters=preset.use_local_linters,
-                strict_config=execution.runtime.strict_config,
-            ),
-            formatting=ExecutionFormattingOptions(
-                line_length=overrides.line_length,
-                sql_dialect=overrides.sql_dialect,
-                python_version=overrides.python_version,
-            ),
-        ),
-        overrides=LintOverrideOptions(
-            complexity=LintComplexityOptions(
-                max_complexity=overrides.max_complexity,
-                max_arguments=overrides.max_arguments,
-            ),
-            strictness=LintStrictnessOptions(
-                type_checking=overrides.type_checking,
-            ),
-            severity=LintSeverityOptions(
-                bandit_severity=severity.bandit_severity,
-                bandit_confidence=severity.bandit_confidence,
-                pylint_fail_under=severity.pylint_fail_under,
-                sensitivity=severity.sensitivity,
-            ),
-        ),
-        provided=preset.provided_flags,
     )
 
     return PreparedLintState(
         options=options,
-        meta=meta,
+        meta=inputs.advanced.meta,
         root=normalized_targets.root,
         ignored_py_qa=normalized_targets.ignored_py_qa,
         artifacts=artifacts,
@@ -237,6 +223,207 @@ def prepare_lint_state(
 
 
 # Internal helpers --------------------------------------------------------------------
+
+
+def _build_target_options(
+    normalized_targets: NormalizedTargets,
+    target_params: LintPathParams,
+    preset: NormalPresetResult,
+) -> LintTargetOptions:
+    """Return the :class:`LintTargetOptions` segment derived from CLI inputs.
+
+    Args:
+        normalized_targets: Canonicalised target paths and directories.
+        target_params: Raw target parameters derived from CLI arguments.
+        preset: Effective preset adjustments applied during option collection.
+
+    Returns:
+        LintTargetOptions: Options describing filesystem discovery inputs.
+    """
+
+    return LintTargetOptions(
+        root=normalized_targets.root,
+        paths=list(normalized_targets.paths),
+        dirs=list(normalized_targets.dirs),
+        exclude=preset.exclude_paths,
+        paths_from_stdin=target_params.paths_from_stdin,
+    )
+
+
+def _build_git_options(git_params: LintGitParams, no_lint_tests: bool) -> LintGitOptions:
+    """Return git-discovery options reflecting preset adjustments.
+
+    Args:
+        git_params: Parameters describing how git discovery should behave.
+        no_lint_tests: Whether test directories should be excluded by default.
+
+    Returns:
+        LintGitOptions: Git configuration embedded in :class:`LintOptions`.
+    """
+
+    return LintGitOptions(
+        changed_only=git_params.changed_only,
+        diff_ref=git_params.diff_ref,
+        include_untracked=git_params.include_untracked,
+        base_branch=git_params.base_branch,
+        no_lint_tests=no_lint_tests,
+    )
+
+
+def _build_selection_options(selection: LintSelectionParams) -> LintSelectionOptions:
+    """Return lint-selection options captured from CLI dependencies.
+
+    Args:
+        selection: Selection parameters describing filters and tool subsets.
+
+    Returns:
+        LintSelectionOptions: Normalised selection configuration.
+    """
+
+    return LintSelectionOptions(
+        filters=list(selection.filters),
+        only=list(selection.only),
+        language=list(selection.language),
+        fix_only=selection.fix_only,
+        check_only=selection.check_only,
+    )
+
+
+def _build_output_bundle(
+    output: LintOutputGroup,
+    display: CLIDisplayOptions,
+    artifacts: LintOutputArtifacts,
+    preset: NormalPresetResult,
+) -> LintOutputBundle:
+    """Return the output bundle describing console and report targets.
+
+    Args:
+        output: CLI output parameters grouped by rendering/reporting category.
+        display: Console display configuration assembled earlier in the flow.
+        artifacts: Filesystem artifact destinations requested by the user.
+        preset: Preset adjustments that may tweak display behaviour.
+
+    Returns:
+        LintOutputBundle: Bundle containing display and summary configuration.
+    """
+
+    return LintOutputBundle(
+        display=OptionsDisplayOptions(
+            verbose=display.verbose,
+            quiet=display.quiet,
+            no_color=output.rendering.no_color,
+            no_emoji=output.rendering.no_emoji,
+            output_mode=preset.output_mode,
+            advice=preset.advice,
+        ),
+        summary=LintSummaryOptions(
+            show_passing=output.reporting.show_passing,
+            no_stats=output.reporting.no_stats,
+            pr_summary_out=artifacts.pr_summary_out,
+            pr_summary_limit=output.summary.pr_summary_limit,
+            pr_summary_min_severity=output.summary.pr_summary_min_severity,
+            pr_summary_template=output.summary.pr_summary_template,
+        ),
+    )
+
+
+def _build_execution_options(
+    execution: LintExecutionGroup,
+    advanced: LintAdvancedGroup,
+    cache_dir: Path,
+    use_local_linters: bool,
+    effective_jobs: int,
+) -> LintExecutionOptions:
+    """Return execution options including runtime and formatting overrides.
+
+    Args:
+        execution: CLI execution parameters grouped by selection/runtime.
+        advanced: Advanced overrides bundled with severity information.
+        cache_dir: Resolved cache directory derived from CLI inputs.
+        use_local_linters: Whether local linters should be preferred.
+        effective_jobs: Finalised job count after preset adjustments.
+
+    Returns:
+        LintExecutionOptions: Runtime and formatting configuration for linting.
+    """
+
+    runtime = _build_runtime_options(execution.runtime, cache_dir, use_local_linters, effective_jobs)
+    formatting = _build_formatting_options(advanced.overrides)
+    return LintExecutionOptions(runtime=runtime, formatting=formatting)
+
+
+def _build_runtime_options(
+    runtime: LintExecutionRuntimeParams,
+    cache_dir: Path,
+    use_local_linters: bool,
+    effective_jobs: int,
+) -> ExecutionRuntimeOptions:
+    """Return runtime execution options derived from CLI settings.
+
+    Args:
+        runtime: Runtime parameters collected from CLI dependencies.
+        cache_dir: Resolved cache directory used for execution caching.
+        use_local_linters: Whether the run should prefer local linters.
+        effective_jobs: Finalised job count after preset adjustments.
+
+    Returns:
+        ExecutionRuntimeOptions: Execution runtime configuration for lint.
+    """
+
+    return ExecutionRuntimeOptions(
+        jobs=effective_jobs,
+        bail=runtime.bail,
+        no_cache=runtime.no_cache,
+        cache_dir=cache_dir,
+        use_local_linters=use_local_linters,
+        strict_config=runtime.strict_config,
+    )
+
+
+def _build_formatting_options(overrides: LintOverrideParams) -> ExecutionFormattingOptions:
+    """Return formatting options shared across compatible tools.
+
+    Args:
+        overrides: Advanced override parameters assembled from CLI flags.
+
+    Returns:
+        ExecutionFormattingOptions: Formatting preferences propagated to tools.
+    """
+
+    return ExecutionFormattingOptions(
+        line_length=overrides.line_length,
+        sql_dialect=overrides.sql_dialect,
+        python_version=overrides.python_version,
+    )
+
+
+def _build_override_options(advanced: LintAdvancedGroup) -> LintOverrideOptions:
+    """Return the override bundle copied from advanced CLI parameters.
+
+    Args:
+        advanced: Advanced CLI inputs containing override dataclasses.
+
+    Returns:
+        LintOverrideOptions: Override configuration extracted from ``advanced``.
+    """
+
+    overrides = advanced.overrides
+    severity = advanced.severity
+    return LintOverrideOptions(
+        complexity=LintComplexityOptions(
+            max_complexity=overrides.max_complexity,
+            max_arguments=overrides.max_arguments,
+        ),
+        strictness=LintStrictnessOptions(
+            type_checking=overrides.type_checking,
+        ),
+        severity=LintSeverityOptions(
+            bandit_severity=severity.bandit_severity,
+            bandit_confidence=severity.bandit_confidence,
+            pylint_fail_under=severity.pylint_fail_under,
+            sensitivity=severity.sensitivity,
+        ),
+    )
 
 
 def _normalize_targets(
@@ -319,18 +506,18 @@ def _apply_normal_preset(
     effective_use_local_linters = state.use_local_linters
 
     if meta.normal:
-        if "output_mode" not in updated_provided:
+        if PROVIDED_FLAG_OUTPUT_MODE not in updated_provided:
             effective_output = OUTPUT_MODE_CONCISE
         effective_advice = True
         effective_no_lint_tests = True
         effective_use_local_linters = True
         updated_provided.update(
             {
-                "output_mode",
-                "advice",
-                "exclude",
-                "use_local_linters",
-                "no_lint_tests",
+                PROVIDED_FLAG_OUTPUT_MODE,
+                PROVIDED_FLAG_ADVICE,
+                PROVIDED_FLAG_EXCLUDE,
+                PROVIDED_FLAG_USE_LOCAL_LINTERS,
+                PROVIDED_FLAG_NO_LINT_TESTS,
             },
         )
 
@@ -369,11 +556,9 @@ def _collect_provided_flags(
     ctx: typer.Context,
     *,
     paths_provided: bool,
-    dirs: list[Path],
-    exclude: list[Path],
-    filters: list[str],
-    only: list[str],
-    language: list[str],
+    directories: list[Path],
+    exclusion_paths: list[Path],
+    selection: LintSelectionParams,
 ) -> set[str]:
     tracked = {
         "changed_only",
@@ -394,7 +579,7 @@ def _collect_provided_flags(
         "no_color",
         "no_emoji",
         "no_stats",
-        "output_mode",
+        PROVIDED_FLAG_OUTPUT_MODE,
         "show_passing",
         "jobs",
         "bail",
@@ -404,7 +589,7 @@ def _collect_provided_flags(
         "pr_summary_limit",
         "pr_summary_min_severity",
         "pr_summary_template",
-        "use_local_linters",
+        PROVIDED_FLAG_USE_LOCAL_LINTERS,
         "line_length",
         "max_complexity",
         "max_arguments",
@@ -414,7 +599,7 @@ def _collect_provided_flags(
         "pylint_fail_under",
         "sensitivity",
         "sql_dialect",
-        "advice",
+        PROVIDED_FLAG_ADVICE,
     }
     provided: set[str] = set()
     for name in tracked:
@@ -423,15 +608,15 @@ def _collect_provided_flags(
             provided.add(name)
     if paths_provided:
         provided.add("paths")
-    if dirs:
+    if directories:
         provided.add("dirs")
-    if exclude:
+    if exclusion_paths:
         provided.add("exclude")
-    if filters:
+    if selection.filters:
         provided.add("filters")
-    if only:
+    if selection.only:
         provided.add("only")
-    if language:
+    if selection.language:
         provided.add("language")
     return provided
 

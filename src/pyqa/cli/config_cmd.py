@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import typer
 from pydantic import BaseModel, ConfigDict
@@ -30,8 +30,6 @@ from ._config_cmd_services import (
 )
 from .shared import CLIError, build_cli_logger, register_command
 from .typer_ext import create_typer
-
-SchemaFormatLiteral = Literal["json", "json-tools", "markdown", "md"]
 
 config_app = create_typer(help="Inspect, validate, and document configuration layers.")
 

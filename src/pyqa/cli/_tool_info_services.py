@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import cast
+from typing import Final, cast
 
 from ..config import Config
 from ..config_loader import ConfigError, ConfigLoader, FieldUpdate
@@ -26,12 +26,13 @@ def load_configuration(
 
     Args:
         inputs: Normalized CLI inputs containing the project root and console.
+        logger: CLI logger used to emit configuration failure messages.
 
     Returns:
         ToolInfoConfigData: Loaded configuration bundle.
 
     Raises:
-        ToolInfoError: Raised when configuration loading fails.
+        CLIError: Raised when configuration loading fails.
     """
 
     if inputs.cfg is not None:
@@ -73,12 +74,13 @@ def resolve_tool(inputs: ToolInfoInputs, *, logger: CLILogger) -> Tool:
 
     Args:
         inputs: Normalized CLI inputs describing the requested tool.
+        logger: CLI logger used to emit failure messages when no tool matches.
 
     Returns:
         Tool: Tool definition resolved from the registry.
 
     Raises:
-        ToolInfoError: Raised when the tool cannot be located.
+        CLIError: Raised when the tool cannot be located.
     """
 
     tool = DEFAULT_REGISTRY.try_get(inputs.tool_name)
@@ -113,6 +115,7 @@ def prepare_context(inputs: ToolInfoInputs, *, logger: CLILogger) -> ToolInfoCon
 
     Args:
         inputs: Normalized CLI inputs describing the requested tool.
+        logger: CLI logger used for configuration and tool resolution failures.
 
     Returns:
         ToolInfoContext: Context containing configuration, status, and metadata.
@@ -139,6 +142,9 @@ def prepare_context(inputs: ToolInfoInputs, *, logger: CLILogger) -> ToolInfoCon
     )
 
 
+TOOL_SETTINGS_SECTION: Final[str] = "tool_settings"
+
+
 def provenance_updates_for_tool(
     *,
     updates: Sequence[FieldUpdate],
@@ -154,7 +160,7 @@ def provenance_updates_for_tool(
         tuple[FieldUpdate, ...]: Filtered updates relevant to ``tool_name``.
     """
 
-    return tuple(update for update in updates if update.section == "tool_settings" and update.field == tool_name)
+    return tuple(update for update in updates if update.section == TOOL_SETTINGS_SECTION and update.field == tool_name)
 
 
 __all__ = [

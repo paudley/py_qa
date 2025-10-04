@@ -3,7 +3,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Final, Literal, cast
 
 from rich import box
 from rich.progress import (
@@ -23,6 +24,23 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only
     from ._lint_runtime import LintRuntimeContext
 
 FetchResult = list[tuple[str, str, PreparedCommand | None, str | None]]
+ProgressEventLiteral = Literal["start", "completed", "error"]
+EVENT_START: Final[ProgressEventLiteral] = "start"
+EVENT_COMPLETED: Final[ProgressEventLiteral] = "completed"
+EVENT_ERROR: Final[ProgressEventLiteral] = "error"
+PROGRESS_PAYLOAD_SIZE: Final[int] = 6
+
+
+@dataclass(frozen=True, slots=True)
+class _FetchProgressRecord:
+    """Structured representation of a tool preparation progress event."""
+
+    event: ProgressEventLiteral
+    tool_name: str
+    action_name: str
+    index: int
+    total: int
+    message: str | None
 
 
 def render_fetch_all_tools(
@@ -39,10 +57,11 @@ def render_fetch_all_tools(
     console = console_manager.get(color=config.output.color, emoji=config.output.emoji)
     verbose = state.display.verbose
 
-    if progress_enabled:
-        results = _fetch_with_progress(runtime, total_actions, console, verbose)
-    else:
-        results = runtime.orchestrator.fetch_all_tools(config, root=runtime.state.root)
+    results = (
+        _fetch_with_progress(runtime, total_actions, console, verbose)
+        if progress_enabled
+        else runtime.orchestrator.fetch_all_tools(config, root=runtime.state.root)
+    )
 
     _render_fetch_summary(console, config, state, results, phase_order)
     return 0
@@ -66,36 +85,25 @@ def _fetch_with_progress(
     task_id = progress.add_task("Preparing tools", total=total_actions)
 
     def progress_callback(*payload: object) -> None:
-        if len(payload) != 6:
-            raise ValueError("unexpected progress payload")
-        typed_payload = cast(
-            tuple[str, str, str, int, int, str | None],
-            tuple(payload),
-        )
-        event = typed_payload[0]
-        tool_name = typed_payload[1]
-        action_name = typed_payload[2]
-        index = typed_payload[3]
-        total = typed_payload[4]
-        message = typed_payload[5]
-        description = f"{tool_name}:{action_name}"
-        if event == "start":
+        record = _coerce_progress_record(payload)
+        description = f"{record.tool_name}:{record.action_name}"
+        if record.event == EVENT_START:
             status = "Preparing"
-            completed = index - 1
-        elif event == "completed":
+            completed = record.index - 1
+        elif record.event == EVENT_COMPLETED:
             status = "Prepared"
-            completed = index
+            completed = record.index
         else:
             status = "Error"
-            completed = index
-            if message:
-                logger.warn(f"Failed to prepare {description}: {message}")
+            completed = record.index
+            if record.message:
+                logger.warn(f"Failed to prepare {description}: {record.message}")
                 if verbose:
-                    console.print(f"[red]{description} failed: {message}[/red]")
+                    console.print(f"[red]{description} failed: {record.message}[/red]")
         progress.update(
             task_id,
             completed=completed,
-            total=total,
+            total=record.total,
             description=f"{status} {description}",
         )
 
@@ -159,6 +167,32 @@ def _render_fetch_summary(
     logger.ok(f"Prepared {len(results)} tool action(s) without execution.")
     for failure in failures:
         logger.warn(failure)
+
+
+def _coerce_progress_record(payload: tuple[object, ...]) -> _FetchProgressRecord:
+    """Convert an arbitrary payload into a typed progress record."""
+
+    if len(payload) != PROGRESS_PAYLOAD_SIZE:
+        raise ValueError("unexpected progress payload")
+    event, tool_name, action_name, index, total, message = payload
+    if not isinstance(event, str):
+        raise TypeError("event must be a string")
+    if event not in {EVENT_START, EVENT_COMPLETED, EVENT_ERROR}:
+        raise ValueError(f"unsupported progress event: {event}")
+    if not isinstance(tool_name, str) or not isinstance(action_name, str):
+        raise TypeError("tool name and action name must be strings")
+    if not isinstance(index, int) or not isinstance(total, int):
+        raise TypeError("index and total must be integers")
+    if message is not None and not isinstance(message, str):
+        raise TypeError("message must be a string when provided")
+    return _FetchProgressRecord(
+        event=cast(ProgressEventLiteral, event),
+        tool_name=tool_name,
+        action_name=action_name,
+        index=index,
+        total=total,
+        message=message,
+    )
 
 
 def _format_fetch_row(

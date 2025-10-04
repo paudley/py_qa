@@ -175,7 +175,9 @@ class ActionExecutor:
             else self.collect_metrics_for_files(state, invocation.context.files)
         )
         self._update_state_metrics(state, metrics_map)
-        state.outcomes[record.order] = record.outcome
+        outcome = record.outcome
+        outcome.cached = record.from_cache
+        state.outcomes[record.order] = outcome
         cache_ctx = environment.cache
         if cache_ctx.cache and cache_ctx.token is not None and not record.from_cache:
             request = CacheRequest(
@@ -185,9 +187,9 @@ class ActionExecutor:
                 files=tuple(Path(path) for path in invocation.context.files),
                 token=cache_ctx.token,
             )
-            cache_ctx.cache.store(request, outcome=record.outcome, file_metrics=metrics_map)
+            cache_ctx.cache.store(request, outcome=outcome, file_metrics=metrics_map)
         if self.after_tool_hook:
-            self.after_tool_hook(record.outcome)
+            self.after_tool_hook(outcome)
 
     def run_action(self, invocation: ActionInvocation, environment: ExecutionEnvironment) -> ToolOutcome:
         """Execute ``invocation`` and return the normalized outcome.

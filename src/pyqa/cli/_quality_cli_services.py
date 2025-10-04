@@ -5,17 +5,18 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from pathlib import Path
+from typing import Final
 
-from ..config_loader import ConfigError, ConfigLoader
 from ..constants import PY_QA_DIR_NAME
 from ..quality import QualityChecker, QualityCheckerOptions
 from ..workspace import is_py_qa_workspace
+from ._config_loading import load_config_result
 from ._quality_cli_models import (
     QualityCLIOptions,
     QualityConfigContext,
     QualityTargetResolution,
 )
-from .shared import CLIError, CLILogger
+from .shared import CLILogger
 from .utils import filter_py_qa_paths
 
 
@@ -28,6 +29,7 @@ def load_quality_context(
 
     Args:
         options: Normalized CLI options describing the requested run.
+        logger: CLI logger used to surface loading errors to the user.
 
     Returns:
         QualityConfigContext: Loaded configuration and deferred warnings.
@@ -36,12 +38,7 @@ def load_quality_context(
         CLIError: Raised when configuration loading fails.
     """
 
-    loader = ConfigLoader.for_root(options.root)
-    try:
-        load_result = loader.load_with_trace()
-    except ConfigError as exc:  # pragma: no cover - CLI path
-        logger.fail(f"Configuration invalid: {exc}")
-        raise CLIError(str(exc)) from exc
+    load_result = load_config_result(options.root, logger=logger)
 
     context = QualityConfigContext(
         root=options.root,
@@ -59,6 +56,7 @@ def render_config_warnings(context: QualityConfigContext, *, logger: CLILogger) 
     Args:
         context: Loaded quality configuration context containing warnings to
             present to the user.
+        logger: CLI logger used to emit the warning text.
     """
 
     for message in context.warnings:
@@ -83,8 +81,8 @@ def determine_checks(
     """
 
     selected = set(requested_checks or available_checks)
-    if not include_schema and "schema" in selected:
-        selected.remove("schema")
+    if not include_schema and SCHEMA_CHECK in selected:
+        selected.remove(SCHEMA_CHECK)
     return frozenset(selected)
 
 
@@ -97,6 +95,8 @@ def resolve_target_files(
 
     Args:
         context: Loaded configuration context containing CLI options.
+        logger: CLI logger used to emit informational messages when no files
+            are selected for quality checks.
 
     Returns:
         QualityTargetResolution: Files that should be checked and a record of
@@ -173,3 +173,4 @@ __all__ = [
     "render_config_warnings",
     "resolve_target_files",
 ]
+SCHEMA_CHECK: Final[str] = "schema"

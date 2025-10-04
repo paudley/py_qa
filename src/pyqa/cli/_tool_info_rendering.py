@@ -51,7 +51,7 @@ def build_metadata_table(
     table.add_row("Config Files", ", ".join(tool.config_files) or "-")
     if catalog_tool is not None:
         table.add_row("Phase", catalog_tool.phase)
-    version_cmd = " ".join(map(str, tool.version_command)) if tool.version_command else "-"
+    version_cmd = " ".join(str(part) for part in tool.version_command) if tool.version_command else "-"
     table.add_row("Version Command", version_cmd)
     table.add_row("Current Version", status.version.detected or "-")
     table.add_row("Status", status.availability.value)
@@ -96,7 +96,7 @@ def build_actions_table(
             settings=dict(overrides) if overrides else {},
         )
         command = action.build_command(context)
-        command_str = " ".join(map(str, command)) if command else "-"
+        command_str = " ".join(str(part) for part in command) if command else "-"
         table.add_row(action.name, action_type, command_str, action.description or "-")
     return table
 

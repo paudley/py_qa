@@ -196,10 +196,14 @@ def _render_concise_summary(
     fallback_label = "Failed" if failed_actions else "Passed"
     summary_label = f"{summary_symbol} {fallback_label}" if summary_symbol else fallback_label
     summary_color = "red" if failed_actions else "green"
-    stats_raw = (
-        f"— {diagnostics_count} diagnostic(s) across {files_count} file(s); "
-        f"{failed_actions} failing action(s) out of {total_actions}"
-    )
+    cached_actions = sum(1 for outcome in result.outcomes if outcome.cached)
+    stats_parts = [
+        f"{diagnostics_count} diagnostic(s) across {files_count} file(s)",
+        f"{failed_actions} failing action(s) out of {total_actions}",
+    ]
+    if cached_actions:
+        stats_parts.append(f"{cached_actions} cached action(s)")
+    stats_raw = "— " + "; ".join(stats_parts)
     status_text = colorize(summary_label, summary_color, cfg.color)
     stats_text = colorize(stats_raw, "white", cfg.color)
     print(f"{status_text} {stats_text}".strip())

@@ -15,6 +15,7 @@ from pyqa.cli.options import (
     LintExecutionOptions,
     LintGitOptions,
     LintOptions,
+    LintOptionBundles,
     LintOverrideOptions,
     LintSelectionOptions,
     LintSeverityOptions,
@@ -144,15 +145,15 @@ def _build_options(
         severity=severity,
     )
 
-    return LintOptions(
+    bundles = LintOptionBundles(
         targets=target,
         git=git,
         selection=selection,
         output=output,
         execution=execution,
         overrides=overrides,
-        provided=provided or set(),
     )
+    return LintOptions(bundles=bundles, provided=provided or set())
 
 
 def test_build_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -28,6 +28,13 @@ class SeverityOverrides:
     pylint_fail_under: float | None = None
 
     def updates(self) -> dict[str, object]:
+        """Return a mapping of overridden severity fields.
+
+        Returns:
+            dict[str, object]: Keys and values that should overwrite the
+            configuration severity section.
+        """
+
         payload: dict[str, object] = {}
         if self.sensitivity is not None:
             payload["sensitivity"] = self.sensitivity
@@ -40,6 +47,8 @@ class SeverityOverrides:
         return payload
 
     def has_updates(self) -> bool:
+        """Return ``True`` when any overrides were provided."""
+
         return bool(self.updates())
 
 
@@ -51,6 +60,8 @@ class ComplexityOverrides:
     max_arguments: int | None = None
 
     def updates(self) -> dict[str, int | None]:
+        """Return the complexity thresholds that should be overridden."""
+
         payload: dict[str, int | None] = {}
         if self.max_complexity is not None:
             payload["max_complexity"] = self.max_complexity
@@ -59,6 +70,8 @@ class ComplexityOverrides:
         return payload
 
     def has_updates(self) -> bool:
+        """Return ``True`` when a complexity override has been supplied."""
+
         return bool(self.updates())
 
 
@@ -69,13 +82,19 @@ class StrictnessOverrides:
     type_checking: StrictnessLevel | None = None
 
     def updates(self) -> dict[str, StrictnessLevel]:
+        """Return the strictness overrides to apply."""
+
         return {"type_checking": self.type_checking} if self.type_checking is not None else {}
 
     def has_updates(self) -> bool:
+        """Return ``True`` when a strictness override has been provided."""
+
         return self.type_checking is not None
 
 
 def apply_severity_overrides(config: Config, overrides: SeverityOverrides) -> Config:
+    """Apply severity overrides to ``config`` and return the updated model."""
+
     if not overrides.has_updates():
         return config
     return config.model_copy(
@@ -84,6 +103,8 @@ def apply_severity_overrides(config: Config, overrides: SeverityOverrides) -> Co
 
 
 def apply_complexity_overrides(config: Config, overrides: ComplexityOverrides) -> Config:
+    """Return ``config`` with complexity overrides applied."""
+
     if not overrides.has_updates():
         return config
     return config.model_copy(
@@ -92,6 +113,8 @@ def apply_complexity_overrides(config: Config, overrides: ComplexityOverrides) -
 
 
 def apply_strictness_overrides(config: Config, overrides: StrictnessOverrides) -> Config:
+    """Return ``config`` with strictness overrides applied."""
+
     if not overrides.has_updates():
         return config
     return config.model_copy(

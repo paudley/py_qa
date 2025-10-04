@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from pathlib import Path
 from typing import TypeVar
 
@@ -22,14 +22,46 @@ def model_clone(instance: ModelT, **updates: object) -> ModelT:
     return instance.model_copy(update=updates, deep=True)
 
 
-def select_flag(candidate: bool, fallback: bool, key: LintOptionKey, provided: set[str]) -> bool:
-    """Return the flag value honouring whether the user explicitly provided it."""
+def select_flag(
+    candidate: bool,
+    fallback: bool,
+    key: LintOptionKey,
+    provided: Collection[str],
+) -> bool:
+    """Return the flag value honouring whether the user explicitly provided it.
+
+    Args:
+        candidate: Flag derived from CLI or configuration input.
+        fallback: Default value sourced from the existing configuration.
+        key: Option key that guards whether the CLI flag was supplied.
+        provided: Collection of option identifiers supplied by the user.
+
+    Returns:
+        bool: ``candidate`` when explicitly provided, otherwise ``fallback``.
+
+    """
 
     return candidate if key.value in provided else fallback
 
 
-def select_value(value: ValueT, fallback: ValueT, key: LintOptionKey, provided: set[str]) -> ValueT:
-    """Return the override value when explicitly provided, otherwise fallback."""
+def select_value(
+    value: ValueT,
+    fallback: ValueT,
+    key: LintOptionKey,
+    provided: Collection[str],
+) -> ValueT:
+    """Return the override value when explicitly provided, otherwise fallback.
+
+    Args:
+        value: Override value derived from CLI inputs.
+        fallback: Default value from the current configuration state.
+        key: Option key mapping to the override flag.
+        provided: Collection of option identifiers supplied by the user.
+
+    Returns:
+        ValueT: ``value`` when the user supplied the flag, otherwise ``fallback``.
+
+    """
 
     return value if key.value in provided else fallback
 

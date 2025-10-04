@@ -7,7 +7,7 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, cast
 
 import typer
 
@@ -18,7 +18,7 @@ from ..config_loader import (
     FieldUpdate,
     generate_config_schema,
 )
-from ..serialization import jsonify
+from ..serialization import JsonValue, jsonify
 from ..tools.settings import TOOL_SETTING_SCHEMA, SettingField, tool_setting_schema_as_dict
 from .shared import CLIError, CLILogger
 
@@ -27,6 +27,7 @@ SchemaFormatLiteral = Literal["json", "json-tools", "markdown", "md"]
 JSON_FORMAT: Final[SchemaFormatLiteral] = "json"
 JSON_TOOLS_FORMAT: Final[SchemaFormatLiteral] = "json-tools"
 MARKDOWN_FORMATS: Final[frozenset[str]] = frozenset({"markdown", "md"})
+ROOT_SECTION: Final[str] = "root"
 FINAL_LAYER_KEY = "final"
 TOOL_SETTINGS_KEY = "tool_settings"
 TYPE_KEY = "type"
@@ -61,7 +62,7 @@ def validate_config(root: Path, *, strict: bool, logger: CLILogger) -> None:
     logger.ok("Configuration is valid.")
 
 
-def render_config_mapping(result: ConfigLoadResult) -> Mapping[str, object]:
+def render_config_mapping(result: ConfigLoadResult) -> Mapping[str, JsonValue]:
     """Convert a config load result into a JSON-serialisable mapping."""
 
     config = result.config
@@ -80,8 +81,9 @@ def summarise_updates(updates: Sequence[FieldUpdate]) -> list[str]:
 
     rendered: list[str] = []
     for update in updates:
-        field_path = update.field if update.section == "root" else f"{update.section}.{update.field}"
-        rendered.append(f"- {field_path} <- {update.source} -> {summarise_value(field_path, update.value)}")
+        field_path = update.field if update.section == ROOT_SECTION else f"{update.section}.{update.field}"
+        formatted_value = summarise_value(field_path, update.value)
+        rendered.append(f"- {field_path} <- {update.source} -> {formatted_value}")
     return rendered
 
 
@@ -170,23 +172,25 @@ def build_tool_schema_payload() -> dict[str, Any]:
     return payload
 
 
-def collect_layer_snapshots(result: ConfigLoadResult) -> dict[str, dict[str, object]]:
-    """Return snapshot mapping normalised to lower-case keys."""
+def collect_layer_snapshots(result: ConfigLoadResult) -> dict[str, JsonValue]:
+    """Return configuration snapshots normalised to lower-case keys."""
 
-    snapshots: dict[str, dict[str, object]] = {key.lower(): jsonify(value) for key, value in result.snapshots.items()}
+    snapshots: dict[str, JsonValue] = {}
+    for key, value in result.snapshots.items():
+        snapshots[key.lower()] = jsonify(value)
     snapshots[FINAL_LAYER_KEY] = dict(render_config_mapping(result))
     return snapshots
 
 
 def diff_snapshots(
-    from_snapshot: Mapping[str, Any],
-    to_snapshot: Mapping[str, Any],
+    from_snapshot: Mapping[str, JsonValue],
+    to_snapshot: Mapping[str, JsonValue],
     *,
     prefix: str = "",
-) -> dict[str, Any]:
+) -> dict[str, JsonValue]:
     """Return a structural diff between two configuration snapshots."""
 
-    diff: dict[str, Any] = {}
+    diff: dict[str, JsonValue] = {}
     keys = set(from_snapshot) | set(to_snapshot)
     for key in sorted(keys):
         left = from_snapshot.get(key)
@@ -252,6 +256,8 @@ def build_config_diff(
     Raises:
         UnknownConfigLayerError: If either ``from_layer`` or ``to_layer`` is not
             present in the snapshots.
+        CLIError: If either configuration layer fails to provide a mapping
+            payload that can be diffed.
     """
 
     snapshots = collect_layer_snapshots(result)
@@ -264,7 +270,13 @@ def build_config_diff(
     if to_key not in snapshots:
         raise UnknownConfigLayerError(to_layer, available=available_layers)
 
-    diff_payload = diff_snapshots(snapshots[from_key], snapshots[to_key])
+    from_snapshot = snapshots[from_key]
+    to_snapshot = snapshots[to_key]
+    if not isinstance(from_snapshot, Mapping) or not isinstance(to_snapshot, Mapping):
+        raise CLIError("Configuration layers must be mapping objects to diff")
+    typed_from = cast(Mapping[str, JsonValue], from_snapshot)
+    typed_to = cast(Mapping[str, JsonValue], to_snapshot)
+    diff_payload = diff_snapshots(typed_from, typed_to)
     return ConfigDiffComputation(diff=diff_payload, available_layers=available_layers)
 
 

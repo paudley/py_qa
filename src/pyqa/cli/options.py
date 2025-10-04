@@ -7,8 +7,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final, Literal, overload
 
-from ._lint_cli_models import (
+from ._lint_literals import (
     BanditLevelLiteral,
     OutputModeLiteral,
     PRSummarySeverityLiteral,
@@ -19,6 +20,8 @@ from ._lint_cli_models import (
 
 @dataclass(slots=True)
 class LintTargetOptions:
+    """File discovery parameters provided via CLI arguments."""
+
     root: Path
     paths: list[Path]
     dirs: list[Path]
@@ -28,6 +31,8 @@ class LintTargetOptions:
 
 @dataclass(slots=True)
 class LintGitOptions:
+    """Git discovery controls provided via CLI arguments."""
+
     changed_only: bool
     diff_ref: str
     include_untracked: bool
@@ -37,6 +42,8 @@ class LintGitOptions:
 
 @dataclass(slots=True)
 class LintSelectionOptions:
+    """Tool selection filters derived from CLI arguments."""
+
     filters: list[str]
     only: list[str]
     language: list[str]
@@ -45,17 +52,27 @@ class LintSelectionOptions:
 
 
 @dataclass(slots=True)
-class LintDisplayOptions:
+class LintDisplayToggles:
+    """Console display toggles shared between CLI and configuration layers."""
+
     verbose: bool
     quiet: bool
     no_color: bool
     no_emoji: bool
     output_mode: OutputModeLiteral
+
+
+@dataclass(slots=True)
+class LintDisplayOptions(LintDisplayToggles):
+    """Display toggles extended with advice rendering support."""
+
     advice: bool
 
 
 @dataclass(slots=True)
 class LintSummaryOptions:
+    """Summary rendering preferences supplied via CLI arguments."""
+
     show_passing: bool
     no_stats: bool
     pr_summary_out: Path | None
@@ -66,12 +83,16 @@ class LintSummaryOptions:
 
 @dataclass(slots=True)
 class LintOutputBundle:
+    """Bundle display and summary output preferences."""
+
     display: LintDisplayOptions
     summary: LintSummaryOptions
 
 
 @dataclass(slots=True)
 class ExecutionRuntimeOptions:
+    """Execution runtime configuration shared across tools."""
+
     jobs: int | None
     bail: bool
     no_cache: bool
@@ -82,6 +103,8 @@ class ExecutionRuntimeOptions:
 
 @dataclass(slots=True)
 class ExecutionFormattingOptions:
+    """Formatting overrides propagated to compatible tools."""
+
     line_length: int
     sql_dialect: str
     python_version: str | None
@@ -89,23 +112,31 @@ class ExecutionFormattingOptions:
 
 @dataclass(slots=True)
 class LintExecutionOptions:
+    """Execution runtime and formatting configuration for linting."""
+
     runtime: ExecutionRuntimeOptions
     formatting: ExecutionFormattingOptions
 
 
 @dataclass(slots=True)
 class LintComplexityOptions:
+    """Complexity overrides shared across supported tools."""
+
     max_complexity: int | None
     max_arguments: int | None
 
 
 @dataclass(slots=True)
 class LintStrictnessOptions:
+    """Type checking strictness override."""
+
     type_checking: StrictnessLiteral | None
 
 
 @dataclass(slots=True)
 class LintSeverityOptions:
+    """Tool-specific severity overrides."""
+
     bandit_severity: BanditLevelLiteral | None
     bandit_confidence: BanditLevelLiteral | None
     pylint_fail_under: float | None
@@ -114,9 +145,182 @@ class LintSeverityOptions:
 
 @dataclass(slots=True)
 class LintOverrideOptions:
+    """Aggregated override bundles applied to downstream tooling."""
+
     complexity: LintComplexityOptions
     strictness: LintStrictnessOptions
     severity: LintSeverityOptions
+
+
+@dataclass(slots=True)
+class LintOptionBundles:
+    """Aggregate component dataclasses required to build ``LintOptions``."""
+
+    targets: LintTargetOptions
+    git: LintGitOptions
+    selection: LintSelectionOptions
+    output: LintOutputBundle
+    execution: LintExecutionOptions
+    overrides: LintOverrideOptions
+
+
+_OPTION_ATTRIBUTE_MAP: Final[dict[str, tuple[str, ...]]] = {
+    "root": ("_targets", "root"),
+    "paths": ("_targets", "paths"),
+    "dirs": ("_targets", "dirs"),
+    "exclude": ("_targets", "exclude"),
+    "paths_from_stdin": ("_targets", "paths_from_stdin"),
+    "changed_only": ("_git", "changed_only"),
+    "diff_ref": ("_git", "diff_ref"),
+    "include_untracked": ("_git", "include_untracked"),
+    "base_branch": ("_git", "base_branch"),
+    "no_lint_tests": ("_git", "no_lint_tests"),
+    "filters": ("_selection", "filters"),
+    "only": ("_selection", "only"),
+    "language": ("_selection", "language"),
+    "fix_only": ("_selection", "fix_only"),
+    "check_only": ("_selection", "check_only"),
+    "verbose": (
+        "_output",
+        "display",
+        "verbose",
+    ),
+    "quiet": (
+        "_output",
+        "display",
+        "quiet",
+    ),
+    "no_color": (
+        "_output",
+        "display",
+        "no_color",
+    ),
+    "no_emoji": (
+        "_output",
+        "display",
+        "no_emoji",
+    ),
+    "output_mode": (
+        "_output",
+        "display",
+        "output_mode",
+    ),
+    "advice": (
+        "_output",
+        "display",
+        "advice",
+    ),
+    "show_passing": (
+        "_output",
+        "summary",
+        "show_passing",
+    ),
+    "no_stats": (
+        "_output",
+        "summary",
+        "no_stats",
+    ),
+    "pr_summary_out": (
+        "_output",
+        "summary",
+        "pr_summary_out",
+    ),
+    "pr_summary_limit": (
+        "_output",
+        "summary",
+        "pr_summary_limit",
+    ),
+    "pr_summary_min_severity": (
+        "_output",
+        "summary",
+        "pr_summary_min_severity",
+    ),
+    "pr_summary_template": (
+        "_output",
+        "summary",
+        "pr_summary_template",
+    ),
+    "jobs": (
+        "_execution",
+        "runtime",
+        "jobs",
+    ),
+    "bail": (
+        "_execution",
+        "runtime",
+        "bail",
+    ),
+    "no_cache": (
+        "_execution",
+        "runtime",
+        "no_cache",
+    ),
+    "cache_dir": (
+        "_execution",
+        "runtime",
+        "cache_dir",
+    ),
+    "use_local_linters": (
+        "_execution",
+        "runtime",
+        "use_local_linters",
+    ),
+    "strict_config": (
+        "_execution",
+        "runtime",
+        "strict_config",
+    ),
+    "line_length": (
+        "_execution",
+        "formatting",
+        "line_length",
+    ),
+    "sql_dialect": (
+        "_execution",
+        "formatting",
+        "sql_dialect",
+    ),
+    "python_version": (
+        "_execution",
+        "formatting",
+        "python_version",
+    ),
+    "max_complexity": (
+        "_overrides",
+        "complexity",
+        "max_complexity",
+    ),
+    "max_arguments": (
+        "_overrides",
+        "complexity",
+        "max_arguments",
+    ),
+    "type_checking": (
+        "_overrides",
+        "strictness",
+        "type_checking",
+    ),
+    "bandit_severity": (
+        "_overrides",
+        "severity",
+        "bandit_severity",
+    ),
+    "bandit_confidence": (
+        "_overrides",
+        "severity",
+        "bandit_confidence",
+    ),
+    "pylint_fail_under": (
+        "_overrides",
+        "severity",
+        "pylint_fail_under",
+    ),
+    "sensitivity": (
+        "_overrides",
+        "severity",
+        "sensitivity",
+    ),
+}
 
 
 class LintOptions:
@@ -135,210 +339,169 @@ class LintOptions:
     def __init__(
         self,
         *,
-        targets: LintTargetOptions,
-        git: LintGitOptions,
-        selection: LintSelectionOptions,
-        output: LintOutputBundle,
-        execution: LintExecutionOptions,
-        overrides: LintOverrideOptions,
+        bundles: LintOptionBundles,
         provided: Iterable[str],
     ) -> None:
-        self._targets = targets
-        self._git = git
-        self._selection = selection
-        self._output = output
-        self._execution = execution
-        self._overrides = overrides
-        self._provided = set(provided)
+        """Initialise the composed lint options bundle.
 
-    # File discovery -----------------------------------------------------------------
+        Args:
+            bundles: Component dataclasses derived from CLI inputs.
+            provided: Names of CLI flags that were explicitly provided by the user.
 
-    @property
-    def root(self) -> Path:
-        return self._targets.root
+        """
 
-    @property
-    def paths(self) -> list[Path]:
-        return self._targets.paths
+        self._targets = bundles.targets
+        self._git = bundles.git
+        self._selection = bundles.selection
+        self._output = bundles.output
+        self._execution = bundles.execution
+        self._overrides = bundles.overrides
+        self._provided = frozenset(provided)
 
-    @property
-    def dirs(self) -> list[Path]:
-        return self._targets.dirs
+    @overload
+    def __getattr__(self, name: Literal["root", "cache_dir"]) -> Path: ...
 
-    @property
-    def exclude(self) -> list[Path]:
-        return self._targets.exclude
+    @overload
+    def __getattr__(self, name: Literal["paths", "dirs", "exclude"]) -> list[Path]: ...
 
-    @property
-    def paths_from_stdin(self) -> bool:
-        return self._targets.paths_from_stdin
+    @overload
+    def __getattr__(self, name: Literal["filters", "only", "language"]) -> list[str]: ...
 
-    # Git discovery ------------------------------------------------------------------
+    @overload
+    def __getattr__(
+        self,
+        name: Literal[
+            "paths_from_stdin",
+            "changed_only",
+            "include_untracked",
+            "no_lint_tests",
+            "fix_only",
+            "check_only",
+            "verbose",
+            "quiet",
+            "no_color",
+            "no_emoji",
+            "advice",
+            "show_passing",
+            "no_stats",
+            "bail",
+            "no_cache",
+            "use_local_linters",
+            "strict_config",
+        ],
+    ) -> bool: ...
 
-    @property
-    def changed_only(self) -> bool:
-        return self._git.changed_only
+    @overload
+    def __getattr__(self, name: Literal["diff_ref", "pr_summary_template", "sql_dialect"]) -> str: ...
 
-    @property
-    def diff_ref(self) -> str:
-        return self._git.diff_ref
+    @overload
+    def __getattr__(self, name: Literal["base_branch", "python_version"]) -> str | None: ...
 
-    @property
-    def include_untracked(self) -> bool:
-        return self._git.include_untracked
+    @overload
+    def __getattr__(self, name: Literal["pr_summary_out"]) -> Path | None: ...
 
-    @property
-    def base_branch(self) -> str | None:
-        return self._git.base_branch
+    @overload
+    def __getattr__(self, name: Literal["pr_summary_limit", "line_length"]) -> int: ...
 
-    @property
-    def no_lint_tests(self) -> bool:
-        return self._git.no_lint_tests
+    @overload
+    def __getattr__(self, name: Literal["jobs"]) -> int | None: ...
 
-    # Selection ----------------------------------------------------------------------
+    @overload
+    def __getattr__(self, name: Literal["max_complexity", "max_arguments"]) -> int | None: ...
 
-    @property
-    def filters(self) -> list[str]:
-        return self._selection.filters
+    @overload
+    def __getattr__(self, name: Literal["pylint_fail_under"]) -> float | None: ...
 
-    @property
-    def only(self) -> list[str]:
-        return self._selection.only
+    @overload
+    def __getattr__(self, name: Literal["output_mode"]) -> OutputModeLiteral: ...
 
-    @property
-    def language(self) -> list[str]:
-        return self._selection.language
+    @overload
+    def __getattr__(self, name: Literal["pr_summary_min_severity"]) -> PRSummarySeverityLiteral: ...
 
-    @property
-    def fix_only(self) -> bool:
-        return self._selection.fix_only
+    @overload
+    def __getattr__(self, name: Literal["type_checking"]) -> StrictnessLiteral | None: ...
 
-    @property
-    def check_only(self) -> bool:
-        return self._selection.check_only
+    @overload
+    def __getattr__(
+        self,
+        name: Literal["bandit_severity", "bandit_confidence"],
+    ) -> BanditLevelLiteral | None: ...
 
-    # Output -------------------------------------------------------------------------
+    @overload
+    def __getattr__(self, name: Literal["sensitivity"]) -> SensitivityLiteral | None: ...
 
-    @property
-    def verbose(self) -> bool:
-        return self._output.display.verbose
+    def __getattr__(self, name: str) -> object:
+        """Proxy attribute access to nested option bundles.
 
-    @property
-    def quiet(self) -> bool:
-        return self._output.display.quiet
+        Args:
+            name: Attribute name requested by the caller.
 
-    @property
-    def no_color(self) -> bool:
-        return self._output.display.no_color
+        Returns:
+            object: Value extracted from the composed lint option dataclasses.
 
-    @property
-    def no_emoji(self) -> bool:
-        return self._output.display.no_emoji
+        Raises:
+            AttributeError: If ``name`` is not a recognised option attribute.
 
-    @property
-    def output_mode(self) -> str:
-        return self._output.display.output_mode
+        """
 
-    @property
-    def advice(self) -> bool:
-        return self._output.display.advice
+        path = _OPTION_ATTRIBUTE_MAP.get(name)
+        if path is None:
+            raise AttributeError(name) from None
 
-    @property
-    def show_passing(self) -> bool:
-        return self._output.summary.show_passing
+        value: object = self
+        for attribute in path:
+            value = getattr(value, attribute)
+        return value
 
-    @property
-    def no_stats(self) -> bool:
-        return self._output.summary.no_stats
+    def __dir__(self) -> list[str]:
+        """Return a merged attribute listing including proxied entries.
 
-    @property
-    def pr_summary_out(self) -> Path | None:
-        return self._output.summary.pr_summary_out
+        Returns:
+            list[str]: Combined attribute names exposed by the wrapper and
+            nested dataclasses.
 
-    @property
-    def pr_summary_limit(self) -> int:
-        return self._output.summary.pr_summary_limit
+        """
 
-    @property
-    def pr_summary_min_severity(self) -> str:
-        return self._output.summary.pr_summary_min_severity
+        return sorted(set(super().__dir__()) | set(_OPTION_ATTRIBUTE_MAP))
 
-    @property
-    def pr_summary_template(self) -> str:
-        return self._output.summary.pr_summary_template
+    def __contains__(self, item: str) -> bool:
+        """Return ``True`` when ``item`` was explicitly provided on the CLI.
 
-    # Execution ----------------------------------------------------------------------
+        Args:
+            item: CLI flag name to probe for explicit invocation.
 
-    @property
-    def jobs(self) -> int | None:
-        return self._execution.runtime.jobs
+        Returns:
+            bool: ``True`` when ``item`` is recorded in ``provided``.
 
-    @property
-    def bail(self) -> bool:
-        return self._execution.runtime.bail
+        """
 
-    @property
-    def no_cache(self) -> bool:
-        return self._execution.runtime.no_cache
+        return item in self._provided
 
-    @property
-    def cache_dir(self) -> Path:
-        return self._execution.runtime.cache_dir
+    def __repr__(self) -> str:
+        """Return a deterministic representation for debugging support.
 
-    @property
-    def use_local_linters(self) -> bool:
-        return self._execution.runtime.use_local_linters
+        Returns:
+            str: Readable representation showing component dataclasses.
 
-    @property
-    def strict_config(self) -> bool:
-        return self._execution.runtime.strict_config
+        """
 
-    @property
-    def line_length(self) -> int:
-        return self._execution.formatting.line_length
+        provided = sorted(self._provided)
+        return (
+            "LintOptions("
+            f"targets={self._targets!r}, git={self._git!r}, selection={self._selection!r}, "
+            f"output={self._output!r}, execution={self._execution!r}, "
+            f"overrides={self._overrides!r}, provided={provided!r})"
+        )
 
     @property
-    def sql_dialect(self) -> str:
-        return self._execution.formatting.sql_dialect
+    def provided(self) -> frozenset[str]:
+        """Return the set of CLI flags explicitly provided by the caller.
 
-    @property
-    def python_version(self) -> str | None:
-        return self._execution.formatting.python_version
+        Returns:
+            frozenset[str]: Flag names supplied on the command line.
 
-    # Overrides ----------------------------------------------------------------------
+        """
 
-    @property
-    def max_complexity(self) -> int | None:
-        return self._overrides.complexity.max_complexity
-
-    @property
-    def max_arguments(self) -> int | None:
-        return self._overrides.complexity.max_arguments
-
-    @property
-    def type_checking(self) -> str | None:
-        return self._overrides.strictness.type_checking
-
-    @property
-    def bandit_severity(self) -> str | None:
-        return self._overrides.severity.bandit_severity
-
-    @property
-    def bandit_confidence(self) -> str | None:
-        return self._overrides.severity.bandit_confidence
-
-    @property
-    def pylint_fail_under(self) -> float | None:
-        return self._overrides.severity.pylint_fail_under
-
-    @property
-    def sensitivity(self) -> str | None:
-        return self._overrides.severity.sensitivity
-
-    # Provided flags -----------------------------------------------------------------
-
-    @property
-    def provided(self) -> set[str]:
         return self._provided
 
 

@@ -28,6 +28,9 @@ class StatsSnapshot:
     suppression_counts: dict[str, int]
     warnings_per_loc: float
     diagnostics_count: int
+    total_actions: int
+    failed_actions: int
+    cached_actions: int
 
 
 def emit_stats_panel(result: RunResult, cfg: OutputConfig, diagnostics_count: int) -> None:
@@ -64,12 +67,16 @@ def compute_stats_snapshot(result: RunResult, diagnostics_count: int) -> StatsSn
         label: sum(metric.suppressions.get(label, 0) for metric in metrics.values()) for label in SUPPRESSION_LABELS
     }
     warnings_per_loc = diagnostics_count / loc_count if loc_count else 0.0
+    outcomes = result.outcomes
     return StatsSnapshot(
         files_count=len(result.files),
         loc_count=loc_count,
         suppression_counts=suppression_counts,
         warnings_per_loc=warnings_per_loc,
         diagnostics_count=diagnostics_count,
+        total_actions=len(outcomes),
+        failed_actions=sum(1 for outcome in outcomes if not outcome.ok),
+        cached_actions=sum(1 for outcome in outcomes if outcome.cached),
     )
 
 
@@ -105,6 +112,18 @@ def create_stats_panel(snapshot: StatsSnapshot, cfg: OutputConfig) -> Panel:
     table.add_row(
         styled("Lines of code", label_style),
         styled(f"{snapshot.loc_count:,}", value_style),
+    )
+    table.add_row(
+        styled("Actions", label_style),
+        styled(str(snapshot.total_actions), value_style),
+    )
+    table.add_row(
+        styled("- cached", label_style),
+        styled(str(snapshot.cached_actions), value_style),
+    )
+    table.add_row(
+        styled("- failed", label_style),
+        styled(str(snapshot.failed_actions), value_style),
     )
     total_suppressions = sum(snapshot.suppression_counts.values())
     table.add_row(

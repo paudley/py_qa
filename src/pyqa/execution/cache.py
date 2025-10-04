@@ -185,6 +185,7 @@ class ResultCache:
             return None
 
         outcome = deserialize_outcome(payload)
+        outcome.cached = True
         metrics = _coerce_metrics_payload(payload.get(FILE_METRICS_FIELD))
         return CachedEntry(outcome=outcome, file_metrics=metrics)
 

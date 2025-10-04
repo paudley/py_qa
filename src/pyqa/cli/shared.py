@@ -29,15 +29,23 @@ class CLILogger:
     use_emoji: bool
 
     def fail(self, message: str) -> None:
+        """Log a failure message honouring emoji preferences."""
+
         core_fail(message, use_emoji=self.use_emoji)
 
     def warn(self, message: str) -> None:
+        """Log a warning message honouring emoji preferences."""
+
         core_warn(message, use_emoji=self.use_emoji)
 
     def ok(self, message: str) -> None:
+        """Log a success message honouring emoji preferences."""
+
         core_ok(message, use_emoji=self.use_emoji)
 
     def echo(self, message: str) -> None:
+        """Write ``message`` to stdout using Typer's echo helper."""
+
         typer.echo(message)
 
 

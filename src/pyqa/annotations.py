@@ -11,48 +11,128 @@ highlighting consistent without re-tokenising every message.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import threading
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from shutil import which
-from types import ModuleType
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import Final, Literal, Protocol, cast, runtime_checkable
+
+import spacy
 
 from .context import TreeSitterContextResolver
 from .models import RunResult
 
-try:
-    import spacy as _SPACY_MODULE
-except ImportError:  # pragma: no cover - spaCy optional dependency
-    _SPACY_MODULE: ModuleType | None = None
-else:  # pragma: no cover - executed only when spaCy installed
-    _SPACY_MODULE = _SPACY_MODULE
 
-
+@runtime_checkable
 class TokenLike(Protocol):
-    """Minimal protocol representing spaCy tokens used by pyqa."""
+    """Protocol describing the spaCy token API relied upon by pyqa."""
 
-    text: str
-    idx: int
-    is_stop: bool
-    pos_: str
-    lemma_: str
+    @property
+    def text(self) -> str:  # pragma: no cover - protocol definition
+        """Return the raw token text as emitted by spaCy."""
+        ...
+
+    @property
+    def idx(self) -> int:  # pragma: no cover - protocol definition
+        """Return the byte index of the token within the source string."""
+        ...
+
+    @property
+    def is_stop(self) -> bool:  # pragma: no cover - protocol definition
+        """Return ``True`` when the token is considered a stop word."""
+        ...
+
+    @property
+    def pos_(self) -> str:  # pragma: no cover - protocol definition
+        """Return the coarse-grained part-of-speech tag for the token."""
+        ...
+
+    @property
+    def lemma_(self) -> str:  # pragma: no cover - protocol definition
+        """Return the lemmatised form of the token."""
+        ...
+
+    def __len__(self) -> int:  # pragma: no cover - protocol definition
+        """Return the character length of the token."""
+        ...
 
 
-DocLike = Iterable[TokenLike]
+@runtime_checkable
+class DocLike(Protocol):
+    """Protocol representing iterable spaCy documents used in analysis."""
+
+    def __iter__(self) -> Iterator[TokenLike]:  # pragma: no cover - protocol definition
+        """Yield ``TokenLike`` instances from the parsed document."""
+        ...
+
+    def __len__(self) -> int:  # pragma: no cover - protocol definition
+        """Return the number of tokens contained in the document."""
+        ...
+
+    def __getitem__(self, index: int) -> TokenLike:  # pragma: no cover - protocol definition
+        """Return a token located at ``index`` within the document."""
+        ...
 
 
-if TYPE_CHECKING:  # pragma: no cover - type checking aid only
-    from spacy.language import Language as SpacyLanguage
-else:
+_PATH_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+(?:\.[A-Za-z0-9_]+)?)",
+)
+_CAMEL_IDENTIFIER_PATTERN: Final[re.Pattern[str]] = re.compile(r"[A-Za-z][A-Za-z0-9]+")
+_ARGUMENT_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"function argument(?:s)?\s+([A-Za-z0-9_,\s]+)",
+    re.IGNORECASE,
+)
+_VARIABLE_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"variable(?:\s+name)?\s+([A-Za-z_][\w\.]*)",
+    re.IGNORECASE,
+)
+_ATTRIBUTE_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"attribute\s+[\"']([A-Za-z_][\w\.]*)[\"']",
+    re.IGNORECASE,
+)
+_FUNCTION_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"function\s+([A-Za-z_][\w\.]*)",
+    re.IGNORECASE,
+)
 
-    class SpacyLanguage(Protocol):
-        """Callable NLP pipeline contract used at runtime."""
+_PATH_STYLE: Final[str] = "ansi256:81"
+_CLASS_STYLE: Final[str] = "ansi256:154"
+_ARGUMENT_STYLE: Final[str] = "ansi256:213"
+_VARIABLE_STYLE: Final[str] = "ansi256:156"
+_ATTRIBUTE_STYLE: Final[str] = "ansi256:208"
+_MIN_CAMEL_LENGTH: Final[int] = 2
+_UNDERSCORE_CHAR: Final[str] = "_"
 
-        def __call__(self, text: str) -> DocLike:  # pragma: no cover - protocol
-            ...
+
+@dataclass(frozen=True, slots=True)
+class _SpanSpec:
+    """Describe a span style and highlight kind."""
+
+    style: str
+    kind: HighlightKind
+
+
+_PATH_SPEC: Final[_SpanSpec] = _SpanSpec(style=_PATH_STYLE, kind="file")
+_CLASS_SPEC: Final[_SpanSpec] = _SpanSpec(style=_CLASS_STYLE, kind="class")
+_ARGUMENT_SPEC: Final[_SpanSpec] = _SpanSpec(style=_ARGUMENT_STYLE, kind="argument")
+_VARIABLE_SPEC: Final[_SpanSpec] = _SpanSpec(style=_VARIABLE_STYLE, kind="variable")
+_ATTRIBUTE_SPEC: Final[_SpanSpec] = _SpanSpec(style=_ATTRIBUTE_STYLE, kind="attribute")
+_FUNCTION_SPEC: Final[_SpanSpec] = _SpanSpec(style=_ATTRIBUTE_STYLE, kind="function")
+
+
+class SpacyLanguage(Protocol):
+    """Callable NLP pipeline contract used by pyqa."""
+
+    def __call__(self, text: str) -> DocLike:  # pragma: no cover - protocol definition
+        """Return a parsed document for ``text``."""
+        ...
+
+    def pipe(self, texts: Iterable[str]) -> Iterable[DocLike]:  # pragma: no cover - protocol definition
+        """Yield parsed documents for a stream of input strings."""
+        ...
 
 
 HighlightKind = Literal[
@@ -147,15 +227,13 @@ class AnnotationEngine:
         return MessageAnalysis(spans=tuple(spans), signature=signature)
 
     def _get_nlp(self) -> SpacyLanguage | None:
-        if _SPACY_MODULE is None:
-            return None
         if self._nlp is not None:
             return self._nlp
         with self._nlp_lock:
             if self._nlp is not None:
                 return self._nlp
             try:
-                self._nlp = _SPACY_MODULE.load(self._model_name)
+                self._nlp = cast(SpacyLanguage, spacy.load(self._model_name))
             except OSError:  # pragma: no cover - spaCy optional
                 should_retry = False
                 if not self._download_attempted:
@@ -163,7 +241,7 @@ class AnnotationEngine:
                     should_retry = _download_spacy_model(self._model_name)
                 if should_retry:
                     try:
-                        self._nlp = _SPACY_MODULE.load(self._model_name)
+                        self._nlp = cast(SpacyLanguage, spacy.load(self._model_name))
                     except OSError:
                         self._nlp = None
                 else:
@@ -172,69 +250,122 @@ class AnnotationEngine:
 
 
 def _heuristic_spans(message: str) -> tuple[list[MessageSpan], list[str]]:
-    spans: list[MessageSpan] = []
-    tokens: list[str] = []
-    import re
+    """Return heuristic spans/token hints derived from ``message``.
 
-    def add_span(start: int, end: int, style: str, kind: HighlightKind | None = None) -> None:
-        if 0 <= start < end <= len(message):
-            spans.append(MessageSpan(start=start, end=end, style=style, kind=kind))
+    Args:
+        message: Diagnostic message emitted by a tool.
 
-    path_pattern = re.compile(
-        r"((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+(?:\.[A-Za-z0-9_]+)?)",
-    )
-    for match in path_pattern.finditer(message):
-        value = message[match.start(1) : match.end(1)]
-        tokens.append(value.lower())
-        add_span(match.start(1), match.end(1), "ansi256:81", "file")
+    Returns:
+        tuple[list[MessageSpan], list[str]]: Highlight spans and lower-cased
+        tokens extracted from ``message`` using lightweight regex heuristics.
+    """
 
-    for match in re.finditer(r"[A-Za-z][A-Za-z0-9]+", message):
-        value = match.group(0)
-        if _looks_camel_case(value):
-            tokens.append(value.lower())
-            add_span(match.start(0), match.end(0), "ansi256:154", "class")
+    collector = _SpanCollector(message=message, spans=[], tokens=[])
+    collector.collect()
+    return collector.spans, collector.tokens
 
-    argument_pattern = re.compile(r"function argument(?:s)?\s+([A-Za-z0-9_,\s]+)", re.IGNORECASE)
-    variable_pattern = re.compile(r"variable(?:\s+name)?\s+([A-Za-z_][\w\.]*)", re.IGNORECASE)
-    attribute_pattern = re.compile(r"attribute\s+[\"']([A-Za-z_][\w\.]*)[\"']", re.IGNORECASE)
-    function_inline_pattern = re.compile(r"function\s+([A-Za-z_][\w\.]*)", re.IGNORECASE)
 
-    for match in argument_pattern.finditer(message):
-        raw = match.group(1)
-        offset = match.start(1)
-        for part in raw.split(","):
+@dataclass(slots=True)
+class _SpanCollector:
+    """Utility for extracting highlight spans and associated tokens."""
+
+    message: str
+    spans: list[MessageSpan]
+    tokens: list[str]
+
+    def collect(self) -> None:
+        """Populate ``spans`` and ``tokens`` using heuristic patterns."""
+
+        self._collect_paths()
+        self._collect_camel_case_identifiers()
+        self._collect_argument_names()
+        self._collect_simple_matches(_VARIABLE_PATTERN, _VARIABLE_SPEC)
+        self._collect_simple_matches(_ATTRIBUTE_PATTERN, _ATTRIBUTE_SPEC)
+        self._collect_simple_matches(_FUNCTION_PATTERN, _FUNCTION_SPEC)
+
+    # Span helpers -----------------------------------------------------------------
+
+    def _collect_paths(self) -> None:
+        """Highlight path-like substrings within the message."""
+
+        for match in _PATH_PATTERN.finditer(self.message):
+            value = self.message[match.start(1) : match.end(1)]
+            self._record_span(value, match.start(1), match.end(1), _PATH_SPEC)
+
+    def _collect_camel_case_identifiers(self) -> None:
+        """Highlight CamelCase identifiers that resemble class names."""
+
+        for match in _CAMEL_IDENTIFIER_PATTERN.finditer(self.message):
+            value = match.group(0)
+            if _looks_camel_case(value):
+                self._record_span(value, match.start(0), match.end(0), _CLASS_SPEC)
+
+    def _collect_argument_names(self) -> None:
+        """Highlight function argument names referenced inline."""
+
+        for match in _ARGUMENT_PATTERN.finditer(self.message):
+            raw_arguments = match.group(1)
+            search_start = match.start(1)
+            for name in self._split_arguments(raw_arguments):
+                start = self.message.find(name, search_start)
+                if start == -1:
+                    continue
+                end = start + len(name)
+                self._record_span(name, start, end, _ARGUMENT_SPEC)
+                search_start = end
+
+    def _collect_simple_matches(
+        self,
+        pattern: re.Pattern[str],
+        spec: _SpanSpec,
+    ) -> None:
+        """Highlight matches using ``pattern`` with a uniform style/kind."""
+
+        for match in pattern.finditer(self.message):
+            name = match.group(1)
+            self._record_span(name, match.start(1), match.end(1), spec)
+
+    # Utility helpers --------------------------------------------------------------
+
+    @staticmethod
+    def _split_arguments(raw_arguments: str) -> list[str]:
+        """Return cleaned argument names extracted from ``raw_arguments``."""
+
+        cleaned: list[str] = []
+        for part in raw_arguments.split(","):
             name = part.strip(" \t.:;'\"")
-            if not name:
-                continue
-            start = message.find(name, offset)
-            if start == -1:
-                continue
-            tokens.append(name.lower())
-            add_span(start, start + len(name), "ansi256:213", "argument")
-            offset = start + len(name)
+            if name:
+                cleaned.append(name)
+        return cleaned
 
-    for match in variable_pattern.finditer(message):
-        name = match.group(1)
-        start = match.start(1)
-        tokens.append(name.lower())
-        add_span(start, start + len(name), "ansi256:156", "variable")
+    def _record_span(
+        self,
+        value: str,
+        start: int,
+        end: int,
+        spec: _SpanSpec,
+    ) -> None:
+        """Store the lower-cased token and its highlight span."""
 
-    for match in attribute_pattern.finditer(message):
-        name = match.group(1)
-        start = match.start(1)
-        tokens.append(name.lower())
-        add_span(start, start + len(name), "ansi256:208", "attribute")
-
-    for match in function_inline_pattern.finditer(message):
-        name = match.group(1)
-        start = match.start(1)
-        tokens.append(name.lower())
-        add_span(start, start + len(name), "ansi256:208", "function")
-
-    return spans, tokens
+        if 0 <= start < end <= len(self.message):
+            self.tokens.append(value.lower())
+            self.spans.append(
+                MessageSpan(start=start, end=end, style=spec.style, kind=spec.kind),
+            )
 
 
 def _spacy_spans(doc: DocLike) -> list[MessageSpan]:
+    """Return spaCy-derived highlight spans for the supplied document.
+
+    Args:
+        doc: spaCy document produced by the configured language pipeline.
+
+    Returns:
+        list[MessageSpan]: Highlight spans inferred from part-of-speech tags
+        and casing heuristics.
+
+    """
+
     spans: list[MessageSpan] = []
     for token in doc:
         if token.is_stop or not token.text.strip():
@@ -261,6 +392,17 @@ def _spacy_spans(doc: DocLike) -> list[MessageSpan]:
 
 
 def _signature_from_doc(doc: DocLike) -> list[str]:
+    """Return semantic signature tokens extracted from ``doc``.
+
+    Args:
+        doc: spaCy document produced by the configured language pipeline.
+
+    Returns:
+        list[str]: Lemmas capturing the key nouns, verbs, and adjectives in the
+        message.
+
+    """
+
     tokens: list[str] = []
     for token in doc:
         if token.is_stop or not token.text.strip():
@@ -273,15 +415,33 @@ def _signature_from_doc(doc: DocLike) -> list[str]:
 
 
 def _fallback_signature_tokens(message: str) -> list[str]:
-    import re
+    """Return naive signature tokens when spaCy is unavailable.
+
+    Args:
+        message: Diagnostic message to tokenise.
+
+    Returns:
+        list[str]: Lower-cased tokens with minimal length filtering applied.
+
+    """
 
     return re.findall(r"[a-zA-Z_]{3,}", message.lower())
 
 
 def _looks_camel_case(token: str) -> bool:
-    if len(token) < 2 or not token[0].isupper():
+    """Return ``True`` when ``token`` resembles a CamelCase identifier.
+
+    Args:
+        token: Identifier candidate taken from a diagnostic message.
+
+    Returns:
+        bool: ``True`` when the token appears to be CamelCase.
+
+    """
+
+    if len(token) < _MIN_CAMEL_LENGTH or not token[0].isupper():
         return False
-    if "_" in token:
+    if _UNDERSCORE_CHAR in token:
         return False
     rest = token[1:]
     has_lower = any(ch.islower() for ch in rest)
@@ -290,6 +450,16 @@ def _looks_camel_case(token: str) -> bool:
 
 
 def _dedupe_spans(spans: Sequence[MessageSpan]) -> list[MessageSpan]:
+    """Return ``spans`` without overlaps, preferring earlier entries.
+
+    Args:
+        spans: Candidate spans produced by heuristics and spaCy analysis.
+
+    Returns:
+        list[MessageSpan]: Non-overlapping set of spans sorted by position.
+
+    """
+
     seen: list[MessageSpan] = []
     for span in sorted(spans, key=lambda s: (s.start, s.end - s.start), reverse=False):
         if any(_overlap(span, existing) for existing in seen):
@@ -299,17 +469,36 @@ def _dedupe_spans(spans: Sequence[MessageSpan]) -> list[MessageSpan]:
 
 
 def _overlap(left: MessageSpan, right: MessageSpan) -> bool:
+    """Return ``True`` when two message spans overlap.
+
+    Args:
+        left: First span for overlap comparison.
+        right: Second span for overlap comparison.
+
+    Returns:
+        bool: ``True`` when the spans intersect.
+
+    """
+
     return max(left.start, right.start) < min(left.end, right.end)
 
 
 def _download_spacy_model(model_name: str) -> bool:
-    if _SPACY_MODULE is None:
-        return False
+    """Attempt to download the specified spaCy model via ``uv``.
+
+    Args:
+        model_name: Name of the spaCy model to fetch from the model releases.
+
+    Returns:
+        bool: ``True`` when the model download succeeds, otherwise ``False``.
+
+    """
+
     uv_path = which("uv")
     if not uv_path:
         return False
 
-    version = getattr(_SPACY_MODULE, "__version__", None)
+    version = getattr(spacy, "__version__", None)
     if not version:
         return False
 

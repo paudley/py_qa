@@ -42,6 +42,7 @@ def serialize_outcome(outcome: ToolOutcome) -> dict[str, object]:
         "stdout": list(outcome.stdout),
         "stderr": list(outcome.stderr),
         "diagnostics": [serialize_diagnostic(diag) for diag in outcome.diagnostics],
+        "cached": outcome.cached,
     }
 
 
@@ -79,6 +80,7 @@ def deserialize_outcome(data: Mapping[str, Any]) -> ToolOutcome:
         stdout=stdout_list,
         stderr=stderr_list,
         diagnostics=diagnostics,
+        cached=bool(data.get("cached", False)),
     )
 
 

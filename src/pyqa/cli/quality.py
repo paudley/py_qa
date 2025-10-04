@@ -13,6 +13,7 @@ from ..quality import check_commit_message, ensure_branch_protection
 from ._quality_cli_models import (
     EMOJI_OPTION,
     ROOT_OPTION,
+    QualityCLIInputParams,
     QualityCLIOptions,
     build_quality_options,
 )
@@ -45,9 +46,6 @@ def main(
         ctx: Typer context used to detect subcommand invocations.
         options: Structured CLI inputs (root, path filters, flags) constructed by
             :func:`build_quality_options`.
-
-    Returns:
-        None: The command exits via :func:`typer.Exit` after rendering results.
     """
 
     if ctx.invoked_subcommand:
@@ -90,9 +88,6 @@ def commit_msg(
         root: Repository root used for configuration and ignore detection.
         message_file: Path to the commit message provided by git hooks.
         emoji: Toggle emoji output when rendering diagnostic results.
-
-    Returns:
-        None: The command exits via :func:`typer.Exit` with the check result.
     """
 
     resolved_root = root.resolve()
@@ -112,19 +107,18 @@ def branch_guard(
     Args:
         root: Repository root containing the quality configuration.
         emoji: Toggle emoji output for rendered diagnostics.
-
-    Returns:
-        None: The command exits via :func:`typer.Exit` after reporting status.
     """
 
     options = QualityCLIOptions.from_cli(
-        root=root,
-        paths=(),
-        staged=False,
-        fix=False,
-        requested_checks=(),
-        include_schema=True,
-        emoji=emoji,
+        QualityCLIInputParams(
+            root=root,
+            paths=(),
+            staged=False,
+            fix=False,
+            requested_checks=(),
+            include_schema=True,
+            emoji=emoji,
+        ),
     )
     logger = build_cli_logger(emoji=emoji)
     try:

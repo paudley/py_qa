@@ -4,13 +4,14 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Final, Literal
+from typing import Annotated, Final
 
 import typer
 from rich.progress import Progress
 
 from ..config import ConfigError
 from ..console import is_tty
+from ..execution.tool_selection import PHASE_ORDER, PhaseLiteral
 from ._lint_cli_models import LintCLIInputs, _build_lint_cli_inputs
 from ._lint_meta import (
     MetaActionOutcome,
@@ -24,25 +25,9 @@ from ._lint_runtime import LintRuntimeContext, build_lint_runtime_context
 from .config_builder import build_config
 from .shared import CLILogger, Depends, build_cli_logger
 
-LintPhaseLiteral = Literal[
-    "lint",
-    "format",
-    "analysis",
-    "security",
-    "test",
-    "coverage",
-    "utility",
-]
+LintPhaseLiteral = PhaseLiteral
 
-PHASE_SORT_ORDER: Final[tuple[LintPhaseLiteral, ...]] = (
-    "lint",
-    "format",
-    "analysis",
-    "security",
-    "test",
-    "coverage",
-    "utility",
-)
+PHASE_SORT_ORDER: Final[tuple[LintPhaseLiteral, ...]] = PHASE_ORDER
 
 
 def lint_command(

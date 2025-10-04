@@ -34,6 +34,11 @@ class DefaultDiscovery(DiscoveryService):
             return changed
         return list(self._filesystem.discover(config, root))
 
+    def strategies(self) -> tuple[DiscoveryStrategy, ...]:
+        """Return the configured discovery strategies in evaluation order."""
+
+        return (self._git, self._filesystem)
+
 
 def build_default_discovery() -> DefaultDiscovery:
     """Factory for the default discovery pipeline."""

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import re
 import sys
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -58,10 +58,10 @@ class CommentStyle(str, Enum):
         Returns:
             str: Comment line using this style.
         """
-        prefix, suffix, empty_value = RENDER_TOKENS[self]
+        template = RENDER_TOKENS[self]
         if not text:
-            return empty_value
-        return f"{prefix}{text}{suffix}"
+            return template.empty_line
+        return f"{template.prefix}{text}{template.suffix}"
 
     def extract(self, line: str) -> str | None:
         """Extract the comment payload from ``line`` for the comment style.
@@ -75,24 +75,10 @@ class CommentStyle(str, Enum):
         """
 
         stripped = line.strip()
-        result: str | None = None
-        if stripped:
-            if self is CommentStyle.HASH:
-                if stripped.startswith("#") and not stripped.startswith("#!"):
-                    result = stripped[1:].lstrip()
-            elif self is CommentStyle.SLASH:
-                if stripped.startswith("//"):
-                    result = stripped[2:].lstrip()
-            elif self is CommentStyle.HTML:
-                if stripped.startswith("<!--") and stripped.endswith("-->"):
-                    result = stripped[4:-3].strip()
-            elif self is CommentStyle.RST:
-                if stripped.startswith(".."):
-                    result = stripped[2:].lstrip()
-            elif self is CommentStyle.DASH:
-                if stripped.startswith("--"):
-                    result = stripped[2:].lstrip()
-        return result
+        if not stripped:
+            return None
+        extractor = _COMMENT_EXTRACTORS[self]
+        return extractor(stripped)
 
 
 STYLE_EXTENSIONS: Final[dict[CommentStyle, tuple[str, ...]]] = {
@@ -162,12 +148,74 @@ NAME_STYLE_OVERRIDES: Final[dict[str, CommentStyle]] = {
 
 _ENCODING_PATTERN: Final[re.Pattern[str]] = re.compile(r"#.*coding[:=]")
 _SPDX_PREFIX: Final[str] = "spdx-license-identifier:"
-RENDER_TOKENS: Final[dict[CommentStyle, tuple[str, str, str]]] = {
-    CommentStyle.HASH: ("# ", "", "#"),
-    CommentStyle.SLASH: ("// ", "", "//"),
-    CommentStyle.HTML: ("<!-- ", " -->", "<!--  -->"),
-    CommentStyle.RST: (".. ", "", ".."),
-    CommentStyle.DASH: ("-- ", "", "--"),
+
+
+@dataclass(frozen=True, slots=True)
+class RenderTemplate:
+    """Describes the tokens required to render header comment lines."""
+
+    prefix: str
+    suffix: str
+    empty_line: str
+
+
+RENDER_TOKENS: Final[dict[CommentStyle, RenderTemplate]] = {
+    CommentStyle.HASH: RenderTemplate(prefix="# ", suffix="", empty_line="#"),
+    CommentStyle.SLASH: RenderTemplate(prefix="// ", suffix="", empty_line="//"),
+    CommentStyle.HTML: RenderTemplate(prefix="<!-- ", suffix=" -->", empty_line="<!--  -->"),
+    CommentStyle.RST: RenderTemplate(prefix=".. ", suffix="", empty_line=".."),
+    CommentStyle.DASH: RenderTemplate(prefix="-- ", suffix="", empty_line="--"),
+}
+
+
+def _extract_hash_comment(line: str) -> str | None:
+    """Return a hash-style comment payload from ``line`` when present."""
+
+    if line.startswith("#!"):
+        return None
+    if line.startswith("#"):
+        return line[1:].lstrip()
+    return None
+
+
+def _extract_slash_comment(line: str) -> str | None:
+    """Return a C/Java style comment payload from ``line`` when present."""
+
+    if line.startswith("//"):
+        return line[2:].lstrip()
+    return None
+
+
+def _extract_html_comment(line: str) -> str | None:
+    """Return an HTML-style comment payload from ``line`` when present."""
+
+    if line.startswith("<!--") and line.endswith("-->"):
+        return line[4:-3].strip()
+    return None
+
+
+def _extract_rst_comment(line: str) -> str | None:
+    """Return an reStructuredText comment payload from ``line`` when present."""
+
+    if line.startswith(".."):
+        return line[2:].lstrip()
+    return None
+
+
+def _extract_dash_comment(line: str) -> str | None:
+    """Return a SQL-style dash comment payload from ``line`` when present."""
+
+    if line.startswith("--"):
+        return line[2:].lstrip()
+    return None
+
+
+_COMMENT_EXTRACTORS: Final[dict[CommentStyle, Callable[[str], str | None]]] = {
+    CommentStyle.HASH: _extract_hash_comment,
+    CommentStyle.SLASH: _extract_slash_comment,
+    CommentStyle.HTML: _extract_html_comment,
+    CommentStyle.RST: _extract_rst_comment,
+    CommentStyle.DASH: _extract_dash_comment,
 }
 
 
@@ -191,6 +239,14 @@ class ConflictingLicenseError(LicenseFixError):
 
         formatted = ", ".join(sorted({identifier for identifier in identifiers if identifier}))
         super().__init__(f"Conflicting SPDX identifier(s) present: {formatted}")
+
+
+class PruneDecision(str, Enum):
+    """Enumerate pruning decisions for existing header lines."""
+
+    DELETE = "delete"
+    ADVANCE = "advance"
+    STOP = "stop"
 
 
 def _default_year() -> int:
@@ -462,18 +518,17 @@ def _prune_existing_header(
         comment = style.extract(lines[index])
         if comment is None:
             break
-        lowered = comment.lower()
-        if lowered.startswith(_SPDX_PREFIX):
-            if remove_spdx:
-                indices_to_remove.append(index)
-                continue
+        decision = _classify_header_comment(
+            comment,
+            remove_spdx=remove_spdx,
+            remove_notice=remove_notice,
+        )
+        if decision is PruneDecision.DELETE:
+            indices_to_remove.append(index)
+            continue
+        if decision is PruneDecision.ADVANCE:
             scan_index = index + 1
             continue
-        if lowered.startswith("copyright"):
-            if remove_notice:
-                indices_to_remove.append(index)
-                continue
-            break
         break
 
     for index in reversed(indices_to_remove):
@@ -487,6 +542,32 @@ def _prune_existing_header(
             lines.pop(scan_index)
 
     return scan_index
+
+
+def _classify_header_comment(
+    comment: str,
+    *,
+    remove_spdx: bool,
+    remove_notice: bool,
+) -> PruneDecision:
+    """Return pruning directive for a single comment line.
+
+    Args:
+        comment: Comment payload extracted from the source file.
+        remove_spdx: Whether conflicting SPDX lines should be removed.
+        remove_notice: Whether conflicting copyright notices should be removed.
+
+    Returns:
+        PruneDecision: Decision on whether to delete, advance, or stop scanning.
+
+    """
+
+    lowered = comment.lower()
+    if lowered.startswith(_SPDX_PREFIX):
+        return PruneDecision.DELETE if remove_spdx else PruneDecision.ADVANCE
+    if lowered.startswith("copyright"):
+        return PruneDecision.DELETE if remove_notice else PruneDecision.STOP
+    return PruneDecision.STOP
 
 
 def _format_comment(style: CommentStyle, text: str) -> str:

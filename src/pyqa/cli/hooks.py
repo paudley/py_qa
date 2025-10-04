@@ -29,9 +29,6 @@ def main(
 
     Args:
         options: Normalized CLI options containing installer directives.
-
-    Returns:
-        None. The function exits the Typer application with status information.
     """
 
     logger = build_cli_logger(emoji=options.emoji)

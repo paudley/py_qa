@@ -8,15 +8,25 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
 from ..config import Config
 from ..languages import detect_languages
 from ..tools import Tool
 from ..tools.registry import ToolRegistry
 
-_DEFAULT_PHASE: Final[str] = "lint"
-_PHASE_ORDER: Final[tuple[str, ...]] = (
+PhaseLiteral = Literal[
+    "format",
+    "lint",
+    "analysis",
+    "security",
+    "test",
+    "coverage",
+    "utility",
+]
+
+_DEFAULT_PHASE: Final[PhaseLiteral] = "lint"
+PHASE_ORDER: Final[tuple[PhaseLiteral, ...]] = (
     "format",
     "lint",
     "analysis",
@@ -80,7 +90,7 @@ class ToolSelector:
         fallback_index = {name: index for index, name in enumerate(filtered)}
         bucketed: list[list[str]] = []
 
-        for phase in _PHASE_ORDER:
+        for phase in PHASE_ORDER:
             names = phase_groups.get(phase)
             if names:
                 bucketed.append(self._order_phase(names, tools, fallback_index))
@@ -147,7 +157,7 @@ class ToolSelector:
             tool = tools[name]
             phase = getattr(tool, "phase", _DEFAULT_PHASE)
             phase_groups.setdefault(phase, []).append(name)
-            if phase not in _PHASE_ORDER and phase not in unknown_phases:
+            if phase not in PHASE_ORDER and phase not in unknown_phases:
                 unknown_phases.append(phase)
         return phase_groups, unknown_phases
 
@@ -191,4 +201,4 @@ class ToolSelector:
         return ordered
 
 
-__all__ = ["ToolSelector"]
+__all__ = ["ToolSelector", "PhaseLiteral", "PHASE_ORDER"]

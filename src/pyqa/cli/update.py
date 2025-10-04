@@ -46,10 +46,11 @@ VALID_MANAGERS: Final[frozenset[ManagerNameLiteral]] = frozenset(_KNOWN_MANAGER_
 
 _REGISTERED_MANAGERS = {strategy.kind.value for strategy in DEFAULT_STRATEGIES}
 if not _REGISTERED_MANAGERS <= set(VALID_MANAGERS):  # pragma: no cover - defensive
-    missing = ", ".join(sorted(_REGISTERED_MANAGERS - set(VALID_MANAGERS)))
+    missing_manager_diff = _REGISTERED_MANAGERS - set(VALID_MANAGERS)
+    MISSING_MANAGER_KINDS: Final[str] = ", ".join(sorted(missing_manager_diff))
     raise RuntimeError(
         "DEFAULT_STRATEGIES defines manager kinds missing from ManagerNameLiteral: "
-        f"{missing}. Update src/pyqa/cli/update.py."
+        f"{MISSING_MANAGER_KINDS}. Update src/pyqa/cli/update.py."
     )
 
 
@@ -75,14 +76,7 @@ def main(
     """Execute dependency updates across discovered workspaces.
 
     Args:
-        root: Root directory to scan for workspaces.
-        manager: Optional list of managers to include.
-        skip_lint_install: Whether to skip bootstrapping lint dependencies.
-        dry_run: When ``True``, emit planned commands without execution.
-        emoji: Toggle emoji output for status messages.
-
-    Returns:
-        None: The Typer command exits the process via :func:`typer.Exit`.
+        options: Parsed CLI options controlling update execution.
 
     """
 
@@ -97,9 +91,6 @@ def _run_update(options: UpdateOptions) -> None:
 
     Args:
         options: Parsed CLI options controlling update execution.
-
-    Returns:
-        None: Control flow terminates via :func:`typer.Exit`.
 
     """
 

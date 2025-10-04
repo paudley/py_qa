@@ -63,12 +63,8 @@ def _format_issue_location(path: object | None, root: Path) -> str:
     path_obj = _to_path(path)
     if path_obj is None:
         return "" if path is None else f" [{path}]"
-
-    try:
-        relative = path_obj.resolve().relative_to(root.resolve())
-        return f" [{relative}]"
-    except ValueError:
-        return f" [{path_obj}]"
+    relative = _relative_path_or_original(path_obj, root)
+    return f" [{relative}]"
 
 
 def _to_path(value: object) -> Path | None:
@@ -79,6 +75,26 @@ def _to_path(value: object) -> Path | None:
     if isinstance(value, str):
         return Path(value)
     return None
+
+
+def _relative_path_or_original(path: Path, root: Path) -> str:
+    """Return ``path`` relative to ``root`` when both share a common prefix.
+
+    Args:
+        path: Filesystem path associated with the diagnostic.
+        root: Workspace root used to normalise diagnostic paths.
+
+    Returns:
+        str: ``path`` relative to ``root`` when possible, otherwise the
+        absolute representation of ``path``.
+    """
+
+    resolved_root = root.resolve()
+    resolved_path = path.resolve()
+    try:
+        return str(resolved_path.relative_to(resolved_root))
+    except ValueError:
+        return str(path)
 
 
 __all__ = ["render_py_qa_skip_warning", "render_quality_result"]
