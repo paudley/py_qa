@@ -30,12 +30,14 @@ _SEVERITY_RANK: MutableMapping[Severity, int] = {
 }
 
 _CROSS_TOOL_EQUIVALENT_CODES: Final[set[frozenset[str]]] = {
-    frozenset({"override", "W0221"}),
-    frozenset({"TC002", "reportPrivateImportUsage"}),
-    frozenset({"F822", "reportUnsupportedDunderAll"}),
-    frozenset({"F821", "reportUndefinedVariable"}),
-    frozenset({"PLR2004", "R2004"}),
-    frozenset({"arg-type", "reportArgumentType"}),
+    frozenset({"override", "w0221"}),
+    frozenset({"tc002", "reportprivateimportusage"}),
+    frozenset({"f822", "reportunsupporteddunderall"}),
+    frozenset({"f821", "reportundefinedvariable"}),
+    frozenset({"f821", "undefined-variable"}),
+    frozenset({"plr2004", "r2004"}),
+    frozenset({"undefined-variable", "reportundefinedvariable"}),
+    frozenset({"arg-type", "reportargumenttype"}),
 }
 
 _CODE_PREFERENCE: Final[dict[frozenset[str], str]] = {

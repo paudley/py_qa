@@ -71,10 +71,7 @@ def is_within_limits(candidate: Path, limits: Sequence[Path]) -> bool:
 
     if not limits:
         return True
-    for limit in limits:
-        if _within_limit(candidate, limit):
-            return True
-    return False
+    return any(_within_limit(candidate, limit) for limit in limits)
 
 
 def filter_files_for_tool(extensions: Sequence[str], files: Sequence[Path]) -> list[Path]:
@@ -118,11 +115,7 @@ def _within_limit(candidate: Path, limit: Path) -> bool:
         bool: ``True`` when ``candidate`` lies inside ``limit``.
     """
 
-    try:
-        candidate.relative_to(limit)
-        return True
-    except ValueError:
-        return False
+    return candidate.is_relative_to(limit)
 
 
 __all__ = ["discover_files", "filter_files_for_tool", "is_within_limits", "prepare_runtime"]

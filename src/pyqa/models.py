@@ -84,9 +84,30 @@ class RawDiagnostic(BaseModel):
         raw = Path(str(value)) if not isinstance(value, Path) else value
         try:
             normalised = normalize_path(raw)
-        except Exception:
+        except (OSError, RuntimeError, ValueError):
             return str(value)
         return normalised.as_posix()
+
+
+def coerce_output_sequence(value: object) -> list[str]:
+    """Normalise stdout/stderr payloads into a list of strings.
+
+    Args:
+        value: Output payload supplied by a tool or serialized artifact.
+
+    Returns:
+        list[str]: Sequence of output lines represented as strings.
+    """
+
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if isinstance(value, tuple):
+        return [str(item) for item in value]
+    if isinstance(value, str):
+        return value.splitlines()
+    return [str(value)]
 
 
 class ToolOutcome(BaseModel):
@@ -105,15 +126,7 @@ class ToolOutcome(BaseModel):
     @field_validator("stdout", "stderr", mode="before")
     @classmethod
     def _coerce_output(cls, value: object) -> list[str]:
-        if value is None:
-            return []
-        if isinstance(value, list):
-            return [str(item) for item in value]
-        if isinstance(value, tuple):
-            return [str(item) for item in value]
-        if isinstance(value, str):
-            return value.splitlines()
-        return [str(value)]
+        return coerce_output_sequence(value)
 
     def is_ok(self) -> bool:
         """Return ``True`` when the tool exited successfully."""

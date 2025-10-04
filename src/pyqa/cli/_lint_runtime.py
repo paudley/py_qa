@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from ..config import Config
 from ..discovery import build_default_discovery
 from ..discovery.base import SupportsDiscovery
-from ..execution.orchestrator import Orchestrator, OrchestratorHooks
+from ..execution.orchestrator import Orchestrator, OrchestratorHooks, OrchestratorOverrides
 from ..tooling.catalog.model_catalog import CatalogSnapshot
 from ..tools.builtin_registry import initialize_registry
 from ..tools.registry import DEFAULT_REGISTRY, ToolRegistry
@@ -53,7 +53,8 @@ def _default_orchestrator_factory(
         Orchestrator: Configured orchestrator instance.
     """
 
-    return Orchestrator(registry=registry, discovery=discovery, hooks=hooks)
+    overrides = OrchestratorOverrides(hooks=hooks)
+    return Orchestrator(registry=registry, discovery=discovery, overrides=overrides)
 
 
 DEFAULT_LINT_DEPENDENCIES = LintRuntimeDependencies(

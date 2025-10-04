@@ -9,7 +9,7 @@ from pathlib import Path
 
 from ..config import FileDiscoveryConfig
 from ..execution.worker import run_command
-from .base import DiscoveryStrategy
+from .base import DiscoveryStrategy, is_within_limits, resolve_limit_paths
 
 GitRunner = Callable[[Sequence[str], Path], list[str]]
 
@@ -17,11 +17,29 @@ GitRunner = Callable[[Sequence[str], Path], list[str]]
 class GitDiscovery(DiscoveryStrategy):
     """Collect files reported as changed by Git."""
 
-    def __init__(self, *, runner: Callable[[Sequence[str], Path], list[str]] | None = None) -> None:
+    def __init__(self, *, runner: GitRunner | None = None) -> None:
+        """Create a Git discovery strategy.
+
+        Args:
+            runner: Optional command runner used to execute git commands. A
+                sensible default based on :func:`run_command` is used when
+                omitted.
+        """
+
         self._runner = runner or self._default_runner
 
     def discover(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
-        limits = self._normalise_limits(config, root)
+        """Return files discovered via git status/diff output.
+
+        Args:
+            config: Discovery configuration controlling git flags.
+            root: Repository root directory.
+
+        Returns:
+            Iterable[Path]: Sorted sequence of resolved candidate paths.
+        """
+
+        limits = tuple(resolve_limit_paths(config.limit_to, root))
         if not (config.changed_only or config.pre_commit or config.base_branch):
             return []
         candidates: set[Path] = set()
@@ -29,37 +47,79 @@ class GitDiscovery(DiscoveryStrategy):
         candidates.update(diff_targets)
         if config.include_untracked:
             candidates.update(self._untracked(root))
-        bounded = {path.resolve() for path in candidates if path.exists() and self._within_limits(path, limits)}
+        bounded: set[Path] = set()
+        for candidate in candidates:
+            if not candidate.exists():
+                continue
+            resolved = candidate.resolve()
+            if is_within_limits(resolved, limits):
+                bounded.add(resolved)
         return sorted(bounded)
 
+    def __call__(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
+        """Delegate to :meth:`discover` to support callable semantics."""
+
+        return self.discover(config, root)
+
     def _diff_names(self, config: FileDiscoveryConfig, root: Path) -> Iterator[Path]:
+        """Yield files referenced by git diff or status output.
+
+        Args:
+            config: Discovery configuration controlling diff behaviour.
+            root: Repository root directory.
+
+        Yields:
+            Path: Resolved candidate files reported by git.
+        """
+
         if config.pre_commit:
             cmd = ["git", "diff", "--name-only", "--cached"]
         else:
             diff_ref = self._resolve_diff_ref(config, root)
             cmd = ["git", "diff", "--name-only", diff_ref, "--"] if diff_ref else ["git", "status", "--short"]
             if not diff_ref:
-                for line in self._runner(cmd, root):
-                    line = line.strip()
-                    if not line:
+                for raw in self._runner(cmd, root):
+                    stripped = raw.strip()
+                    if not stripped:
                         continue
-                    yield (root / line.split(maxsplit=1)[-1]).resolve()
+                    path_fragment = stripped.split(maxsplit=1)[-1]
+                    yield (root / path_fragment).resolve()
                 return
-        for line in self._runner(cmd, root):
-            line = line.strip()
-            if not line:
+        for raw in self._runner(cmd, root):
+            stripped = raw.strip()
+            if not stripped:
                 continue
-            yield (root / line).resolve()
+            yield (root / stripped).resolve()
 
     def _untracked(self, root: Path) -> Iterator[Path]:
+        """Yield untracked files from git ls-files output.
+
+        Args:
+            root: Repository root directory.
+
+        Yields:
+            Path: Resolved untracked file paths.
+        """
+
         cmd = ["git", "ls-files", "--others", "--exclude-standard"]
-        for line in self._runner(cmd, root):
-            line = line.strip()
-            if not line:
+        for raw in self._runner(cmd, root):
+            stripped = raw.strip()
+            if not stripped:
                 continue
-            yield (root / line).resolve()
+            yield (root / stripped).resolve()
 
     def _resolve_diff_ref(self, config: FileDiscoveryConfig, root: Path) -> str | None:
+        """Return the git reference to diff against based on ``config``.
+
+        Args:
+            config: Discovery configuration specifying diff behaviour.
+            root: Repository root directory.
+
+        Returns:
+            str | None: Git reference to diff against, or ``None`` when status
+                output should be used.
+        """
+
         if config.base_branch:
             merge_base_cmd = ["git", "merge-base", "HEAD", config.base_branch]
             output = self._runner(merge_base_cmd, root)
@@ -72,36 +132,31 @@ class GitDiscovery(DiscoveryStrategy):
 
     @staticmethod
     def _default_runner(cmd: Sequence[str], root: Path) -> list[str]:
+        """Execute ``cmd`` returning stdout lines while swallowing failures.
+
+        Args:
+            cmd: Git command to execute.
+            root: Repository root directory.
+
+        Returns:
+            list[str]: Raw stdout lines produced by subprocess execution.
+        """
+
         cp = run_command(cmd, cwd=root)
         if cp.returncode != 0:
             return []
         return cp.stdout.splitlines()
 
-    @staticmethod
-    def _normalise_limits(config: FileDiscoveryConfig, root: Path) -> list[Path]:
-        limits: list[Path] = []
-        for entry in config.limit_to:
-            candidate = entry if entry.is_absolute() else root / entry
-            resolved = candidate.resolve()
-            if resolved not in limits:
-                limits.append(resolved)
-        return limits
-
-    @staticmethod
-    def _within_limits(candidate: Path, limits: list[Path]) -> bool:
-        if not limits:
-            return True
-        for limit in limits:
-            try:
-                candidate.relative_to(limit)
-                return True
-            except ValueError:
-                continue
-        return False
-
 
 def list_tracked_files(root: Path) -> list[Path]:
-    """Return all tracked files for the repository rooted at *root*."""
+    """Return tracked files for the git repository rooted at ``root``.
+
+    Args:
+        root: Repository root directory.
+
+    Returns:
+        list[Path]: Resolved, tracked file paths.
+    """
     cp = run_command(["git", "ls-files"], cwd=root)
     if cp.returncode != 0:
         return []

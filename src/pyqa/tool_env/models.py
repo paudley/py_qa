@@ -29,6 +29,18 @@ class PreparedCommand(BaseModel):
         version: str | None,
         source: Literal["system", "local", "project"],
     ) -> PreparedCommand:
+        """Construct a :class:`PreparedCommand` from primitive components.
+
+        Args:
+            cmd: Command sequence ready for execution.
+            env: Optional environment overrides.
+            version: Detected tool version, if any.
+            source: Origin of the command (system, local, or project).
+
+        Returns:
+            PreparedCommand: Normalised command data class.
+        """
+
         return cls(
             cmd=list(cmd),
             env={str(k): str(v) for k, v in (env or {}).items()},

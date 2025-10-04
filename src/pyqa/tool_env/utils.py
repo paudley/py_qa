@@ -5,8 +5,13 @@
 from __future__ import annotations
 
 import re
+from typing import Final
 
 from ..tools.base import Tool
+
+SCOPED_PACKAGE_PREFIX: Final[str] = "@"
+PACKAGE_SEPARATOR: Final[str] = "@"
+SCOPED_SPLIT_THRESHOLD: Final[int] = 2
 
 
 def _slugify(value: str) -> str:
@@ -25,13 +30,13 @@ def _split_package_spec(spec: str) -> tuple[str, str | None]:
     """Split a package specifier into name and version components."""
     if spec.startswith("git+") or spec.startswith("file:") or spec.startswith("http"):
         return spec, None
-    if spec.startswith("@"):
-        if spec.count("@") >= 2:
-            name, version = spec.rsplit("@", 1)
+    if spec.startswith(SCOPED_PACKAGE_PREFIX):
+        if spec.count(PACKAGE_SEPARATOR) >= SCOPED_SPLIT_THRESHOLD:
+            name, version = spec.rsplit(PACKAGE_SEPARATOR, 1)
             return name, version
         return spec, None
-    if "@" in spec:
-        name, version = spec.rsplit("@", 1)
+    if PACKAGE_SEPARATOR in spec:
+        name, version = spec.rsplit(PACKAGE_SEPARATOR, 1)
         return name, version
     return spec, None
 

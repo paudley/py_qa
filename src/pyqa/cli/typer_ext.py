@@ -171,14 +171,14 @@ def _build_dependency_callback_adapter(
             if call_args[1:]:  # pragma: no cover - defensive guard for unexpected usage
                 raise TypeError("Positional arguments beyond the Typer context are not supported.")
 
-            return resolver.invoke(
-                callback,
+            plan = resolver.InvocationPlan(
                 analysis=analysis,
                 defaults=defaults,
                 convertors=use_convertors,
                 context=context,
                 params=kwargs,
             )
+            return resolver.invoke(callback, plan)
 
         return wrapper
 
@@ -223,30 +223,31 @@ class _DependencyResolver:
             result = meta.dependency(**call_kwargs)
             values[meta.param_name] = result
 
-    def invoke(
-        self,
-        callback: Callable[..., Any],
-        *,
-        analysis: _AnalyzedCallback,
-        defaults: dict[str, Any],
-        convertors: dict[str, Callable[[Any], Any]],
-        context: click.Context,
-        params: dict[str, Any],
-    ) -> Any:
+    @dataclass(slots=True)
+    class InvocationPlan:
+        """Describe resolved parameters required to invoke a callback."""
+
+        analysis: _AnalyzedCallback
+        defaults: dict[str, Any]
+        convertors: dict[str, Callable[[Any], Any]]
+        context: click.Context
+        params: dict[str, Any]
+
+    def invoke(self, callback: Callable[..., Any], plan: InvocationPlan) -> Any:
         """Invoke ``callback`` with dependency-aware argument resolution."""
 
-        values: dict[str, Any] = dict(defaults)
-        for key, value in params.items():
-            if key in convertors:
-                values[key] = convertors[key](value) if value is not None else values.get(key)
+        values: dict[str, Any] = dict(plan.defaults)
+        for key, value in plan.params.items():
+            if key in plan.convertors:
+                values[key] = plan.convertors[key](value) if value is not None else values.get(key)
                 continue
             if value is not None:
                 values[key] = value
             else:
                 values[key] = values.get(key)
-        if analysis.context_param_name:
-            values[analysis.context_param_name] = context
-        self.resolve(callback, values, context)
+        if plan.analysis.context_param_name:
+            values[plan.analysis.context_param_name] = plan.context
+        self.resolve(callback, values, plan.context)
         call_signature = inspect.signature(callback)
         call_kwargs = {name: values[name] for name in call_signature.parameters if name in values}
         return callback(**call_kwargs)

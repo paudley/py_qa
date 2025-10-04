@@ -3,12 +3,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+import inspect
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from subprocess import CompletedProcess
 from types import MappingProxyType
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
 from ..analysis import apply_change_impact, apply_suppression_hints, build_refactor_navigator
 from ..annotations import AnnotationEngine
@@ -17,6 +18,7 @@ from ..diagnostics import build_severity_rules, dedupe_outcomes
 from ..discovery.base import SupportsDiscovery
 from ..logging import warn
 from ..models import RunResult, ToolOutcome
+from ..process_utils import CommandOptions
 from ..tool_env import CommandPreparationRequest, CommandPreparer, PreparedCommand
 from ..tools import Tool, ToolAction, ToolContext
 from ..tools.registry import ToolRegistry
@@ -28,6 +30,7 @@ from .action_executor import (
     OutcomeRecord,
     RunnerCallable,
     ScheduledAction,
+    wrap_runner,
 )
 from .cache_context import build_cache_context, load_cached_outcome, save_versions, update_tool_version
 from .runtime import discover_files, filter_files_for_tool, prepare_runtime
@@ -35,6 +38,13 @@ from .tool_selection import ToolSelector
 from .worker import run_command
 
 FetchEvent = Literal["start", "completed", "error"]
+ActionDecision = Literal["execute", "skip", "bail"]
+_DECISION_EXECUTE: Final[ActionDecision] = "execute"
+_DECISION_SKIP: Final[ActionDecision] = "skip"
+_DECISION_BAIL: Final[ActionDecision] = "bail"
+_FETCH_EVENT_START: Final[FetchEvent] = "start"
+_FETCH_EVENT_COMPLETED: Final[FetchEvent] = "completed"
+_FETCH_EVENT_ERROR: Final[FetchEvent] = "error"
 
 _ANALYSIS_ENGINE: Final[AnnotationEngine] = AnnotationEngine()
 FetchCallback = Callable[[FetchEvent, str, str, int, int, str | None], None]
@@ -63,6 +73,15 @@ class OrchestratorDeps:
     cmd_preparer: CommandPreparationFn | None = None
 
 
+@dataclass(frozen=True)
+class OrchestratorOverrides:
+    """Optional overrides applied when constructing an :class:`Orchestrator`."""
+
+    runner: RunnerCallable | None = None
+    hooks: OrchestratorHooks | None = None
+    cmd_preparer: CommandPreparationFn | None = None
+
+
 class Orchestrator:
     """Coordinates discovery, tool selection, and execution."""
 
@@ -72,9 +91,7 @@ class Orchestrator:
         *,
         registry: ToolRegistry | None = None,
         discovery: SupportsDiscovery | None = None,
-        runner: RunnerCallable | None = None,
-        hooks: OrchestratorHooks | None = None,
-        cmd_preparer: CommandPreparationFn | None = None,
+        overrides: OrchestratorOverrides | None = None,
     ) -> None:
         """Create an orchestrator with the supplied collaborators.
 
@@ -87,32 +104,36 @@ class Orchestrator:
             cmd_preparer: Callable that converts tool actions into runnable commands.
         """
 
+        overrides = overrides or OrchestratorOverrides()
         if deps is not None:
-            if any(value is not None for value in (registry, discovery, runner, hooks, cmd_preparer)):
-                raise TypeError("Pass either 'deps' or explicit keyword arguments, not both")
+            if any(
+                value is not None
+                for value in (registry, discovery, overrides.runner, overrides.hooks, overrides.cmd_preparer)
+            ):
+                raise TypeError("Pass either 'deps' or explicit overrides, not both")
             registry = deps.registry
             discovery = deps.discovery
-            runner = deps.runner or runner
-            hooks = deps.hooks or hooks
-            cmd_preparer = deps.cmd_preparer or cmd_preparer
+            final_runner = deps.runner or overrides.runner
+            final_hooks = deps.hooks or overrides.hooks
+            final_preparer = deps.cmd_preparer or overrides.cmd_preparer
+        else:
+            final_runner = overrides.runner
+            final_hooks = overrides.hooks
+            final_preparer = overrides.cmd_preparer
         if registry is None or discovery is None:
             raise TypeError("Orchestrator requires 'registry' and 'discovery' dependencies")
 
         self._registry = registry
         self._discovery = discovery
-        self._runner = runner or _build_default_runner()
-        self._hooks = hooks or OrchestratorHooks()
-        preparer = cmd_preparer
+        base_runner = final_runner or _build_default_runner()
+        self._runner = base_runner if isinstance(base_runner, RunnerCallable) else wrap_runner(base_runner)
+        self._hooks = final_hooks or OrchestratorHooks()
+        preparer = final_preparer
         if preparer is None:
             default_preparer = CommandPreparer()
             preparer = default_preparer.prepare_request
-        if hasattr(preparer, "prepare") and callable(getattr(preparer, "prepare")):
-            prepare_callable = getattr(preparer, "prepare")
-        elif callable(preparer):
-            prepare_callable = preparer
-        else:
-            raise TypeError("cmd_preparer must be callable or expose a callable 'prepare' attribute")
-        self._prepare_command: CommandPreparationFn = prepare_callable
+        prepare_callable = self._resolve_preparer(preparer)
+        self._prepare_command = self._coerce_preparer(prepare_callable)
         self._selector = ToolSelector(self._registry)
         self._executor = ActionExecutor(self._runner, self._hooks.after_tool)
 
@@ -167,37 +188,26 @@ class Orchestrator:
         """Prepared command metadata for all tools without executing them."""
 
         root_path = prepare_runtime(root)
-        cache_dir = (
-            cfg.execution.cache_dir if cfg.execution.cache_dir.is_absolute() else root_path / cfg.execution.cache_dir
-        )
-        inputs = PreparationInputs(
-            root=root_path,
-            cache_dir=cache_dir,
-            system_preferred=not cfg.execution.use_local_linters,
-            use_local_override=cfg.execution.use_local_linters,
-        )
+        inputs = self._build_preparation_inputs(cfg, root=root_path)
         results: list[tuple[str, str, PreparedCommand | None, str | None]] = []
 
-        actions = self._iter_tool_actions()
-        total = len(actions)
-        installed_tools: set[str] = set()
-
-        for index, (tool, action) in enumerate(actions, start=1):
+        for (
+            index,
+            total,
+            tool_name,
+            action_name,
+            prepared,
+            error,
+        ) in self._iter_fetch_entries(
+            cfg,
+            root=root_path,
+            inputs=inputs,
+            callback=callback,
+        ):
+            results.append((tool_name, action_name, prepared, error))
             if callback:
-                callback("start", tool.name, action.name, index, total, None)
-            settings_view = MappingProxyType(dict(cfg.tool_settings.get(tool.name, {})))
-            context = ToolContext(cfg=cfg, root=root_path, files=tuple(), settings=settings_view)
-            self._apply_installers(tool, context, installed_tools)
-            preparation = self._prepare_action(
-                tool=tool,
-                action=action,
-                context=context,
-                inputs=inputs,
-            )
-            results.append((tool.name, action.name, preparation.prepared, preparation.error))
-            if callback:
-                event = "completed" if preparation.error is None else "error"
-                callback(event, tool.name, action.name, index, total, preparation.error)
+                event = _FETCH_EVENT_COMPLETED if error is None else _FETCH_EVENT_ERROR
+                callback(event, tool_name, action_name, index, total, error)
         return results
 
     def _build_environment(self, cfg: Config, root: Path | None) -> tuple[ExecutionEnvironment, list[Path]]:
@@ -272,72 +282,62 @@ class Orchestrator:
             bool: ``True`` when execution should bail early, ``False`` otherwise.
         """
 
-        tool = self._registry.try_get(tool_name)
         cfg = environment.config
+        tool = self._registry.try_get(tool_name)
         if tool is None:
             warn(f"Unknown tool '{tool_name}'", use_emoji=cfg.output.emoji)
             return False
-        tool_files = filter_files_for_tool(tool.file_extensions, matched_files)
-        settings_view = MappingProxyType(dict(cfg.tool_settings.get(tool.name, {})))
-        context = ToolContext(cfg=cfg, root=environment.root, files=tuple(tool_files), settings=settings_view)
+
+        context = self._build_tool_context(cfg, environment, tool, matched_files)
         self._apply_installers(tool, context, state.installed_tools)
         if self._hooks.before_tool:
             self._hooks.before_tool(tool.name)
 
+        prep_inputs = self._build_preparation_inputs(
+            cfg,
+            root=environment.root,
+            cache_dir=environment.cache.cache_dir,
+        )
+
         for action in tool.actions:
             if not self._should_run_action(cfg, action):
                 continue
-            request = CommandPreparationRequest(
+
+            preparation = self._prepare_action(
                 tool=tool,
-                command=tuple(action.build_command(context)),
-                root=environment.root,
-                cache_dir=environment.cache.cache_dir,
-                system_preferred=not cfg.execution.use_local_linters,
-                use_local_override=cfg.execution.use_local_linters,
+                action=action,
+                context=context,
+                inputs=prep_inputs,
             )
-            prepared = self._invoke_preparer(request)
-            invocation = self._build_invocation(tool.name, action, context, prepared)
-            update_tool_version(environment.cache, tool.name, prepared.version)
-            cached_entry = load_cached_outcome(
-                environment.cache,
-                tool_name=tool.name,
-                action_name=action.name,
-                cmd=invocation.command,
-                files=context.files,
+            if preparation.error is not None or preparation.prepared is None:
+                raise RuntimeError(preparation.error or "Failed to prepare command")
+
+            prepared_command = preparation.prepared
+            invocation = self._build_invocation(tool.name, action, context, prepared_command)
+            update_tool_version(environment.cache, tool.name, prepared_command.version)
+
+            cache_decision = self._handle_cached_outcome(
+                cfg,
+                environment=environment,
+                state=state,
+                invocation=invocation,
             )
-            if cached_entry is not None:
-                record = OutcomeRecord(
-                    order=state.order,
-                    invocation=invocation,
-                    outcome=cached_entry.outcome,
-                    file_metrics=cached_entry.file_metrics,
-                    from_cache=True,
-                )
-                self._executor.record_outcome(state, environment, record)
-                if cfg.execution.bail and cached_entry.outcome.returncode != 0:
-                    state.bail_triggered = True
-                    return True
-                state.order += 1
+            if cache_decision == _DECISION_BAIL:
+                return True
+            if cache_decision == _DECISION_SKIP:
                 continue
 
-            if action.is_fix or cfg.execution.bail:
-                outcome = self._executor.run_action(invocation, environment)
-                record = OutcomeRecord(
-                    order=state.order,
+            if self._requires_immediate_execution(cfg, action):
+                if self._execute_immediate_action(
                     invocation=invocation,
-                    outcome=outcome,
-                    file_metrics=None,
-                    from_cache=False,
-                )
-                self._executor.record_outcome(state, environment, record)
-                state.order += 1
-                if cfg.execution.bail and outcome.returncode != 0 and not action.ignore_exit:
-                    state.bail_triggered = True
+                    environment=environment,
+                    state=state,
+                    action=action,
+                ):
                     return True
                 continue
 
-            state.scheduled.append(ScheduledAction(order=state.order, invocation=invocation))
-            state.order += 1
+            self._queue_scheduled_action(state, invocation)
         return False
 
     def _should_run_action(self, cfg: Config, action: ToolAction) -> bool:
@@ -348,6 +348,237 @@ class Orchestrator:
         if cfg.execution.check_only and action.is_fix:
             return False
         return True
+
+    def _build_tool_context(
+        self,
+        cfg: Config,
+        environment: ExecutionEnvironment,
+        tool: Tool,
+        matched_files: Sequence[Path],
+    ) -> ToolContext:
+        """Return a tool context populated with filtered files and settings.
+
+        Args:
+            cfg: Active configuration for the current run.
+            environment: Execution environment used to resolve the root path.
+            tool: Tool whose context should be constructed.
+            matched_files: Files discovered during the discovery phase.
+
+        Returns:
+            ToolContext: Context describing the execution environment for ``tool``.
+        """
+
+        tool_files = filter_files_for_tool(tool.file_extensions, matched_files)
+        settings = MappingProxyType(dict(cfg.tool_settings.get(tool.name, {})))
+        return ToolContext(
+            cfg=cfg,
+            root=environment.root,
+            files=tuple(tool_files),
+            settings=settings,
+        )
+
+    def _build_preparation_inputs(
+        self,
+        cfg: Config,
+        *,
+        root: Path,
+        cache_dir: Path | None = None,
+    ) -> PreparationInputs:
+        """Return preparation inputs shared across tool actions.
+
+        Args:
+            cfg: Active configuration governing execution behaviour.
+            root: Project root path resolved for the current run.
+            cache_dir: Directory used to store cached tool outputs.
+
+        Returns:
+            PreparationInputs: Immutable view of shared preparation parameters.
+        """
+
+        resolved_cache_dir = cache_dir or self._resolve_cache_dir(cfg, root)
+        return PreparationInputs(
+            root=root,
+            cache_dir=resolved_cache_dir,
+            system_preferred=not cfg.execution.use_local_linters,
+            use_local_override=cfg.execution.use_local_linters,
+        )
+
+    def _handle_cached_outcome(
+        self,
+        cfg: Config,
+        *,
+        environment: ExecutionEnvironment,
+        state: ExecutionState,
+        invocation: ActionInvocation,
+    ) -> ActionDecision:
+        """Attempt to load a cached outcome, returning the resulting decision.
+
+        Args:
+            cfg: Active configuration for the current run.
+            environment: Execution environment containing cache data.
+            state: Mutable execution state shared across actions.
+            invocation: Planned action invocation.
+
+        Returns:
+            ActionDecision: ``"skip"`` if a cached entry was recorded, ``"bail"``
+            if bail mode should halt execution, otherwise ``"execute"``.
+        """
+
+        files: Sequence[Path] = invocation.context.files
+        cached_entry = load_cached_outcome(
+            environment.cache,
+            tool_name=invocation.tool_name,
+            action_name=invocation.action.name,
+            cmd=invocation.command,
+            files=files,
+        )
+        if cached_entry is None:
+            return _DECISION_EXECUTE
+
+        record = OutcomeRecord(
+            order=state.order,
+            invocation=invocation,
+            outcome=cached_entry.outcome,
+            file_metrics=cached_entry.file_metrics,
+            from_cache=True,
+        )
+        self._executor.record_outcome(state, environment, record)
+        state.order += 1
+        if cfg.execution.bail and cached_entry.outcome.returncode != 0:
+            state.bail_triggered = True
+            return _DECISION_BAIL
+        return _DECISION_SKIP
+
+    @staticmethod
+    def _requires_immediate_execution(cfg: Config, action: ToolAction) -> bool:
+        """Return whether ``action`` should execute synchronously."""
+
+        return action.is_fix or cfg.execution.bail
+
+    def _execute_immediate_action(
+        self,
+        *,
+        invocation: ActionInvocation,
+        environment: ExecutionEnvironment,
+        state: ExecutionState,
+        action: ToolAction,
+    ) -> bool:
+        """Execute an action immediately, returning ``True`` if bail is triggered.
+
+        Args:
+            invocation: Prepared invocation to execute.
+            environment: Execution environment describing root and cache.
+            state: Mutable execution state to update with outcomes.
+            action: Action metadata that informs bail semantics.
+
+        Returns:
+            bool: ``True`` when bail mode should halt further execution.
+        """
+
+        outcome = self._executor.run_action(invocation, environment)
+        record = OutcomeRecord(
+            order=state.order,
+            invocation=invocation,
+            outcome=outcome,
+            file_metrics=None,
+            from_cache=False,
+        )
+        self._executor.record_outcome(state, environment, record)
+        state.order += 1
+        bail_enabled = environment.config.execution.bail
+        if bail_enabled and outcome.returncode != 0 and not action.ignore_exit:
+            state.bail_triggered = True
+            return True
+        return False
+
+    def _queue_scheduled_action(self, state: ExecutionState, invocation: ActionInvocation) -> None:
+        """Queue ``invocation`` for deferred execution respecting order.
+
+        Args:
+            state: Mutable execution state storing the schedule.
+            invocation: Invocation ready to be enqueued for later execution.
+        """
+
+        state.scheduled.append(ScheduledAction(order=state.order, invocation=invocation))
+        state.order += 1
+
+    @staticmethod
+    def _resolve_cache_dir(cfg: Config, root: Path) -> Path:
+        """Return the cache directory path for ``cfg`` relative to ``root``.
+
+        Args:
+            cfg: Configuration providing cache directory settings.
+            root: Project root directory used for relative cache paths.
+
+        Returns:
+            Path: Absolute cache directory path.
+        """
+
+        cache_dir = cfg.execution.cache_dir
+        if cache_dir.is_absolute():
+            return cache_dir
+        return root / cache_dir
+
+    def _build_dry_run_context(self, cfg: Config, root: Path, tool: Tool) -> ToolContext:
+        """Return a tool context suitable for preparation without file inputs.
+
+        Args:
+            cfg: Active configuration for the current run.
+            root: Project root directory resolved for execution.
+            tool: Tool whose settings should be exposed via the context.
+
+        Returns:
+            ToolContext: Context object with settings and empty file selection.
+        """
+
+        settings = MappingProxyType(dict(cfg.tool_settings.get(tool.name, {})))
+        return ToolContext(cfg=cfg, root=root, files=tuple(), settings=settings)
+
+    def _iter_fetch_entries(
+        self,
+        cfg: Config,
+        *,
+        root: Path,
+        inputs: PreparationInputs,
+        callback: FetchCallback | None,
+    ) -> Iterator[tuple[int, int, str, str, PreparedCommand | None, str | None]]:
+        """Yield prepared command information for :meth:`fetch_all_tools`.
+
+        Args:
+            cfg: Active configuration for the current run.
+            root: Project root directory resolved for execution.
+            inputs: Shared preparation inputs for the run.
+            callback: Optional callback invoked with progress updates.
+
+        Yields:
+            tuple[int, int, str, str, PreparedCommand | None, str | None]: Tuple
+            containing the current index, total action count, tool name, action
+            name, prepared command, and optional error message.
+        """
+
+        actions = self._iter_tool_actions()
+        total = len(actions)
+        installed_tools: set[str] = set()
+
+        for index, (tool, action) in enumerate(actions, start=1):
+            if callback:
+                callback(_FETCH_EVENT_START, tool.name, action.name, index, total, None)
+            context = self._build_dry_run_context(cfg, root, tool)
+            self._apply_installers(tool, context, installed_tools)
+            preparation = self._prepare_action(
+                tool=tool,
+                action=action,
+                context=context,
+                inputs=inputs,
+            )
+            yield (
+                index,
+                total,
+                tool.name,
+                action.name,
+                preparation.prepared,
+                preparation.error,
+            )
 
     def _apply_installers(self, tool: Tool, context: ToolContext, installed: set[str]) -> None:
         """Execute tool installers once per run prior to command execution.
@@ -374,20 +605,7 @@ class Orchestrator:
             PreparedCommand: Command ready for execution.
         """
 
-        try:
-            return self._prepare_command(request)
-        except TypeError as exc:
-            try:
-                return self._prepare_command(  # type: ignore[misc]
-                    tool=request.tool,
-                    base_cmd=list(request.command),
-                    root=request.root,
-                    cache_dir=request.cache_dir,
-                    system_preferred=request.system_preferred,
-                    use_local_override=request.use_local_override,
-                )
-            except TypeError:
-                raise exc
+        return self._prepare_command(request)
 
     def _build_invocation(
         self,
@@ -454,18 +672,98 @@ class Orchestrator:
         """
 
         try:
-            request = CommandPreparationRequest(
-                tool=tool,
-                command=tuple(action.build_command(context)),
-                root=inputs.root,
-                cache_dir=inputs.cache_dir,
-                system_preferred=inputs.system_preferred,
-                use_local_override=inputs.use_local_override,
-            )
-            prepared = self._invoke_preparer(request)
-            return PreparationResult(tool=tool.name, action=action.name, prepared=prepared, error=None)
+            command = tuple(action.build_command(context))
         except RuntimeError as exc:
             return PreparationResult(tool=tool.name, action=action.name, prepared=None, error=str(exc))
+
+        request = CommandPreparationRequest(
+            tool=tool,
+            command=command,
+            root=inputs.root,
+            cache_dir=inputs.cache_dir,
+            system_preferred=inputs.system_preferred,
+            use_local_override=inputs.use_local_override,
+        )
+        try:
+            prepared = self._invoke_preparer(request)
+        except RuntimeError as exc:
+            return PreparationResult(tool=tool.name, action=action.name, prepared=None, error=str(exc))
+        return PreparationResult(tool=tool.name, action=action.name, prepared=prepared, error=None)
+
+    @staticmethod
+    def _resolve_preparer(
+        preparer: CommandPreparer | CommandPreparationFn | Callable[..., PreparedCommand],
+    ) -> Callable[..., PreparedCommand]:
+        """Return a callable capable of preparing commands.
+
+        Args:
+            preparer: Instance or callable responsible for preparing commands.
+
+        Returns:
+            Callable[..., PreparedCommand]: Callable form of the preparer.
+
+        Raises:
+            TypeError: If ``preparer`` is not callable.
+        """
+
+        if isinstance(preparer, CommandPreparer):
+            return preparer.prepare_request
+        if hasattr(preparer, "prepare") and callable(getattr(preparer, "prepare")):
+            return getattr(preparer, "prepare")
+        if callable(preparer):
+            return preparer
+        raise TypeError("cmd_preparer must be callable or expose a callable 'prepare' attribute")
+
+    @staticmethod
+    def _coerce_preparer(
+        prepare_callable: Callable[..., PreparedCommand],
+    ) -> CommandPreparationFn:
+        """Convert ``prepare_callable`` into the modern preparer signature.
+
+        Args:
+            prepare_callable: Callable returned by :meth:`_resolve_preparer`.
+
+        Returns:
+            CommandPreparationFn: Callable accepting a :class:`CommandPreparationRequest`.
+        """
+
+        try:
+            signature = inspect.signature(prepare_callable)
+        except (TypeError, ValueError):
+            signature = None
+        if signature is not None:
+            parameters = list(signature.parameters.values())
+            if len(parameters) == 1 and parameters[0].kind in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            ):
+                return cast(CommandPreparationFn, prepare_callable)
+        return Orchestrator._wrap_legacy_preparer(prepare_callable)
+
+    @staticmethod
+    def _wrap_legacy_preparer(
+        legacy_callable: Callable[..., PreparedCommand],
+    ) -> CommandPreparationFn:
+        """Wrap legacy preparers that expect discrete arguments.
+
+        Args:
+            legacy_callable: Legacy callable expecting discrete parameters.
+
+        Returns:
+            CommandPreparationFn: Adapter that builds a request from legacy inputs.
+        """
+
+        def _wrapped(request: CommandPreparationRequest) -> PreparedCommand:
+            return legacy_callable(
+                tool=request.tool,
+                base_cmd=list(request.command),
+                root=request.root,
+                cache_dir=request.cache_dir,
+                system_preferred=request.system_preferred,
+                use_local_override=request.use_local_override,
+            )
+
+        return _wrapped
 
 
 @dataclass(frozen=True)
@@ -498,19 +796,19 @@ def _build_default_runner() -> RunnerCallable:
     def _runner(
         cmd: Sequence[str],
         *,
-        cwd: Path | None = None,
-        env: Mapping[str, str] | None = None,
-        timeout: float | None = None,
+        options: CommandOptions | None = None,
+        **overrides: object,
     ) -> CompletedProcess[str]:
-        return run_command(cmd, cwd=cwd, env=env, timeout=timeout)
+        return run_command(cmd, options=options, **overrides)
 
-    return _runner
+    return wrap_runner(_runner)
 
 
 __all__ = [
     "Orchestrator",
     "OrchestratorDeps",
     "OrchestratorHooks",
+    "OrchestratorOverrides",
     "CommandPreparationFn",
     "PreparationInputs",
     "PreparationResult",

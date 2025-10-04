@@ -315,7 +315,8 @@ def _ensure_command_builder(instance: Any, *, context: str) -> CommandBuilder:
     if hasattr(instance, "build") and callable(instance.build):
         return cast(CommandBuilder, instance)
     if isinstance(instance, Sequence) and not isinstance(instance, (str, bytes, bytearray)):
-        return DeferredCommand(tuple(str(part) for part in instance))
+        deferred = DeferredCommand(tuple(str(part) for part in instance))
+        return cast(CommandBuilder, deferred)
     raise CatalogIntegrityError(
         f"{context}: command strategy did not return a valid command builder",
     )

@@ -53,7 +53,11 @@ class CommandPreparer:
 
     @property
     def available_runtimes(self) -> tuple[str, ...]:
-        """Return the runtime identifiers managed by this preparer."""
+        """Return the runtime identifiers managed by this preparer.
+
+        Returns:
+            tuple[str, ...]: Runtime identifiers recognised by the preparer.
+        """
 
         return tuple(self._handlers)
 
@@ -62,7 +66,21 @@ class CommandPreparer:
         request: CommandPreparationRequest | None = None,
         **legacy_kwargs: object,
     ) -> PreparedCommand:
-        """Return a prepared command for *request* or legacy keyword args."""
+        """Return a prepared command for *request* or legacy keyword arguments.
+
+        Args:
+            request: Fully populated command preparation request. When ``None``
+                the deprecated keyword-argument path is used.
+            **legacy_kwargs: Legacy keyword arguments accepted by the previous
+                API shape.
+
+        Returns:
+            PreparedCommand: Command ready to execute with required tooling.
+
+        Raises:
+            TypeError: If both ``request`` and ``legacy_kwargs`` are provided or
+                when required legacy arguments are missing.
+        """
 
         if request is None:
             request = self._from_legacy_kwargs(legacy_kwargs)
@@ -85,18 +103,36 @@ class CommandPreparer:
         return handler.prepare(runtime_request)
 
     def _from_legacy_kwargs(self, legacy_kwargs: dict[str, object]) -> CommandPreparationRequest:
-        """Build a request object from the legacy keyword-call style."""
+        """Build a request object from the legacy keyword-call style.
 
-        try:
-            tool = legacy_kwargs.pop("tool")
-            command = legacy_kwargs.pop("base_cmd")
-            root = legacy_kwargs.pop("root")
-            cache_dir = legacy_kwargs.pop("cache_dir")
-            system_preferred = legacy_kwargs.pop("system_preferred")
-            use_local_override = legacy_kwargs.pop("use_local_override")
-        except KeyError as exc:  # pragma: no cover - mirrors legacy call expectations
-            missing = exc.args[0]
-            raise TypeError(f"Missing required legacy argument '{missing}'") from exc
+        Args:
+            legacy_kwargs: Mapping of legacy keyword arguments.
+
+        Returns:
+            CommandPreparationRequest: Normalised request derived from legacy inputs.
+
+        Raises:
+            TypeError: If required arguments are missing or unexpected keys are supplied.
+        """
+
+        required_keys = (
+            "tool",
+            "base_cmd",
+            "root",
+            "cache_dir",
+            "system_preferred",
+            "use_local_override",
+        )
+        missing = [key for key in required_keys if key not in legacy_kwargs]
+        if missing:  # pragma: no cover - mirrors legacy call expectations
+            raise TypeError(f"Missing required legacy argument(s): {', '.join(sorted(missing))}")
+
+        tool = legacy_kwargs.pop("tool")
+        command = legacy_kwargs.pop("base_cmd")
+        root = legacy_kwargs.pop("root")
+        cache_dir = legacy_kwargs.pop("cache_dir")
+        system_preferred = legacy_kwargs.pop("system_preferred")
+        use_local_override = legacy_kwargs.pop("use_local_override")
         if legacy_kwargs:
             unexpected = ", ".join(sorted(legacy_kwargs))
             raise TypeError(f"Unexpected legacy arguments in prepare(): {unexpected}")
@@ -104,7 +140,7 @@ class CommandPreparer:
             raise TypeError("base_cmd must be a sequence of strings")
         return CommandPreparationRequest(
             tool=cast(Tool, tool),
-            command=tuple(cast("Sequence[str]", command)),
+            command=tuple(cast(Sequence[str], command)),
             root=cast(Path, root),
             cache_dir=cast(Path, cache_dir),
             system_preferred=bool(system_preferred),
@@ -112,6 +148,8 @@ class CommandPreparer:
         )
 
     def _ensure_dirs(self) -> None:
+        """Ensure cache directories for supported runtimes exist."""
+
         tool_constants.UV_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         tool_constants.NODE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         tool_constants.NPM_CACHE_DIR.mkdir(parents=True, exist_ok=True)

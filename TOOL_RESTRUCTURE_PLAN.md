@@ -48,7 +48,6 @@
 ## Target Architecture Overview
 
 1. **Data-first Tool Catalog**
-
    - Authoritative catalog stored as JSON files grouped by language/utility under `tooling/catalog/{language|utility}`.
    - JSON Schema (`tooling/schema/tool_definition.schema.json`) enforces structure.
    - Each JSON captures:
@@ -62,39 +61,33 @@
      - Execution ordering: `phase` field (e.g., `lint`, `format`, `analysis`), optional `before`/`after` lists for intra-phase ordering; alphabetical fallback within phase.
 
 1. **Strategy Catalog**
-
    - Secondary JSON catalog (`tooling/catalog/strategies`) enumerates reusable execution/parsing components.
    - Each strategy entry defines an identifier, type (command runner, parser, formatter, post-processor), implementation import path, and expected configuration keys.
    - JSON Schema (`tooling/schema/strategy.schema.json`) validates entries to guarantee callable availability and config structure.
    - Tool definitions reference strategies by ID; no tool-specific wiring remains in Python.
 
 1. **Loader & Validation Layer**
-
    - `tooling/loader.py` reads catalog, validates against JSON Schema via `jsonschema`.
    - Normalizes paths, expands inheritance (allow shared fragments in `_common.json`).
    - Produces immutable `ToolDefinition` dataclasses.
 
 1. **Registry Revamp**
-
    - `pyqa.tools.registry.ToolRegistry` loads definitions exclusively through loader.
    - Registry caching keyed by catalog checksum.
    - Applies ordering rules derived from `phase` + `before`/`after` metadata (topological sort, alphabetical fallback).
    - Provides query APIs (`tools_for_language`, `tool_by_name`) returning structured definitions.
 
 1. **Adapters / Facades**
-
    - Loader instantiates strategy objects by resolving implementation paths declared in the strategy catalog.
    - Command builders, parser adapters, and environment preparers become thin wrappers that dispatch through strategy interfaces.
    - New strategies can be introduced by adding catalog entries without touching orchestrator code.
 
 1. **Configuration Integration**
-
    - CLI/config builder reads tool option metadata from catalog (no hard-coded options in Python).
    - Quality/suppression defaults pulled from catalog at build time.
    - Duplicate-detection hints centralized in catalog.
 
 1. **Testing/Docs Automation**
-
    - JSON Schema tests: validate catalog + ensure coverage of required fields.
    - Snapshot tests for generated `ToolDefinition` objects.
    - Regenerate tool schema docs from catalog metadata.
@@ -102,70 +95,58 @@
 ## Work Breakdown Structure
 
 1. **Foundational Schema Work**
-
    - Draft `tool_definition.schema.json` with modular references (commands, suppressions, options).
    - Add CI step to validate catalog against schema.
 
 1. **Catalog Authoring**
-
    - Migrate existing tool information into language/utility JSON files.
    - Introduce `_shared` fragments for common npm/python/go runtime requirements.
    - Ensure every tool’s suppressions/duplicate hints move from Python to JSON.
 
 1. **Strategy Catalog Implementation**
-
    - Define `strategy_definition.schema.json` with enumerated types.
    - Implement loader for strategy catalog, including import-path validation and friendly diagnostics.
    - Seed catalog with existing shared strategies (e.g., npm runner, Python JSON parser, typer command glue).
 
 1. **Loader Implementation**
-
    - Build `ToolDefinition` dataclasses + factories.
    - Implement loader with caching, deep-merge of shared fragments, and schema validation.
    - Provide diagnostics for missing executables/parse adapters.
 
 1. **Registry & Runtime Integration**
-
    - Refactor `pyqa.tools.registry` to consume loader.
    - Replace bespoke command classes with generic strategy dispatch resolved from catalog.
    - Adjust environment installers to use runtime metadata from catalog.
 
 1. **Configuration & Reporting Alignment**
-
    - Remove hard-coded tool settings from `Config`/`config_loader`; replace with catalog-driven population.
    - Update advice/dedup modules to read cross-tool duplicate mappings from catalog.
 
 1. **Test & Doc Refresh**
-
    - Add tests for loader + registry; update existing tool tests to assert catalog-driven behavior.
    - Regenerate tool schema documentation from catalog (extend `pyqa config export-tools`).
    - Document authoring workflow in `docs/tooling/TOOL_CATALOG_GUIDE.md`.
 
 1. **Catalog Parity Verification**
-
    - Audit every legacy tool and confirm an equivalent catalog definition exists with identical commands, runtime defaults, suppressions, and installers.
    - Migrate any remaining Python-only metadata (version constants, runtime arguments, environment preparation) into JSON fragments or strategy config.
    - Run the full pytest suite and integration smoke checks with catalog-backed registry enabled to prove parity.
 
 1. **Legacy Registry Retirement**
-
    - Flip the default configuration to use catalog-backed tools, removing feature-flag fallbacks.
    - Delete legacy registry helpers, command classes, and constants; ensure CLI/docs/tests reference only catalog-driven behaviour.
    - Provide migration notes for downstream consumers, highlighting any removed imports or renamed APIs.
 
 1. **Strategy Simplification**
-
    - Refactor remaining `_FooCommand` classes into reusable strategy helpers or data-driven templates.
    - Capture default flag sets and environment variables in catalog metadata so Python code only applies parameterised transforms.
    - Generalise installer strategies (e.g. binary downloads, cargo installs) to eliminate bespoke helper functions.
 
 1. **Metadata Consumers**
-
    - Extend catalog metadata helpers to expose runtime info, option schemas, and installer requirements.
    - Update CLI/export commands to rely on these helpers instead of bespoke JSON loading.
 
 1. **Documentation & Automation**
-
    - Generate reference docs (tool list, installer table, runtime matrix) directly from the catalog.
    - Add tests ensuring catalog tool coverage aligns with CLI/doctor/tool-info suites.
    - Provide contributor guidance for adding new strategies and installer types.

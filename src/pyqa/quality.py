@@ -121,9 +121,11 @@ class QualityCheck(Protocol):
 
     def run(self, ctx: QualityContext, result: QualityCheckResult) -> None:
         """Execute the check and append findings to *result*."""
+        raise NotImplementedError
 
     def supports_fix(self) -> bool:
         """Return ``True`` when the check can perform in-place fixes."""
+        raise NotImplementedError
 
 
 @dataclass(slots=True)
@@ -164,6 +166,16 @@ class LicenseCheck:
 
     name: str = "license"
 
+    @dataclass(slots=True)
+    class EvaluationOptions:
+        """Aggregated inputs required to evaluate a license header."""
+
+        policy: LicensePolicy
+        root: Path
+        fixer: LicenseHeaderFixer | None
+        current_year: int | None
+        result: QualityCheckResult
+
     def run(self, ctx: QualityContext, result: QualityCheckResult) -> None:
         """Verify license headers across candidate files.
 
@@ -176,7 +188,13 @@ class LicenseCheck:
             return
 
         fixer = LicenseHeaderFixer(policy) if ctx.fix else None
-        current_year = fixer.current_year if fixer else None
+        options = self.EvaluationOptions(
+            policy=policy,
+            root=ctx.root,
+            fixer=fixer,
+            current_year=fixer.current_year if fixer else None,
+            result=result,
+        )
         observed_notices: set[str] = set()
 
         for path in ctx.files:
@@ -186,15 +204,7 @@ class LicenseCheck:
             if content is None:
                 continue
 
-            issues, final_content = self._evaluate_license(
-                path,
-                content,
-                ctx,
-                policy,
-                fixer,
-                current_year,
-                result,
-            )
+            issues, final_content = self._evaluate_license(path, content, options)
             for issue in issues:
                 result.add_error(issue, path)
 
@@ -225,28 +235,30 @@ class LicenseCheck:
         self,
         path: Path,
         content: str,
-        ctx: QualityContext,
-        policy: LicensePolicy,
-        fixer: LicenseHeaderFixer | None,
-        current_year: int | None,
-        result: QualityCheckResult,
+        options: EvaluationOptions,
     ) -> tuple[list[str], str]:
         """Return issues for ``path`` and the content used for notice extraction."""
 
-        issues = verify_file_license(path, content, policy, ctx.root, current_year=current_year)
-        if not issues or fixer is None:
+        issues = verify_file_license(
+            path,
+            content,
+            options.policy,
+            options.root,
+            current_year=options.current_year,
+        )
+        if not issues or options.fixer is None:
             return issues, content
 
-        updated_content = self._attempt_fix(path, content, fixer, result)
+        updated_content = self._attempt_fix(path, content, options.fixer, options.result)
         if updated_content is None:
             return issues, content
 
         refreshed = verify_file_license(
             path,
             updated_content,
-            policy,
-            ctx.root,
-            current_year=current_year,
+            options.policy,
+            options.root,
+            current_year=options.current_year,
         )
         return refreshed, updated_content
 

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Final
 
 from ..models import RawDiagnostic
 from ..severity import Severity
@@ -16,6 +16,9 @@ _TSC_PATTERN = re.compile(
     r"^(?P<file>[^:(\n]+)\((?P<line>\d+),(?P<col>\d+)\):\s*"
     r"(?P<severity>error|warning)\s*(?P<code>[A-Z]+\d+)?\s*:?\s*(?P<message>.+)$",
 )
+_ESLINT_ERROR_LEVEL: Final[int] = 2
+_ESLINT_WARNING_LEVEL: Final[int] = 1
+_TSC_ERROR_LABEL: Final[str] = "error"
 
 
 def parse_eslint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
@@ -29,10 +32,10 @@ def parse_eslint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]
         for message in entry.get("messages", []) or []:
             if not isinstance(message, dict):
                 continue
-            severity = message.get("severity", 1)
-            if severity == 2:
+            severity = message.get("severity", _ESLINT_WARNING_LEVEL)
+            if severity == _ESLINT_ERROR_LEVEL:
                 sev_enum = Severity.ERROR
-            elif severity == 1:
+            elif severity == _ESLINT_WARNING_LEVEL:
                 sev_enum = Severity.WARNING
             else:
                 sev_enum = Severity.NOTICE
@@ -95,7 +98,7 @@ def parse_tsc(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagn
         match = _TSC_PATTERN.match(line.strip())
         if not match:
             continue
-        severity = Severity.ERROR if match.group("severity") == "error" else Severity.WARNING
+        severity = Severity.ERROR if match.group("severity") == _TSC_ERROR_LABEL else Severity.WARNING
         code = match.group("code")
         results.append(
             RawDiagnostic(

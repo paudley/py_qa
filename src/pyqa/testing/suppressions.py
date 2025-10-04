@@ -26,10 +26,7 @@ def flatten_test_suppressions(
 ) -> dict[str, list[str]]:
     """Return a tool -> suppression-pattern mapping for the given *languages*."""
     source = _catalog_test_suppressions()
-    if languages is None:
-        selected = set(source)
-    else:
-        selected = {language.lower() for language in languages if language}
+    selected = set(source) if languages is None else {language.lower() for language in languages if language}
 
     merged: dict[str, list[str]] = {}
     for language in selected:

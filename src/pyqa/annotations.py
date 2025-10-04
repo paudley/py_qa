@@ -33,31 +33,31 @@ class TokenLike(Protocol):
     @property
     def text(self) -> str:  # pragma: no cover - protocol definition
         """Return the raw token text as emitted by spaCy."""
-        ...
+        raise NotImplementedError
 
     @property
     def idx(self) -> int:  # pragma: no cover - protocol definition
         """Return the byte index of the token within the source string."""
-        ...
+        raise NotImplementedError
 
     @property
     def is_stop(self) -> bool:  # pragma: no cover - protocol definition
         """Return ``True`` when the token is considered a stop word."""
-        ...
+        raise NotImplementedError
 
     @property
     def pos_(self) -> str:  # pragma: no cover - protocol definition
         """Return the coarse-grained part-of-speech tag for the token."""
-        ...
+        raise NotImplementedError
 
     @property
     def lemma_(self) -> str:  # pragma: no cover - protocol definition
         """Return the lemmatised form of the token."""
-        ...
+        raise NotImplementedError
 
     def __len__(self) -> int:  # pragma: no cover - protocol definition
         """Return the character length of the token."""
-        ...
+        raise NotImplementedError
 
 
 @runtime_checkable
@@ -66,15 +66,15 @@ class DocLike(Protocol):
 
     def __iter__(self) -> Iterator[TokenLike]:  # pragma: no cover - protocol definition
         """Yield ``TokenLike`` instances from the parsed document."""
-        ...
+        raise NotImplementedError
 
     def __len__(self) -> int:  # pragma: no cover - protocol definition
         """Return the number of tokens contained in the document."""
-        ...
+        raise NotImplementedError
 
     def __getitem__(self, index: int) -> TokenLike:  # pragma: no cover - protocol definition
         """Return a token located at ``index`` within the document."""
-        ...
+        raise NotImplementedError
 
 
 _PATH_PATTERN: Final[re.Pattern[str]] = re.compile(
@@ -128,11 +128,11 @@ class SpacyLanguage(Protocol):
 
     def __call__(self, text: str) -> DocLike:  # pragma: no cover - protocol definition
         """Return a parsed document for ``text``."""
-        ...
+        raise NotImplementedError
 
     def pipe(self, texts: Iterable[str]) -> Iterable[DocLike]:  # pragma: no cover - protocol definition
         """Yield parsed documents for a stream of input strings."""
-        ...
+        raise NotImplementedError
 
 
 HighlightKind = Literal[

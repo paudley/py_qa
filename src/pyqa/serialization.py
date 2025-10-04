@@ -12,7 +12,7 @@ from typing import Any, TypeAlias
 
 from pydantic import BaseModel
 
-from .models import Diagnostic, ToolOutcome
+from .models import Diagnostic, ToolOutcome, coerce_output_sequence
 from .severity import Severity
 
 JsonPrimitive: TypeAlias = str | int | float | bool | None
@@ -50,11 +50,7 @@ def deserialize_outcome(data: Mapping[str, Any]) -> ToolOutcome:
     """Rehydrate a :class:`ToolOutcome` from the serialized representation."""
     diagnostics: list[Diagnostic] = []
     for entry in _coerce_diagnostic_payload(data.get("diagnostics")):
-        severity = entry.get("severity", "warning")
-        try:
-            severity_enum = Severity(str(severity))
-        except ValueError:
-            severity_enum = Severity.WARNING
+        severity_enum = _coerce_severity(entry.get("severity", "warning"))
         diagnostics.append(
             Diagnostic(
                 file=coerce_optional_str(entry.get("file")),
@@ -70,8 +66,8 @@ def deserialize_outcome(data: Mapping[str, Any]) -> ToolOutcome:
 
     stdout_value = data.get("stdout", [])
     stderr_value = data.get("stderr", [])
-    stdout_list = _coerce_output_sequence(stdout_value)
-    stderr_list = _coerce_output_sequence(stderr_value)
+    stdout_list = coerce_output_sequence(stdout_value)
+    stderr_list = coerce_output_sequence(stderr_value)
 
     return ToolOutcome(
         tool=str(data.get("tool", "")),
@@ -84,16 +80,13 @@ def deserialize_outcome(data: Mapping[str, Any]) -> ToolOutcome:
     )
 
 
-def _coerce_output_sequence(value: object) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(item) for item in value]
-    if isinstance(value, tuple):
-        return [str(item) for item in value]
-    if isinstance(value, str):
-        return value.splitlines()
-    return [str(value)]
+def _coerce_severity(value: object) -> Severity:
+    """Return a :class:`Severity` derived from ``value`` with fallback."""
+
+    try:
+        return Severity(str(value))
+    except ValueError:
+        return Severity.WARNING
 
 
 def safe_int(value: object, default: int = 0) -> int:
@@ -111,6 +104,7 @@ def safe_int(value: object, default: int = 0) -> int:
 
 
 def coerce_optional_int(value: object) -> int | None:
+    """Return an optional integer parsed from ``value`` when feasible."""
     if isinstance(value, bool):
         return int(value)
     if isinstance(value, int):
@@ -124,6 +118,7 @@ def coerce_optional_int(value: object) -> int | None:
 
 
 def coerce_optional_str(value: object) -> str | None:
+    """Return a string representation of ``value`` or ``None`` when unset."""
     if value is None:
         return None
     return str(value)
@@ -141,26 +136,28 @@ def _coerce_diagnostic_payload(value: object) -> list[dict[str, Any]]:
 
 def jsonify(value: Any) -> JsonValue:
     """Convert ``value`` into a JSON-serializable payload."""
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, BaseModel):
-        return jsonify(value.model_dump(mode="python", by_alias=True))
-    if hasattr(value, "to_dict"):
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        result: JsonValue = value
+    elif isinstance(value, Path):
+        result = str(value)
+    elif isinstance(value, BaseModel):
+        result = jsonify(value.model_dump(mode="python", by_alias=True))
+    elif hasattr(value, "to_dict"):
         dumped = value.to_dict()  # type: ignore[call-arg, no-untyped-call]
-        return jsonify(dumped)
-    if isinstance(value, Mapping):
-        return {str(key): jsonify(item) for key, item in value.items()}
-    if isinstance(value, AbstractSet):
+        result = jsonify(dumped)
+    elif isinstance(value, Mapping):
+        result = {str(key): jsonify(item) for key, item in value.items()}
+    elif isinstance(value, AbstractSet):
         serialised = [jsonify(item) for item in value]
         try:
-            return sorted(serialised, key=lambda item: json.dumps(item, sort_keys=True))
+            result = sorted(serialised, key=lambda item: json.dumps(item, sort_keys=True))
         except TypeError:
-            return serialised
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return [jsonify(item) for item in value]
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return str(value)
+            result = serialised
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        result = [jsonify(item) for item in value]
+    else:
+        result = str(value)
+    return result
 
 
 __all__ = [

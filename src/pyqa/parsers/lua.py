@@ -6,35 +6,48 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from typing import Final
 
 from ..models import RawDiagnostic
 from ..severity import Severity
 from ..tools.base import ToolContext
+from .base import (
+    DiagnosticDetails,
+    DiagnosticLocation,
+    append_diagnostic,
+    iter_pattern_matches,
+)
 
 LUALINT_PATTERN = re.compile(r"^(?P<file>[^:]+):(?P<line>\d+):\s*(?:\*\*\*\s*)?(?P<message>.+)$")
+LUALINT_TOOL_NAME: Final[str] = "lualint"
+LUACHECK_TOOL_NAME: Final[str] = "luacheck"
 
 
-def parse_lualint(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse lualint text output."""
+def parse_lualint(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse lualint text output into diagnostics.
+
+    Args:
+        stdout: Sequence of lines returned by lualint.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics flagged by lualint.
+    """
+
+    del context
     results: list[RawDiagnostic] = []
-    for raw_line in stdout:
-        line = raw_line.strip()
-        if not line or line.startswith("Usage"):
-            continue
-        match = LUALINT_PATTERN.match(line)
-        if not match:
-            continue
-        results.append(
-            RawDiagnostic(
-                file=match.group("file"),
-                line=int(match.group("line")),
-                column=None,
-                severity=Severity.WARNING,
-                message=match.group("message").strip(),
-                code=None,
-                tool="lualint",
-            ),
+    for match in iter_pattern_matches(stdout, LUALINT_PATTERN, skip_prefixes=("Usage",)):
+        location = DiagnosticLocation(
+            file=match.group("file"),
+            line=int(match.group("line")),
+            column=None,
         )
+        details = _build_lua_details(
+            LUALINT_TOOL_NAME,
+            match.group("message"),
+            Severity.WARNING,
+        )
+        append_diagnostic(results, location=location, details=details)
     return results
 
 
@@ -43,30 +56,53 @@ LUACHECK_PATTERN = re.compile(
 )
 
 
-def parse_luacheck(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse luacheck plain formatter output."""
+def parse_luacheck(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse luacheck plain formatter output into diagnostics.
+
+    Args:
+        stdout: Sequence of luacheck output lines.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics describing luacheck findings.
+    """
+
+    del context
     results: list[RawDiagnostic] = []
-    for raw_line in stdout:
-        line = raw_line.strip()
-        if not line or line.startswith("Total:"):
-            continue
-        match = LUACHECK_PATTERN.match(line)
-        if not match:
-            continue
+    for match in iter_pattern_matches(stdout, LUACHECK_PATTERN, skip_prefixes=("Total:",)):
         code = match.group("code")
         severity = Severity.ERROR if code.startswith("E") else Severity.WARNING
-        results.append(
-            RawDiagnostic(
-                file=match.group("file"),
-                line=int(match.group("line")),
-                column=int(match.group("column")),
-                severity=severity,
-                message=match.group("message").strip(),
-                code=code,
-                tool="luacheck",
-            ),
+        location = DiagnosticLocation(
+            file=match.group("file"),
+            line=int(match.group("line")),
+            column=int(match.group("column")),
         )
+        details = _build_lua_details(
+            LUACHECK_TOOL_NAME,
+            match.group("message"),
+            severity,
+            code,
+        )
+        append_diagnostic(results, location=location, details=details)
     return results
+
+
+def _build_lua_details(
+    tool: str,
+    message: str,
+    severity: Severity,
+    code: str | None = None,
+) -> DiagnosticDetails:
+    """Return diagnostic metadata for Lua tooling."""
+
+    normalized_message = message.strip()
+    normalized_code = code.upper() if code and tool == LUACHECK_TOOL_NAME else code
+    return DiagnosticDetails(
+        severity=severity,
+        message=normalized_message,
+        tool=tool,
+        code=normalized_code,
+    )
 
 
 __all__ = [

@@ -4,7 +4,7 @@
 
 # **A Technical Guide to Maximizing Pydantic V2 Utility**
 
-______________________________________________________________________
+---
 
 ## **Section 1: The Pydantic V2 Architectural Paradigm**
 

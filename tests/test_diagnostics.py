@@ -193,42 +193,49 @@ def test_dedupe_prefers_pyright_over_mypy(tmp_path: Path) -> None:
 
     assert not result.outcomes[0].diagnostics
     assert result.outcomes[1].diagnostics == [diag_pyright]
-    cfg = DedupeConfig(
-        dedupe=True,
-        dedupe_by="prefer",
-        dedupe_prefer=["pylint"],
-        dedupe_line_fuzz=1,
-    )
-    diag_a = Diagnostic(
-        file="src/app.py",
-        line=20,
+
+
+def test_dedupe_cross_tool_undefined_variable(tmp_path: Path) -> None:
+    cfg = DedupeConfig(dedupe=True, dedupe_line_fuzz=0)
+    diag_pyright = Diagnostic(
+        file="src/pyqa/parsers/misc.py",
+        line=275,
         column=None,
-        severity=Severity.WARNING,
-        message="issue",
-        tool="ruff",
-        code="W100",
+        severity=Severity.ERROR,
+        message='"map_severity" is not defined',
+        tool="pyright",
+        code="reportUndefinedVariable",
     )
-    diag_b = Diagnostic(
-        file="src/app.py",
-        line=21,
+    diag_pylint = Diagnostic(
+        file="src/pyqa/parsers/misc.py",
+        line=275,
         column=None,
-        severity=Severity.WARNING,
-        message="issue",
+        severity=Severity.ERROR,
+        message="Undefined variable 'map_severity'",
         tool="pylint",
-        code="W100",
+        code="undefined-variable",
+    )
+    diag_ruff = Diagnostic(
+        file="src/pyqa/parsers/misc.py",
+        line=275,
+        column=None,
+        severity=Severity.ERROR,
+        message="Undefined name map_severity",
+        tool="ruff",
+        code="F821",
     )
 
     result = RunResult(
         root=tmp_path,
-        files=[tmp_path / "src" / "app.py"],
+        files=[tmp_path / "src" / "pyqa" / "parsers" / "misc.py"],
         outcomes=[
             ToolOutcome(
-                tool="ruff",
+                tool="pyright",
                 action="lint",
                 returncode=1,
                 stdout="",
                 stderr="",
-                diagnostics=[diag_a],
+                diagnostics=[diag_pyright],
             ),
             ToolOutcome(
                 tool="pylint",
@@ -236,12 +243,21 @@ def test_dedupe_prefers_pyright_over_mypy(tmp_path: Path) -> None:
                 returncode=1,
                 stdout="",
                 stderr="",
-                diagnostics=[diag_b],
+                diagnostics=[diag_pylint],
+            ),
+            ToolOutcome(
+                tool="ruff",
+                action="lint",
+                returncode=1,
+                stdout="",
+                stderr="",
+                diagnostics=[diag_ruff],
             ),
         ],
     )
 
     dedupe_outcomes(result, cfg)
 
-    assert len(result.outcomes[0].diagnostics) == 0
-    assert result.outcomes[1].diagnostics == [diag_b]
+    assert result.outcomes[0].diagnostics == [diag_pyright]
+    assert not result.outcomes[1].diagnostics
+    assert not result.outcomes[2].diagnostics

@@ -29,7 +29,7 @@ PERL_CACHE_DIR: Final[Path] = CACHE_ROOT / "perl"
 PERL_BIN_DIR: Final[Path] = PERL_CACHE_DIR / "bin"
 PERL_META_DIR: Final[Path] = PERL_CACHE_DIR / "meta"
 
-__all__ = [
+__all__ = (
     "CACHE_ROOT",
     "GO_BIN_DIR",
     "GO_CACHE_DIR",
@@ -51,4 +51,6 @@ __all__ = [
     "RUST_META_DIR",
     "RUST_WORK_DIR",
     "UV_CACHE_DIR",
-]
+)
+
+EXPORTABLE_NAMES: Final[tuple[str, ...]] = __all__

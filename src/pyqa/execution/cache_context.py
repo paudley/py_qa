@@ -13,6 +13,8 @@ from typing import Final
 
 from ..config import Config
 from ..execution.cache import CachedEntry, CacheRequest, ResultCache
+from ..tool_versions import load_versions as _load_versions
+from ..tool_versions import save_versions as _save_versions
 
 _HASH_ENCODING: Final[str] = "utf-8"
 
@@ -135,8 +137,6 @@ def load_versions(cache_dir: Path) -> dict[str, str]:
         dict[str, str]: Mapping of tool name to version string.
     """
 
-    from ..tool_versions import load_versions as _load_versions
-
     return _load_versions(cache_dir)
 
 
@@ -147,8 +147,6 @@ def save_versions(cache_dir: Path, versions: dict[str, str]) -> None:
         cache_dir: Destination directory for the metadata file.
         versions: Mapping of tool names to their resolved versions.
     """
-
-    from ..tool_versions import save_versions as _save_versions
 
     _save_versions(cache_dir, versions)
 

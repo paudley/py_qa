@@ -14,7 +14,7 @@ from ..annotations import HighlightKind
 from ..models import Diagnostic, RunResult
 from ..serialization import serialize_outcome
 from ..severity import Severity, severity_to_sarif
-from ..utils.bool_utils import coerce_bool_literal
+from ..utils.bool_utils import interpret_optional_bool
 from .advice import AdviceBuilder, AdviceEntry
 
 SARIF_VERSION = "2.1.0"
@@ -137,32 +137,21 @@ def _coerce_str(value: object, default: str, name: str) -> str:
     raise TypeError(f"{name} must be a string value")
 
 
-def _coerce_bool(value: object, default: bool, name: str) -> bool:
+def _coerce_bool(value: object, default: bool) -> bool:
     """Return a boolean flag derived from *value* with validation.
 
     Args:
         value: Raw value provided by the caller.
         default: Default boolean used when *value* is ``None``.
-        name: Name of the argument for error messages.
 
     Returns:
         bool: Parsed boolean value.
-
-    Raises:
-        TypeError: If *value* is not boolean-compatible.
-        ValueError: If string conversions do not match accepted literals.
     """
 
-    if value is None:
+    interpreted = interpret_optional_bool(value)
+    if interpreted is None:
         return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        try:
-            return coerce_bool_literal(value)
-        except ValueError as exc:
-            raise ValueError(f"{name} must be a boolean string literal") from exc
-    raise TypeError(f"{name} must be a boolean value")
+    return interpreted
 
 
 def _coerce_section_builder(
@@ -409,7 +398,6 @@ def _options_from_legacy_kwargs(
     include_advice = _coerce_bool(
         extracted.get("include_advice"),
         settings.include_advice,
-        "include_advice",
     )
     section_builder = _coerce_section_builder(
         extracted.get("advice_section_builder"),

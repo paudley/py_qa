@@ -3,13 +3,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from subprocess import CompletedProcess
-from typing import Final, Protocol
+from typing import Final, Protocol, runtime_checkable
 
 from ..config import Config
 from ..context import CONTEXT_RESOLVER
@@ -21,10 +21,12 @@ from ..filesystem.paths import normalize_path_key
 from ..logging import warn
 from ..metrics import FileMetrics, compute_file_metrics
 from ..models import Diagnostic, RawDiagnostic, ToolOutcome
+from ..process_utils import CommandOptions
 from ..severity import SeverityRuleView
 from ..tools import ToolAction, ToolContext
 
 
+@runtime_checkable
 class RunnerCallable(Protocol):
     """Callable protocol for invoking external tool commands."""
 
@@ -32,11 +34,93 @@ class RunnerCallable(Protocol):
         self,
         cmd: Sequence[str],
         *,
-        cwd: Path | None = None,
-        env: Mapping[str, str] | None = None,
-        timeout: float | None = None,
+        options: CommandOptions | None = None,
+        **overrides: object,
     ) -> CompletedProcess[str]:
-        """Execute ``cmd`` returning a completed subprocess."""
+        """Execute ``cmd`` returning a completed subprocess.
+
+        Args:
+            cmd: Command to execute including executable and arguments.
+            options: Optional command execution configuration overrides.
+            **overrides: Additional keyword arguments forwarded to the runner.
+
+        Returns:
+            CompletedProcess[str]: Completed subprocess with captured output.
+
+        Raises:
+            NotImplementedError: Always raised; method must be provided by
+                concrete runner implementations.
+        """
+
+        raise NotImplementedError
+
+    def __repr__(self) -> str:
+        """Return a diagnostic representation of the runner.
+
+        Returns:
+            str: Readable description for debugging.
+
+        Raises:
+            NotImplementedError: Always raised; method must be provided by
+                concrete implementations.
+        """
+
+        raise NotImplementedError
+
+
+@dataclass(frozen=True, slots=True)
+class FunctionRunner:
+    """Adapter that turns plain callables into :class:`RunnerCallable` objects."""
+
+    func: Callable[..., CompletedProcess[str]]
+
+    def __call__(
+        self,
+        cmd: Sequence[str],
+        *,
+        options: CommandOptions | None = None,
+        **overrides: object,
+    ) -> CompletedProcess[str]:
+        """Invoke the wrapped callable using runner semantics.
+
+        Args:
+            cmd: Command to execute.
+            options: Optional execution options overriding defaults.
+            **overrides: Additional keyword arguments forwarded to the wrapped callable.
+
+        Returns:
+            CompletedProcess[str]: Completed process metadata.
+        """
+
+        return self.func(cmd, options=options, **overrides)
+
+    def __repr__(self) -> str:
+        """Return a descriptive representation of the wrapped callable.
+
+        Returns:
+            str: Readable description based on the wrapped callable.
+        """
+
+        qualname = getattr(self.func, "__qualname__", None)
+        module = getattr(self.func, "__module__", None)
+        if qualname and module:
+            return f"FunctionRunner({module}.{qualname})"
+        return f"FunctionRunner({self.func!r})"
+
+
+def wrap_runner(func: Callable[..., CompletedProcess[str]]) -> RunnerCallable:
+    """Return a :class:`RunnerCallable` that delegates to ``func``.
+
+    Args:
+        func: Callable implementing the runner protocol.
+
+    Returns:
+        RunnerCallable: Adapter object implementing the runner protocol.
+    """
+
+    if isinstance(func, RunnerCallable):
+        return func
+    return FunctionRunner(func)
 
 
 PYLINT_TOOL_NAME: Final[str] = "pylint"
@@ -205,9 +289,14 @@ class ActionExecutor:
         env = self._compose_environment(invocation)
         completed = self.runner(
             list(invocation.command),
-            cwd=environment.root,
-            env=env,
-            timeout=invocation.action.timeout_s,
+            options=CommandOptions(
+                cwd=environment.root,
+                env=env,
+                timeout=invocation.action.timeout_s,
+                capture_output=True,
+                discard_stdin=True,
+                check=False,
+            ),
         )
         filters = invocation.context.cfg.output.tool_filters.get(invocation.tool_name, [])
         stdout_lines, stderr_lines = self._filter_outputs(invocation, completed, filters)
@@ -378,7 +467,9 @@ __all__ = [
     "ActionInvocation",
     "ExecutionEnvironment",
     "ExecutionState",
+    "FunctionRunner",
     "OutcomeRecord",
     "RunnerCallable",
     "ScheduledAction",
+    "wrap_runner",
 ]

@@ -8,7 +8,7 @@ import heapq
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 
-from .base import Tool
+from .base import PHASE_NAMES, Tool
 
 
 class ToolRegistry(Mapping[str, Tool]):
@@ -19,15 +19,7 @@ class ToolRegistry(Mapping[str, Tool]):
     discovering tools by language and registering new adapters.
     """
 
-    _PHASE_ORDER: tuple[str, ...] = (
-        "lint",
-        "format",
-        "analysis",
-        "security",
-        "test",
-        "coverage",
-        "utility",
-    )
+    _PHASE_ORDER: tuple[str, ...] = PHASE_NAMES
 
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
@@ -48,10 +40,10 @@ class ToolRegistry(Mapping[str, Tool]):
         self._by_language.clear()
         self._ordered = ()
 
-    def get(self, name: str, default: Tool | None = None) -> Tool | None:
-        """Return the tool named *name* if present; otherwise return *default*."""
+    def get(self, key: str, default: Tool | None = None) -> Tool | None:
+        """Return the tool named *key* if present; otherwise return *default*."""
 
-        return self._tools.get(name, default)
+        return self._tools.get(key, default)
 
     def try_get(self, name: str) -> Tool | None:
         """Return the tool named *name* when registered, otherwise ``None``."""
@@ -132,7 +124,7 @@ class ToolRegistry(Mapping[str, Tool]):
                 if predecessor in names_in_phase:
                     adjacency.setdefault(predecessor, set()).add(tool.name)
 
-        for source, targets in adjacency.items():
+        for targets in adjacency.values():
             for target in targets:
                 indegree[target] = indegree.get(target, 0) + 1
 

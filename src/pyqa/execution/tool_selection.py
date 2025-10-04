@@ -8,33 +8,15 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final, cast
 
 from ..config import Config
 from ..languages import detect_languages
-from ..tools import Tool
+from ..tools.base import PHASE_NAMES, PhaseLiteral, Tool
 from ..tools.registry import ToolRegistry
 
-PhaseLiteral = Literal[
-    "format",
-    "lint",
-    "analysis",
-    "security",
-    "test",
-    "coverage",
-    "utility",
-]
-
 _DEFAULT_PHASE: Final[PhaseLiteral] = "lint"
-PHASE_ORDER: Final[tuple[PhaseLiteral, ...]] = (
-    "format",
-    "lint",
-    "analysis",
-    "security",
-    "test",
-    "coverage",
-    "utility",
-)
+PHASE_ORDER: Final[tuple[PhaseLiteral, ...]] = cast(tuple[PhaseLiteral, ...], PHASE_NAMES)
 
 
 @dataclass(slots=True)
@@ -95,8 +77,8 @@ class ToolSelector:
             if names:
                 bucketed.append(self._order_phase(names, tools, fallback_index))
 
-        for phase in sorted(unknown_phases):
-            names = phase_groups.get(phase)
+        for other_phase in sorted(unknown_phases):
+            names = phase_groups.get(other_phase)
             if names:
                 bucketed.append(self._order_phase(names, tools, fallback_index))
 
@@ -191,7 +173,7 @@ class ToolSelector:
                 if succ in dependencies:
                     dependencies[succ].add(name)
 
-        sorter = TopologicalSorter()
+        sorter: TopologicalSorter[str] = TopologicalSorter()
         for name in names:
             sorter.add(name, *sorted(dependencies[name], key=lambda item: fallback_index.get(item, 0)))
         try:

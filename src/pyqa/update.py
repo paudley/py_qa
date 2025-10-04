@@ -235,10 +235,10 @@ class WorkspaceStrategy(Protocol):
             filenames: Filenames contained within ``directory``.
 
         Returns:
-            bool: ``True`` if the strategy can manage the workspace.
+            bool: ``True`` when the strategy can manage the workspace, ``False`` otherwise.
         """
 
-        ...
+        raise NotImplementedError
 
     def plan(self, workspace: Workspace) -> list[CommandSpec]:
         """Return the commands required to update ``workspace``.
@@ -247,10 +247,10 @@ class WorkspaceStrategy(Protocol):
             workspace: Workspace to update.
 
         Returns:
-            list[CommandSpec]: Commands that perform the update.
+            list[CommandSpec]: Commands that perform the update or an empty list when none are required.
         """
 
-        ...
+        raise NotImplementedError
 
 
 class PythonStrategy:
@@ -266,7 +266,7 @@ class PythonStrategy:
             filenames: Filenames contained in the directory.
 
         Returns:
-            bool: ``True`` if the strategy should manage the directory.
+            bool: ``True`` when the strategy should manage the directory, ``False`` otherwise.
         """
 
         manifest_path = directory / PYPROJECT_MANIFEST
@@ -279,7 +279,7 @@ class PythonStrategy:
             workspace: Workspace whose dependencies should be updated.
 
         Returns:
-            list[CommandSpec]: Ordered command specifications for uv.
+            list[CommandSpec]: Ordered command specifications for uv; empty when no work is required.
 
         """
 
@@ -324,7 +324,7 @@ class PnpmStrategy:
             filenames: Filenames contained in the directory.
 
         Returns:
-            bool: ``True`` if this strategy should handle the directory.
+            bool: ``True`` when this strategy handles the directory, ``False`` otherwise.
         """
 
         manifest_path = directory / PNPM_LOCKFILE
@@ -337,7 +337,7 @@ class PnpmStrategy:
             workspace: Workspace whose dependencies should be updated.
 
         Returns:
-            list[CommandSpec]: Command specifications to run with pnpm.
+            list[CommandSpec]: Command specifications to run with pnpm; empty when no update is required.
         """
 
         label = workspace.directory.name or str(workspace.directory)

@@ -20,6 +20,15 @@ from ..models import RunResult
 
 
 @dataclass(slots=True)
+class ActionSummary:
+    """Summarise orchestrator action execution outcomes."""
+
+    total: int
+    failed: int
+    cached: int
+
+
+@dataclass(slots=True)
 class StatsSnapshot:
     """Aggregated metrics displayed in the stats panel."""
 
@@ -28,9 +37,7 @@ class StatsSnapshot:
     suppression_counts: dict[str, int]
     warnings_per_loc: float
     diagnostics_count: int
-    total_actions: int
-    failed_actions: int
-    cached_actions: int
+    actions: ActionSummary
 
 
 def emit_stats_panel(result: RunResult, cfg: OutputConfig, diagnostics_count: int) -> None:
@@ -68,15 +75,18 @@ def compute_stats_snapshot(result: RunResult, diagnostics_count: int) -> StatsSn
     }
     warnings_per_loc = diagnostics_count / loc_count if loc_count else 0.0
     outcomes = result.outcomes
+    actions = ActionSummary(
+        total=len(outcomes),
+        failed=sum(1 for outcome in outcomes if not outcome.ok),
+        cached=sum(1 for outcome in outcomes if outcome.cached),
+    )
     return StatsSnapshot(
         files_count=len(result.files),
         loc_count=loc_count,
         suppression_counts=suppression_counts,
         warnings_per_loc=warnings_per_loc,
         diagnostics_count=diagnostics_count,
-        total_actions=len(outcomes),
-        failed_actions=sum(1 for outcome in outcomes if not outcome.ok),
-        cached_actions=sum(1 for outcome in outcomes if outcome.cached),
+        actions=actions,
     )
 
 
@@ -115,15 +125,15 @@ def create_stats_panel(snapshot: StatsSnapshot, cfg: OutputConfig) -> Panel:
     )
     table.add_row(
         styled("Actions", label_style),
-        styled(str(snapshot.total_actions), value_style),
+        styled(str(snapshot.actions.total), value_style),
     )
     table.add_row(
         styled("- cached", label_style),
-        styled(str(snapshot.cached_actions), value_style),
+        styled(str(snapshot.actions.cached), value_style),
     )
     table.add_row(
         styled("- failed", label_style),
-        styled(str(snapshot.failed_actions), value_style),
+        styled(str(snapshot.actions.failed), value_style),
     )
     total_suppressions = sum(snapshot.suppression_counts.values())
     table.add_row(

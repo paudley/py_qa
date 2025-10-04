@@ -65,6 +65,8 @@ _DOC_ENV_PATTERNS = re.compile(
     r"os\.environ|process\.env|ENV\[|getenv\(|-e [A-Z_]+=|export [A-Z_]+=|\$\{?[A-Z_]+\}?",
 )
 
+_MARKDOWN_SUFFIX: Final[str] = ".md"
+
 _SKIP_PII_FILES = (
     "CONTRIBUTING.md",
     "CODE_OF_CONDUCT.md",
@@ -188,10 +190,11 @@ class SecurityScanner:
         """Return ``True`` when ``path`` appears to contain binary data."""
 
         try:
-            with path.open("rb") as handle:
-                chunk = handle.read(_BINARY_SNIFF_BYTES)
+            handle = path.open("rb")
         except OSError:
             return False
+        with handle:
+            chunk = handle.read(_BINARY_SNIFF_BYTES)
         return _NULL_BYTE in chunk
 
     def _read_text(self, path: Path) -> str:
@@ -437,7 +440,7 @@ def _should_skip_markdown(
 ) -> bool:
     """Return ``True`` when Markdown matches likely reference docs rather than secrets."""
 
-    if path.suffix.lower() != ".md":
+    if path.suffix.lower() != _MARKDOWN_SUFFIX:
         return False
     return all(_DOC_ENV_PATTERNS.search(line) for _, line in matches)
 
@@ -485,8 +488,8 @@ def get_staged_files(root: Path) -> list[Path]:
             check=False,
             cwd=root,
         )
-        if completed.returncode != 0:
-            return []
-        return [root / line.strip() for line in completed.stdout.splitlines() if line.strip()]
     except FileNotFoundError:  # git not installed
         return []
+    if completed.returncode != 0:
+        return []
+    return [root / line.strip() for line in completed.stdout.splitlines() if line.strip()]

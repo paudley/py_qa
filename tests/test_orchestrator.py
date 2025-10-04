@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from pyqa.config import Config
-from pyqa.execution.orchestrator import Orchestrator
+from pyqa.execution.orchestrator import Orchestrator, OrchestratorOverrides
 from pyqa.models import RawDiagnostic
 from pyqa.testing import flatten_test_suppressions
 from pyqa.tool_env.models import PreparedCommand
@@ -39,6 +39,20 @@ class SettingsCommand:
             args_list = [str(args)]
         cmd.extend(args_list)
         return cmd
+
+
+def _create_orchestrator(
+    *,
+    registry: ToolRegistry,
+    discovery: FakeDiscovery,
+    runner=None,
+    hooks=None,
+    cmd_preparer=None,
+):
+    overrides = OrchestratorOverrides(runner=runner, hooks=hooks, cmd_preparer=cmd_preparer)
+    if runner is None and hooks is None and cmd_preparer is None:
+        return Orchestrator(registry=registry, discovery=discovery)
+    return Orchestrator(registry=registry, discovery=discovery, overrides=overrides)
 
 
 class StubPreparer:
@@ -97,7 +111,7 @@ def test_orchestrator_runs_registered_tool(tmp_path: Path) -> None:
         assert env.get("DUMMY_ENV") == "1"
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="output", stderr="")
 
-    orchestrator = Orchestrator(
+    orchestrator = _create_orchestrator(
         registry=registry,
         discovery=FakeDiscovery([target]),
         runner=runner,
@@ -149,7 +163,7 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
         calls.append(list(cmd))
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="output", stderr="")
 
-    orchestrator = Orchestrator(
+    orchestrator = _create_orchestrator(
         registry=registry,
         discovery=FakeDiscovery([target]),
         runner=runner,
@@ -160,7 +174,7 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
     def runner_fail(cmd, **_kwargs):
         raise AssertionError(f"cache miss for {cmd}")
 
-    orchestrator_cached = Orchestrator(
+    orchestrator_cached = _create_orchestrator(
         registry=registry,
         discovery=FakeDiscovery([target]),
         runner=runner_fail,
@@ -177,7 +191,7 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
         calls_after.append(list(cmd))
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="updated", stderr="")
 
-    orchestrator_settings = Orchestrator(
+    orchestrator_settings = _create_orchestrator(
         registry=registry,
         discovery=FakeDiscovery([target]),
         runner=runner_settings,
@@ -251,7 +265,7 @@ def test_orchestrator_filters_suppressed_diagnostics(tmp_path: Path) -> None:
     def runner(cmd, **_kwargs):
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
 
-    orchestrator = Orchestrator(
+    orchestrator = _create_orchestrator(
         registry=registry,
         discovery=FakeDiscovery([target]),
         runner=runner,
@@ -335,7 +349,7 @@ def test_orchestrator_prefers_non_test_duplicate_anchor(tmp_path: Path) -> None:
     def runner(cmd, **_kwargs):
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
 
-    orchestrator = Orchestrator(
+    orchestrator = _create_orchestrator(
         registry=registry,
         discovery=FakeDiscovery([target]),
         runner=runner,
@@ -413,7 +427,7 @@ def test_fetch_all_tools_respects_phase_order(tmp_path: Path) -> None:
     registry.register(analysis_tool)
 
     preparer = StubPreparer()
-    orchestrator = Orchestrator(
+    orchestrator = _create_orchestrator(
         registry=registry,
         discovery=FakeDiscovery([]),
         cmd_preparer=preparer,
@@ -458,7 +472,7 @@ def test_installers_run_once(tmp_path: Path) -> None:
         ),
     )
 
-    orchestrator = Orchestrator(
+    orchestrator = _create_orchestrator(
         registry=registry,
         discovery=FakeDiscovery([]),
     )
@@ -470,7 +484,7 @@ def test_installers_run_once(tmp_path: Path) -> None:
     def runner(cmd, **_kwargs):
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
 
-    orchestrator_runtime = Orchestrator(
+    orchestrator_runtime = _create_orchestrator(
         registry=registry,
         discovery=FakeDiscovery([]),
         runner=runner,

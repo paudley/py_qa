@@ -6,11 +6,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Any, Final, Literal, Protocol, cast, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
-from ..config import Config
 from ..models import Diagnostic, OutputFilter, RawDiagnostic
 
 
@@ -86,6 +85,8 @@ class CommandBuilder(Protocol):
 
 
 if TYPE_CHECKING:
+    from ..config import Config
+
     CommandField = CommandBuilder
     ParserField = Parser | None
     ConfigField = Config
@@ -198,6 +199,27 @@ class ToolDocumentationEntry(BaseModel):
     content: str
 
 
+PHASE_NAMES: Final[tuple[str, ...]] = (
+    "lint",
+    "format",
+    "analysis",
+    "security",
+    "test",
+    "coverage",
+    "utility",
+)
+
+PhaseLiteral = Literal[
+    "lint",
+    "format",
+    "analysis",
+    "security",
+    "test",
+    "coverage",
+    "utility",
+]
+
+
 class ToolDocumentation(BaseModel):
     """Grouped documentation entries for a tool."""
 
@@ -213,15 +235,7 @@ class Tool(BaseModel):
 
     name: str
     actions: tuple[ToolAction, ...]
-    phase: Literal[
-        "lint",
-        "format",
-        "analysis",
-        "security",
-        "test",
-        "coverage",
-        "utility",
-    ] = "lint"
+    phase: PhaseLiteral = "lint"
     before: tuple[str, ...] = Field(default_factory=tuple)
     after: tuple[str, ...] = Field(default_factory=tuple)
     languages: tuple[str, ...] = Field(default_factory=tuple)

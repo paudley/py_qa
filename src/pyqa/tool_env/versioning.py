@@ -28,7 +28,7 @@ class VersionResolver:
             completed = run_command(
                 list(command),
                 capture_output=True,
-                env=dict(env) if env else None,
+                env=env,
             )
         except (OSError, ValueError, SubprocessExecutionError):
             return None
@@ -39,6 +39,7 @@ class VersionResolver:
         return self.normalize(first_line)
 
     def normalize(self, raw: str | None) -> str | None:
+        """Return a normalized semantic version extracted from ``raw``."""
         if not raw:
             return None
         match = self.VERSION_PATTERN.search(raw)
@@ -50,6 +51,7 @@ class VersionResolver:
         return candidate
 
     def is_compatible(self, actual: str | None, expected: str | None) -> bool:
+        """Return ``True`` when ``actual`` satisfies the ``expected`` minimum."""
         if expected is None:
             return True
         if actual is None:
