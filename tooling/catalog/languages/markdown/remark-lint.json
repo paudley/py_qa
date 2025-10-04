@@ -8,12 +8,13 @@
   "fileExtensions": [".md", ".mdx", ".markdown"],
   "runtime": {
     "type": "npm",
-    "package": "remark-cli",
+    "package": "remark-cli remark-lint remark-preset-lint-recommended vfile-reporter-json",
     "versionCommand": ["remark", "--version"]
   },
   "actions": [
     {
       "name": "lint",
+      "appendFiles": false,
       "ignoreExit": true,
       "command": {
         "strategy": "command_option_map",
@@ -28,7 +29,7 @@
             "--quiet",
             "--no-color"
           ],
-          "appendFiles": false,
+      "appendFiles": true,
           "options": [
             { "setting": "config", "type": "path", "flag": "--config" },
             { "setting": "use", "type": "args", "flag": "--use" },
@@ -48,23 +49,18 @@
     {
       "name": "fix",
       "isFix": true,
+      "appendFiles": false,
+      "ignoreExit": true,
       "command": {
         "strategy": "command_option_map",
         "config": {
-          "base": ["remark", "--use", "remark-preset-lint-recommended"],
-          "appendFiles": false,
+          "base": ["remark", "--use", "remark-preset-lint-recommended", "--output"],
+          "appendFiles": true,
           "options": [
             { "setting": "config", "type": "path", "flag": "--config" },
             { "setting": "use", "type": "args", "flag": "--use" },
             { "setting": "ignore-path", "type": "path", "flag": "--ignore-path" },
-            { "setting": "setting", "type": "args", "flag": "--setting" },
-            {
-              "setting": "output",
-              "type": "value",
-              "flag": "--output",
-              "defaultFrom": "tool.root"
-            },
-            { "setting": "args", "type": "args" }
+            { "setting": "setting", "type": "args", "flag": "--setting" }
           ]
         }
       }

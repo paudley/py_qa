@@ -375,7 +375,14 @@ class _OptionCommandStrategy(CommandBuilder):
         for option in self.options:
             option.apply(ctx, command)
         if self.append_files and ctx.files:
-            command.extend(str(path) for path in ctx.files)
+            files = [str(path) for path in ctx.files]
+            command.extend(files)
+            if "--output" in command:
+                index = command.index("--output")
+                # Relocate the output flag after appended files so remark-style
+                # fixers receive their inputs before the flag.
+                command.pop(index)
+                command.append("--output")
         return tuple(command)
 
 

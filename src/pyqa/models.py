@@ -137,6 +137,11 @@ class ToolOutcome(BaseModel):
         """Expose :meth:`is_ok` as an attribute-style accessor."""
         return self.is_ok()
 
+    def indicates_failure(self) -> bool:
+        """Return ``True`` when the outcome represents a tool execution failure."""
+
+        return not self.ok and not self.diagnostics
+
 
 class RunResult(BaseModel):
     """Aggregate result for a full orchestrator run."""
@@ -152,7 +157,7 @@ class RunResult(BaseModel):
 
     def has_failures(self) -> bool:
         """Return ``True`` when any outcome failed."""
-        return any(not outcome.ok for outcome in self.outcomes)
+        return any(outcome.indicates_failure() for outcome in self.outcomes)
 
     @property
     def failed(self) -> bool:

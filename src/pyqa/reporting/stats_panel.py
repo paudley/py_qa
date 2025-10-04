@@ -77,7 +77,7 @@ def compute_stats_snapshot(result: RunResult, diagnostics_count: int) -> StatsSn
     outcomes = result.outcomes
     actions = ActionSummary(
         total=len(outcomes),
-        failed=sum(1 for outcome in outcomes if not outcome.ok),
+        failed=sum(1 for outcome in outcomes if outcome.indicates_failure()),
         cached=sum(1 for outcome in outcomes if outcome.cached),
     )
     return StatsSnapshot(

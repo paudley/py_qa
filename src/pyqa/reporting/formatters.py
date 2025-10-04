@@ -153,7 +153,7 @@ def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
 
     root_path = _resolve_root_path(result.root)
     total_actions = len(result.outcomes)
-    failed_actions = sum(1 for outcome in result.outcomes if not outcome.ok)
+    failed_actions = sum(1 for outcome in result.outcomes if outcome.indicates_failure())
 
     raw_entries = _collect_concise_entries(result, root_path)
     entries = _group_similar_entries(raw_entries)

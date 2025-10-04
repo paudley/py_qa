@@ -63,7 +63,7 @@
       "command": {
         "strategy": "command_option_map",
         "config": {
-          "base": ["pyupgrade"],
+          "base": ["pyupgrade", "--exit-zero-even-if-changed"],
           "appendFiles": false,
           "options": [
             {
@@ -77,11 +77,6 @@
             { "setting": "keep-percent-format", "type": "flag", "flag": "--keep-percent-format" },
             { "setting": "keep-annotations", "type": "flag", "flag": "--keep-annotations" },
             { "setting": "keep-logging-format", "type": "flag", "flag": "--keep-logging-format" },
-            {
-              "setting": "exit-zero-even-if-changed",
-              "type": "flag",
-              "flag": "--exit-zero-even-if-changed"
-            },
             { "setting": "no-verify", "type": "flag", "flag": "--no-verify" },
             { "setting": "args", "type": "args" }
           ]

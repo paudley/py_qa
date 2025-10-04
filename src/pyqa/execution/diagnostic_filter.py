@@ -140,7 +140,8 @@ def _suppress_tombi_out_of_order(diagnostic: Diagnostic, tool: str) -> bool:
 
     if tool != TOMBI_TOOL or not diagnostic.file:
         return False
-    if not diagnostic.file.lower().endswith("pyproject.toml"):
+    file_path = diagnostic.file.strip().lower()
+    if not file_path.endswith("pyproject.toml"):
         return False
     message = diagnostic.message.lower()
     return TOMBI_OUT_OF_ORDER_MSG in message

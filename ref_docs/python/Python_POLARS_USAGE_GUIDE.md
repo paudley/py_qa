@@ -4,7 +4,7 @@
 
 # **The Definitive Guide to High-Performance Data Manipulation with Polars LazyFrames**
 
-______________________________________________________________________
+---
 
 ## **Section 1: The Lazy Execution Paradigm: A Fundamental Shift in Data Processing**
 
@@ -41,7 +41,7 @@ The meticulously constructed query plan remains dormant until its execution is e
 
 The lazy API can be viewed as a contract between the developer and the Polars engine. The developer agrees to provide the full sequence of operations before demanding a result. In return, the engine guarantees that it will use its global view of this sequence to find and execute the most performant computation path possible. This symbiotic relationship is impossible in an eager framework, where the engine's lack of foresight about future operations is a fundamental barrier to holistic optimization. Therefore, the practice of chaining as many operations as feasible before a final .collect() or .sink\_\*() call is not merely a stylistic preference; it is the central mechanism for unlocking the profound performance advantages of Polars.
 
-______________________________________________________________________
+---
 
 ## **Section 2: Under the Hood: The Polars Query Optimizer**
 
@@ -80,7 +80,7 @@ While predicate and projection pushdown are the most prominent, the Polars optim
 
 The query plan, made visible through the .explain() method, serves as a crucial feedback mechanism. By comparing the "naive" plan (what was written) to the "optimized" plan (what will be executed), a developer can gain a deep understanding of how their coding patterns directly influence performance. For example, observing that a SELECTION predicate has been integrated into the PARQUET SCAN node confirms that predicate pushdown was successful. This insight establishes a clear causal link: writing optimizer-friendly code—such as starting with scan_parquet() instead of the read_parquet().lazy() anti-pattern—directly enables these powerful performance gains. Therefore, inspecting the query plan is not an academic exercise; it is a fundamental practice for debugging, learning, and writing high-performance Polars code.
 
-______________________________________________________________________
+---
 
 ## **Section 3: A Practical Guide to Core LazyFrame Operations**
 
@@ -219,7 +219,7 @@ The following table summarizes the connection between the automatic optimization
 | **Expression Simplification** | Pre-calculates constants and simplifies algebraic expressions before execution.     | This is fully automatic. Write clear, readable expressions; Polars will optimize them.         |
 | **Streaming Engine**          | Processes data in smaller, memory-fitting batches instead of all at once.           | For larger-than-RAM datasets, use .collect(streaming=True) or .sink\_\*().                     |
 
-______________________________________________________________________
+---
 
 ## **Section 4: Scaling to Massive Datasets with the Streaming Engine**
 
@@ -260,7 +260,7 @@ Python
 lazy_query = (\
 pl.scan_parquet("data/very_large_dataset.parquet")\
 .with_columns(\
-processed_value=pl.col("value") * 1.1\
+processed_value=pl.col("value") \* 1.1\
 )\
 )
 
@@ -281,7 +281,7 @@ Troubleshooting Streaming Queries:\
 The .explain(streaming=True) method is the essential tool for debugging streaming performance. The output will explicitly demarcate which parts of the plan are running in streaming mode inside a --- STREAMING --- block. Any operations outside this block are pipeline breakers that will trigger an in-memory materialization.17\
 The primary strategy for handling massive datasets is to design a "streaming-aware" architecture. This involves structuring the query to perform as much data reduction as possible (e.g., filtering and aggregating) within the streaming part of the plan _before_ any non-streamable operations. For instance, performing a group_by().agg() before a .sort() is vastly more memory-efficient than the reverse, as the aggregation dramatically reduces the number of rows that need to be sorted in memory. This conscious planning of the query pipeline is critical for successfully processing data at scale.
 
-______________________________________________________________________
+---
 
 ## **Section 5: Advanced Strategies and Best Practices for Production Workloads**
 
@@ -385,7 +385,7 @@ While the guiding principle of lazy execution is to delay .collect() until the v
 
 In these scenarios, it is often wise to strategically materialize an intermediate result. By running the expensive initial steps once and calling .collect(), the developer creates a smaller, cleaned, in-memory DataFrame. Subsequent iterative analysis and experimentation can then be performed in eager mode on this cached result, providing instant feedback without the cost of re-running the initial heavy lifting.19 This is a conscious trade-off, sacrificing pure lazy execution for a significant boost in development velocity.
 
-______________________________________________________________________
+---
 
 ## **Conclusion**
 

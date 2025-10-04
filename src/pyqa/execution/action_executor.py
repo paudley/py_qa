@@ -3,12 +3,14 @@
 
 from __future__ import annotations
 
+import shlex
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from subprocess import CompletedProcess
+from textwrap import shorten
 from typing import Final, Protocol, runtime_checkable
 
 from ..config import Config
@@ -124,6 +126,7 @@ def wrap_runner(func: Callable[..., CompletedProcess[str]]) -> RunnerCallable:
 
 
 PYLINT_TOOL_NAME: Final[str] = "pylint"
+TOMBI_TOOL_NAME: Final[str] = "tombi"
 
 
 @dataclass(frozen=True, slots=True)
@@ -261,7 +264,40 @@ class ActionExecutor:
         self._update_state_metrics(state, metrics_map)
         outcome = record.outcome
         outcome.cached = record.from_cache
+        if record.from_cache:
+            filters = invocation.context.cfg.output.tool_filters.get(invocation.tool_name, [])
+            outcome.diagnostics = filter_diagnostics(
+                outcome.diagnostics,
+                invocation.tool_name,
+                filters,
+                environment.root,
+            )
+            adjusted = self._adjust_returncode(
+                invocation.tool_name,
+                outcome.returncode,
+                outcome.diagnostics,
+            )
+            outcome.returncode = adjusted
         state.outcomes[record.order] = outcome
+        if (
+            record.from_cache
+            and outcome.returncode != 0
+            and not record.invocation.action.ignore_exit
+            and not outcome.diagnostics
+        ):
+            cached_process = CompletedProcess(
+                list(record.invocation.command),
+                returncode=outcome.returncode,
+                stdout="\n".join(outcome.stdout),
+                stderr="\n".join(outcome.stderr),
+            )
+            _log_action_failure(
+                invocation=record.invocation,
+                completed=cached_process,
+                diagnostics=tuple(outcome.diagnostics),
+                root=environment.root,
+                from_cache=True,
+            )
         cache_ctx = environment.cache
         if cache_ctx.cache and cache_ctx.token is not None and not record.from_cache:
             request = CacheRequest(
@@ -311,10 +347,14 @@ class ActionExecutor:
 
         if diagnostics:
             CONTEXT_RESOLVER.annotate(diagnostics, root=environment.root)
-        if adjusted_returncode != 0 and not invocation.action.ignore_exit and invocation.context.cfg.output.verbose:
-            warn(
-                f"{invocation.tool_name}:{invocation.action.name} exited with {completed.returncode}",
-                use_emoji=invocation.context.cfg.output.emoji,
+        should_log_failure = adjusted_returncode != 0 and not invocation.action.ignore_exit and not diagnostics
+        if should_log_failure:
+            _log_action_failure(
+                invocation=invocation,
+                completed=completed,
+                diagnostics=diagnostics,
+                root=environment.root,
+                from_cache=False,
             )
         return ToolOutcome(
             tool=invocation.tool_name,
@@ -459,7 +499,91 @@ class ActionExecutor:
         """
         if tool_name == PYLINT_TOOL_NAME and not diagnostics:
             return 0
+        if tool_name == TOMBI_TOOL_NAME and not diagnostics:
+            return 0
         return original_returncode
+
+
+def _log_action_failure(
+    *,
+    invocation: ActionInvocation,
+    completed: CompletedProcess[str],
+    diagnostics: Sequence[Diagnostic],
+    root: Path,
+    from_cache: bool,
+) -> None:
+    """Emit a structured warning describing a failed tool action."""
+
+    command_repr = _format_command(invocation.command)
+    files_repr = _summarize_files(invocation.context.files, root)
+    stderr_tail = _last_non_empty_line(_split_output(completed.stderr))
+    stdout_tail = _last_non_empty_line(_split_output(completed.stdout))
+
+    details: list[str] = [
+        f"command: {command_repr}",
+        f"cwd: {root}",
+        f"diagnostics: {len(diagnostics)}",
+    ]
+    if files_repr:
+        details.append(f"files: {files_repr}")
+    if stderr_tail:
+        details.append(f"stderr: {stderr_tail}")
+    if stdout_tail:
+        details.append(f"stdout: {stdout_tail}")
+    if from_cache:
+        details.append("source: cache (rerun with --no-cache to re-execute)")
+
+    message = (
+        f"{invocation.tool_name}:{invocation.action.name} failed (exit {completed.returncode})"
+        + "\n  "
+        + "\n  ".join(details)
+    )
+
+    cfg = invocation.context.cfg.output
+    warn(message, use_emoji=cfg.emoji, use_color=cfg.color)
+
+
+def _format_command(command: Sequence[str]) -> str:
+    """Return a shell-friendly representation of ``command``."""
+
+    return shlex.join(command)
+
+
+def _summarize_files(files: Sequence[Path], root: Path) -> str | None:
+    """Return a compact string summarising target ``files`` relative to *root*."""
+
+    if not files:
+        return None
+    display: list[str] = []
+    for path in files[:5]:
+        try:
+            display.append(normalize_path_key(path, base_dir=root))
+        except ValueError:
+            display.append(str(path))
+    remaining = len(files) - len(display)
+    if remaining > 0:
+        display.append(f"… (+{remaining} more)")
+    return ", ".join(display)
+
+
+def _split_output(payload: str | Sequence[str] | None) -> list[str]:
+    """Return *payload* as a list of lines."""
+
+    if payload is None:
+        return []
+    if isinstance(payload, str):
+        return payload.splitlines()
+    return [str(entry) for entry in payload]
+
+
+def _last_non_empty_line(lines: Sequence[str]) -> str | None:
+    """Return the last non-empty line from ``lines`` truncated for readability."""
+
+    for raw_line in reversed(lines):
+        hint = raw_line.strip()
+        if hint:
+            return shorten(hint, width=160, placeholder="…")
+    return None
 
 
 __all__ = [

@@ -5,7 +5,7 @@
   "extends": ["python_defaults"],
   "languages": ["python"],
   "phase": "analysis",
-  "fileExtensions": [".py", ".pyi"],
+  "fileExtensions": [".py"],
   "configFiles": ["pyproject.toml", "mypy.ini", "setup.cfg"],
   "runtime": {
     "type": "python",

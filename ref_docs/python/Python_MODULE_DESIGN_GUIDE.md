@@ -631,7 +631,7 @@ return text[:max_length-3] + "..."
 def \_log_operation(op_name: str) -> None:\
 print(f"Operation performed: \{op_name}")
 
-In this example, only is_palindrome and truncate_string are considered public. An attempt to use from string_utils import * would only import these two names.18
+In this example, only is_palindrome and truncate_string are considered public. An attempt to use from string_utils import \* would only import these two names.18
 
 ### **The Convention of Internal Use: Single Underscore (\_)**
 

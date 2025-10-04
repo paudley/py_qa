@@ -117,12 +117,14 @@ class _ProjectTargetPlan:
         if not targets:
             return []
         formatted: list[str] = []
-        for path in targets:
+        prefix = self.prefix
+        for path in sorted(targets):
             text = str(path)
-            if self.prefix:
-                text = f"{self.prefix}{text}"
-            formatted.append(text)
-        return sorted(set(formatted))
+            if prefix:
+                formatted.extend([prefix, text])
+            else:
+                formatted.append(text)
+        return formatted
 
     def _is_excluded(self, candidate: Path, excluded: set[Path]) -> bool:
         """Return ``True`` when ``candidate`` should be omitted."""
