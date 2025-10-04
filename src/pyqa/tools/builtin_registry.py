@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal, cast
 
+from ..paths import get_pyqa_root
 from ..tooling import CatalogIntegrityError, CatalogSnapshot, ToolCatalogLoader
 from ..tooling.catalog.model_runtime import SUPPORTED_RUNTIME_TYPES
 from ..tooling.catalog.models import StrategyDefinition
@@ -102,15 +103,11 @@ def initialize_registry(
 def _resolve_catalog_root(candidate: Path | None) -> Path:
     if candidate is not None:
         return candidate
-    base = Path(__file__).resolve()
-    project_root = base.parents[3]
+    project_root = get_pyqa_root()
     catalog = project_root / "tooling" / "catalog"
-    if catalog.exists():
-        return catalog
-    alt_catalog = base.parents[1] / "tooling" / "catalog"
-    if alt_catalog.exists():
-        return alt_catalog
-    raise FileNotFoundError("Unable to locate tooling/catalog directory")
+    if not catalog.exists():
+        raise FileNotFoundError("Unable to locate tooling/catalog directory")
+    return catalog
 
 
 def _materialize_tool(

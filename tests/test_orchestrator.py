@@ -107,7 +107,9 @@ def test_orchestrator_runs_registered_tool(tmp_path: Path) -> None:
         assert cmd[0] == "dummy"
         assert cmd[1] == "--flag"
         assert Path(cmd[2]) == target
-        env = kwargs.get("env", {})
+        options = kwargs.get("options")
+        assert options is not None
+        env = options.env or {}
         assert env.get("DUMMY_ENV") == "1"
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="output", stderr="")
 

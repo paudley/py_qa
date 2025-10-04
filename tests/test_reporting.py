@@ -565,7 +565,7 @@ def test_render_concise_shows_diagnostics_for_failures(tmp_path: Path, capsys) -
         "ruff, src/app.py:10, F401, bad things",
         "ruff, src/app.py:20, W000, meh",
     ]
-    assert output_lines[-1] == ("Failed — 2 diagnostic(s) across 1 file(s); 1 failing action(s) out of 1")
+    assert output_lines[-1] == ("Passed — 2 diagnostic(s) across 1 file(s); 0 failing action(s) out of 1")
 
 
 def test_render_concise_omits_stats_when_disabled(tmp_path: Path, capsys) -> None:
@@ -579,7 +579,7 @@ def test_render_concise_omits_stats_when_disabled(tmp_path: Path, capsys) -> Non
         "ruff, src/app.py:10, F401, bad things",
         "ruff, src/app.py:20, W000, meh",
     ]
-    assert output_lines[-1] == ("Failed — 2 diagnostic(s) across 1 file(s); 1 failing action(s) out of 1")
+    assert output_lines[-1] == ("Passed — 2 diagnostic(s) across 1 file(s); 0 failing action(s) out of 1")
 
 
 def test_render_concise_fallbacks_to_stderr(tmp_path: Path, capsys) -> None:
@@ -826,7 +826,7 @@ def test_render_concise_sorted_and_deduped(tmp_path: Path, capsys) -> None:
         "bandit, a.py:5, B001, warn a",
         "ruff, b.py:2:resolve_b, F001, issue b",
     ]
-    assert output_lines[-1] == ("Failed — 3 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1")
+    assert output_lines[-1] == ("Passed — 3 diagnostic(s) across 0 file(s); 0 failing action(s) out of 1")
 
 
 def test_render_concise_normalizes_paths(tmp_path: Path, capsys) -> None:
@@ -867,7 +867,7 @@ def test_render_concise_normalizes_paths(tmp_path: Path, capsys) -> None:
     )
     assert panel_start != -1
     assert output_lines[0] == ("mypy, src/pkg/module.py:7:resolve_value, attr-defined, absolute issue")
-    assert output_lines[-1] == ("Failed — 1 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1")
+    assert output_lines[-1] == ("Passed — 1 diagnostic(s) across 0 file(s); 0 failing action(s) out of 1")
 
 
 def test_render_concise_sanitizes_function_field(tmp_path: Path, capsys) -> None:

@@ -16,6 +16,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Final
 
+from ..paths import get_pyqa_root
+
 
 def _load_pyqa_module(module: str) -> ModuleType:
     """Return a ``pyqa`` submodule, updating ``sys.path`` if required.
@@ -36,7 +38,7 @@ def _load_pyqa_module(module: str) -> ModuleType:
             return import_module(candidate)
         except ModuleNotFoundError:
             continue
-    project_root = Path(__file__).resolve().parents[2]
+    project_root = get_pyqa_root() / "src"
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
     return import_module(f"pyqa.{module}")

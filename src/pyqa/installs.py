@@ -15,7 +15,7 @@ from typing import Any
 
 from .environments import find_venv_bin
 from .process_utils import SubprocessExecutionError, run_command
-from .tool_env.constants import PROJECT_MARKER
+from .tool_env.constants import PROJECT_MARKER_FILENAME
 
 Runner = Callable[[list[str]], Any]
 Warn = Callable[[str], None]
@@ -304,7 +304,7 @@ def _write_project_marker(project_root: Path) -> Path:
         Path: Path to the written marker file.
     """
 
-    marker = project_root / ".lint-cache" / PROJECT_MARKER.name
+    marker = project_root / ".lint-cache" / PROJECT_MARKER_FILENAME
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text(json.dumps({"project": True}), encoding="utf-8")
     return marker

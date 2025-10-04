@@ -14,7 +14,6 @@ from pathlib import Path
 from ...environments import inject_node_defaults
 from ...process_utils import SubprocessExecutionError, run_command
 from ...tools.base import Tool
-from .. import constants as tool_constants
 from ..models import PreparedCommand
 from ..utils import _slugify, _split_package_spec, desired_version
 from .base import RuntimeContext, RuntimeHandler
@@ -34,7 +33,7 @@ class NpmRuntime(RuntimeHandler):
         executable = bin_dir / context.executable
         if not executable.exists():
             return None
-        env_overrides = self._project_env(bin_dir, context.root)
+        env_overrides = self._project_env(context, bin_dir)
         version = None
         if context.tool.version_command:
             version = self._versions.capture(
@@ -55,24 +54,26 @@ class NpmRuntime(RuntimeHandler):
     def _prepare_local(self, context: RuntimeContext) -> PreparedCommand:
         """Install npm packages into the cache and return the local command."""
 
-        prefix, cached_version = self._ensure_local_package(context.tool)
+        prefix, cached_version = self._ensure_local_package(context)
         bin_dir = prefix / "node_modules" / ".bin"
         executable = bin_dir / context.executable
         cmd = context.command_list()
         cmd[0] = str(executable)
-        env = self._local_env(bin_dir, prefix, context.root)
+        env = self._local_env(context, bin_dir, prefix)
         version = cached_version
         if version is None and context.tool.version_command:
             version = self._versions.capture(context.tool.version_command, env=self._merge_env(env))
         return PreparedCommand.from_parts(cmd=cmd, env=env, version=version, source="local")
 
-    def _ensure_local_package(self, tool: Tool) -> tuple[Path, str | None]:
+    def _ensure_local_package(self, context: RuntimeContext) -> tuple[Path, str | None]:
+        tool = context.tool
+        layout = context.cache_layout
         requirement = self._npm_requirement(tool)
         packages = shlex.split(requirement)
         if not packages:
             raise RuntimeError("No npm packages specified for tool")
         slug = _slugify(" ".join(packages))
-        prefix = tool_constants.NODE_CACHE_DIR / slug
+        prefix = layout.node_cache_dir / slug
         meta_path = prefix / self.META_FILE
         bin_dir = prefix / "node_modules" / ".bin"
         if meta_path.is_file() and bin_dir.exists():
@@ -83,8 +84,8 @@ class NpmRuntime(RuntimeHandler):
         prefix.mkdir(parents=True, exist_ok=True)
         env = os.environ.copy()
         inject_node_defaults(env)
-        env.setdefault("NPM_CONFIG_CACHE", str(tool_constants.NPM_CACHE_DIR))
-        env.setdefault("npm_config_cache", str(tool_constants.NPM_CACHE_DIR))
+        env.setdefault("NPM_CONFIG_CACHE", str(layout.npm_cache_dir))
+        env.setdefault("npm_config_cache", str(layout.npm_cache_dir))
         env.setdefault("NPM_CONFIG_PREFIX", str(prefix))
         env.setdefault("npm_config_prefix", str(prefix))
         run_command(
@@ -137,25 +138,25 @@ class NpmRuntime(RuntimeHandler):
         return None
 
     @staticmethod
-    def _project_env(bin_dir: Path, root: Path) -> dict[str, str]:
+    def _project_env(context: RuntimeContext, bin_dir: Path) -> dict[str, str]:
         path_value = os.environ.get("PATH", "")
         combined = f"{bin_dir}{os.pathsep}{path_value}" if path_value else str(bin_dir)
         return {
             "PATH": combined,
-            "PWD": str(root),
-            "NPM_CONFIG_CACHE": str(tool_constants.NPM_CACHE_DIR),
-            "npm_config_cache": str(tool_constants.NPM_CACHE_DIR),
+            "PWD": str(context.root),
+            "NPM_CONFIG_CACHE": str(context.cache_layout.npm_cache_dir),
+            "npm_config_cache": str(context.cache_layout.npm_cache_dir),
         }
 
     @staticmethod
-    def _local_env(bin_dir: Path, prefix: Path, root: Path) -> dict[str, str]:
+    def _local_env(context: RuntimeContext, bin_dir: Path, prefix: Path) -> dict[str, str]:
         path_value = os.environ.get("PATH", "")
         combined = f"{bin_dir}{os.pathsep}{path_value}" if path_value else str(bin_dir)
         return {
             "PATH": combined,
-            "PWD": str(root),
-            "NPM_CONFIG_CACHE": str(tool_constants.NPM_CACHE_DIR),
-            "npm_config_cache": str(tool_constants.NPM_CACHE_DIR),
+            "PWD": str(context.root),
+            "NPM_CONFIG_CACHE": str(context.cache_layout.npm_cache_dir),
+            "npm_config_cache": str(context.cache_layout.npm_cache_dir),
             "NPM_CONFIG_PREFIX": str(prefix),
             "npm_config_prefix": str(prefix),
         }

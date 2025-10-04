@@ -12,7 +12,6 @@ from pathlib import Path
 
 from ...process_utils import run_command
 from ...tools.base import Tool
-from .. import constants as tool_constants
 from ..models import PreparedCommand
 from ..utils import _slugify
 from .base import RuntimeContext, RuntimeHandler
@@ -39,23 +38,25 @@ class PerlRuntime(RuntimeHandler):
         """Install Perl tooling using cpanm and return the command."""
 
         binary_name = Path(context.executable).name
-        binary_path = self._ensure_local_tool(context.tool, binary_name)
+        binary_path = self._ensure_local_tool(context, binary_name)
         cmd = context.command_list()
         cmd[0] = str(binary_path)
-        env = self._perl_env(context.root)
+        env = self._perl_env(context)
         version = None
         if context.tool.version_command:
             version = self._versions.capture(context.tool.version_command, env=self._merge_env(env))
         return PreparedCommand.from_parts(cmd=cmd, env=env, version=version, source="local")
 
-    def _ensure_local_tool(self, tool: Tool, binary_name: str) -> Path:
+    def _ensure_local_tool(self, context: RuntimeContext, binary_name: str) -> Path:
         """Ensure ``binary_name`` is installed for ``tool`` via cpanm."""
 
+        tool = context.tool
+        layout = context.cache_layout
         requirement = tool.package or tool.name
         slug = _slugify(requirement)
-        prefix = tool_constants.PERL_CACHE_DIR / slug
-        meta_file = tool_constants.PERL_META_DIR / f"{slug}.json"
-        binary = tool_constants.PERL_BIN_DIR / binary_name
+        prefix = layout.perl_cache_dir / slug
+        meta_file = layout.perl_meta_dir / f"{slug}.json"
+        binary = layout.perl_bin_dir / binary_name
 
         if binary.exists() and meta_file.exists():
             data = self._load_json(meta_file)
@@ -63,8 +64,8 @@ class PerlRuntime(RuntimeHandler):
                 return binary
 
         prefix.mkdir(parents=True, exist_ok=True)
-        tool_constants.PERL_META_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.PERL_BIN_DIR.mkdir(parents=True, exist_ok=True)
+        layout.perl_meta_dir.mkdir(parents=True, exist_ok=True)
+        layout.perl_bin_dir.mkdir(parents=True, exist_ok=True)
 
         cmd = [
             "cpanm",
@@ -87,15 +88,14 @@ class PerlRuntime(RuntimeHandler):
         return binary
 
     @staticmethod
-    def _perl_env(root: Path) -> dict[str, str]:
+    def _perl_env(context: RuntimeContext) -> dict[str, str]:
         """Return environment variables required for Perl tool execution."""
         path_value = os.environ.get("PATH", "")
-        combined = (
-            f"{tool_constants.PERL_BIN_DIR}{os.pathsep}{path_value}" if path_value else str(tool_constants.PERL_BIN_DIR)
-        )
+        bin_dir = context.cache_layout.perl_bin_dir
+        combined = f"{bin_dir}{os.pathsep}{path_value}" if path_value else str(bin_dir)
         return {
             "PATH": combined,
-            "PWD": str(root),
+            "PWD": str(context.root),
         }
 
 

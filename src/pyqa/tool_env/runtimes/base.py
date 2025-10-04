@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from ...tools.base import Tool
+from ..constants import ToolCacheLayout
 from ..models import PreparedCommand
 from ..utils import desired_version
 from ..versioning import VersionResolver
@@ -30,6 +31,8 @@ class RuntimeRequest:
     project_mode: bool
     system_preferred: bool
     use_local_override: bool
+    cache_layout: ToolCacheLayout
+    pyqa_root: Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +44,8 @@ class RuntimeContext:
     root: Path
     cache_dir: Path
     target_version: str | None
+    cache_layout: ToolCacheLayout
+    pyqa_root: Path
 
     def command_list(self) -> list[str]:
         """Return a mutable copy of the command sequence."""
@@ -68,7 +73,9 @@ class RuntimeHandler(ABC):
             command=request.command,
             root=request.root,
             cache_dir=request.cache_dir,
+            cache_layout=request.cache_layout,
             target_version=desired_version(request.tool),
+            pyqa_root=request.pyqa_root,
         )
 
         if request.use_local_override or request.tool.prefer_local:

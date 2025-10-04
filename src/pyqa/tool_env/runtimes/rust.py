@@ -12,7 +12,6 @@ from pathlib import Path
 
 from ...process_utils import run_command
 from ...tools.base import Tool
-from .. import constants as tool_constants
 from ..models import PreparedCommand
 from ..utils import _slugify, _split_package_spec
 from .base import RuntimeContext, RuntimeHandler
@@ -40,7 +39,7 @@ class RustRuntime(RuntimeHandler):
             raise RuntimeError("Cargo toolchain is required to install rust-based linters")
 
         binary_name = Path(context.executable).name
-        binary_path = self._ensure_local_tool(context.tool, binary_name)
+        binary_path = self._ensure_local_tool(context, binary_name)
         cmd = context.command_list()
         cmd[0] = str(binary_path)
 
@@ -50,14 +49,16 @@ class RustRuntime(RuntimeHandler):
             version = self._versions.capture(context.tool.version_command)
         return PreparedCommand.from_parts(cmd=cmd, env=env, version=version, source="local")
 
-    def _ensure_local_tool(self, tool: Tool, binary_name: str) -> Path:
+    def _ensure_local_tool(self, context: RuntimeContext, binary_name: str) -> Path:
         """Install or reuse a cargo-installed binary for ``tool``."""
+        tool = context.tool
+        layout = context.cache_layout
         crate, version_spec = self._crate_spec(tool)
         if crate.startswith("rustup:"):
             component = crate.split(":", 1)[1]
             requirement = f"rustup:{component}"
             slug = _slugify(requirement)
-            meta_file = tool_constants.RUST_META_DIR / f"{slug}.json"
+            meta_file = layout.rust_meta_dir / f"{slug}.json"
             meta_file.parent.mkdir(parents=True, exist_ok=True)
             if not meta_file.exists():
                 self._install_rustup_component(component)
@@ -69,9 +70,9 @@ class RustRuntime(RuntimeHandler):
 
         requirement = f"{crate}@{version_spec}" if version_spec else crate
         slug = _slugify(requirement)
-        prefix = tool_constants.RUST_CACHE_DIR / slug
+        prefix = layout.rust_cache_dir / slug
         binary = prefix / "bin" / binary_name
-        meta_file = tool_constants.RUST_META_DIR / f"{slug}.json"
+        meta_file = layout.rust_meta_dir / f"{slug}.json"
 
         if binary.exists() and meta_file.exists():
             meta = self._load_json(meta_file)

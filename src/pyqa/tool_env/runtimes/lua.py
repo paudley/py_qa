@@ -11,7 +11,6 @@ from pathlib import Path
 
 from ...process_utils import run_command
 from ...tools.base import Tool
-from .. import constants as tool_constants
 from ..models import PreparedCommand
 from ..utils import _slugify, _split_package_spec
 from .base import RuntimeContext, RuntimeHandler
@@ -29,26 +28,28 @@ class LuaRuntime(RuntimeHandler):
         """Install Lua tooling via luarocks into the shared cache."""
 
         binary_name = Path(context.executable).name
-        binary_path = self._ensure_local_tool(context.tool, binary_name)
+        binary_path = self._ensure_local_tool(context, binary_name)
         cmd = context.command_list()
         cmd[0] = str(binary_path)
-        env = self._lua_env(context.root)
+        env = self._lua_env(context)
         version = None
         if context.tool.version_command:
             version = self._versions.capture(context.tool.version_command, env=self._merge_env(env))
         return PreparedCommand.from_parts(cmd=cmd, env=env, version=version, source="local")
 
-    def _ensure_local_tool(self, tool: Tool, binary_name: str) -> Path:
+    def _ensure_local_tool(self, context: RuntimeContext, binary_name: str) -> Path:
         """Ensure ``binary_name`` is installed for ``tool`` using luarocks."""
 
+        tool = context.tool
         package, version = self._package_spec(tool)
         if not shutil.which("luarocks"):
             raise RuntimeError("luarocks is required to install Lua-based linters")
 
         slug = _slugify(f"{package}@{version or 'latest'}")
-        prefix = tool_constants.LUA_CACHE_DIR / slug
-        meta_file = tool_constants.LUA_META_DIR / f"{slug}.json"
-        binary = tool_constants.LUA_BIN_DIR / binary_name
+        layout = context.cache_layout
+        prefix = layout.lua_cache_dir / slug
+        meta_file = layout.lua_meta_dir / f"{slug}.json"
+        binary = layout.lua_bin_dir / binary_name
 
         if binary.exists() and meta_file.exists():
             meta = self._load_json(meta_file)
@@ -56,9 +57,9 @@ class LuaRuntime(RuntimeHandler):
                 return binary
 
         prefix.mkdir(parents=True, exist_ok=True)
-        tool_constants.LUA_META_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.LUA_BIN_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.LUA_WORK_DIR.mkdir(parents=True, exist_ok=True)
+        layout.lua_meta_dir.mkdir(parents=True, exist_ok=True)
+        layout.lua_bin_dir.mkdir(parents=True, exist_ok=True)
+        layout.lua_work_dir.mkdir(parents=True, exist_ok=True)
 
         args = [
             "luarocks",
@@ -92,9 +93,12 @@ class LuaRuntime(RuntimeHandler):
         return tool.name, tool.min_version
 
     @staticmethod
-    def _lua_env(root: Path) -> dict[str, str]:
+    def _lua_env(context: RuntimeContext) -> dict[str, str]:
         """Return environment variables required to execute Lua tools."""
-        return RuntimeHandler._prepend_path_environment(bin_dir=tool_constants.LUA_BIN_DIR, root=root)
+        return RuntimeHandler._prepend_path_environment(
+            bin_dir=context.cache_layout.lua_bin_dir,
+            root=context.root,
+        )
 
 
 __all__ = ["LuaRuntime"]

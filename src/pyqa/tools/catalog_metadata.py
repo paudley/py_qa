@@ -10,6 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Final
 
+from ..paths import get_pyqa_root
 from ..tooling import CatalogIntegrityError, CatalogSnapshot, ToolCatalogLoader
 
 
@@ -234,8 +235,7 @@ def _catalog_paths() -> tuple[Path, Path]:
         tuple[Path, Path]: Paths to the catalog and schema directories.
 
     """
-    base = Path(__file__).resolve()
-    project_root = base.parents[3]
+    project_root = get_pyqa_root()
     catalog_root = project_root / "tooling" / "catalog"
     schema_root = project_root / "tooling" / "schema"
     return catalog_root, schema_root

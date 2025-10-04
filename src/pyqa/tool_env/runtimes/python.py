@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from ..constants import PYQA_ROOT, UV_CACHE_DIR
 from ..models import PreparedCommand
 from .base import RuntimeContext, RuntimeHandler
 
@@ -33,15 +32,15 @@ class PythonRuntime(RuntimeHandler):
         cmd = [
             "uv",
             "--project",
-            str(PYQA_ROOT),
+            str(context.pyqa_root),
             "run",
             "--with",
             requirement,
             *context.command,
         ]
         env = {
-            "UV_CACHE_DIR": str(UV_CACHE_DIR),
-            "UV_PROJECT": str(PYQA_ROOT),
+            "UV_CACHE_DIR": str(context.cache_layout.uv_dir),
+            "UV_PROJECT": str(context.pyqa_root),
         }
         version = None
         if context.tool.version_command:

@@ -200,8 +200,8 @@ class ToolDocumentationEntry(BaseModel):
 
 
 PHASE_NAMES: Final[tuple[str, ...]] = (
-    "lint",
     "format",
+    "lint",
     "analysis",
     "security",
     "test",

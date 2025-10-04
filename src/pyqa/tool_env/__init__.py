@@ -4,30 +4,9 @@
 
 from __future__ import annotations
 
-from .constants import (
-    CACHE_ROOT,
-    GO_BIN_DIR,
-    GO_CACHE_DIR,
-    GO_META_DIR,
-    GO_WORK_DIR,
-    LUA_BIN_DIR,
-    LUA_CACHE_DIR,
-    LUA_META_DIR,
-    LUA_WORK_DIR,
-    NODE_CACHE_DIR,
-    NPM_CACHE_DIR,
-    PERL_BIN_DIR,
-    PERL_CACHE_DIR,
-    PERL_META_DIR,
-    PROJECT_MARKER,
-    PYQA_ROOT,
-    RUST_BIN_DIR,
-    RUST_CACHE_DIR,
-    RUST_META_DIR,
-    RUST_WORK_DIR,
-    UV_CACHE_DIR,
-)
+from .constants import PROJECT_MARKER_FILENAME, ToolCacheLayout, cache_layout
 from .models import PreparedCommand
+from ..paths import get_pyqa_root
 from .preparer import CommandPreparationRequest, CommandPreparer
 from .runtimes.go import GoRuntime
 from .runtimes.lua import LuaRuntime
@@ -39,27 +18,9 @@ from .utils import desired_version
 from .versioning import VersionResolver
 
 __all__ = [
-    "CACHE_ROOT",
-    "GO_BIN_DIR",
-    "GO_CACHE_DIR",
-    "GO_META_DIR",
-    "GO_WORK_DIR",
-    "LUA_BIN_DIR",
-    "LUA_CACHE_DIR",
-    "LUA_META_DIR",
-    "LUA_WORK_DIR",
-    "NODE_CACHE_DIR",
-    "NPM_CACHE_DIR",
-    "PERL_BIN_DIR",
-    "PERL_CACHE_DIR",
-    "PERL_META_DIR",
-    "PROJECT_MARKER",
-    "PYQA_ROOT",
-    "RUST_BIN_DIR",
-    "RUST_CACHE_DIR",
-    "RUST_META_DIR",
-    "RUST_WORK_DIR",
-    "UV_CACHE_DIR",
+    "PROJECT_MARKER_FILENAME",
+    "ToolCacheLayout",
+    "cache_layout",
     "CommandPreparationRequest",
     "CommandPreparer",
     "GoRuntime",
@@ -67,6 +28,7 @@ __all__ = [
     "NpmRuntime",
     "PerlRuntime",
     "PreparedCommand",
+    "get_pyqa_root",
     "PythonRuntime",
     "RustRuntime",
     "VersionResolver",

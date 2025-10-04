@@ -67,10 +67,8 @@ def test_project_scanner_resolves_targets_and_excludes(tmp_path: Path) -> None:
     opt_index = command.index("--opt")
     assert command[opt_index + 1] == "42"
 
-    # Prefix argument is emitted followed by the prefixed target entry
     path_prefix_index = command.index("--path=")
-    assert command[path_prefix_index + 1].startswith("--path=")
-    assert command[path_prefix_index + 1] == f"--path={tmp_path / 'src'}"
+    assert command[path_prefix_index + 1] == str(tmp_path / "src")
 
     fallback_ctx = ToolContext(
         cfg=Config(),
@@ -83,5 +81,5 @@ def test_project_scanner_resolves_targets_and_excludes(tmp_path: Path) -> None:
         "--opt",
         "99",
         "--path=",
-        f"--path={tmp_path / 'fallback'}",
+        str(tmp_path / "fallback"),
     )

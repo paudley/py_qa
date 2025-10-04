@@ -9,8 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from ..paths import get_pyqa_root
 from ..tools.base import Tool
-from . import constants as tool_constants
+from .constants import ToolCacheLayout, cache_layout
 from .models import PreparedCommand
 from .runtimes.base import RuntimeHandler, RuntimeRequest
 from .runtimes.binary import BinaryRuntime
@@ -49,7 +50,8 @@ class CommandPreparer:
             "rust": RustRuntime(self._versions),
             "binary": BinaryRuntime(self._versions),
         }
-        self._ensure_dirs()
+        self._ensured_roots: set[Path] = set()
+        self._pyqa_root: Path = get_pyqa_root()
 
     @property
     def available_runtimes(self) -> tuple[str, ...]:
@@ -88,9 +90,9 @@ class CommandPreparer:
             raise TypeError("CommandPreparer.prepare() received unexpected legacy arguments")
 
         handler = self._handlers.get(request.tool.runtime, self._handlers["binary"])
-        project_mode = (
-            request.cache_dir / tool_constants.PROJECT_MARKER.name
-        ).is_file() or tool_constants.PROJECT_MARKER.is_file()
+        layout = cache_layout(request.cache_dir)
+        self._ensure_dirs(layout)
+        project_mode = layout.legacy_project_marker.is_file() or layout.project_marker.is_file()
         runtime_request = RuntimeRequest(
             tool=request.tool,
             command=request.command,
@@ -99,6 +101,8 @@ class CommandPreparer:
             project_mode=project_mode,
             system_preferred=request.system_preferred,
             use_local_override=request.use_local_override,
+            cache_layout=layout,
+            pyqa_root=self._pyqa_root,
         )
         return handler.prepare(runtime_request)
 
@@ -147,23 +151,14 @@ class CommandPreparer:
             use_local_override=bool(use_local_override),
         )
 
-    def _ensure_dirs(self) -> None:
-        """Ensure cache directories for supported runtimes exist."""
+    def _ensure_dirs(self, layout: ToolCacheLayout) -> None:
+        """Ensure cache directories for ``layout`` exist exactly once."""
 
-        tool_constants.UV_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.NODE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.NPM_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.GO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.GO_BIN_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.LUA_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.LUA_BIN_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.LUA_META_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.RUST_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.RUST_BIN_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.RUST_META_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.PERL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.PERL_BIN_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.PERL_META_DIR.mkdir(parents=True, exist_ok=True)
+        root = layout.tools_root.resolve()
+        if root in self._ensured_roots:
+            return
+        layout.ensure_directories()
+        self._ensured_roots.add(root)
 
     def prepare_request(self, request: CommandPreparationRequest) -> PreparedCommand:
         """Prepare a command described by ``request``.

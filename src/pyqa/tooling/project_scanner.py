@@ -213,8 +213,6 @@ class _ProjectScannerStrategy(CommandBuilder):
         targets = self.target_plan.resolve(ctx, excluded=excluded_paths, root=root)
         if not targets:
             return
-        if self.target_plan.prefix:
-            command.append(self.target_plan.prefix)
         command.extend(targets)
 
 

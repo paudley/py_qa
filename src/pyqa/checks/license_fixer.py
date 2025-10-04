@@ -15,6 +15,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Final
 
+from ..paths import get_pyqa_root
+
 
 def _load_licenses_module() -> ModuleType:
     """Return the licenses module, extending ``sys.path`` when necessary.
@@ -26,7 +28,7 @@ def _load_licenses_module() -> ModuleType:
     try:
         return import_module("pyqa.checks.licenses")
     except ModuleNotFoundError:
-        project_root = Path(__file__).resolve().parents[2]
+        project_root = get_pyqa_root() / "src"
         if str(project_root) not in sys.path:
             sys.path.insert(0, str(project_root))
         return import_module("pyqa.checks.licenses")
