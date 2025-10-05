@@ -59,14 +59,14 @@ def install_download_artifact(config: Mapping[str, JSONValue]) -> Callable[[Tool
             malformed.
 
     """
-    plain_config = cast(JSONValue, _as_plain_json(config))
+    plain_config = _as_plain_json(config)
     if not isinstance(plain_config, Mapping):
         raise CatalogIntegrityError("install_download_artifact: configuration must be an object")
 
     download_config = plain_config.get("download")
     if not isinstance(download_config, Mapping):
         raise CatalogIntegrityError("install_download_artifact: 'download' must be an object")
-    download_mapping = cast(Mapping[str, JSONValue], download_config)
+    download_mapping: Mapping[str, JSONValue] = download_config
 
     version_value = plain_config.get("version")
     if version_value is not None and not isinstance(version_value, str):
@@ -440,7 +440,11 @@ def _parse_target_selector(entry: Any, *, context: str) -> _TargetSelector:
         field_name="pathMustInclude",
         context=context,
     )
-    path_requires = tuple(requirement for item in raw_requires if (requirement := _normalise_path_requirement(item)))
+    path_requires = tuple(
+        requirement
+        for item in raw_requires
+        if (requirement := _normalise_path_requirement(item))
+    )
 
     fallback_directory = _coerce_optional_non_empty_string(
         entry.get("fallbackDirectory"),

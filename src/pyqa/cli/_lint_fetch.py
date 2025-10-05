@@ -136,13 +136,10 @@ def _fetch_with_progress(
         )
 
     with progress:
-        results = cast(
-            FetchResult,
-            runtime.orchestrator.fetch_all_tools(
-                runtime.config,
-                root=runtime.state.root,
-                callback=progress_callback,
-            ),
+        results: FetchResult = runtime.orchestrator.fetch_all_tools(
+            runtime.config,
+            root=runtime.state.root,
+            callback=progress_callback,
         )
     return results
 

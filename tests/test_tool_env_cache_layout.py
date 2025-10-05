@@ -101,9 +101,9 @@ def then_caches_under_expected_root(workspace_state: dict[str, object]) -> None:
     for directory in (
         layout.uv_dir,
         layout.node_cache_dir,
-        layout.go_cache_dir,
-        layout.rust_cache_dir,
-        layout.perl_cache_dir,
+        layout.go.cache_dir,
+        layout.rust.cache_dir,
+        layout.perl.cache_dir,
     ):
         assert directory.is_dir()
 

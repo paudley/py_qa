@@ -13,7 +13,12 @@ from ..paths import get_pyqa_root
 from ..tools.base import Tool
 from .constants import ToolCacheLayout, cache_layout
 from .models import PreparedCommand
-from .runtimes.base import RuntimeHandler, RuntimeRequest
+from .runtimes.base import (
+    RuntimeEnvironment,
+    RuntimeHandler,
+    RuntimePreferences,
+    RuntimeRequest,
+)
 from .runtimes.binary import BinaryRuntime
 from .runtimes.go import GoRuntime
 from .runtimes.lua import LuaRuntime
@@ -93,16 +98,22 @@ class CommandPreparer:
         layout = cache_layout(request.cache_dir)
         self._ensure_dirs(layout)
         project_mode = layout.legacy_project_marker.is_file() or layout.project_marker.is_file()
-        runtime_request = RuntimeRequest(
-            tool=request.tool,
-            command=request.command,
+        environment = RuntimeEnvironment(
             root=request.root,
             cache_dir=request.cache_dir,
+            cache_layout=layout,
+            pyqa_root=self._pyqa_root,
+        )
+        preferences = RuntimePreferences(
             project_mode=project_mode,
             system_preferred=request.system_preferred,
             use_local_override=request.use_local_override,
-            cache_layout=layout,
-            pyqa_root=self._pyqa_root,
+        )
+        runtime_request = RuntimeRequest(
+            tool=request.tool,
+            command=request.command,
+            environment=environment,
+            preferences=preferences,
         )
         return handler.prepare(runtime_request)
 

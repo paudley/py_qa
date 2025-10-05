@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from .catalog.errors import CatalogIntegrityError
 from .catalog.loader import ToolCatalogLoader
-from .catalog.models import CatalogFragment, CatalogSnapshot, ToolDefinition
+from .catalog.model_catalog import CatalogFragment, CatalogSnapshot
+from .catalog.model_tool import ToolDefinition
 
 __all__ = [
     "CatalogFragment",

@@ -196,10 +196,10 @@ class JsonDiagnosticExtractor:
         """Create a field specification for a single diagnostic attribute."""
 
         if isinstance(raw_spec, str):
-            path_tokens = _tokenize_path(raw_spec, allow_wildcards=False)
+            tokens = _tokenize_path(raw_spec, allow_wildcards=False)
             return FieldSpec(
                 name=name,
-                path=path_tokens,
+                path=tokens,
                 value=None,
                 has_value=False,
                 default=None,
@@ -213,8 +213,9 @@ class JsonDiagnosticExtractor:
             )
 
         path_value = raw_spec.get(FieldConfigKey.PATH)
+        path_tokens: tuple[PathComponent, ...] | None
         if path_value is None:
-            path_tokens: tuple[PathComponent, ...] | None = None
+            path_tokens = None
         elif isinstance(path_value, str):
             path_tokens = _tokenize_path(path_value, allow_wildcards=False)
         else:

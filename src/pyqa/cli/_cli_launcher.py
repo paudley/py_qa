@@ -35,6 +35,7 @@ DEPENDENCY_EXIT_CODE: Final[int] = 97
 MIN_PYTHON: Final[tuple[int, int]] = (3, 12)
 PROG_NAME: Final[str] = "pyqa"
 VERSION_COMPONENTS: Final[int] = 2
+PATH_TRAVERSAL_COMPONENT: Final[str] = ".."
 
 
 class ProbeStatus(StrEnum):
@@ -102,8 +103,6 @@ def launch(command: str, argv: Iterable[str] | None = None) -> None:
             arguments from :data:`sys.argv` (excluding the script name) are
             forwarded.
 
-    Returns:
-        None
     """
 
     args = list(sys.argv[1:] if argv is None else argv)
@@ -220,16 +219,38 @@ def _is_python_version_compatible(python_path: Path) -> bool:
     """Return whether ``python_path`` reports a compatible version."""
 
     try:
-        output = subprocess.check_output([str(python_path), "-c", "import sys; print(sys.version_info[:2])"])
-        version_info = ast.literal_eval(output.decode().strip())
-    except (subprocess.CalledProcessError, OSError, ValueError, SyntaxError):
+        major, minor = _read_python_version_info(python_path)
+    except (ProbeError, subprocess.CalledProcessError, OSError, ValueError, SyntaxError):
         _debug("Unable to determine interpreter version; assuming incompatible.")
         return False
-    major, minor = version_info
     minimum_major, minimum_minor = MIN_PYTHON
     compatible = (major, minor) >= (minimum_major, minimum_minor)
     _debug(f"Interpreter version check: {(major, minor)} >= {(minimum_major, minimum_minor)} -> {compatible}")
     return compatible
+
+
+def _read_python_version_info(python_path: Path) -> tuple[int, int]:
+    """Return the interpreter ``major`` and ``minor`` version numbers.
+
+    Args:
+        python_path: Executable resolving to the interpreter being probed.
+
+    Returns:
+        tuple[int, int]: The interpreter ``(major, minor)`` pair.
+
+    Raises:
+        ProbeError: If the interpreter reports an unexpected version payload.
+    """
+
+    output = subprocess.check_output([str(python_path), "-c", "import sys; print(sys.version_info[:2])"])
+    text = output.decode().strip()
+    parsed = ast.literal_eval(text)
+    if not (isinstance(parsed, tuple) and len(parsed) == VERSION_COMPONENTS):
+        raise ProbeError(f"Unexpected version payload from interpreter: {text}")
+    major, minor = parsed
+    if not (isinstance(major, int) and isinstance(minor, int)):
+        raise ProbeError(f"Interpreter returned non-integer version data: {parsed!r}")
+    return major, minor
 
 
 def _run_with_python(
@@ -243,13 +264,17 @@ def _run_with_python(
     current_executable = Path(sys.executable).resolve()
     selected_executable = python_path.resolve()
     _debug(
-        "Evaluating interpreter for in-process execution: current=%s selected=%s"
-        % (current_executable, selected_executable)
+        f"Evaluating interpreter for in-process execution: current={current_executable} "
+        f"selected={selected_executable}"
     )
 
     if current_executable == selected_executable:
         _debug("Using current interpreter for in-process execution")
+        _debug("Running with local interpreter")
         try:
+            # Importing inside the execution branch lets us detect missing optional
+            # dependencies and trigger the uv fallback without crashing at module
+            # import time. pylint: disable=import-outside-toplevel
             from pyqa.cli.app import app
         except ModuleNotFoundError as exc:
             _debug("Local interpreter missing dependencies; falling back to uv: " f"{exc.__class__.__name__}: {exc}")
@@ -268,92 +293,173 @@ def _run_with_python(
     spawn_env = env.copy()
     spawn_env[DEPENDENCY_FLAG_ENV] = "1"
     _debug(f"Executing command: {execution_cmd}")
-    result = subprocess.run(
+    with subprocess.Popen(
         execution_cmd,
         env=spawn_env,
-        check=False,
-        capture_output=True,
+        stdout=None,
+        stderr=subprocess.PIPE,
         text=True,
-    )
-    if result.stdout:
-        sys.stdout.write(result.stdout)
-    if result.stderr:
-        sys.stderr.write(result.stderr)
-
-    missing_dependency = result.returncode == DEPENDENCY_EXIT_CODE or (
-        result.stderr and DEPENDENCY_SENTINEL in result.stderr
-    )
+    ) as process:
+        stderr_output = process.communicate()[1]
+        if stderr_output:
+            sys.stderr.write(stderr_output)
+        missing_dependency = process.returncode == DEPENDENCY_EXIT_CODE or (
+            stderr_output and DEPENDENCY_SENTINEL in stderr_output
+        )
     if missing_dependency:
         _debug("Detected dependency import failure from spawned interpreter; rerunning via uv with --locked")
         uv_path = _ensure_uv()
         _run_with_uv(uv_path, command, args, require_locked=True)
         return
 
-    _debug(f"Interpreter exited with return code {result.returncode}")
-    sys.exit(result.returncode)
+    _debug(f"Interpreter exited with return code {process.returncode}")
+    sys.exit(process.returncode)
 
 
 def _ensure_uv() -> Path:
-    """Return the ``uv`` executable, downloading it when required."""
+    """Return the ``uv`` executable, downloading it when required.
 
-    override = os.environ.get(UV_COMMAND_ENV)
-    if override:
-        resolved = Path(shutil.which(override) or override).expanduser()
-        if not resolved.exists():
-            raise FileNotFoundError(f"uv override not found: {resolved}")
-        return resolved
+    Returns:
+        Path: Location of the ``uv`` executable ready for invocation.
+    """
 
-    candidate_paths = [
-        PYQA_ROOT / ".venv" / "bin" / "uv",
-        Path(shutil.which("uv") or ""),
-    ]
-    for candidate in candidate_paths:
-        if candidate and candidate.exists() and os.access(candidate, os.X_OK):
-            _debug(f"Using existing uv executable: {candidate}")
-            return candidate
+    override = _resolve_uv_override()
+    if override is not None:
+        return override
+
+    existing = _find_existing_uv_path()
+    if existing is not None:
+        _debug(f"Using existing uv executable: {existing}")
+        return existing
 
     UV_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    target = UV_CACHE_DIR / "uv"
-    if target.exists():
-        _debug(f"Reusing cached uv executable: {target}")
-        return target
+    cached = UV_CACHE_DIR / "uv"
+    if cached.exists():
+        _debug(f"Reusing cached uv executable: {cached}")
+        return cached
 
-    system = platform.system().lower()
-    machine = ARCH_ALIASES.get(platform.machine().lower())
-    if not machine:
-        raise ProbeError(f"Unsupported architecture: {platform.machine()}")
+    archive_path = _download_uv_archive()
+    final_path = _extract_uv_binary(archive_path)
+    final_path.chmod(final_path.stat().st_mode | stat.S_IEXEC)
+    return final_path
 
-    triple = UV_TRIPLES.get((system, machine))
-    if not triple:
-        raise ProbeError(f"Unsupported platform: {system}-{machine}")
 
+def _resolve_uv_override() -> Path | None:
+    """Return the user-specified ``uv`` override when provided.
+
+    Returns:
+        Path | None: Resolved override path when the environment variable is
+        set, otherwise ``None``.
+
+    Raises:
+        FileNotFoundError: If the override path does not exist on disk.
+    """
+
+    override = os.environ.get(UV_COMMAND_ENV)
+    if not override:
+        return None
+    resolved = Path(shutil.which(override) or override).expanduser()
+    if not resolved.exists():
+        message = f"PYQA_UV executable not found: {resolved}"
+        _debug(message)
+        raise FileNotFoundError(message)
+    return resolved
+
+
+def _find_existing_uv_path() -> Path | None:
+    """Return an already-installed ``uv`` executable when available.
+
+    Returns:
+        Path | None: Executable path when a suitable ``uv`` binary is found,
+        otherwise ``None``.
+    """
+
+    bin_candidate = shutil.which("uv")
+    candidates = [PYQA_ROOT / ".venv" / "bin" / "uv"]
+    if bin_candidate:
+        candidates.append(Path(bin_candidate))
+    for candidate in candidates:
+        if candidate.exists() and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def _download_uv_archive() -> Path:
+    """Download the ``uv`` archive for the active platform into the cache.
+
+    Returns:
+        Path: Location of the downloaded archive within the cache directory.
+    """
+
+    triple = _resolve_uv_triple()
     archive_name = f"uv-{triple}.tar.gz"
     url = f"https://github.com/astral-sh/uv/releases/latest/download/{archive_name}"
-    _debug(f"Downloading uv from {url}")
     archive_path = UV_CACHE_DIR / archive_name
-    with urllib.request.urlopen(url) as response, open(archive_path, "wb") as handle:
+    _debug(f"Downloading uv from {url}")
+    # Bandit B310: The download is restricted to HTTPS GitHub releases; the
+    # generated URL never uses file or custom schemes, so this network fetch is
+    # a deliberate and safe dependency bootstrap.
+    with urllib.request.urlopen(url) as response, open(archive_path, "wb") as handle:  # nosec B310
         shutil.copyfileobj(response, handle)
+    return archive_path
 
-    extracted_name: str | None = None
+
+def _resolve_uv_triple() -> str:
+    """Return the ``uv`` release triple matching the current system.
+
+    Returns:
+        str: Target triple representing the current platform.
+
+    Raises:
+        ProbeError: If either the architecture or platform is unsupported.
+    """
+
+    system = platform.system().lower()
+    machine_raw = platform.machine().lower()
+    machine = ARCH_ALIASES.get(machine_raw)
+    if machine is None:
+        raise ProbeError(f"Unsupported architecture: {platform.machine()}")
+    triple = UV_TRIPLES.get((system, machine))
+    if triple is None:
+        raise ProbeError(f"Unsupported platform: {system}-{machine}")
+    return triple
+
+
+def _extract_uv_binary(archive_path: Path) -> Path:
+    """Extract the ``uv`` binary from ``archive_path`` into the cache.
+
+    Args:
+        archive_path: Location of the downloaded ``uv`` tarball.
+
+    Returns:
+        Path: Final executable location inside ``UV_CACHE_DIR``.
+
+    Raises:
+        ProbeError: If the archive is missing a binary or contains unsafe
+        paths.
+    """
+
+    binary_member: tarfile.TarInfo | None = None
     with tarfile.open(archive_path, "r:gz") as tar:
-        binary_member = next((member for member in tar.getmembers() if member.name.endswith("/uv")), None)
-        if binary_member is None:
-            raise ProbeError("uv binary not found in archive")
-        extracted_name = binary_member.name
-        tar.extract(binary_member, path=UV_CACHE_DIR)
+        for candidate in tar.getmembers():
+            if not candidate.name.endswith("/uv"):
+                continue
+            candidate_path = Path(candidate.name)
+            if candidate_path.is_absolute() or PATH_TRAVERSAL_COMPONENT in candidate_path.parts:
+                raise ProbeError("Unsafe path in uv archive")
+            tar.extract(candidate, path=UV_CACHE_DIR)
+            binary_member = candidate
+            break
+    if binary_member is None:
+        raise ProbeError("uv binary not found in archive")
 
-    if extracted_name is None:  # pragma: no cover - defensive guard
-        raise ProbeError("uv archive extraction produced no binary name")
-
-    extracted_path = UV_CACHE_DIR / extracted_name
-    final_path = target
+    extracted_path = UV_CACHE_DIR / binary_member.name
+    parent = extracted_path.parent
+    final_path = UV_CACHE_DIR / "uv"
     extracted_path.rename(final_path)
-    extracted_parent = extracted_path.parent
-    if extracted_parent != UV_CACHE_DIR and extracted_parent.exists():
-        shutil.rmtree(extracted_parent)
-
-    final_path.chmod(final_path.stat().st_mode | stat.S_IEXEC)
-    return target
+    if parent != UV_CACHE_DIR and parent.exists():
+        shutil.rmtree(parent)
+    return final_path
 
 
 def _run_with_uv(

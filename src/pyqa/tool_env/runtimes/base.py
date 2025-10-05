@@ -8,10 +8,10 @@ import json
 import os
 import shutil
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from ...tools.base import Tool
 from ..constants import ToolCacheLayout
@@ -21,18 +21,32 @@ from ..versioning import VersionResolver
 
 
 @dataclass(frozen=True, slots=True)
+class RuntimePreferences:
+    """Toggle switches controlling runtime selection behaviour."""
+
+    project_mode: bool
+    system_preferred: bool
+    use_local_override: bool
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeEnvironment:
+    """Data describing filesystem locations for runtime execution."""
+
+    root: Path
+    cache_dir: Path
+    cache_layout: ToolCacheLayout
+    pyqa_root: Path
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeRequest:
     """Inputs describing how a tool command should be prepared."""
 
     tool: Tool
     command: tuple[str, ...]
-    root: Path
-    cache_dir: Path
-    project_mode: bool
-    system_preferred: bool
-    use_local_override: bool
-    cache_layout: ToolCacheLayout
-    pyqa_root: Path
+    environment: RuntimeEnvironment
+    preferences: RuntimePreferences
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,25 +82,27 @@ class RuntimeHandler(ABC):
     def prepare(self, request: RuntimeRequest) -> PreparedCommand:
         """Return a command prepared according to *request* parameters."""
 
+        environment = request.environment
+        preferences = request.preferences
         context = RuntimeContext(
             tool=request.tool,
             command=request.command,
-            root=request.root,
-            cache_dir=request.cache_dir,
-            cache_layout=request.cache_layout,
+            root=environment.root,
+            cache_dir=environment.cache_dir,
+            cache_layout=environment.cache_layout,
             target_version=desired_version(request.tool),
-            pyqa_root=request.pyqa_root,
+            pyqa_root=environment.pyqa_root,
         )
 
-        if request.use_local_override or request.tool.prefer_local:
+        if preferences.use_local_override or request.tool.prefer_local:
             return self._prepare_local(context)
 
-        if request.project_mode:
+        if preferences.project_mode:
             project_cmd = self._try_project(context)
             if project_cmd is not None:
                 return project_cmd
 
-        if request.system_preferred:
+        if preferences.system_preferred:
             system_cmd = self._try_system(context)
             if system_cmd is not None:
                 return system_cmd
@@ -125,7 +141,12 @@ class RuntimeHandler(ABC):
             env.update(overrides)
         return env
 
-    def _project_binary(self, context: RuntimeContext, *, subdir: str = "bin") -> PreparedCommand | None:
+    def _project_binary(
+        self,
+        context: RuntimeContext,
+        *,
+        subdir: str = "bin",
+    ) -> PreparedCommand | None:
         """Return a project binary command when ``subdir`` contains the executable."""
 
         binary_name = Path(context.executable).name
@@ -157,7 +178,12 @@ class RuntimeHandler(ABC):
             version = self._versions.capture(context.tool.version_command, env=capture_env)
         if not self._versions.is_compatible(version, context.target_version):
             return None
-        return PreparedCommand.from_parts(cmd=context.command, env=env, version=version, source="system")
+        return PreparedCommand.from_parts(
+            cmd=context.command,
+            env=env,
+            version=version,
+            source="system",
+        )
 
     @staticmethod
     def _prepend_path_environment(
@@ -180,23 +206,67 @@ class RuntimeHandler(ABC):
             env.update(extra)
         return env
 
+    def _prepare_cached_command(
+        self,
+        context: RuntimeContext,
+        ensure_binary: Callable[[RuntimeContext, str], Path],
+        build_env: Callable[[RuntimeContext], dict[str, str]],
+    ) -> PreparedCommand:
+        """Return a prepared command after provisioning a cached binary.
+
+        Args:
+            context: Runtime execution context.
+            ensure_binary: Callable that installs or retrieves the binary path
+                for the requested command.
+            build_env: Callable returning runtime environment variables for the
+                prepared command.
+
+        Returns:
+            PreparedCommand: Command configured to execute with cached tooling.
+        """
+
+        binary_name = Path(context.executable).name
+        binary_path = ensure_binary(context, binary_name)
+        command = context.command_list()
+        command[0] = str(binary_path)
+        env = build_env(context)
+        version = None
+        if context.tool.version_command:
+            version = self._versions.capture(
+                context.tool.version_command,
+                env=self._merge_env(env),
+            )
+        return PreparedCommand.from_parts(cmd=command, env=env, version=version, source="local")
+
     @staticmethod
     def _load_json(path: Path) -> dict[str, Any] | None:
         """Return JSON content from *path* or ``None`` when parsing fails."""
 
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            payload = json.loads(path.read_text(encoding="utf-8"))
         except (FileNotFoundError, json.JSONDecodeError):
             return None
+        if isinstance(payload, dict):
+            return cast(dict[str, Any], payload)
+        return None
 
     @staticmethod
     def _parse_json(text: str) -> dict[str, Any] | None:
         """Return JSON payload parsed from *text* or ``None`` when invalid."""
 
         try:
-            return json.loads(text)
+            payload = json.loads(text)
         except json.JSONDecodeError:
             return None
+        if isinstance(payload, dict):
+            return cast(dict[str, Any], payload)
+        return None
 
 
-__all__ = ["RuntimeContext", "RuntimeHandler", "RuntimeRequest"]
+__all__ = [
+    "RuntimeContext",
+    "RuntimeEnvironment",
+    "RuntimeHandler",
+    "RuntimePreferences",
+    "RuntimeRequest",
+]

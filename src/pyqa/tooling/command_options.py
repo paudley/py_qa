@@ -35,6 +35,7 @@ __all__ = [
 
 _STRICT_PROFILE_LABEL: Final[str] = "strict"
 _LENIENT_PROFILE_LABEL: Final[str] = "lenient"
+_OUTPUT_FLAG: Final[str] = "--output"
 
 
 class OptionKind(str, Enum):
@@ -125,12 +126,11 @@ class _PathOptionBehavior:
             value: Raw option value containing path(s).
         """
 
-        entries: Sequence[JSONValue]
-        entries = (
-            cast(Sequence[JSONValue], value)
-            if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray))
-            else (value,)
-        )
+        entries: tuple[JSONValue, ...]
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            entries = tuple(value)
+        else:
+            entries = (value,)
         append_value = partial(_append_flagged, command, flag=self.flag)
         for entry in entries:
             if entry is None:
@@ -377,12 +377,12 @@ class _OptionCommandStrategy(CommandBuilder):
         if self.append_files and ctx.files:
             files = [str(path) for path in ctx.files]
             command.extend(files)
-            if "--output" in command:
-                index = command.index("--output")
+            if _OUTPUT_FLAG in command:
+                index = command.index(_OUTPUT_FLAG)
                 # Relocate the output flag after appended files so remark-style
                 # fixers receive their inputs before the flag.
                 command.pop(index)
-                command.append("--output")
+                command.append(_OUTPUT_FLAG)
         return tuple(command)
 
 
@@ -552,6 +552,7 @@ def _parse_option_names(raw: Any, context: str) -> tuple[str, ...]:
 
     """
 
+    names: tuple[str, ...]
     if isinstance(raw, str):
         names = (raw,)
     elif isinstance(raw, Sequence) and not isinstance(raw, (str, bytes, bytearray)):
@@ -909,7 +910,11 @@ _DEFAULT_REFERENCE_LOOKUP: Mapping[str, Callable[[ToolContext], JSONValue | None
     "execution.line_length": lambda ctx: ctx.cfg.execution.line_length,
     "complexity.max_complexity": lambda ctx: ctx.cfg.complexity.max_complexity,
     "complexity.max_arguments": lambda ctx: ctx.cfg.complexity.max_arguments,
-    "severity.bandit_level": lambda ctx: getattr(ctx.cfg.severity.bandit_level, "value", ctx.cfg.severity.bandit_level),
+    "severity.bandit_level": lambda ctx: getattr(
+        ctx.cfg.severity.bandit_level,
+        "value",
+        ctx.cfg.severity.bandit_level,
+    ),
     "severity.bandit_confidence": lambda ctx: getattr(
         ctx.cfg.severity.bandit_confidence,
         "value",

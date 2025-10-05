@@ -138,7 +138,7 @@ def _collect_severity_overrides(
     """Return severity overrides derived from CLI arguments."""
 
     sensitivity = None
-    if has_option(LintOptionKey.SENSITIVITY) and options.sensitivity:
+    if has_option(LintOptionKey.SENSITIVITY) and options.sensitivity is not None:
         sensitivity = coerce_enum_value(
             options.sensitivity,
             SensitivityLevel,
@@ -146,7 +146,7 @@ def _collect_severity_overrides(
         )
 
     bandit_level = None
-    if has_option(LintOptionKey.BANDIT_SEVERITY) and options.bandit_severity:
+    if has_option(LintOptionKey.BANDIT_SEVERITY) and options.bandit_severity is not None:
         bandit_level = coerce_enum_value(
             options.bandit_severity,
             BanditLevel,
@@ -154,7 +154,7 @@ def _collect_severity_overrides(
         )
 
     bandit_confidence = None
-    if has_option(LintOptionKey.BANDIT_CONFIDENCE) and options.bandit_confidence:
+    if has_option(LintOptionKey.BANDIT_CONFIDENCE) and options.bandit_confidence is not None:
         bandit_confidence = coerce_enum_value(
             options.bandit_confidence,
             BanditConfidence,
@@ -195,7 +195,7 @@ def _collect_strictness_overrides(
     """Return strictness overrides derived from CLI arguments."""
 
     type_checking = None
-    if has_option(LintOptionKey.TYPE_CHECKING) and options.type_checking:
+    if has_option(LintOptionKey.TYPE_CHECKING) and options.type_checking is not None:
         type_checking = coerce_enum_value(
             options.type_checking,
             StrictnessLevel,

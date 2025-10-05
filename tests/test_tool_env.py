@@ -238,7 +238,7 @@ def test_go_runtime_installs_when_system_too_old(
     assert result.source == "local"
     assert result.cmd[0] == str(fake_binary)
     layout = cache_layout(tmp_path)
-    assert str(layout.go_bin_dir) in result.env.get("PATH", "")
+    assert str(layout.go.bin_dir) in result.env.get("PATH", "")
 
 
 def test_go_runtime_prefers_system_when_version_ok(
@@ -464,7 +464,7 @@ def test_rust_runtime_installs_when_system_too_old(
     assert result.source == "local"
     assert result.cmd[0] == str(fake_binary)
     layout = cache_layout(tmp_path)
-    assert str(layout.rust_bin_dir) not in result.env.get("PATH", "")
+    assert str(layout.rust.bin_dir) not in result.env.get("PATH", "")
 
 
 def test_rust_runtime_prefers_system_when_version_ok(

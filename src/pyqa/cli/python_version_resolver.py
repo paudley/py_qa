@@ -38,10 +38,7 @@ def resolve_python_version(
 
     if cli_specified:
         normalized = _normalize_python_version(current.python_version)
-        return cast(
-            ExecutionConfig,
-            current.model_copy(update={"python_version": normalized}, deep=True),
-        )
+        return current.model_copy(update={"python_version": normalized}, deep=True)
 
     forced = (
         _python_version_from_pyproject(project_root)
@@ -49,10 +46,7 @@ def resolve_python_version(
         or _normalize_python_version(current.python_version)
         or _default_interpreter_python_version()
     )
-    return cast(
-        ExecutionConfig,
-        current.model_copy(update={"python_version": forced}, deep=True),
-    )
+    return current.model_copy(update={"python_version": forced}, deep=True)
 
 
 def _default_interpreter_python_version() -> str:
@@ -171,11 +165,11 @@ def _load_pyproject_data(path: Path) -> Mapping[str, object] | None:
     except OSError:
         return None
     try:
-        data = tomllib.loads(raw)
+        parsed = tomllib.loads(raw)
     except tomllib.TOMLDecodeError:
         return None
-    if isinstance(data, dict):
-        return data
+    if isinstance(parsed, dict):
+        return cast(Mapping[str, object], parsed)
     return None
 
 

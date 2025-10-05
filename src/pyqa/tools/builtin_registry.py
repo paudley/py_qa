@@ -13,7 +13,7 @@ from typing import Any, Final, Literal, cast
 from ..paths import get_pyqa_root
 from ..tooling import CatalogIntegrityError, CatalogSnapshot, ToolCatalogLoader
 from ..tooling.catalog.model_runtime import SUPPORTED_RUNTIME_TYPES
-from ..tooling.catalog.models import StrategyDefinition
+from ..tooling.catalog.model_strategy import StrategyDefinition
 from .base import (
     CommandBuilder,
     DeferredCommand,

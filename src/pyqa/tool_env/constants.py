@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
@@ -31,126 +31,160 @@ PROJECT_MARKER_FILENAME: Final[str] = "project-installed.json"
 
 
 @dataclass(frozen=True, slots=True)
+class RuntimeCachePaths:
+    """Filesystem locations associated with a cached runtime."""
+
+    cache_dir: Path
+    bin_dir: Path
+    meta_dir: Path
+    work_dir: Path | None = None
+
+    def directories(self) -> tuple[Path, ...]:
+        """Return directories that should exist for the runtime cache.
+
+        Returns:
+            tuple[Path, ...]: Ordered cache directories for the runtime.
+        """
+
+        entries: list[Path] = [self.cache_dir, self.bin_dir, self.meta_dir]
+        if self.work_dir is not None:
+            entries.append(self.work_dir)
+        return tuple(entries)
+
+
+@dataclass(frozen=True, slots=True)
 class ToolCacheLayout:
     """Filesystem layout describing per-run tool cache directories."""
 
     cache_dir: Path
+    _runtime_paths: dict[str, RuntimeCachePaths] = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Populate derived cache directory paths for the layout.
+
+        Returns:
+            None: Initialisation mutates derived attributes for runtime lookup.
+        """
+
+        runtimes = {
+            "go": RuntimeCachePaths(
+                cache_dir=self.tools_root / GO_SUBDIR,
+                bin_dir=self.tools_root / GO_SUBDIR / GO_BIN_SUBDIR,
+                meta_dir=self.tools_root / GO_SUBDIR / GO_META_SUBDIR,
+                work_dir=self.tools_root / GO_SUBDIR / GO_WORK_SUBDIR,
+            ),
+            "lua": RuntimeCachePaths(
+                cache_dir=self.tools_root / LUA_SUBDIR,
+                bin_dir=self.tools_root / LUA_SUBDIR / LUA_BIN_SUBDIR,
+                meta_dir=self.tools_root / LUA_SUBDIR / LUA_META_SUBDIR,
+                work_dir=self.tools_root / LUA_SUBDIR / LUA_WORK_SUBDIR,
+            ),
+            "rust": RuntimeCachePaths(
+                cache_dir=self.tools_root / RUST_SUBDIR,
+                bin_dir=self.tools_root / RUST_SUBDIR / RUST_BIN_SUBDIR,
+                meta_dir=self.tools_root / RUST_SUBDIR / RUST_META_SUBDIR,
+                work_dir=self.tools_root / RUST_SUBDIR / RUST_WORK_SUBDIR,
+            ),
+            "perl": RuntimeCachePaths(
+                cache_dir=self.tools_root / PERL_SUBDIR,
+                bin_dir=self.tools_root / PERL_SUBDIR / PERL_BIN_SUBDIR,
+                meta_dir=self.tools_root / PERL_SUBDIR / PERL_META_SUBDIR,
+            ),
+        }
+        object.__setattr__(self, "_runtime_paths", runtimes)
 
     @property
     def tools_root(self) -> Path:
+        """Return the root directory containing cached tool environments."""
+
         return self.cache_dir / TOOLS_SUBDIR
 
     @property
     def uv_dir(self) -> Path:
+        """Return the directory reserved for the ``uv`` installer."""
+
         return self.tools_root / UV_SUBDIR
 
     @property
     def node_cache_dir(self) -> Path:
+        """Return the cache directory used for npm/node tooling."""
+
         return self.tools_root / NODE_SUBDIR
 
     @property
     def npm_cache_dir(self) -> Path:
+        """Return the cache directory used for npm artefacts."""
+
         return self.tools_root / NPM_SUBDIR
 
     @property
     def project_marker(self) -> Path:
+        """Return the modern project marker file path."""
+
         return self.tools_root / PROJECT_MARKER_FILENAME
 
     @property
     def legacy_project_marker(self) -> Path:
+        """Return the legacy project marker file path."""
+
         return self.cache_dir / PROJECT_MARKER_FILENAME
 
     @property
-    def go_cache_dir(self) -> Path:
-        return self.tools_root / GO_SUBDIR
+    def go(self) -> RuntimeCachePaths:
+        """Return cache paths for Go tooling."""
+
+        return self._runtime_paths["go"]
 
     @property
-    def go_bin_dir(self) -> Path:
-        return self.go_cache_dir / GO_BIN_SUBDIR
+    def lua(self) -> RuntimeCachePaths:
+        """Return cache paths for Lua tooling."""
+
+        return self._runtime_paths["lua"]
 
     @property
-    def go_meta_dir(self) -> Path:
-        return self.go_cache_dir / GO_META_SUBDIR
+    def rust(self) -> RuntimeCachePaths:
+        """Return cache paths for Rust tooling."""
+
+        return self._runtime_paths["rust"]
 
     @property
-    def go_work_dir(self) -> Path:
-        return self.go_cache_dir / GO_WORK_SUBDIR
+    def perl(self) -> RuntimeCachePaths:
+        """Return cache paths for Perl tooling."""
 
-    @property
-    def lua_cache_dir(self) -> Path:
-        return self.tools_root / LUA_SUBDIR
-
-    @property
-    def lua_bin_dir(self) -> Path:
-        return self.lua_cache_dir / LUA_BIN_SUBDIR
-
-    @property
-    def lua_meta_dir(self) -> Path:
-        return self.lua_cache_dir / LUA_META_SUBDIR
-
-    @property
-    def lua_work_dir(self) -> Path:
-        return self.lua_cache_dir / LUA_WORK_SUBDIR
-
-    @property
-    def rust_cache_dir(self) -> Path:
-        return self.tools_root / RUST_SUBDIR
-
-    @property
-    def rust_bin_dir(self) -> Path:
-        return self.rust_cache_dir / RUST_BIN_SUBDIR
-
-    @property
-    def rust_meta_dir(self) -> Path:
-        return self.rust_cache_dir / RUST_META_SUBDIR
-
-    @property
-    def rust_work_dir(self) -> Path:
-        return self.rust_cache_dir / RUST_WORK_SUBDIR
-
-    @property
-    def perl_cache_dir(self) -> Path:
-        return self.tools_root / PERL_SUBDIR
-
-    @property
-    def perl_bin_dir(self) -> Path:
-        return self.perl_cache_dir / PERL_BIN_SUBDIR
-
-    @property
-    def perl_meta_dir(self) -> Path:
-        return self.perl_cache_dir / PERL_META_SUBDIR
+        return self._runtime_paths["perl"]
 
     @property
     def directories(self) -> tuple[Path, ...]:
-        """Return directories that should exist for the cache layout."""
+        """Return cache directories that must exist for the layout.
+
+        Returns:
+            tuple[Path, ...]: Ordered, unique directories that runtimes rely on
+            during tool installation and execution.
+        """
 
         paths: list[Path] = [
             self.tools_root,
             self.uv_dir,
             self.node_cache_dir,
             self.npm_cache_dir,
-            self.go_cache_dir,
-            self.go_bin_dir,
-            self.go_meta_dir,
-            self.go_work_dir,
-            self.lua_cache_dir,
-            self.lua_bin_dir,
-            self.lua_meta_dir,
-            self.lua_work_dir,
-            self.rust_cache_dir,
-            self.rust_bin_dir,
-            self.rust_meta_dir,
-            self.rust_work_dir,
-            self.perl_cache_dir,
-            self.perl_bin_dir,
-            self.perl_meta_dir,
         ]
+        for runtime_paths in self._runtime_paths.values():
+            paths.extend(runtime_paths.directories())
         # Deduplicate while preserving order
         seen: set[Path] = set()
-        return tuple(path for path in paths if not (path in seen or seen.add(path)))
+        unique: list[Path] = []
+        for path in paths:
+            if path not in seen:
+                unique.append(path)
+                seen.add(path)
+        return tuple(unique)
 
     def ensure_directories(self) -> None:
-        """Create required cache directories when absent."""
+        """Create required cache directories when absent.
+
+        Returns:
+            None: This method does not return a value.
+        """
 
         for path in self.directories:
             path.mkdir(parents=True, exist_ok=True)
@@ -171,6 +205,7 @@ def cache_layout(cache_dir: Path) -> ToolCacheLayout:
 
 __all__ = [
     "PROJECT_MARKER_FILENAME",
+    "RuntimeCachePaths",
     "ToolCacheLayout",
     "cache_layout",
 ]

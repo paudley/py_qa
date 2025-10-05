@@ -127,7 +127,10 @@ def build_default_tool_filters() -> ToolFilters:
         _extend_filter_patterns(merged, tool, patterns)
     for tool, patterns in catalog_general_suppressions().items():
         _extend_filter_patterns(merged, tool, patterns)
-    return {tool: list(dict.fromkeys(patterns)) for tool, patterns in merged.items()}
+    deduped: ToolFilters = {}
+    for tool, patterns in merged.items():
+        deduped[tool] = list(dict.fromkeys(patterns))
+    return deduped
 
 
 def _extend_filter_patterns(

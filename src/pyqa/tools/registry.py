@@ -40,11 +40,6 @@ class ToolRegistry(Mapping[str, Tool]):
         self._by_language.clear()
         self._ordered = ()
 
-    def get(self, key: str, default: Tool | None = None) -> Tool | None:
-        """Return the tool named *key* if present; otherwise return *default*."""
-
-        return self._tools.get(key, default)
-
     def try_get(self, name: str) -> Tool | None:
         """Return the tool named *name* when registered, otherwise ``None``."""
 

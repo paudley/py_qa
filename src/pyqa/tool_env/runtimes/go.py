@@ -30,18 +30,11 @@ class GoRuntime(RuntimeHandler):
 
         if not shutil.which("go"):
             raise RuntimeError("Go toolchain is required to install go-based linters")
-
-        binary_name = Path(context.executable).name
-        binary_path = self._ensure_local_tool(context, binary_name)
-
-        cmd = context.command_list()
-        cmd[0] = str(binary_path)
-
-        env = self._go_env(context)
-        version = None
-        if context.tool.version_command:
-            version = self._versions.capture(context.tool.version_command, env=self._merge_env(env))
-        return PreparedCommand.from_parts(cmd=cmd, env=env, version=version, source="local")
+        return self._prepare_cached_command(
+            context,
+            self._ensure_local_tool,
+            self._go_env,
+        )
 
     def _ensure_local_tool(self, context: RuntimeContext, binary_name: str) -> Path:
         """Install or reuse a cached Go binary for ``tool``."""
@@ -52,25 +45,28 @@ class GoRuntime(RuntimeHandler):
         requirement = f"{module}@{version_spec}"
         slug = _slugify(requirement)
         layout = context.cache_layout
-        meta_file = layout.go_meta_dir / f"{slug}.json"
-        binary = layout.go_bin_dir / binary_name
+        meta_file = layout.go.meta_dir / f"{slug}.json"
+        binary = layout.go.bin_dir / binary_name
 
         if binary.exists() and meta_file.exists():
             meta = self._load_json(meta_file)
             if meta and meta.get("requirement") == requirement:
                 return binary
 
-        layout.go_meta_dir.mkdir(parents=True, exist_ok=True)
-        layout.go_bin_dir.mkdir(parents=True, exist_ok=True)
-        (layout.go_work_dir / "gopath").mkdir(parents=True, exist_ok=True)
-        (layout.go_work_dir / "gocache").mkdir(parents=True, exist_ok=True)
-        (layout.go_work_dir / "modcache").mkdir(parents=True, exist_ok=True)
+        layout.go.meta_dir.mkdir(parents=True, exist_ok=True)
+        layout.go.bin_dir.mkdir(parents=True, exist_ok=True)
+        work_root = layout.go.work_dir
+        if work_root is None:  # pragma: no cover - defensive safeguard
+            raise RuntimeError("Go runtime cache layout is missing a work directory")
+        (work_root / "gopath").mkdir(parents=True, exist_ok=True)
+        (work_root / "gocache").mkdir(parents=True, exist_ok=True)
+        (work_root / "modcache").mkdir(parents=True, exist_ok=True)
 
         env = os.environ.copy()
-        env.setdefault("GOBIN", str(layout.go_bin_dir))
-        env.setdefault("GOCACHE", str(layout.go_work_dir / "gocache"))
-        env.setdefault("GOMODCACHE", str(layout.go_work_dir / "modcache"))
-        env.setdefault("GOPATH", str(layout.go_work_dir / "gopath"))
+        env.setdefault("GOBIN", str(layout.go.bin_dir))
+        env.setdefault("GOCACHE", str(work_root / "gocache"))
+        env.setdefault("GOMODCACHE", str(work_root / "modcache"))
+        env.setdefault("GOPATH", str(work_root / "gopath"))
 
         run_command(
             ["go", "install", requirement],
@@ -98,7 +94,7 @@ class GoRuntime(RuntimeHandler):
     def _go_env(context: RuntimeContext) -> dict[str, str]:
         """Return environment variables required for executing Go tools."""
         return RuntimeHandler._prepend_path_environment(
-            bin_dir=context.cache_layout.go_bin_dir,
+            bin_dir=context.cache_layout.go.bin_dir,
             root=context.root,
         )
 

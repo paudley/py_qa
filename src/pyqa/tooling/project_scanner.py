@@ -240,6 +240,7 @@ def build_project_scanner(plain_config: Mapping[str, Any]) -> CommandBuilder:
             "command_project_scanner: 'exclude' must be an object when provided",
         )
     exclude_settings_value = exclude_config.get("settings", ())
+    exclude_settings: tuple[str, ...]
     if isinstance(exclude_settings_value, str):
         exclude_settings = (exclude_settings_value,)
     elif isinstance(exclude_settings_value, Sequence) and not isinstance(
@@ -270,7 +271,7 @@ def build_project_scanner(plain_config: Mapping[str, Any]) -> CommandBuilder:
         )
 
     targets_config = plain_config.get("targets")
-    target_plan = None
+    target_plan: _ProjectTargetPlan | None = None
     if targets_config is not None:
         target_plan = _parse_project_target_plan(targets_config)
 
@@ -292,6 +293,7 @@ def _parse_project_target_plan(entry: Any) -> _ProjectTargetPlan:
         raise CatalogIntegrityError("command_project_scanner.targets must be an object")
 
     settings_value = entry.get("settings", ())
+    settings: tuple[str, ...]
     if isinstance(settings_value, str):
         settings = (settings_value,)
     elif isinstance(settings_value, Sequence) and not isinstance(
@@ -308,6 +310,7 @@ def _parse_project_target_plan(entry: Any) -> _ProjectTargetPlan:
     include_explicit = bool(entry.get("includeDiscoveryExplicit", False))
 
     fallback_value = entry.get("fallback", ())
+    fallback_paths: tuple[str, ...]
     if isinstance(fallback_value, str):
         fallback_paths = (fallback_value,)
     elif isinstance(fallback_value, Sequence) and not isinstance(
@@ -325,7 +328,7 @@ def _parse_project_target_plan(entry: Any) -> _ProjectTargetPlan:
 
     prefix_value = entry.get("prefix")
     if prefix_value is None:
-        prefix = None
+        prefix: str | None = None
     elif isinstance(prefix_value, str):
         prefix = prefix_value
     else:
