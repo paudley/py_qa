@@ -19,6 +19,17 @@ specification as a standalone project.
   module: clear inputs/outputs, interface-first wiring, contract tests.
 * Tooling catalog code must remain pyqa-agnostic so it can ship independently.
 
+## Coding RULES
+
+* When editing files, make sure that all functions have valid and comprehensive google-style comments and that we are using SOLID principles where possible.
+* Keep an eye out for overly complex functions that could benefit from being broken up into smaller, focussed and robust helpers (or where you can use existing helpers).
+* Try to use the strictest types possible and avoid Any, object and optional None if possible.
+* For functions that have more than 5 args or use kwargs, prefer using a paramater dataclass instead.
+* Use typing.Literal, typing.Final, abc.\* and enum where possible to improve code.
+* Consider adding dunder methods to classes where it makes them more useful to callers.i
+* The use of lint warning suppression commments is FORBIDDEN, please remove them when found unless they are acompantied with a robust explanation - you MUST fix lint warnings by fixing code.
+* Apply functools where profitable.
+
 ## Phase 0 – Readiness & Tooling (1 sprint)
 
 1. **Inventory & ownership**

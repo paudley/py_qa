@@ -52,7 +52,7 @@ def _discover_entry_points(group: str) -> Sequence[_EntryPointCallable]:
     for entry in selected:
         try:
             callables.append(entry.load())
-        except (AttributeError, ImportError, ValueError):
+        except (AttributeError, ImportError, ValueError, RuntimeError):
             continue
     return tuple(callables)
 

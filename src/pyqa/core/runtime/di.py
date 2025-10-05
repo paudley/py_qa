@@ -10,6 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from ...cache import ResultCache, build_cache_context
 from ...console import console_manager
 from ...plugins import (
     load_all_plugins,
@@ -83,7 +84,12 @@ class ServiceContainer:
 
 
 def register_default_services(container: ServiceContainer) -> None:
-    """Populate ``container`` with built-in service factories."""
+    """Populate ``container`` with built-in service factories.
+
+    Args:
+        container: Service container receiving the default registrations.
+
+    """
 
     container.register(
         "console_factory",
@@ -98,6 +104,18 @@ def register_default_services(container: ServiceContainer) -> None:
     container.register(
         "serializer",
         lambda _: _JsonSerializer(),
+    )
+
+    container.register(
+        "cache_context_builder",
+        lambda _: build_cache_context,
+        singleton=False,
+    )
+
+    container.register(
+        "result_cache_factory",
+        lambda _: ResultCache,
+        singleton=False,
     )
 
     container.register(

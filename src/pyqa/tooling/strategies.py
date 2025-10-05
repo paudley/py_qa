@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal, cast
 
+from ..discovery.planners import build_project_scanner
+from ..discovery.rules import is_under_any, normalize_path_requirement, path_matches_requirements
 from ..parsers.base import JsonParser, JsonTransform, TextParser, TextTransform
 from ..tools.base import CommandBuilder, ToolContext
 from ..tools.builtin_helpers import _resolve_path, download_tool_artifact
@@ -23,12 +25,6 @@ from .command_options import (
 )
 from .json_diagnostics import JsonDiagnosticExtractor
 from .loader import CatalogIntegrityError
-from .project_scanner import (
-    _is_under_any,
-    _normalise_path_requirement,
-    _path_matches_requirements,
-    build_project_scanner,
-)
 
 TargetSelectorMode = Literal["filePattern"]
 _TARGET_SELECTOR_MODE_FILE_PATTERN: Final[TargetSelectorMode] = "filePattern"
@@ -355,7 +351,7 @@ class _TargetSelector:
                 continue
             if self.contains and not any(fragment in text for fragment in self.contains):
                 continue
-            if self.path_requires and not _path_matches_requirements(
+            if self.path_requires and not path_matches_requirements(
                 candidate,
                 ctx.root,
                 self.path_requires,
@@ -369,7 +365,7 @@ class _TargetSelector:
         root = ctx.root
         if self.fallback_directory:
             fallback_path = _resolve_path(root, self.fallback_directory)
-            if fallback_path.exists() and not _is_under_any(fallback_path, excluded):
+            if fallback_path.exists() and not is_under_any(fallback_path, excluded):
                 return [str(fallback_path)]
 
         if self.default_to_root:
@@ -440,7 +436,7 @@ def _parse_target_selector(entry: Any, *, context: str) -> _TargetSelector:
         field_name="pathMustInclude",
         context=context,
     )
-    path_requires = tuple(requirement for item in raw_requires if (requirement := _normalise_path_requirement(item)))
+    path_requires = tuple(requirement for item in raw_requires if (requirement := normalize_path_requirement(item)))
 
     fallback_directory = _coerce_optional_non_empty_string(
         entry.get("fallbackDirectory"),

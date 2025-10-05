@@ -33,7 +33,7 @@ from pyqa.execution.action_executor import (
     ExecutionState,
     OutcomeRecord,
 )
-from pyqa.execution.cache_context import CacheContext
+from pyqa.cache.context import CacheContext
 from pyqa.models import RawDiagnostic, ToolOutcome
 from pyqa.tools.base import DeferredCommand, ToolAction, ToolContext
 

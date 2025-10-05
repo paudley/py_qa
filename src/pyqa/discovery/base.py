@@ -15,37 +15,26 @@ from ..config import FileDiscoveryConfig
 class DiscoveryStrategy(Protocol):
     """Protocol implemented by discovery strategies.
 
-    Implementers should provide lightweight file discovery routines that do
-    not mutate global state and are safe to execute repeatedly.
+    Concrete implementations should provide a lightweight :meth:`discover`
+    method that yields resolved file paths without mutating global state.
     """
 
     def discover(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
-        """Yield discovered paths for ``root`` using ``config``.
+        """Yield resolved paths for ``root`` using ``config``.
 
         Args:
-            config: File discovery configuration provided by the user.
-            root: Repository root against which relative paths are resolved.
+            config: Discovery configuration supplied by the caller.
+            root: Repository root used to resolve relative entries.
 
         Returns:
             Iterable[Path]: Iterator over resolved filesystem paths.
-
-        Raises:
-            NotImplementedError: Always raised; method must be provided by
-                concrete strategy implementations.
         """
 
         raise NotImplementedError
 
     def __call__(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
-        """Invoke :meth:`discover` allowing strategies to be callable.
+        """Delegate to :meth:`discover` enabling callable semantics."""
 
-        Args:
-            config: File discovery configuration provided by the user.
-            root: Repository root against which relative paths are resolved.
-
-        Returns:
-            Iterable[Path]: Iterator over resolved filesystem paths.
-        """
         raise NotImplementedError
 
 

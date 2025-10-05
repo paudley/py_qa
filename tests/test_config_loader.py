@@ -10,6 +10,7 @@ import pytest
 
 from pyqa.config import ConfigError
 from pyqa.config_loader import ConfigLoader, generate_config_schema, load_config
+from pyqa.interfaces.config import ConfigSource
 
 
 def test_load_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -162,6 +163,28 @@ pr_summary_out = "${REPORT_DIR}/summary.md"
     cfg = ConfigLoader.for_root(project_root).load()
 
     assert cfg.output.pr_summary_out == (project_root / "artifacts/summary.md").resolve()
+
+
+class _StubConfigSource(ConfigSource):
+    def __init__(self, payload: dict[str, object], name: str = "stub") -> None:
+        self.name = name
+        self._payload = payload
+
+    def load(self) -> dict[str, object]:
+        return self._payload
+
+    def describe(self) -> str:
+        return f"Stub source {self.name}"
+
+
+def test_config_loader_accepts_protocol_sources(tmp_path: Path) -> None:
+    source = _StubConfigSource({"execution": {"jobs": 5}})
+    loader = ConfigLoader(project_root=tmp_path, sources=[source])
+
+    result = loader.load_with_trace()
+
+    assert result.config.execution.jobs == 5
+    assert source.name in result.snapshots
 
 
 def test_pyproject_tool_section_is_loaded(tmp_path: Path) -> None:

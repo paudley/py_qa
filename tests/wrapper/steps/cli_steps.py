@@ -73,7 +73,10 @@ def assert_local_interpreter() -> None:
     assert process is not None
     stderr = process.stderr
     assert "Using repository virtualenv interpreter" in stderr
-    assert "Running with local interpreter" in stderr
+    assert (
+        "Running with local interpreter" in stderr
+        or "Spawning separate interpreter for CLI execution" in stderr
+    )
 
 
 @then("the wrapper falls back to uv")

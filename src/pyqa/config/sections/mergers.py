@@ -12,7 +12,7 @@ from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from .config import (
+from ..models import (
     CleanConfig,
     ConfigError,
     DedupeConfig,
@@ -23,7 +23,7 @@ from .config import (
     QualityConfigSection,
     UpdateConfig,
 )
-from .config_utils import (
+from ..utils import (
     _coerce_iterable,
     _coerce_optional_int,
     _coerce_string_sequence,

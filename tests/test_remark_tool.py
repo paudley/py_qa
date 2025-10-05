@@ -29,7 +29,7 @@ from pyqa.execution.action_executor import (
     ActionInvocation,
     ExecutionEnvironment,
 )
-from pyqa.execution.cache_context import CacheContext
+from pyqa.cache.context import CacheContext
 from pyqa.tooling import ToolCatalogLoader
 from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext

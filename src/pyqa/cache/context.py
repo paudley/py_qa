@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Final
 
 from ..config import Config
-from ..execution.cache import CachedEntry, CacheRequest, ResultCache
-from ..tool_versions import load_versions as _load_versions
-from ..tool_versions import save_versions as _save_versions
+from .result_store import CachedEntry, CacheRequest, ResultCache
+from .tool_versions import load_versions as _load_versions
+from .tool_versions import save_versions as _save_versions
 
 _HASH_ENCODING: Final[str] = "utf-8"
 

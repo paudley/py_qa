@@ -20,6 +20,7 @@ from rich.progress import (
 from rich.text import Text
 
 from ..console import console_manager
+from ..core.runtime import ServiceResolutionError
 from ._lint_literals import OUTPUT_MODE_CONCISE
 
 ProgressStatusLiteral = Literal[
@@ -92,7 +93,14 @@ class ExecutionProgressController:
         if not self.enabled:
             return
 
-        console = console_manager.get(color=config.output.color, emoji=config.output.emoji)
+        console_factory = console_manager.get
+        services = getattr(self.runtime, "services", None)
+        if services is not None:
+            try:
+                console_factory = services.resolve("console_factory")
+            except ServiceResolutionError:
+                console_factory = console_manager.get
+        console = console_factory(color=config.output.color, emoji=config.output.emoji)
         progress = self.progress_factory(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),

@@ -15,11 +15,11 @@ from subprocess import CompletedProcess
 from textwrap import shorten
 from typing import Final, Protocol, runtime_checkable
 
+from ..cache.context import CacheContext
+from ..cache.result_store import CacheRequest
 from ..config import Config
 from ..context import CONTEXT_RESOLVER
 from ..diagnostics import normalize_diagnostics
-from ..execution.cache import CacheRequest
-from ..execution.cache_context import CacheContext
 from ..execution.diagnostic_filter import filter_diagnostics
 from ..filesystem.paths import normalize_path_key
 from ..logging import warn

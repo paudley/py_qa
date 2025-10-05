@@ -15,7 +15,9 @@ from typing import Final, Literal, cast
 
 from ..analysis import apply_change_impact, apply_suppression_hints, build_refactor_navigator
 from ..annotations import AnnotationEngine
+from ..cache.context import build_cache_context, load_cached_outcome, save_versions, update_tool_version
 from ..config import Config
+from ..core.runtime import ServiceContainer, ServiceResolutionError
 from ..diagnostics import build_severity_rules, dedupe_outcomes
 from ..discovery.base import SupportsDiscovery
 from ..logging import warn
@@ -34,7 +36,6 @@ from .action_executor import (
     ScheduledAction,
     wrap_runner,
 )
-from .cache_context import build_cache_context, load_cached_outcome, save_versions, update_tool_version
 from .runtime import discover_files, filter_files_for_tool, prepare_runtime
 from .tool_selection import ToolSelector
 from .worker import run_command
@@ -73,6 +74,7 @@ class OrchestratorDeps:
     runner: RunnerCallable | None = None
     hooks: OrchestratorHooks | None = None
     cmd_preparer: CommandPreparationFn | None = None
+    services: ServiceContainer | None = None
 
 
 @dataclass(frozen=True)
@@ -82,6 +84,15 @@ class OrchestratorOverrides:
     runner: RunnerCallable | None = None
     hooks: OrchestratorHooks | None = None
     cmd_preparer: CommandPreparationFn | None = None
+    services: ServiceContainer | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeContext:
+    """Internal container bundling registry and discovery collaborators."""
+
+    registry: ToolRegistry
+    discovery: SupportsDiscovery
 
 
 class Orchestrator:
@@ -110,7 +121,14 @@ class Orchestrator:
         if deps is not None:
             if any(
                 value is not None
-                for value in (registry, discovery, overrides.runner, overrides.hooks, overrides.cmd_preparer)
+                for value in (
+                    registry,
+                    discovery,
+                    overrides.runner,
+                    overrides.hooks,
+                    overrides.cmd_preparer,
+                    overrides.services,
+                )
             ):
                 raise TypeError("Pass either 'deps' or explicit overrides, not both")
             registry = deps.registry
@@ -118,25 +136,27 @@ class Orchestrator:
             final_runner = deps.runner or overrides.runner
             final_hooks = deps.hooks or overrides.hooks
             final_preparer = deps.cmd_preparer or overrides.cmd_preparer
+            services = deps.services
         else:
             final_runner = overrides.runner
             final_hooks = overrides.hooks
             final_preparer = overrides.cmd_preparer
+            services = overrides.services
         if registry is None or discovery is None:
             raise TypeError("Orchestrator requires 'registry' and 'discovery' dependencies")
 
-        self._registry = registry
-        self._discovery = discovery
+        self._context = _RuntimeContext(registry=registry, discovery=discovery)
         base_runner = final_runner or _build_default_runner()
         self._runner = base_runner if isinstance(base_runner, RunnerCallable) else wrap_runner(base_runner)
         self._hooks = final_hooks or OrchestratorHooks()
+        self._services: ServiceContainer | None = services
         preparer = final_preparer
         if preparer is None:
             default_preparer = CommandPreparer()
             preparer = default_preparer.prepare_request
         prepare_callable = self._resolve_preparer(preparer)
         self._prepare_command = self._coerce_preparer(prepare_callable)
-        self._selector = ToolSelector(self._registry)
+        self._selector = ToolSelector(self._context.registry)
         self._executor = ActionExecutor(self._runner, self._hooks.after_tool)
 
     def run(self, cfg: Config, *, root: Path | None = None) -> RunResult:
@@ -225,9 +245,15 @@ class Orchestrator:
         """
 
         root_path = prepare_runtime(root)
-        matched_files = discover_files(self._discovery, cfg, root_path)
+        matched_files = discover_files(self._context.discovery, cfg, root_path)
         severity_rules = build_severity_rules(cfg.severity_rules)
-        cache_ctx = build_cache_context(cfg, root_path)
+        cache_builder = build_cache_context
+        if self._services is not None:
+            try:
+                cache_builder = self._services.resolve("cache_context_builder")
+            except ServiceResolutionError:
+                cache_builder = build_cache_context
+        cache_ctx = cache_builder(cfg, root_path)
         environment = ExecutionEnvironment(
             config=cfg,
             root=root_path,
@@ -258,7 +284,7 @@ class Orchestrator:
             return
         total_actions = 0
         for name in tool_names:
-            tool = self._registry.try_get(name)
+            tool = self._context.registry.try_get(name)
             if tool is None:
                 continue
             total_actions += sum(1 for action in tool.actions if self._should_run_action(cfg, action))
@@ -285,7 +311,7 @@ class Orchestrator:
         """
 
         cfg = environment.config
-        tool = self._registry.try_get(tool_name)
+        tool = self._context.registry.try_get(tool_name)
         if tool is None:
             warn(f"Unknown tool '{tool_name}'", use_emoji=cfg.output.emoji)
             return False
@@ -644,10 +670,10 @@ class Orchestrator:
             list[tuple[Tool, ToolAction]]: Ordered tool/action pairs used for planning.
         """
 
-        ordered_names = self._selector.order_tools([tool.name for tool in self._registry.tools()])
+        ordered_names = self._selector.order_tools([tool.name for tool in self._context.registry.tools()])
         pairs: list[tuple[Tool, ToolAction]] = []
         for name in ordered_names:
-            tool = self._registry.try_get(name)
+            tool = self._context.registry.try_get(name)
             if tool is None:
                 continue
             pairs.extend((tool, action) for action in tool.actions)

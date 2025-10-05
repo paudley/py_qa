@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import TypedDict
 
 from ..config import FileDiscoveryConfig
-from ..config_utils import _existing_unique_paths as shared_existing_unique_paths
-from ..config_utils import _unique_paths as shared_unique_paths
+from ..config.utils import _existing_unique_paths as shared_existing_unique_paths
+from ..config.utils import _unique_paths as shared_unique_paths
 from ._config_builder_constants import DEFAULT_EXCLUDES, LintOptionKey
 from ._config_builder_shared import (
     ensure_abs,

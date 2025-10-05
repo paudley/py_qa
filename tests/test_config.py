@@ -25,6 +25,7 @@ from pyqa.cli.options import (
     LintOutputBundle,
 )
 from pyqa.config import Config
+from pyqa.interfaces.config import ConfigSource
 
 
 def _build_options(
@@ -156,6 +157,18 @@ def _build_options(
     return LintOptions(bundles=bundles, provided=provided or set())
 
 
+class _StubSource(ConfigSource):
+    def __init__(self, payload: dict[str, object], *, name: str = "stub") -> None:
+        self.name = name
+        self._payload = payload
+
+    def load(self) -> dict[str, object]:
+        return self._payload
+
+    def describe(self) -> str:
+        return f"Stub source {self.name}"
+
+
 def test_build_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure CLI option translation produces a fully populated config."""
     home_dir = tmp_path / "home"
@@ -209,6 +222,15 @@ def test_build_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert cfg.severity.pylint_fail_under == 9.5
     assert "ruff" in cfg.dedupe.dedupe_prefer
     assert "pyright" in cfg.dedupe.dedupe_prefer
+
+
+def test_build_config_accepts_protocol_sources(tmp_path: Path) -> None:
+    options = _build_options(tmp_path)
+    custom_source = _StubSource({"execution": {"jobs": 11}})
+
+    cfg = build_config(options, sources=[custom_source])
+
+    assert cfg.execution.jobs == 11
 
 
 def test_build_config_cli_overrides_complexity_and_strictness(

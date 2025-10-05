@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Sequence
 from functools import partial
 from pathlib import Path
 from typing import Final, cast
@@ -20,6 +20,7 @@ from ..config import (
     StrictnessLevel,
 )
 from ..config_loader import ConfigLoader
+from ..interfaces.config import ConfigSource
 from ._config_builder_constants import (
     DEDUPE_SECTION,
 )
@@ -56,11 +57,13 @@ from .python_version_resolver import resolve_python_version
 DEFAULT_TOOL_FILTERS: Final = _DEFAULT_TOOL_FILTERS
 
 
-def build_config(options: LintOptions) -> Config:
+def build_config(options: LintOptions, *, sources: Sequence[ConfigSource] | None = None) -> Config:
     """Translate CLI option data into an executable configuration.
 
     Args:
         options: CLI options resolved from command-line arguments.
+        sources: Optional configuration sources overriding the default
+            precedence.
 
     Returns:
         Config: Concrete configuration instance prepared for execution using
@@ -69,7 +72,11 @@ def build_config(options: LintOptions) -> Config:
     """
 
     project_root = options.root.resolve()
-    loader = ConfigLoader.for_root(project_root)
+    loader = (
+        ConfigLoader.for_root(project_root)
+        if sources is None
+        else ConfigLoader(project_root=project_root, sources=list(sources))
+    )
     load_result = loader.load_with_trace(strict=options.strict_config)
     base_config = load_result.config
 

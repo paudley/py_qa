@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .config import Config, ConfigError
 from .config.loaders import CONFIG_KEY, DefaultConfigSource, PyProjectConfigSource, TomlConfigSource
-from .config_loader_sections import (
+from .config.sections import (
     FieldName,
     ModelT,
     PathResolver,
@@ -23,7 +23,7 @@ from .config_loader_sections import (
     _SectionMerger,
     build_section_mergers,
 )
-from .config_utils import (
+from .config.utils import (
     _deep_merge,
     _normalise_fragment,
     generate_config_schema,

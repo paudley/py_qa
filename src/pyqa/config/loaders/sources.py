@@ -12,9 +12,10 @@ from collections.abc import Iterable, Mapping, MutableMapping
 from pathlib import Path
 from typing import Any, Final
 
-from ...config import Config, ConfigError
-from ...config_utils import _deep_merge, _expand_env, _normalise_pyproject_payload
 from ...interfaces.config import ConfigSource
+from ..defaults import default_config_payload
+from ..models import ConfigError
+from ..utils import _deep_merge, _expand_env, _normalise_pyproject_payload
 
 DEFAULT_INCLUDE_KEY: Final[str] = "include"
 PYPROJECT_TOOL_KEY: Final[str] = "tool"
@@ -30,7 +31,7 @@ class DefaultConfigSource(ConfigSource):
     name = "defaults"
 
     def load(self) -> Mapping[str, Any]:
-        return Config().to_dict()
+        return default_config_payload()
 
     def describe(self) -> str:
         return "Built-in defaults"

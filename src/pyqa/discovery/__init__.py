@@ -10,6 +10,8 @@ from ..config import FileDiscoveryConfig
 from .base import DiscoveryService, DiscoveryStrategy
 from .filesystem import FilesystemDiscovery
 from .git import GitDiscovery
+from .planners import build_project_scanner
+from .rules import compile_exclude_arguments, is_under_any, normalize_path_requirement, path_matches_requirements
 
 __all__ = [
     "DiscoveryService",
@@ -17,6 +19,11 @@ __all__ = [
     "FilesystemDiscovery",
     "GitDiscovery",
     "build_default_discovery",
+    "build_project_scanner",
+    "compile_exclude_arguments",
+    "is_under_any",
+    "normalize_path_requirement",
+    "path_matches_requirements",
 ]
 
 

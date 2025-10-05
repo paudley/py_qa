@@ -4,7 +4,7 @@
 
 from pathlib import Path
 
-from pyqa.execution.cache import CacheRequest, ResultCache
+from pyqa.cache.result_store import CacheRequest, ResultCache
 from pyqa.metrics import compute_file_metrics, normalise_path_key
 from pyqa.models import Diagnostic, ToolOutcome
 from pyqa.severity import Severity
