@@ -86,6 +86,15 @@ dependencies = [
 [project.scripts]
 pyqa = "pyqa.cli:app"
 
+[project.entry-points."pyqa.catalog.plugins"]
+pyqa_builtin_catalog = "pyqa.plugins:noop_plugin"
+
+[project.entry-points."pyqa.cli.plugins"]
+pyqa_builtin_cli = "pyqa.plugins:noop_plugin"
+
+[project.entry-points."pyqa.diagnostics.plugins"]
+pyqa_builtin_diagnostics = "pyqa.plugins:noop_plugin"
+
 [tool.bandit]
 exclude_dirs = ["tests"]
 

@@ -120,7 +120,11 @@ def _hints_for_diagnostic(diag: Diagnostic, engine: AnnotationEngine) -> Iterabl
         )
 
     annotation_tool = _resolve_annotation_tool(tool_name)
-    if annotation_tool in _ANNOTATION_TOOLS and _ANNOTATION_KEYWORD in diag.message.lower():
+    if (
+        annotation_tool is not None
+        and annotation_tool in _ANNOTATION_TOOLS
+        and _ANNOTATION_KEYWORD in diag.message.lower()
+    ):
         hints.append(
             _format_hint(
                 diag,
