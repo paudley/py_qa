@@ -50,7 +50,14 @@ def normalize_cli_values(values: Sequence[str] | None) -> tuple[str, ...]:
 
     if not values:
         return ()
-    return tuple(entry for entry in values if entry)
+    cleaned_values: list[str] = []
+    for entry in values:
+        if not entry:
+            continue
+        stripped = entry.strip()
+        if stripped:
+            cleaned_values.append(stripped)
+    return tuple(cleaned_values)
 
 
 @dataclass(slots=True)
