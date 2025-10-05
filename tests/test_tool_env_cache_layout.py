@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """BDD tests covering cache root resolution for tool environments."""
 
 from __future__ import annotations

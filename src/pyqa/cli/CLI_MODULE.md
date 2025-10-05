@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # CLI Module Guide
 
 This guide documents the architecture, patterns, and best practices used across

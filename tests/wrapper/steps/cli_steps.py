@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Step definitions for CLI wrapper behaviours."""
 
 from __future__ import annotations

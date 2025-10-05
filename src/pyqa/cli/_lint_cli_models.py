@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Shared models and Typer dependency factories for the lint CLI."""
 
 from __future__ import annotations

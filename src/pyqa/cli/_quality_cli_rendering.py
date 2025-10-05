@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Rendering helpers for the quality CLI commands."""
 
 from __future__ import annotations

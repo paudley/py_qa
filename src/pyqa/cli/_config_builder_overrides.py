@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Dataclasses and helpers for lint CLI override application."""
 
 from __future__ import annotations

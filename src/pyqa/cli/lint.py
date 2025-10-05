@@ -35,7 +35,6 @@ def lint_command(
     inputs: Annotated[LintCLIInputs, Depends(_build_lint_cli_inputs)],
 ) -> None:
     """Typer entry point for the ``pyqa lint`` command."""
-
     logger = build_cli_logger(emoji=not inputs.output.rendering.no_emoji)
     _execute_lint(ctx, inputs, logger=logger)
 
@@ -47,7 +46,6 @@ def _execute_lint(
     logger: CLILogger,
 ) -> None:
     """Resolve CLI arguments into structured inputs and run the pipeline."""
-
     _validate_cli_combinations(inputs)
     state = prepare_lint_state(ctx, inputs, logger=logger)
     early_meta = handle_initial_meta_actions(state)
@@ -60,7 +58,6 @@ def _execute_lint(
 
 def _validate_cli_combinations(inputs: LintCLIInputs) -> None:
     """Guard against unsupported flag combinations before heavy processing."""
-
     meta = inputs.advanced.meta
     selection = inputs.execution.selection
     rendering = inputs.output.rendering
@@ -106,18 +103,19 @@ def _validate_cli_combinations(inputs: LintCLIInputs) -> None:
 
 def _build_runtime_context(state: PreparedLintState) -> LintRuntimeContext:
     """Materialise runtime dependencies for lint execution."""
-
     try:
         config = build_config(state.options)
     except (ValueError, ConfigError) as exc:
         raise typer.BadParameter(str(exc)) from exc
+
+    if state.meta.normal:
+        config.quality.enforce_in_lint = True
 
     return build_lint_runtime_context(state, config=config)
 
 
 def _run_lint_pipeline(runtime: LintRuntimeContext) -> None:
     """Execute linting via the orchestrator and manage reporting."""
-
     config = runtime.config
     controller = ExecutionProgressController(
         runtime,
@@ -152,7 +150,6 @@ def _run_lint_pipeline(runtime: LintRuntimeContext) -> None:
 
 def _exit_if_handled(outcome: MetaActionOutcome) -> None:
     """Exit the Typer command when ``outcome`` indicates handling occurred."""
-
     if not outcome.handled:
         return
     code = outcome.exit_code if outcome.exit_code is not None else 0

@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Services for preparing lint command state from CLI inputs."""
 
 from __future__ import annotations

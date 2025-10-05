@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Shared launcher utilities for command-line wrappers.
 
 This module previously lived under ``scripts/cli_launcher.py``; relocating it

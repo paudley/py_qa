@@ -76,8 +76,8 @@ class ConfigOverrideKey(str, Enum):
         Returns:
             ConfigOverrideKey | None: Matching enum instance when recognised;
             otherwise ``None``.
-        """
 
+        """
         try:
             return cls(raw)
         except ValueError:
@@ -89,17 +89,25 @@ class ConfigOverrideKey(str, Enum):
         Args:
             config: Mutable configuration instance receiving the override.
             value: Override value resolved from the sensitivity preset.
-        """
 
+        """
         if self is ConfigOverrideKey.LINE_LENGTH:
             numeric_value = cast(int | float, value)
-            config.execution = config.execution.model_copy(update={"line_length": int(numeric_value)})
+            config.execution = config.execution.model_copy(
+                update={"line_length": int(numeric_value)},
+            )
         elif self is ConfigOverrideKey.MAX_COMPLEXITY:
-            config.complexity = config.complexity.model_copy(update={"max_complexity": cast(int | None, value)})
+            config.complexity = config.complexity.model_copy(
+                update={"max_complexity": cast(int | None, value)},
+            )
         elif self is ConfigOverrideKey.MAX_ARGUMENTS:
-            config.complexity = config.complexity.model_copy(update={"max_arguments": cast(int | None, value)})
+            config.complexity = config.complexity.model_copy(
+                update={"max_arguments": cast(int | None, value)},
+            )
         elif self is ConfigOverrideKey.TYPE_CHECKING:
-            config.strictness = config.strictness.model_copy(update={"type_checking": cast(StrictnessLevel, value)})
+            config.strictness = config.strictness.model_copy(
+                update={"type_checking": cast(StrictnessLevel, value)},
+            )
         elif self is ConfigOverrideKey.BANDIT_LEVEL:
             config.update_severity(bandit_level=cast(BanditLevel, value))
         elif self is ConfigOverrideKey.BANDIT_CONFIDENCE:
@@ -120,6 +128,7 @@ def default_parallel_jobs() -> int:
     Returns:
         int: Rounded-down count representing roughly 75% of available CPU
         cores while guaranteeing a minimum of one worker.
+
     """
     cores = os.cpu_count() or 1
     proposed = max(1, math.floor(cores * 0.75))
@@ -151,8 +160,8 @@ def _expected_mypy_profile(strict_level: StrictnessLevel) -> dict[str, object]:
 
     Returns:
         dict[str, object]: Expected mypy INI-style configuration values.
-    """
 
+    """
     profile: dict[str, object] = {flag: True for flag in _MYPY_BASE_TRUE_FLAGS}
     profile["strict"] = strict_level is StrictnessLevel.STRICT
     for flag in _MYPY_STRICT_FLAGS:
@@ -173,8 +182,8 @@ def _expected_mypy_value_for(
 
     Returns:
         object: Default value when known; otherwise ``NO_BASELINE``.
-    """
 
+    """
     profile = _expected_mypy_profile(strict_level)
     return profile.get(key, NO_BASELINE)
 
@@ -290,6 +299,7 @@ def _default_tool_settings() -> dict[str, dict[str, object]]:
 
     Returns:
         dict[str, dict[str, object]]: Default tool configuration mapping.
+
     """
     return {}
 
@@ -305,8 +315,8 @@ def _normalize_override_keys(
     Returns:
         set[ConfigOverrideKey]: Normalised override keys recognised by the
         configuration layer.
-    """
 
+    """
     overrides: set[ConfigOverrideKey] = set()
     if not cli_overrides:
         return overrides
@@ -326,7 +336,6 @@ def _load_duplicate_preference() -> tuple[str, ...]:
         defined.
 
     """
-
     return catalog_duplicate_preference()
 
 
@@ -377,8 +386,8 @@ class ToolSpecificOverride:
 
         Args:
             tool_settings: Mutable mapping of tool configuration values.
-        """
 
+        """
         existing = tool_settings.get(self.key, UNSET)
         if existing is not UNSET:
             if self.skip_if_truthy and bool(existing):
@@ -395,7 +404,9 @@ class ToolSpecificOverride:
 class SensitivityPreset:
     """Preset values driven by overall sensitivity."""
 
-    config_overrides: Mapping[ConfigOverrideKey, SensitivityOverrideValue] = field(default_factory=dict)
+    config_overrides: Mapping[ConfigOverrideKey, SensitivityOverrideValue] = field(
+        default_factory=dict,
+    )
     tool_overrides: Mapping[str, tuple[ToolSpecificOverride, ...]] = field(default_factory=dict)
 
     def apply(
@@ -409,8 +420,8 @@ class SensitivityPreset:
         Args:
             config: Configuration instance receiving the overrides.
             skip_keys: Override keys that should be skipped due to CLI input.
-        """
 
+        """
         for key, value in self.config_overrides.items():
             if key in skip_keys:
                 continue
@@ -522,8 +533,8 @@ class SharedKnobSnapshot:
         Returns:
             object: Baseline value when maintained, or ``NO_BASELINE`` when
             the shared configuration does not manage the requested key.
-        """
 
+        """
         mapping_key = (tool, key)
         if mapping_key in _TOOL_KNOB_MAPPING:
             knob = _TOOL_KNOB_MAPPING[mapping_key]
@@ -559,8 +570,8 @@ class SharedKnobSnapshot:
 
         Returns:
             object: Serialisable value suitable for downstream comparisons.
-        """
 
+        """
         if isinstance(value, Enum):
             return value.value
         return value
@@ -592,6 +603,7 @@ class QualityConfigSection(BaseModel):
     warn_file_size: int = 5 * 1024 * 1024
     max_file_size: int = 10 * 1024 * 1024
     protected_branches: list[str] = Field(default_factory=lambda: list(DEFAULT_PROTECTED_BRANCHES))
+    enforce_in_lint: bool = False
 
 
 class CleanConfig(BaseModel):
@@ -636,6 +648,7 @@ class Config(BaseModel):
 
         Returns:
             dict[str, object]: Serialisable mapping of configuration values.
+
         """
         payload: dict[str, object] = dict(self.model_dump(mode="python"))
         payload["severity_rules"] = list(self.severity_rules)
@@ -658,8 +671,8 @@ class Config(BaseModel):
 
         Returns:
             Config: Configuration instance with shared defaults applied.
-        """
 
+        """
         self.apply_shared_defaults()
         return self
 
@@ -673,8 +686,8 @@ class Config(BaseModel):
         Args:
             cli_overrides: Raw override tokens supplied by the CLI to opt out
                 of specific preset-provided values.
-        """
 
+        """
         preset = SENSITIVITY_PRESETS.get(self.severity.sensitivity)
         if preset is None:
             return
@@ -689,8 +702,8 @@ class Config(BaseModel):
         Returns:
             SharedKnobSnapshot: Immutable snapshot of shared configuration
             settings that influence multiple tools.
-        """
 
+        """
         knob_values: dict[ConfigOverrideKey, SensitivityOverrideValue] = {
             ConfigOverrideKey.LINE_LENGTH: self.execution.line_length,
             ConfigOverrideKey.MAX_COMPLEXITY: self.complexity.max_complexity,
@@ -721,8 +734,8 @@ class Config(BaseModel):
         Args:
             override: When ``True`` override values that match the baseline.
             baseline: Snapshot representing previously applied shared values.
-        """
 
+        """
         duplicate_preference = _load_duplicate_preference()
         if duplicate_preference:
             self._merge_dedupe_preferences(duplicate_preference)
@@ -745,7 +758,6 @@ class Config(BaseModel):
             max_warnings: Optional override for maximum tolerable warnings.
 
         """
-
         self._update_severity(
             bandit_level=bandit_level,
             bandit_confidence=bandit_confidence,
@@ -768,8 +780,8 @@ class Config(BaseModel):
             bandit_confidence: Optional override for Bandit's confidence level.
             pylint_fail_under: Optional override for Pylint's fail-under score.
             max_warnings: Optional override for maximum tolerable warnings.
-        """
 
+        """
         updates: dict[str, object | None] = {}
         if bandit_level is not UNSET:
             updates["bandit_level"] = cast(BanditLevel, bandit_level)
@@ -784,7 +796,6 @@ class Config(BaseModel):
 
     def _enable_strict_dedupe(self) -> None:
         """Tighten dedupe behaviour for strict sensitivity presets."""
-
         self.dedupe.dedupe = True
         self.dedupe.dedupe_by = "prefer"
         prefer_list = list(self.dedupe.dedupe_prefer)
@@ -799,8 +810,8 @@ class Config(BaseModel):
         Args:
             preferred_order: Ordered sequence of tool identifiers drawn from
                 catalog metadata.
-        """
 
+        """
         prefer_list = list(self.dedupe.dedupe_prefer)
         for tool_name in preferred_order:
             if tool_name not in prefer_list:
@@ -818,8 +829,8 @@ class Config(BaseModel):
         Args:
             override: When ``True`` apply updates even when settings exist.
             baseline: Prior snapshot to respect manual adjustments.
-        """
 
+        """
         mypy_settings = self.tool_settings.setdefault("mypy", {})
         baseline_profile: Mapping[str, object] = {}
         strictness = self.strictness.type_checking
@@ -859,8 +870,8 @@ class _MypySettingManager:
         Args:
             key: Name of the mypy configuration option to manage.
             value: Desired default value, or ``None`` to remove the key.
-        """
 
+        """
         existing = self.settings.get(key, UNSET)
         baseline_value = self.baseline.get(key, NO_BASELINE)
         if value is None:

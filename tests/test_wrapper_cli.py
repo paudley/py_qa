@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """BDD entrypoint for wrapper CLI scenarios."""
 
 from pytest_bdd import scenario

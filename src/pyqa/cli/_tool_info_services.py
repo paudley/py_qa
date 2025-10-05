@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Service helpers for the tool-info CLI implementation."""
 
 from __future__ import annotations

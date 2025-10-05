@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Section-specific configuration merge helpers for :mod:`pyqa.config_loader`."""
 
 from __future__ import annotations

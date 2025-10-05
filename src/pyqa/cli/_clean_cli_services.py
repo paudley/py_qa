@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Helper services for the sparkly-clean CLI."""
 
 from __future__ import annotations

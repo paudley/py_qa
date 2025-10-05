@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Data structures and errors for the tool-info CLI plumbing."""
 
 from __future__ import annotations

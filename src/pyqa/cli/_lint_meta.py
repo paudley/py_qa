@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Meta-command helpers for the lint CLI."""
 
 from __future__ import annotations

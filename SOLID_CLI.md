@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # SOLID CLI Recovery Plan
 
 ## Phase 1: Shared Infrastructure

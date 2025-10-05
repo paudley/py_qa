@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Shared literal definitions for lint CLI option types.
 
 These literals centralise the canonical vocabulary used throughout the lint

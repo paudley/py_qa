@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Helpers for rendering fetch-all-tools output in the CLI."""
 
 from __future__ import annotations

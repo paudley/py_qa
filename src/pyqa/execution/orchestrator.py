@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """High level orchestration for running registered lint tools."""
 
 from __future__ import annotations

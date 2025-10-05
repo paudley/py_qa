@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Constant values and enumerations shared across config builder helpers."""
 
 from __future__ import annotations
