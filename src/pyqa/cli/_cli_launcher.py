@@ -29,6 +29,9 @@ UV_CACHE_DIR: Final[Path] = CACHE_DIR / "uv"
 PYTHON_OVERRIDE_ENV: Final[str] = "PYQA_PYTHON"
 UV_COMMAND_ENV: Final[str] = "PYQA_UV"
 VERBOSE_ENV: Final[str] = "PYQA_WRAPPER_VERBOSE"
+DEPENDENCY_SENTINEL: Final[str] = "PYQA_LAUNCHER_IMPORT_ERROR::"
+DEPENDENCY_FLAG_ENV: Final[str] = "PYQA_LAUNCHER_EXPECT_DEPENDENCIES"
+DEPENDENCY_EXIT_CODE: Final[int] = 97
 MIN_PYTHON: Final[tuple[int, int]] = (3, 12)
 PROG_NAME: Final[str] = "pyqa"
 VERSION_COMPONENTS: Final[int] = 2
@@ -112,7 +115,7 @@ def launch(command: str, argv: Iterable[str] | None = None) -> None:
         return
 
     uv_path = _ensure_uv()
-    _run_with_uv(uv_path, command, args)
+    _run_with_uv(uv_path, command, args, require_locked=True)
 
 
 def _debug(message: str) -> None:
@@ -251,7 +254,7 @@ def _run_with_python(
         except ModuleNotFoundError as exc:
             _debug("Local interpreter missing dependencies; falling back to uv: " f"{exc.__class__.__name__}: {exc}")
             uv_path = _ensure_uv()
-            _run_with_uv(uv_path, command, args)
+            _run_with_uv(uv_path, command, args, require_locked=True)
             return
 
         sys.argv = [PROG_NAME, command, *args]
@@ -262,8 +265,30 @@ def _run_with_python(
     _debug("Spawning separate interpreter for CLI execution")
     code = _build_cli_invocation_code([command, *args])
     execution_cmd = [str(python_path), "-c", code]
+    spawn_env = env.copy()
+    spawn_env[DEPENDENCY_FLAG_ENV] = "1"
     _debug(f"Executing command: {execution_cmd}")
-    result = subprocess.run(execution_cmd, env=env, check=False)
+    result = subprocess.run(
+        execution_cmd,
+        env=spawn_env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.stdout:
+        sys.stdout.write(result.stdout)
+    if result.stderr:
+        sys.stderr.write(result.stderr)
+
+    missing_dependency = result.returncode == DEPENDENCY_EXIT_CODE or (
+        result.stderr and DEPENDENCY_SENTINEL in result.stderr
+    )
+    if missing_dependency:
+        _debug("Detected dependency import failure from spawned interpreter; rerunning via uv with --locked")
+        uv_path = _ensure_uv()
+        _run_with_uv(uv_path, command, args, require_locked=True)
+        return
+
     _debug(f"Interpreter exited with return code {result.returncode}")
     sys.exit(result.returncode)
 
@@ -331,22 +356,24 @@ def _ensure_uv() -> Path:
     return target
 
 
-def _run_with_uv(uv_path: Path, command: str, args: list[str]) -> None:
+def _run_with_uv(
+    uv_path: Path,
+    command: str,
+    args: list[str],
+    *,
+    require_locked: bool = False,
+) -> None:
     """Execute ``command`` using ``uv`` when a local interpreter is unsuitable."""
 
     _debug(f"Running with uv: {uv_path}")
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)
     code = _build_cli_invocation_code([command, *args])
-    cmd = [
-        str(uv_path),
-        "--project",
-        str(PYQA_ROOT),
-        "run",
-        "python",
-        "-c",
-        code,
-    ]
+    cmd = [str(uv_path), "--project", str(PYQA_ROOT), "run"]
+    if require_locked:
+        cmd.append("--locked")
+        _debug("Including --locked to install/update dependencies via uv")
+    cmd.extend(["python", "-c", code])
     _debug(f"Executing via uv: {cmd}")
     result = subprocess.run(cmd, env=env, check=False)
     _debug(f"uv execution completed with return code {result.returncode}")
@@ -358,9 +385,16 @@ def _build_cli_invocation_code(argv_payload: Iterable[str]) -> str:
 
     argv_list = list(argv_payload)
     return (
+        "import os\n"
         "import sys\n"
         "from typer.main import get_command\n"
-        "from pyqa.cli.app import app as _app\n"
+        "try:\n"
+        "    from pyqa.cli.app import app as _app\n"
+        "except ModuleNotFoundError as exc:\n"
+        f"    if os.environ.get('{DEPENDENCY_FLAG_ENV}'):\n"
+        f"        sys.stderr.write('{DEPENDENCY_SENTINEL}' + exc.__class__.__name__ + ':' + str(exc) + '\\n')\n"
+        f"        sys.exit({DEPENDENCY_EXIT_CODE})\n"
+        "    raise\n"
         f"argv = {argv_list!r}\n"
         "command = get_command(_app)\n"
         f"command.main(args=argv, prog_name={PROG_NAME!r})\n"

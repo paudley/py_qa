@@ -71,10 +71,24 @@
 3. **Diagnostics & Logging**
 
    * Provide optional `PYQA_WRAPPER_VERBOSE=1` mode that prints interpreter
-     selection details and fallback steps for debugging.
+     selection details, detected site-packages, in-process vs. spawned execution
+     decisions, and the exact `uv` command when fallbacks occur.
    * Default behaviour should be silent unless errors occur.
+   * Example usage:
+     * `PYQA_WRAPPER_VERBOSE=1 ./lint --help`
 
-4. **Testing**
+4. **Dependency Remediation**
+
+   * When the selected interpreter is not the currently running executable, the
+     launcher spawns it with an internal sentinel (`PYQA_LAUNCHER_EXPECT_DEPENDENCIES`)
+     so the child can report missing packages without crashing the shell.
+   * If the child interpreter exits with the sentinel or a dedicated exit code,
+     we immediately rerun `uv --project … run --locked …` to install or repair the
+     environment before executing the CLI again.
+   * When the initial probe rejects the interpreter outright (wrong version,
+     import outside the repo), the wrapper jumps straight to `uv --locked …`.
+
+5. **Testing**
 
    * Add wrapper tests covering scenarios:
      * Local dependencies installed (`pyqa.cli` importable).
@@ -83,7 +97,7 @@
      * Non-existent `.venv` or `PYQA_PYTHON` path.
    * Verify exit codes in each scenario.
 
-5. **Documentation**
+6. **Documentation**
 
    * Update `cli/CLI_MODULE.md` with wrapper behaviour, environment variables,
      and troubleshooting steps.
@@ -117,6 +131,9 @@
   compatibility probe, we emit a clear error so they fix the path.
 * `uv` missing: wrapper downloads `uv` into `.lint-cache/uv` and executes it,
   ensuring consistent behaviour without manual installs.
+* Incomplete `.venv` (e.g., only `uv` installed): the probe succeeds, but the
+  child interpreter emits the dependency sentinel which triggers an automatic
+  `uv --locked …` run to hydrate packages before rerunning the command.
 
 ### Scenario Observations (2025-02-27)
 
