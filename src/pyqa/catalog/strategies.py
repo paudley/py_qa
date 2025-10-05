@@ -16,7 +16,6 @@ from ..discovery.rules import is_under_any, normalize_path_requirement, path_mat
 from ..parsers.base import JsonParser, JsonTransform, TextParser, TextTransform
 from ..tools.base import CommandBuilder, ToolContext
 from ..tools.builtin_helpers import _resolve_path, download_tool_artifact
-from .catalog.types import JSONValue
 from .command_options import (
     OptionMapping,
     command_option_map,
@@ -25,6 +24,7 @@ from .command_options import (
 )
 from .json_diagnostics import JsonDiagnosticExtractor
 from .loader import CatalogIntegrityError
+from .types import JSONValue
 
 TargetSelectorMode = Literal["filePattern"]
 _TARGET_SELECTOR_MODE_FILE_PATTERN: Final[TargetSelectorMode] = "filePattern"

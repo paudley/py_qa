@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ..tooling.catalog.errors import CatalogIntegrityError, CatalogValidationError
+from ..catalog.errors import CatalogIntegrityError, CatalogValidationError
 from ..tools.builtin_registry import initialize_registry
 from ..tools.registry import DEFAULT_REGISTRY
 from ._lint_fetch import render_fetch_all_tools

@@ -30,8 +30,8 @@ from pyqa.execution.action_executor import (
     ExecutionEnvironment,
 )
 from pyqa.cache.context import CacheContext
-from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import command_option_map
+from pyqa.catalog import ToolCatalogLoader
+from pyqa.catalog.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PYQA_ROOT = Path(__file__).resolve().parents[1]

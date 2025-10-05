@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from pyqa.tooling.loader import (
+from pyqa.catalog.loader import (
     CatalogIntegrityError,
     CatalogValidationError,
     JSONValue,

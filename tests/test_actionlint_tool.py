@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 
 from pyqa.config import Config
-from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import command_download_binary
+from pyqa.catalog import ToolCatalogLoader
+from pyqa.catalog.strategies import command_download_binary
 from pyqa.tools.base import ToolContext
 
 _PYQA_ROOT = Path(__file__).resolve().parents[1]
@@ -43,7 +43,7 @@ def test_actionlint_command_download(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     binary_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
 
     monkeypatch.setattr(
-        "pyqa.tooling.strategies._download_artifact_for_tool",
+        "pyqa.catalog.strategies._download_artifact_for_tool",
         lambda download_config, version, cache_root, context: binary_path,
     )
 
@@ -73,7 +73,7 @@ def test_actionlint_filters_non_github_files(
     binary_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
 
     monkeypatch.setattr(
-        "pyqa.tooling.strategies._download_artifact_for_tool",
+        "pyqa.catalog.strategies._download_artifact_for_tool",
         lambda download_config, version, cache_root, context: binary_path,
     )
 

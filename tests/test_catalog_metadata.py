@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from pyqa.tools.catalog_metadata import (
+from pyqa.catalog.metadata import (
     CatalogOption,
     catalog_duplicate_hint_codes,
     catalog_duplicate_preference,

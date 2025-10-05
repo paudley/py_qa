@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from functools import lru_cache
 
-from ..tools.catalog_metadata import catalog_test_suppressions
+from ..catalog.metadata import catalog_test_suppressions
 
 TestSuppressionsMap = dict[str, dict[str, tuple[str, ...]]]
 

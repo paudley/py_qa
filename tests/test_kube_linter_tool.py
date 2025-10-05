@@ -8,8 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import Mock
 
-from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import command_option_map
+from pyqa.catalog import ToolCatalogLoader
+from pyqa.catalog.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PYQA_ROOT = Path(__file__).resolve().parents[1]

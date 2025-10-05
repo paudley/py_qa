@@ -20,8 +20,8 @@ from pathlib import Path
 from typing import Final
 
 from ..annotations import AnnotationEngine
+from ..catalog.metadata import catalog_duplicate_hint_codes
 from ..filesystem.paths import normalize_path
-from ..tools.catalog_metadata import catalog_duplicate_hint_codes
 
 
 class AdviceCategory(str, Enum):

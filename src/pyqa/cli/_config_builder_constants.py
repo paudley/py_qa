@@ -10,8 +10,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Final, Literal
 
+from ..catalog.metadata import catalog_general_suppressions
 from ..testing.suppressions import flatten_test_suppressions
-from ..tools.catalog_metadata import catalog_general_suppressions
 
 
 class LintOptionKey(str, Enum):

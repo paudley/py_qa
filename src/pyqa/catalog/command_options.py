@@ -21,8 +21,8 @@ from ..tools.builtin_commands_python import (
     _pyupgrade_flag_from_version,
 )
 from ..tools.builtin_helpers import _as_bool, _resolve_path, _setting, _settings_list
-from .catalog.types import JSONValue
 from .loader import CatalogIntegrityError
+from .types import JSONValue
 
 __all__ = [
     "command_option_map",

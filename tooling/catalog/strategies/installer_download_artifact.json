@@ -3,7 +3,7 @@
   "id": "installer_download_artifact",
   "type": "installer",
   "description": "Download tool artifacts into the cache based on catalog metadata.",
-  "implementation": "pyqa.tooling.strategies.install_download_artifact",
+  "implementation": "pyqa.catalog.strategies.install_download_artifact",
   "config": {
     "version": {
       "type": "string",

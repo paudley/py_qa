@@ -14,9 +14,9 @@ from rich.panel import Panel
 from rich.pretty import Pretty
 from rich.table import Table
 
+from ..catalog.model_tool import ToolDefinition
 from ..config import Config
 from ..config_loader import FieldUpdate
-from ..tooling import ToolDefinition
 from ..tools.base import Tool, ToolContext
 from .utils import ToolStatus
 

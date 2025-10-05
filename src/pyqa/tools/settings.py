@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 
-from .catalog_metadata import CatalogOption, catalog_tool_options
+from ..catalog.metadata import CatalogOption, catalog_tool_options
 
 
 @dataclass(frozen=True, slots=True)

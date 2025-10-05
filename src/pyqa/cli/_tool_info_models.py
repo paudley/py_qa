@@ -10,9 +10,10 @@ from pathlib import Path
 
 from rich.console import Console
 
+from ..catalog.model_catalog import CatalogSnapshot
+from ..catalog.model_tool import ToolDefinition
 from ..config import Config
 from ..config_loader import FieldUpdate
-from ..tooling import CatalogSnapshot, ToolDefinition
 from ..tools.base import Tool
 from .shared import CLIError
 from .utils import ToolStatus

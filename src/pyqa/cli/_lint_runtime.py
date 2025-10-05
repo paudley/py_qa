@@ -9,12 +9,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from types import SimpleNamespace
 
+from ..catalog.model_catalog import CatalogSnapshot
 from ..config import Config
 from ..core.runtime import ServiceContainer, ServiceResolutionError, register_default_services
 from ..discovery import build_default_discovery
 from ..discovery.base import SupportsDiscovery
 from ..execution.orchestrator import Orchestrator, OrchestratorHooks, OrchestratorOverrides
-from ..tooling.catalog.model_catalog import CatalogSnapshot
 from ..tools.builtin_registry import initialize_registry
 from ..tools.registry import DEFAULT_REGISTRY, ToolRegistry
 from ._lint_preparation import PreparedLintState

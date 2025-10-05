@@ -10,10 +10,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal, cast
 
+from ..catalog.errors import CatalogIntegrityError
+from ..catalog.loader import ToolCatalogLoader
+from ..catalog.model_catalog import CatalogSnapshot
+from ..catalog.model_runtime import SUPPORTED_RUNTIME_TYPES
+from ..catalog.model_strategy import StrategyDefinition
 from ..paths import get_pyqa_root
-from ..tooling import CatalogIntegrityError, CatalogSnapshot, ToolCatalogLoader
-from ..tooling.catalog.model_runtime import SUPPORTED_RUNTIME_TYPES
-from ..tooling.catalog.model_strategy import StrategyDefinition
 from .base import (
     CommandBuilder,
     DeferredCommand,

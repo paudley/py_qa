@@ -52,6 +52,7 @@ class ToolCatalogLoader:
 
     def load_fragments(self) -> tuple[CatalogFragment, ...]:
         """Load shared catalog fragments."""
+
         fragments: list[CatalogFragment] = []
         for path in self._scanner.fragment_documents():
             document = load_document(path)
@@ -68,6 +69,7 @@ class ToolCatalogLoader:
 
     def load_strategy_definitions(self) -> tuple[StrategyDefinition, ...]:
         """Load catalog-defined strategies from disk."""
+
         definitions: list[StrategyDefinition] = []
         for path in self._scanner.strategy_documents():
             document = load_document(path)
@@ -84,6 +86,7 @@ class ToolCatalogLoader:
         fragments: Sequence[CatalogFragment] | None = None,
     ) -> tuple[ToolDefinition, ...]:
         """Load all tool definitions contained in the catalog root."""
+
         fragment_sequence = fragments if fragments is not None else self.load_fragments()
         fragment_lookup = {fragment.name: fragment for fragment in fragment_sequence}
         definitions: list[ToolDefinition] = []
@@ -112,6 +115,7 @@ class ToolCatalogLoader:
 
     def load_snapshot(self) -> CatalogSnapshot:
         """Load tools, strategies, and fragments with checksum metadata."""
+
         fragments = self.load_fragments()
         strategies = self.load_strategy_definitions()
         tools = self.load_tool_definitions(fragments=fragments)
@@ -125,6 +129,7 @@ class ToolCatalogLoader:
 
     def compute_checksum(self) -> str:
         """Return a checksum representing the current catalog contents."""
+
         paths = self._scanner.catalog_files()
         return compute_catalog_checksum(self.catalog_root, paths)
 
@@ -147,11 +152,17 @@ class ToolCatalogLoader:
             raise CatalogValidationError(f"{path}: {exc}") from exc
 
 
-__all__ = ["ToolCatalogLoader"]
+__all__ = [
+    "CatalogIntegrityError",
+    "CatalogValidationError",
+    "JSONValue",
+    "ToolCatalogLoader",
+]
 
 
 def _validate_strategy_implementation(definition: StrategyDefinition) -> None:
     """Validate that a strategy definition points to an importable implementation."""
+
     try:
         _resolve_strategy_attribute(definition)
     except (ImportError, AttributeError, ValueError) as exc:

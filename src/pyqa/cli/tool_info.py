@@ -12,8 +12,8 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
+from ..catalog.model_catalog import CatalogSnapshot
 from ..config import Config
-from ..tooling import CatalogSnapshot
 from ._tool_info_models import ToolInfoInputs
 from ._tool_info_rendering import (
     build_actions_table,

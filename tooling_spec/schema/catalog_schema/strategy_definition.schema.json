@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pyqa.dev/schema/strategy_definition.schema.json",
+  "title": "PyQA Strategy Definition",
+  "description": "Schema describing reusable execution, parsing, and utility strategies for catalog-driven tools.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "type", "implementation"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.0\\.0$",
+      "description": "Semantic version for the strategy schema."
+    },
+    "id": {
+      "$ref": "#/definitions/Identifier",
+      "description": "Unique identifier that tool definitions reference."
+    },
+    "type": {
+      "type": "string",
+      "description": "High level capability provided by the strategy.",
+      "enum": ["command", "parser", "formatter", "postProcessor", "installer"]
+    },
+    "description": {
+      "type": "string",
+      "description": "Human readable explanation of the strategy purpose."
+    },
+    "implementation": {
+      "type": "string",
+      "description": "Fully qualified Python import path to the strategy callable or factory.",
+      "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)+$"
+    },
+    "entry": {
+      "type": "string",
+      "description": "Optional attribute name on the imported module/object when not using the module level symbol."
+    },
+    "config": {
+      "type": "object",
+      "description": "Describes required and optional configuration keys consumed by the strategy.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["string", "boolean", "integer", "number", "array", "object"]
+          },
+          "required": {
+            "type": "boolean",
+            "default": false
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Identifier": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9][-_a-zA-Z0-9]*$"
+    }
+  }
+}

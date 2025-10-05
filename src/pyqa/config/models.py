@@ -14,7 +14,7 @@ from typing import Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..tools.catalog_metadata import catalog_duplicate_preference
+from ..catalog.metadata import catalog_duplicate_preference
 
 
 class ConfigError(Exception):

@@ -39,7 +39,7 @@ from pyqa.parsers import (
     parse_yamllint,
 )
 from pyqa.severity import Severity
-from pyqa.tooling.strategies import parser_json_diagnostics
+from pyqa.catalog.strategies import parser_json_diagnostics
 from pyqa.tools.base import ToolContext
 
 

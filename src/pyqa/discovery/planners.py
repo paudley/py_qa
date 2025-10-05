@@ -10,9 +10,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, cast
 
-from ..tooling.catalog.types import JSONValue
-from ..tooling.command_options import OptionMapping, compile_option_mappings
-from ..tooling.loader import CatalogIntegrityError
+from ..catalog.command_options import OptionMapping, compile_option_mappings
+from ..catalog.loader import CatalogIntegrityError
+from ..catalog.types import JSONValue
 from ..tools.base import CommandBuilder, ToolContext
 from ..tools.builtin_helpers import _resolve_path, _setting, _settings_list
 from .rules import compile_exclude_arguments, is_under_any

@@ -3,7 +3,7 @@
   "id": "parser_json",
   "type": "parser",
   "description": "Wrap a JSON transform callable in the standard JsonParser adapter.",
-  "implementation": "pyqa.tooling.strategies.json_parser",
+  "implementation": "pyqa.catalog.strategies.json_parser",
   "config": {
     "transform": {
       "type": "string",

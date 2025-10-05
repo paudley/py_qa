@@ -6,7 +6,7 @@
 
 The files in this directory define reusable strategies that tools reference in
 `tooling/catalog/languages/…`. Strategies keep behaviour declarative by mapping
-catalog configuration to factories exported from `pyqa.tooling.strategies`.
+catalog configuration to factories exported from `pyqa.catalog.strategies`.
 
 Each strategy file is a JSON document with the following top-level structure:
 
@@ -16,7 +16,7 @@ Each strategy file is a JSON document with the following top-level structure:
   "id": "command_download_binary",
   "type": "command",
   "description": "Optional human readable summary.",
-  "implementation": "pyqa.tooling.strategies.command_download_binary",
+  "implementation": "pyqa.catalog.strategies.command_download_binary",
   "config": {}
 }
 ```
@@ -26,7 +26,7 @@ Each strategy file is a JSON document with the following top-level structure:
 * `type` – one of `command`, `parser`, `formatter`, `postProcessor`, or
   `installer`.
 * `implementation` – fully qualified Python import path pointing at the factory
-  in `pyqa.tooling.strategies`.
+  in `pyqa.catalog.strategies`.
 * `config` – description of the configuration keys a tool may supply when using
   the strategy. Keys include `type`, `required`, and optional `description` to
   aid catalog authors.
@@ -77,7 +77,7 @@ optional `version`/`contextLabel` overrides.
 
 ## Adding a New Strategy
 
-1. Implement the corresponding factory in `pyqa.tooling.strategies` and export it
+1. Implement the corresponding factory in `pyqa.catalog.strategies` and export it
    via `__all__`.
 2. Create a JSON descriptor in this directory using the structure above.
 3. Describe any configuration keys in the `config` object to help authors and to

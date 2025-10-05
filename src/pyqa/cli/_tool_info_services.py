@@ -8,8 +8,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Final
 
+from ..catalog.model_catalog import CatalogSnapshot
+from ..catalog.model_tool import ToolDefinition
 from ..config_loader import ConfigError, ConfigLoader, FieldUpdate
-from ..tooling import CatalogSnapshot, ToolDefinition
 from ..tools.base import Tool
 from ..tools.builtins import initialize_registry
 from ..tools.registry import DEFAULT_REGISTRY

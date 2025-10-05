@@ -3,7 +3,7 @@
   "id": "command_option_map",
   "type": "command",
   "description": "Map catalog-defined option metadata to CLI arguments.",
-  "implementation": "pyqa.tooling.strategies.command_option_map",
+  "implementation": "pyqa.catalog.strategies.command_option_map",
   "config": {
     "base": {
       "type": "array",

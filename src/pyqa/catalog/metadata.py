@@ -11,7 +11,9 @@ from pathlib import Path
 from typing import Final
 
 from ..paths import get_pyqa_root
-from ..tooling import CatalogIntegrityError, CatalogSnapshot, ToolCatalogLoader
+from .errors import CatalogIntegrityError
+from .loader import ToolCatalogLoader
+from .model_catalog import CatalogSnapshot
 
 
 @dataclass(frozen=True, slots=True)

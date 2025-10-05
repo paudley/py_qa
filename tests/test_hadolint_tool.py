@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 
 from pyqa.config import Config
-from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import command_download_binary
+from pyqa.catalog import ToolCatalogLoader
+from pyqa.catalog.strategies import command_download_binary
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PYQA_ROOT = Path(__file__).resolve().parents[1]
@@ -44,7 +44,7 @@ def test_hadolint_command_download(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     fake_binary.chmod(0o755)
 
     monkeypatch.setattr(
-        "pyqa.tooling.strategies._download_artifact_for_tool",
+        "pyqa.catalog.strategies._download_artifact_for_tool",
         lambda download_config, version, cache_root, context: fake_binary,
     )
 
