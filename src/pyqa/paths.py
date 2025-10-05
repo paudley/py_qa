@@ -4,9 +4,9 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 from functools import cache
 from pathlib import Path
-from typing import Iterable
 
 from .logging import warn
 from .workspace import is_py_qa_workspace
@@ -38,8 +38,7 @@ def get_pyqa_root() -> Path:
     detected = _auto_detect_pyqa_root()
     if detected is None:
         raise RuntimeError(
-            "Unable to locate the py_qa project root; set PYQA_ROOT to the directory "
-            "containing pyproject.toml."
+            "Unable to locate the py_qa project root; set PYQA_ROOT to the directory " "containing pyproject.toml."
         )
     _warn_on_suspicious_layout(detected, source="auto-detected root")
     return detected

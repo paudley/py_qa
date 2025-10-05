@@ -4,9 +4,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Final, cast
+from typing import Final
 
-from ..config import Config
 from ..config_loader import ConfigError, ConfigLoader, FieldUpdate
 from ..tooling import CatalogSnapshot, ToolDefinition
 from ..tools.base import Tool
@@ -125,9 +124,8 @@ def prepare_context(inputs: ToolInfoInputs, *, logger: CLILogger) -> ToolInfoCon
     snapshot = resolve_catalog_snapshot(inputs)
     tool = resolve_tool(inputs, logger=logger)
     status = check_tool_status(tool)
-    config_model = cast(Config, config_data.config)
-    tool_settings_raw = getattr(config_model, "tool_settings")
-    tool_settings = cast(dict[str, dict[str, object]], tool_settings_raw)
+    config_model = config_data.config
+    tool_settings = config_model.tool_settings
     overrides = dict(tool_settings.get(tool.name, {}) or {})
     catalog_tool = find_catalog_tool(tool.name, snapshot)
 

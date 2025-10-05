@@ -11,9 +11,9 @@ many tools.
 
 ## Naming & Loading
 
-- Filenames must start with an underscore (`_python_defaults.json`).
-- Fragments follow the same schema as tool definitions (`tool_definition.schema.json`).
-- Tools reference fragments via the `extends` array. Entries are merged
+* Filenames must start with an underscore (`_python_defaults.json`).
+* Fragments follow the same schema as tool definitions (`tool_definition.schema.json`).
+* Tools reference fragments via the `extends` array. Entries are merged
   depth-first in the order they appear.
 
 Example:
@@ -37,10 +37,10 @@ Example:
 
 1. Keep fragment scope focused (e.g., runtime defaults for a single ecosystem,
    shared suppressions for a suite of tools).
-1. Avoid tool-specific configuration—those belong in individual tool files.
-1. Validate fragments with `uv run pytest tests/test_tooling_loader.py` to catch
+2. Avoid tool-specific configuration—those belong in individual tool files.
+3. Validate fragments with `uv run pytest tests/test_tooling_loader.py` to catch
    schema issues.
-1. Update this document when adding or renaming fragments to keep the catalog
+4. Update this document when adding or renaming fragments to keep the catalog
    discoverable.
 
 Fragments are merged prior to schema validation, so any conflicting fields will

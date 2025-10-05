@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
+from ..paths import get_pyqa_root
 from .constants import PROJECT_MARKER_FILENAME, ToolCacheLayout, cache_layout
 from .models import PreparedCommand
-from ..paths import get_pyqa_root
 from .preparer import CommandPreparationRequest, CommandPreparer
 from .runtimes.go import GoRuntime
 from .runtimes.lua import LuaRuntime

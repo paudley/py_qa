@@ -18,7 +18,7 @@ from ._config_builder_shared import (
     select_flag,
     select_value,
 )
-from .options import LintOptions
+from .options import LintGitOptions, LintOptions, LintTargetOptions
 
 
 class FileDiscoveryOverrides(TypedDict):
@@ -60,17 +60,42 @@ def collect_file_discovery_overrides(
     options: LintOptions,
     project_root: Path,
 ) -> FileDiscoveryOverrides:
-    """Return the file discovery overrides derived from CLI inputs."""
+    """Return the file discovery overrides derived from CLI inputs.
+
+    Args:
+        current: Existing file discovery configuration prior to overrides.
+        options: Composed CLI options bundle derived from user arguments.
+        project_root: Resolved project root used for relative path handling.
+
+    Returns:
+        FileDiscoveryOverrides: Mapping of normalized overrides covering roots,
+        explicit paths, and git-discovery toggles.
+    """
 
     provided = options.provided
-    roots: list[Path] = resolve_roots(current, project_root, options)
+    target_options = options.target_options
+    git_options = options.git_options
+
+    roots: list[Path] = resolve_roots(
+        current,
+        project_root,
+        target_options,
+        provided,
+    )
     explicit_files, boundaries = resolve_explicit_files(
         current,
-        options,
+        target_options,
         project_root,
         roots,
+        provided,
     )
-    excludes = resolve_excludes(current, options, project_root)
+    excludes = resolve_excludes(
+        current,
+        project_root,
+        target_options,
+        git_options,
+        provided,
+    )
 
     overrides: FileDiscoveryOverrides = {
         "roots": tuple(shared_unique_paths(roots)),
@@ -78,31 +103,31 @@ def collect_file_discovery_overrides(
         "explicit_files": tuple(shared_existing_unique_paths(explicit_files)),
         "boundaries": tuple(shared_unique_paths(boundaries)),
         "paths_from_stdin": select_flag(
-            options.paths_from_stdin,
+            target_options.paths_from_stdin,
             current.paths_from_stdin,
             LintOptionKey.PATHS_FROM_STDIN,
             provided,
         ),
         "changed_only": select_flag(
-            options.changed_only,
+            git_options.changed_only,
             current.changed_only,
             LintOptionKey.CHANGED_ONLY,
             provided,
         ),
         "diff_ref": select_value(
-            options.diff_ref,
+            git_options.diff_ref,
             current.diff_ref,
             LintOptionKey.DIFF_REF,
             provided,
         ),
         "include_untracked": select_flag(
-            options.include_untracked,
+            git_options.include_untracked,
             current.include_untracked,
             LintOptionKey.INCLUDE_UNTRACKED,
             provided,
         ),
         "base_branch": select_value(
-            options.base_branch,
+            git_options.base_branch,
             current.base_branch,
             LintOptionKey.BASE_BRANCH,
             provided,
@@ -114,37 +139,62 @@ def collect_file_discovery_overrides(
 def resolve_roots(
     current: FileDiscoveryConfig,
     project_root: Path,
-    options: LintOptions,
+    target_options: LintTargetOptions,
+    provided_flags: frozenset[str],
 ) -> list[Path]:
-    """Resolve the root directories that should be scanned for files."""
+    """Resolve the root directories that should be scanned for files.
+
+    Args:
+        current: Baseline discovery configuration sourced from config files.
+        project_root: Repository root used for normalizing relative entries.
+        target_options: CLI-supplied filesystem target overrides.
+        provided_flags: CLI flag names explicitly provided by the user.
+
+    Returns:
+        list[Path]: Ordered list of discovery roots deduplicated by path.
+    """
 
     roots = shared_unique_paths(ensure_abs(project_root, path) for path in current.roots)
     if project_root not in roots:
         roots.insert(0, project_root)
 
-    if LintOptionKey.DIRS.value in options.provided:
+    if LintOptionKey.DIRS.value in provided_flags:
         resolved_dirs = (
-            directory if directory.is_absolute() else (project_root / directory) for directory in options.dirs
+            directory if directory.is_absolute() else (project_root / directory) for directory in target_options.dirs
         )
         roots.extend(path.resolve() for path in resolved_dirs)
 
-    return shared_unique_paths(roots)
+    normalized_roots: list[Path] = shared_unique_paths(roots)
+    return normalized_roots
 
 
 def resolve_explicit_files(
     current: FileDiscoveryConfig,
-    options: LintOptions,
+    target_options: LintTargetOptions,
     project_root: Path,
     roots: list[Path],
+    provided_flags: frozenset[str],
 ) -> tuple[list[Path], list[Path]]:
-    """Resolve explicit file selections and derived discovery boundaries."""
+    """Resolve explicit file selections and derived discovery boundaries.
+
+    Args:
+        current: Baseline discovery configuration sourced from config files.
+        target_options: CLI-supplied filesystem target overrides.
+        project_root: Repository root used for normalizing relative entries.
+        roots: Mutable list of discovery roots that may be expanded.
+        provided_flags: CLI flag names explicitly provided by the user.
+
+    Returns:
+        tuple[list[Path], list[Path]]: Normalized explicit files and derived
+        directory boundaries that constrain discovery when applicable.
+    """
 
     explicit_files: list[Path] = shared_existing_unique_paths(current.explicit_files)
     user_dirs: list[Path] = []
     user_files: list[Path] = []
 
-    if LintOptionKey.PATHS.value in options.provided:
-        for raw_path in options.paths:
+    if LintOptionKey.PATHS.value in provided_flags:
+        for raw_path in target_options.paths:
             resolved_path = (raw_path if raw_path.is_absolute() else project_root / raw_path).resolve()
             if resolved_path.is_dir():
                 roots.append(resolved_path)
@@ -154,7 +204,9 @@ def resolve_explicit_files(
                 if resolved_path not in explicit_files:
                     explicit_files.append(resolved_path)
 
-    boundaries = shared_unique_paths(boundary for boundary in derive_boundaries(user_dirs, user_files) if boundary)
+    boundaries: list[Path] = shared_unique_paths(
+        boundary for boundary in derive_boundaries(user_dirs, user_files) if boundary
+    )
     if not boundaries:
         return explicit_files, []
 
@@ -176,22 +228,35 @@ def derive_boundaries(user_dirs: Sequence[Path], user_files: Sequence[Path]) -> 
 
 def resolve_excludes(
     current: FileDiscoveryConfig,
-    options: LintOptions,
     project_root: Path,
+    target_options: LintTargetOptions,
+    git_options: LintGitOptions,
+    provided_flags: frozenset[str],
 ) -> list[Path]:
-    """Resolve excluded paths by combining defaults, config, and CLI input."""
+    """Resolve excluded paths by combining defaults, config, and CLI input.
 
-    excludes = shared_unique_paths(path.resolve() for path in current.excludes)
+    Args:
+        current: Baseline discovery configuration sourced from config files.
+        project_root: Repository root used for normalizing relative entries.
+        target_options: CLI-supplied filesystem target overrides.
+        git_options: CLI-supplied git discovery overrides.
+        provided_flags: CLI flag names explicitly provided by the user.
+
+    Returns:
+        list[Path]: Deduplicated absolute paths excluded from discovery.
+    """
+
+    excludes: list[Path] = shared_unique_paths(path.resolve() for path in current.excludes)
     for default_path in DEFAULT_EXCLUDES:
         resolved = ensure_abs(project_root, default_path).resolve()
         if resolved not in excludes:
             excludes.append(resolved)
-    if LintOptionKey.EXCLUDE.value in options.provided:
-        for path in options.exclude:
+    if LintOptionKey.EXCLUDE.value in provided_flags:
+        for path in target_options.exclude:
             resolved = ensure_abs(project_root, path).resolve()
             if resolved not in excludes:
                 excludes.append(resolved)
-    if options.no_lint_tests:
+    if git_options.no_lint_tests:
         tests_path = ensure_abs(project_root, Path("tests")).resolve()
         if tests_path not in excludes:
             excludes.append(tests_path)
@@ -208,9 +273,11 @@ def _filter_roots_within_boundaries(
     if matching:
         merged = list(matching)
         merged.extend(path for path in boundaries if path not in matching and path.is_dir())
-        return shared_unique_paths(merged)
+        unique_paths: list[Path] = shared_unique_paths(merged)
+        return unique_paths
     boundary_dirs = [path for path in boundaries if path.is_dir()]
-    return shared_unique_paths(boundary_dirs)
+    unique_boundaries: list[Path] = shared_unique_paths(boundary_dirs)
+    return unique_boundaries
 
 
 __all__ = [

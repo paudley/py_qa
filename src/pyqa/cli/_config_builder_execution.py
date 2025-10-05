@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import TypedDict
+from typing import Final, TypedDict
 
 from ..config import ExecutionConfig
 from ._config_builder_constants import LintOptionKey
@@ -61,31 +61,46 @@ def collect_execution_overrides(
     project_root: Path,
     has_option: Callable[[LintOptionKey], bool],
 ) -> ExecutionOverrides:
-    """Return the execution overrides derived from CLI inputs."""
+    """Return the execution overrides derived from CLI inputs.
+
+    Args:
+        current: Existing execution configuration prior to applying overrides.
+        options: Composed CLI options bundle derived from user arguments.
+        project_root: Resolved project root used for relative path handling.
+        has_option: Predicate indicating whether a CLI flag was provided.
+
+    Returns:
+        ExecutionOverrides: Mapping of normalized execution overrides spanning
+        runtime, tool selection, and formatting controls.
+    """
 
     provided = options.provided
-    bail_value = select_flag(options.bail, current.bail, LintOptionKey.BAIL, provided)
-    jobs_value = select_value(options.jobs, current.jobs, LintOptionKey.JOBS, provided)
+    runtime_options = options.execution_options.runtime
+    selection = options.selection_options
+    formatting = options.execution_options.formatting
+
+    bail_value = select_flag(runtime_options.bail, current.bail, LintOptionKey.BAIL, provided)
+    jobs_value = select_value(runtime_options.jobs, current.jobs, LintOptionKey.JOBS, provided)
     if bail_value:
         jobs_value = SERIAL_JOB_COUNT
 
     cache_dir = (
-        resolve_path(project_root, options.cache_dir).resolve()
+        resolve_path(project_root, runtime_options.cache_dir).resolve()
         if has_option(LintOptionKey.CACHE_DIR)
         else current.cache_dir
     )
 
     overrides: ExecutionOverrides = {
-        "only": tuple(options.only) if has_option(LintOptionKey.ONLY) else tuple(current.only),
-        "languages": tuple(options.language) if has_option(LintOptionKey.LANGUAGE) else tuple(current.languages),
+        "only": tuple(selection.only) if has_option(LintOptionKey.ONLY) else tuple(current.only),
+        "languages": tuple(selection.language) if has_option(LintOptionKey.LANGUAGE) else tuple(current.languages),
         "fix_only": select_flag(
-            options.fix_only,
+            selection.fix_only,
             current.fix_only,
             LintOptionKey.FIX_ONLY,
             provided,
         ),
         "check_only": select_flag(
-            options.check_only,
+            selection.check_only,
             current.check_only,
             LintOptionKey.CHECK_ONLY,
             provided,
@@ -93,32 +108,32 @@ def collect_execution_overrides(
         "bail": bail_value,
         "jobs": jobs_value,
         "cache_enabled": select_flag(
-            not options.no_cache,
+            not runtime_options.no_cache,
             current.cache_enabled,
             LintOptionKey.NO_CACHE,
             provided,
         ),
         "cache_dir": cache_dir,
         "use_local_linters": select_flag(
-            options.use_local_linters,
+            runtime_options.use_local_linters,
             current.use_local_linters,
             LintOptionKey.USE_LOCAL_LINTERS,
             provided,
         ),
         "line_length": select_value(
-            options.line_length,
+            formatting.line_length,
             current.line_length,
             LintOptionKey.LINE_LENGTH,
             provided,
         ),
         "sql_dialect": select_value(
-            options.sql_dialect,
+            formatting.sql_dialect,
             current.sql_dialect,
             LintOptionKey.SQL_DIALECT,
             provided,
         ),
         "python_version": select_value(
-            options.python_version,
+            formatting.python_version,
             current.python_version,
             LintOptionKey.PYTHON_VERSION,
             provided,
@@ -127,7 +142,7 @@ def collect_execution_overrides(
     return overrides
 
 
-SERIAL_JOB_COUNT = 1
+SERIAL_JOB_COUNT: Final[int] = 1
 
 
 __all__ = [

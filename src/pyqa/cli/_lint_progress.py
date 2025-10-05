@@ -140,10 +140,9 @@ class ExecutionProgressController:
         lock = self.context.lock
         with lock:
             self._advance(1)
-            status = STATUS_RENDERING
-            if self.runtime.config.output.color:
-                status = "[cyan]rendering output[/]"
-            progress.update(task_id, current_status=status)
+            color_enabled = self.runtime.config.output.color
+            status_value = "[cyan]rendering output[/]" if color_enabled else STATUS_RENDERING
+            progress.update(task_id, current_status=status_value)
 
     def finalize(self, success: bool) -> Text | None:
         """Finalize the progress display and return a summary message."""
@@ -154,12 +153,16 @@ class ExecutionProgressController:
         task_id = self.context.task_id
         lock = self.context.lock
         with lock:
-            status_text = STATUS_DONE if success else STATUS_ISSUES
-            if self.runtime.config.output.color:
-                status_text = "[green]done[/]" if success else "[red]issues detected[/]"
+            status_literal = STATUS_DONE if success else STATUS_ISSUES
+            color_enabled = self.runtime.config.output.color
+            status_value = (
+                ("[green]done[/]" if success else "[red]issues detected[/]") if color_enabled else status_literal
+            )
             total = max(self.state.total, self.state.completed)
-            progress.update(task_id, total=total, current_status=status_text)
-        return Text.from_markup(status_text) if self.runtime.config.output.color else Text(status_text)
+            progress.update(task_id, total=total, current_status=status_value)
+        if color_enabled:
+            return Text.from_markup(status_value)
+        return Text(status_literal)
 
     def stop(self) -> None:
         """Stop the progress bar if it was previously started."""

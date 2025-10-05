@@ -21,13 +21,13 @@ Each strategy file is a JSON document with the following top-level structure:
 }
 ```
 
-- `schemaVersion` – schema version of the strategy catalog (currently `1.0.0`).
-- `id` – globally unique identifier referenced by tool definitions.
-- `type` – one of `command`, `parser`, `formatter`, `postProcessor`, or
+* `schemaVersion` – schema version of the strategy catalog (currently `1.0.0`).
+* `id` – globally unique identifier referenced by tool definitions.
+* `type` – one of `command`, `parser`, `formatter`, `postProcessor`, or
   `installer`.
-- `implementation` – fully qualified Python import path pointing at the factory
+* `implementation` – fully qualified Python import path pointing at the factory
   in `pyqa.tooling.strategies`.
-- `config` – description of the configuration keys a tool may supply when using
+* `config` – description of the configuration keys a tool may supply when using
   the strategy. Keys include `type`, `required`, and optional `description` to
   aid catalog authors.
 
@@ -39,16 +39,16 @@ Downloads a platform-specific binary and builds an argument list using option
 mappings and optional target selection. Key config values supported by the
 strategy/schema:
 
-- `version` (string, optional) – override the version passed to the download helper.
-- `download` (object, required) – describes available assets (`name`,
+* `version` (string, optional) – override the version passed to the download helper.
+* `download` (object, required) – describes available assets (`name`,
   `cacheSubdir`, `targets`).
-- `base` (array) – static arguments; use `${binary}` to inject the downloaded
+* `base` (array) – static arguments; use `${binary}` to inject the downloaded
   binary path.
-- `binaryPlaceholder` (string) – change the token replaced by the binary path.
-- `options` (array) – option mappings that translate tool settings into flags.
+* `binaryPlaceholder` (string) – change the token replaced by the binary path.
+* `options` (array) – option mappings that translate tool settings into flags.
   Supported mapping fields: `setting`, `type` (`value`, `path`, `args`, `flag`,
   `repeatFlag`), `flag`, `negateFlag`, `joinWith`, `literalValues`, `default`.
-- `targets` (object) – optional file selection rules (`suffixes`, `contains`,
+* `targets` (object) – optional file selection rules (`suffixes`, `contains`,
   `pathMustInclude`, `fallbackDirectory`, `defaultToRoot`).
 
 ### `command_project_scanner`
@@ -56,11 +56,11 @@ strategy/schema:
 Captures scanners that derive targets from project metadata (discovery roots,
 explicit files, user provided paths) and need exclude handling.
 
-- `base` (array, required) – command prefix.
-- `options` (array) – same option mapping structure as above.
-- `exclude` – configuration for exclusion lists (settings names, whether to
+* `base` (array, required) – command prefix.
+* `options` (array) – same option mapping structure as above.
+* `exclude` – configuration for exclusion lists (settings names, whether to
   include discovery excludes, CLI flag/separator).
-- `targets` – planning for target arguments (settings, fallback directories,
+* `targets` – planning for target arguments (settings, fallback directories,
   optional prefix, and whether to include discovery roots/explicit files).
 
 ### `parser_json_diagnostics`
@@ -79,19 +79,19 @@ optional `version`/`contextLabel` overrides.
 
 1. Implement the corresponding factory in `pyqa.tooling.strategies` and export it
    via `__all__`.
-1. Create a JSON descriptor in this directory using the structure above.
-1. Describe any configuration keys in the `config` object to help authors and to
+2. Create a JSON descriptor in this directory using the structure above.
+3. Describe any configuration keys in the `config` object to help authors and to
    support validation tooling.
-1. Update `tooling/schema/strategy_definition.schema.json` if new concepts are
+4. Update `tooling/schema/strategy_definition.schema.json` if new concepts are
    introduced that should be enforced globally.
-1. Add tests that exercise the new strategy (e.g. under `tests/`), referencing it
+5. Add tests that exercise the new strategy (e.g. under `tests/`), referencing it
    through the catalog to ensure end-to-end coverage.
 
 ## Tips for Catalog Authors
 
-- Strategy files are validated during test runs; schema violations will fail
+* Strategy files are validated during test runs; schema violations will fail
   early before the registry loads.
-- Keep descriptions up to date—CLI commands such as `pyqa tool-info` surface
+* Keep descriptions up to date—CLI commands such as `pyqa tool-info` surface
   strategy-derived metadata when debugging catalog issues.
-- Treat strategy configuration as the public contract: once multiple tools rely
+* Treat strategy configuration as the public contract: once multiple tools rely
   on a field it should be documented here and in `SCHEMA.md` to avoid regressions.

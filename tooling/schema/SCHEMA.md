@@ -26,20 +26,20 @@ Tool definitions describe a single linter/formatter/utility and are grouped by
 language (or utility class) inside `tooling/catalog/languages`. The schema
 captures the following high level areas:
 
-- **Metadata** – tool name, description, language tags, default enablement, and
+* **Metadata** – tool name, description, language tags, default enablement, and
   phase ordering (`phase`, `before`, `after`).
-- **Runtime** – describes how the tool is executed. This can represent Python
+* **Runtime** – describes how the tool is executed. This can represent Python
   packages, npm packages, Go modules, standalone binaries, etc. Runtime
   sections optionally include an `install` block that references an installer
   strategy (such as `installer_download_artifact`).
-- **Actions** – every executable entry point a tool exposes (e.g. `lint`, `fix`,
+* **Actions** – every executable entry point a tool exposes (e.g. `lint`, `fix`,
   `check`). Each action references a command strategy, an optional parser, and
   metadata such as appended files, exit-code handling, and timeouts.
-- **Diagnostics** – severity mapping and dedupe hints used by the orchestrator
+* **Diagnostics** – severity mapping and dedupe hints used by the orchestrator
   to normalise diagnostics from the tool.
-- **Suppressions** – default suppressions for tests/general usage along with
+* **Suppressions** – default suppressions for tests/general usage along with
   duplicate tool hints.
-- **Options & Documentation** – strongly typed option metadata exposed through
+* **Options & Documentation** – strongly typed option metadata exposed through
   CLI/config APIs and paths to documentation fragments rendered by the CLI.
 
 ### Strategy-specific Command Validation
@@ -47,10 +47,10 @@ captures the following high level areas:
 The schema now contains command-specific validation for the new generic
 strategies:
 
-- `command_download_binary` – ensures `download` targets, optional base
+* `command_download_binary` – ensures `download` targets, optional base
   arguments, option mappings (including `joinWith`, `default`, `literalValues`),
   and optional `targets` selector are correctly typed.
-- `command_project_scanner` – validates project-aware scanners that utilise
+* `command_project_scanner` – validates project-aware scanners that utilise
   exclude plans, target planning, and option mappings.
 
 Installer configuration is similarly constrained for
@@ -70,9 +70,9 @@ Strategy definitions live under `tooling/catalog/strategies` and provide the
 registry with reusable command/parser/post-processing behaviour. Each strategy
 entry includes:
 
-- `id`, `type`, and `implementation` – these must match the callable exported
+* `id`, `type`, and `implementation` – these must match the callable exported
   from `pyqa.tooling.strategies`.
-- `config` – a description of the configuration keys that tool JSON files may
+* `config` – a description of the configuration keys that tool JSON files may
   supply when referencing the strategy. While the schema keeps this section
   deliberately open (to avoid duplicating every possible field), it ensures at
   minimum that types are declared and that required keys are called out.
@@ -81,9 +81,9 @@ entry includes:
 
 1. `ToolCatalogLoader` loads strategy definitions first and validates every JSON
    document against `strategy_definition.schema.json`.
-1. Tool definitions and fragments are loaded next, validated against
+2. Tool definitions and fragments are loaded next, validated against
    `tool_definition.schema.json`, and merged with `_shared` fragments.
-1. A snapshot containing the checksum and validated data structures is produced
+3. A snapshot containing the checksum and validated data structures is produced
    for use by the registry.
 
 Authors can run `uv run pytest tests/test_tooling_loader.py` to exercise schema

@@ -358,6 +358,72 @@ class LintOptions:
         self._overrides = bundles.overrides
         self._provided = frozenset(provided)
 
+    @property
+    def target_options(self) -> LintTargetOptions:
+        """Return the CLI-provided target discovery options bundle.
+
+        Returns:
+            LintTargetOptions: Structured view of filesystem discovery inputs
+            collected from the command line interface.
+        """
+
+        return self._targets
+
+    @property
+    def git_options(self) -> LintGitOptions:
+        """Return the CLI git discovery options bundle.
+
+        Returns:
+            LintGitOptions: Aggregated git-discovery related inputs including
+            revision boundaries and test skipping preferences.
+        """
+
+        return self._git
+
+    @property
+    def selection_options(self) -> LintSelectionOptions:
+        """Return tool selection options derived from CLI arguments.
+
+        Returns:
+            LintSelectionOptions: Filters, language selection, and fix/check
+            toggles used when building the execution plan.
+        """
+
+        return self._selection
+
+    @property
+    def output_bundle(self) -> LintOutputBundle:
+        """Return the CLI output bundle containing display and summary data.
+
+        Returns:
+            LintOutputBundle: Nested display toggles and summary preferences
+            gathered from the CLI invocation.
+        """
+
+        return self._output
+
+    @property
+    def execution_options(self) -> LintExecutionOptions:
+        """Return the execution options bundle derived from CLI arguments.
+
+        Returns:
+            LintExecutionOptions: Runtime and formatting parameters scoped to
+            downstream tool execution.
+        """
+
+        return self._execution
+
+    @property
+    def override_options(self) -> LintOverrideOptions:
+        """Return the CLI override bundle for complexity and strictness.
+
+        Returns:
+            LintOverrideOptions: Aggregated overrides for complexity, typing,
+            and severity enforcement passed via CLI flags.
+        """
+
+        return self._overrides
+
     @overload
     def __getattr__(self, name: Literal["root", "cache_dir"]) -> Path: ...
 

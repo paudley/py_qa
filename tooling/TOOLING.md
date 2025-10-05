@@ -22,22 +22,22 @@ catalog or strategy layer.
 ## Catalog Lifecycle
 
 1. **Validation & Snapshotting** – `ToolCatalogLoader` walks the catalog directories, validates JSON against the schemas, merges `_shared` fragments, and computes a checksum stored in `tooling/catalog/cache.json`.
-1. **Materialisation** – `register_catalog_tools` converts validated definitions into `Tool` instances by instantiating referenced strategies (commands, parsers, installers).
-1. **Execution** – The orchestrator (`src/pyqa/execution/orchestrator.py`) uses the registry to fetch tools for a run, executes actions in phase order, and feeds stdout/stderr into the configured parsers.
+2. **Materialisation** – `register_catalog_tools` converts validated definitions into `Tool` instances by instantiating referenced strategies (commands, parsers, installers).
+3. **Execution** – The orchestrator (`src/pyqa/execution/orchestrator.py`) uses the registry to fetch tools for a run, executes actions in phase order, and feeds stdout/stderr into the configured parsers.
 
 ## Strategies
 
 Strategies are JSON-defined references to Python factories. They keep runtime
 code small and focused:
 
-- **Command Strategies** build argument lists from catalog configuration and
+* **Command Strategies** build argument lists from catalog configuration and
   tool settings. Examples include `command_download_binary` for standalone
   binaries and `command_project_scanner` for language-aware scanners that need
   exclude/target planning.
-- **Parser Strategies** encapsulate stdout/stderr parsing. `parser_json` wraps a
+* **Parser Strategies** encapsulate stdout/stderr parsing. `parser_json` wraps a
   transform callable, while `parser_json_diagnostics` maps JSON payloads onto
   `RawDiagnostic` objects declaratively.
-- **Installer Strategies** run once per tool to ensure a runtime is available
+* **Installer Strategies** run once per tool to ensure a runtime is available
   (e.g., downloading a binary release).
 
 All strategies live under `tooling/catalog/strategies` and are validated by the
@@ -60,16 +60,16 @@ change.
 
 ## Testing & Validation
 
-- **Unit tests** – `tests/test_tooling_loader.py`, `tests/test_tool_catalog_registry.py`, and strategy-specific tests exercise the loader and strategy layer against the real catalog.
-- **Author workflow** – After editing catalog JSON or strategies, run `uv run pytest` for the relevant tests and update the checksum. Schema validation failures will surface immediately during test collection.
-- **Quick check** – Run `./lint --validate-schema` (or `uv run pyqa lint --validate-schema`) to load the catalog, report tool/strategy counts, and confirm the checksum without running the full test suite.
+* **Unit tests** – `tests/test_tooling_loader.py`, `tests/test_tool_catalog_registry.py`, and strategy-specific tests exercise the loader and strategy layer against the real catalog.
+* **Author workflow** – After editing catalog JSON or strategies, run `uv run pytest` for the relevant tests and update the checksum. Schema validation failures will surface immediately during test collection.
+* **Quick check** – Run `./lint --validate-schema` (or `uv run pyqa lint --validate-schema`) to load the catalog, report tool/strategy counts, and confirm the checksum without running the full test suite.
 
 ## Authoring Checklist
 
 1. Update or add JSON under `tooling/catalog/…`.
-1. Ensure any new configuration keys are documented in the schemas (`tool_definition` or `strategy_definition`).
-1. Regenerate `tooling/catalog/cache.json` via `ToolCatalogLoader.compute_checksum()`.
-1. Run `uv run pytest tests/test_tooling_loader.py tests/test_tool_catalog_registry.py` (or the full suite) before opening a PR.
+2. Ensure any new configuration keys are documented in the schemas (`tool_definition` or `strategy_definition`).
+3. Regenerate `tooling/catalog/cache.json` via `ToolCatalogLoader.compute_checksum()`.
+4. Run `uv run pytest tests/test_tooling_loader.py tests/test_tool_catalog_registry.py` (or the full suite) before opening a PR.
 
 Keeping these steps in sync ensures the catalog remains source-of-truth and the
 Python runtime layer stays minimal.

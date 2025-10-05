@@ -56,9 +56,24 @@ def collect_output_overrides(
     project_root: Path,
     has_option: Callable[[LintOptionKey], bool],
 ) -> OutputOverrides:
-    """Return the output overrides derived from CLI inputs."""
+    """Return the output overrides derived from CLI inputs.
+
+    Args:
+        current: Existing output configuration prior to applying overrides.
+        options: Composed CLI options bundle derived from user arguments.
+        project_root: Resolved project root used for relative path decisions.
+        has_option: Predicate indicating whether a CLI flag was provided.
+
+    Returns:
+        OutputOverrides: Mapping of normalized output overrides including
+        toggles, filters, and PR summary adjustments.
+    """
 
     provided = options.provided
+    output_bundle = options.output_bundle
+    display = output_bundle.display
+    summary = output_bundle.summary
+
     tool_filters = resolve_tool_filters(
         current.tool_filters,
         DEFAULT_TOOL_FILTERS,
@@ -66,15 +81,15 @@ def collect_output_overrides(
         has_option,
     )
 
-    quiet_value = select_flag(options.quiet, current.quiet, LintOptionKey.QUIET, provided)
+    quiet_value = select_flag(display.quiet, current.quiet, LintOptionKey.QUIET, provided)
     show_passing_value = select_flag(
-        options.show_passing,
+        summary.show_passing,
         current.show_passing,
         LintOptionKey.SHOW_PASSING,
         provided,
     )
     show_stats_value = select_flag(
-        not options.no_stats,
+        not summary.no_stats,
         current.show_stats,
         LintOptionKey.NO_STATS,
         provided,
@@ -86,53 +101,53 @@ def collect_output_overrides(
     overrides: OutputOverrides = {
         "tool_filters": tool_filters,
         "verbose": select_flag(
-            options.verbose,
+            display.verbose,
             current.verbose,
             LintOptionKey.VERBOSE,
             provided,
         ),
         "quiet": quiet_value,
         "color": select_flag(
-            not options.no_color,
+            not display.no_color,
             current.color,
             LintOptionKey.NO_COLOR,
             provided,
         ),
         "emoji": select_flag(
-            not options.no_emoji,
+            not display.no_emoji,
             current.emoji,
             LintOptionKey.NO_EMOJI,
             provided,
         ),
         "output": (
-            normalize_output_mode(options.output_mode) if has_option(LintOptionKey.OUTPUT_MODE) else current.output
+            normalize_output_mode(display.output_mode) if has_option(LintOptionKey.OUTPUT_MODE) else current.output
         ),
         "show_passing": show_passing_value,
         "show_stats": show_stats_value,
         "advice": select_flag(
-            options.advice,
+            display.advice,
             current.advice,
             LintOptionKey.ADVICE,
             provided,
         ),
         "pr_summary_out": (
-            resolve_optional_path(project_root, options.pr_summary_out)
+            resolve_optional_path(project_root, summary.pr_summary_out)
             if has_option(LintOptionKey.PR_SUMMARY_OUT)
             else current.pr_summary_out
         ),
         "pr_summary_limit": select_value(
-            options.pr_summary_limit,
+            summary.pr_summary_limit,
             current.pr_summary_limit,
             LintOptionKey.PR_SUMMARY_LIMIT,
             provided,
         ),
         "pr_summary_min_severity": (
-            normalize_min_severity(options.pr_summary_min_severity)
+            normalize_min_severity(summary.pr_summary_min_severity)
             if has_option(LintOptionKey.PR_SUMMARY_MIN_SEVERITY)
             else current.pr_summary_min_severity
         ),
         "pr_summary_template": select_value(
-            options.pr_summary_template,
+            summary.pr_summary_template,
             current.pr_summary_template,
             LintOptionKey.PR_SUMMARY_TEMPLATE,
             provided,
@@ -147,13 +162,24 @@ def resolve_tool_filters(
     options: LintOptions,
     has_option: Callable[[LintOptionKey], bool],
 ) -> ToolFilters:
-    """Return merged tool filters combining defaults, config, and CLI values."""
+    """Return merged tool filters combining defaults, config, and CLI values.
+
+    Args:
+        current_filters: Filters from the persisted configuration file.
+        defaults: Built-in default filters shared across commands.
+        options: Composed CLI options bundle derived from user arguments.
+        has_option: Predicate indicating whether a CLI flag was provided.
+
+    Returns:
+        ToolFilters: Deduplicated mapping of tool names to suppression
+        patterns derived from defaults, config, and CLI input.
+    """
 
     filters: ToolFilters = {tool: patterns.copy() for tool, patterns in defaults.items()}
     for tool, patterns in current_filters.items():
         filters.setdefault(tool, []).extend(patterns)
     if has_option(LintOptionKey.FILTERS):
-        parsed = parse_filters(options.filters)
+        parsed = parse_filters(options.selection_options.filters)
         for tool, patterns in parsed.items():
             filters.setdefault(tool, []).extend(patterns)
     return {tool: list(dict.fromkeys(patterns)) for tool, patterns in filters.items()}

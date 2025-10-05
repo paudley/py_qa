@@ -672,6 +672,7 @@ _TOML_CACHE: dict[tuple[Path, int], Mapping[str, Any]] = {}
 __all__ = [
     "ConfigLoadResult",
     "ConfigLoader",
+    "ConfigError",
     "FieldUpdate",
     "generate_config_schema",
     "load_config",

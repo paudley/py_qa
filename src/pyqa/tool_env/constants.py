@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Iterable
+from typing import Final
 
 TOOLS_SUBDIR: Final[str] = "tools"
 UV_SUBDIR: Final[str] = "uv"

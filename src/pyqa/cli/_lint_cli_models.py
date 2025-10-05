@@ -737,6 +737,7 @@ __all__ = [
     "LintSelectionParams",
     "LintSeverityParams",
     "LintSummaryParams",
+    "OutputModeLiteral",
     "PathArgument",
     "RootOption",
     "MAX_ARGUMENTS_HELP",

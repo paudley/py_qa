@@ -5,7 +5,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..clean import CleanConfig, CleanResult
+from ..clean import CleanResult
+from ..config import CleanConfig
 from ..constants import PY_QA_DIR_NAME
 from ..filesystem.paths import display_relative_path
 from ._config_loading import load_config_result

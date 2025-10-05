@@ -13,8 +13,8 @@ This mission is governed by a set of non-negotiable principles that must guide e
 ### **Guiding Principles**
 
 1. **Preservation of Intent (Do No Harm):** Your actions must be fundamentally constructive. Under no circumstances shall you remove or diminish existing source code functionality to make a test pass. The functional intent of every test must be preserved or enhanced. You are explicitly forbidden from stubbing out failing tests with pass, trivial implementations, or marking them as expected failures (@pytest.mark.xfail) as a means of avoiding a fix. The objective is to repair underlying issues, not to circumvent them.
-1. **Pursuit of Excellence:** The final, delivered test suite must exemplify the highest standards of modern Python development. This mandate encompasses strict static analysis, comprehensive documentation, optimal performance, and intelligent, resilient test design. Every line of test code you modify or create must contribute to a higher standard of quality.
-1. **Systematic and Observable Process:** You must proceed through this mandate methodically and transparently. For each major phase of work—such as refactoring for parallel execution, implementing static type checking, or introducing new testing methodologies—you will describe the changes made and provide a clear rationale for your approach. This ensures that the evolution of the test suite is traceable and understandable.
+2. **Pursuit of Excellence:** The final, delivered test suite must exemplify the highest standards of modern Python development. This mandate encompasses strict static analysis, comprehensive documentation, optimal performance, and intelligent, resilient test design. Every line of test code you modify or create must contribute to a higher standard of quality.
+3. **Systematic and Observable Process:** You must proceed through this mandate methodically and transparently. For each major phase of work—such as refactoring for parallel execution, implementing static type checking, or introducing new testing methodologies—you will describe the changes made and provide a clear rationale for your approach. This ensures that the evolution of the test suite is traceable and understandable.
 
 ## **Section 1: Foundational Quality and Style Requirements**
 
@@ -24,7 +24,7 @@ This section establishes the baseline code quality standards for all test code y
 
 **Requirement:** All new or modified test code must be fully and explicitly type-annotated in accordance with PEP 484. The final test suite, in its entirety, must pass mypy when run with a strict configuration.
 
-**Implementation:** You will ensure the pyproject.toml file contains a [tool.mypy] section with a comprehensive set of strict checks enabled. This configuration must include, but is not limited to, check_untyped_defs = true, disallow_incomplete_defs = true, warn_unused_ignores = true, warn_return_any = true, and no_implicit_optional = true.1 The primary goal of this configuration is to eliminate the implicit use of the
+**Implementation:** You will ensure the pyproject.toml file contains a \[tool.mypy] section with a comprehensive set of strict checks enabled. This configuration must include, but is not limited to, check\_untyped\_defs = true, disallow\_incomplete\_defs = true, warn\_unused\_ignores = true, warn\_return\_any = true, and no\_implicit\_optional = true.1 The primary goal of this configuration is to eliminate the implicit use of the
 
 Any type, thereby maximizing the benefits of static analysis.
 
@@ -38,7 +38,7 @@ pytest-mypy plugin will be used to integrate these static analysis checks direct
 
 **Implementation:** You will adhere to a pylint configuration that enforces Python best practices while remaining pragmatic for the specific context of test code. Certain pylint checks that are often counterproductive in tests may be disabled. These include protected-access (W0212), as tests frequently need to inspect the internal state of objects, and too-few-public-methods (R0903), which is not relevant for test classes that serve as organizational namespaces.8 The complete configuration will be specified within the
 
-[tool.pylint.\*] sections of the pyproject.toml file.9
+\[tool.pylint.\*] sections of the pyproject.toml file.9
 
 **Context:** Consistent adherence to a high-quality linter configuration is essential for maintaining code readability and consistency, particularly in a collaborative development environment.10 By integrating
 
@@ -69,10 +69,10 @@ This section details the primary task of fixing the failing tests. The focus is 
 **Implementation Protocol:** A systematic approach is required to achieve robust parallelization. A test that fails under parallel execution is merely a symptom of a deeper architectural flaw, such as shared state or an implicit dependency on execution order. You will follow this protocol to diagnose and resolve these flaws:
 
 1. **Diagnose Order Dependencies:** The first step is to uncover and eliminate any implicit dependencies on test execution order. To do this, you will integrate the pytest-random-order plugin and run the suite with the --random-order flag. Failures that appear under this randomized execution, but not under sequential execution, are direct evidence of order dependencies.17 You must resolve these issues by making each test fully self-contained, ensuring it sets up its own state and does not rely on the artifacts of a previously run test.
-1. **Identify and Eliminate Shared State:** After resolving order dependencies, you must scrutinize the test suite for any shared resources that could create race conditions or state corruption when accessed concurrently. Common sources of shared state include:
-   - **Filesystem:** Any test that reads from or writes to a hardcoded file path is not parallel-safe. These tests must be refactored to use the built-in tmp_path fixture. This fixture provides a unique, empty temporary directory for each test function, guaranteeing filesystem isolation.21
-   - **Database:** Tests that modify a shared database are a primary source of flakiness in parallel runs. These must be refactored to ensure complete isolation. This can be achieved by ensuring each test runs within its own database transaction that is rolled back upon completion, or by using fixtures that create and tear down a unique test database or schema for each test worker.
-   - **Global State:** Any test that relies on or modifies mutable global variables, module-level state, or class-level state is inherently unsafe for parallel execution. This pattern must be eliminated entirely. All state required by a test must be created and managed within the scope of that test, typically via fixtures.
+2. **Identify and Eliminate Shared State:** After resolving order dependencies, you must scrutinize the test suite for any shared resources that could create race conditions or state corruption when accessed concurrently. Common sources of shared state include:
+   * **Filesystem:** Any test that reads from or writes to a hardcoded file path is not parallel-safe. These tests must be refactored to use the built-in tmp\_path fixture. This fixture provides a unique, empty temporary directory for each test function, guaranteeing filesystem isolation.21
+   * **Database:** Tests that modify a shared database are a primary source of flakiness in parallel runs. These must be refactored to ensure complete isolation. This can be achieved by ensuring each test runs within its own database transaction that is rolled back upon completion, or by using fixtures that create and tear down a unique test database or schema for each test worker.
+   * **Global State:** Any test that relies on or modifies mutable global variables, module-level state, or class-level state is inherently unsafe for parallel execution. This pattern must be eliminated entirely. All state required by a test must be created and managed within the scope of that test, typically via fixtures.
 
 ### **2.3. Refactoring for Maintainability (DRY Principle)**
 
@@ -80,8 +80,8 @@ This section details the primary task of fixing the failing tests. The focus is 
 
 **Implementation:**
 
-- **Helper Functions:** Identify any repeated patterns of logic within your tests. This could include complex object instantiation, multi-step data preparation, or recurring sequences of validation checks. Extract this logic into well-documented, fully-typed helper functions. These functions should be organized into a dedicated module, such as tests/helpers.py, to create a reusable library of testing utilities.22
-- **Shared Fixtures (conftest.py):** Identify common setup and teardown procedures that are used across multiple tests. These are ideal candidates for conversion into shared fixtures. Place these fixtures in the appropriate conftest.py file to make them available to the relevant tests. You must use fixture scopes (function, class, module, session) judiciously to optimize test suite performance.23 For example, an expensive, read-only resource like a database connection pool can be session-scoped to be created only once. In contrast, a fixture that provides a specific piece of mutable test data for a single test should be function-scoped to ensure isolation.
+* **Helper Functions:** Identify any repeated patterns of logic within your tests. This could include complex object instantiation, multi-step data preparation, or recurring sequences of validation checks. Extract this logic into well-documented, fully-typed helper functions. These functions should be organized into a dedicated module, such as tests/helpers.py, to create a reusable library of testing utilities.22
+* **Shared Fixtures (conftest.py):** Identify common setup and teardown procedures that are used across multiple tests. These are ideal candidates for conversion into shared fixtures. Place these fixtures in the appropriate conftest.py file to make them available to the relevant tests. You must use fixture scopes (function, class, module, session) judiciously to optimize test suite performance.23 For example, an expensive, read-only resource like a database connection pool can be session-scoped to be created only once. In contrast, a fixture that provides a specific piece of mutable test data for a single test should be function-scoped to ensure isolation.
 
 ## **Section 3: Implementation of Advanced pytest Tooling**
 
@@ -91,7 +91,7 @@ This section mandates the integration of specific pytest plugins to elevate the 
 
 **Requirement:** Refactor tests to report all assertion failures within a single test run, rather than stopping at the first failure.
 
-**Implementation:** You will identify test functions that perform multiple, independent checks on a single object or state. These tests must be refactored to use the pytest-check plugin. For clarity and readability, you should prefer using the explicit helper functions provided by the plugin (e.g., check.equal(), check.is_in(), check.greater()). For more complex or custom validation logic that cannot be expressed with the built-in helpers, you may use the with check: context manager.35
+**Implementation:** You will identify test functions that perform multiple, independent checks on a single object or state. These tests must be refactored to use the pytest-check plugin. For clarity and readability, you should prefer using the explicit helper functions provided by the plugin (e.g., check.equal(), check.is\_in(), check.greater()). For more complex or custom validation logic that cannot be expressed with the built-in helpers, you may use the with check: context manager.35
 
 **Context:** Standard assert statements cause a test to fail and exit immediately. This can hide other potential failures within the same test, leading to a slow, iterative process of fixing one issue, re-running the tests, and only then discovering the next. By using pytest-check, you gather a comprehensive list of all failures in a single run, providing much richer diagnostic feedback and accelerating the debugging cycle.35
 
@@ -102,7 +102,7 @@ This section mandates the integration of specific pytest plugins to elevate the 
 **Implementation - A Two-Pronged Approach:** The user's intent for deterministic I/O will be fulfilled by using the correct tool for each specific job: one for network interactions and another for validating deterministic data outputs.
 
 1. **Network Operations (pytest-recording):** For all tests that make external HTTP or HTTPS requests, you will use the pytest-recording plugin, which provides a seamless integration for vcrpy. On the first execution of such a test, the plugin will perform the real network request and record the full interaction (request and response) into a human-readable YAML file known as a "cassette." On all subsequent test runs, the plugin will intercept the network call and replay the saved response from the cassette, eliminating any dependency on the network or the external service. This ensures tests are fast, repeatable, and can run offline. A critical part of this implementation is configuring pytest-recording to filter sensitive data, such as Authorization headers or API keys, from the cassettes before they are saved. This prevents secrets from being committed to version control.36
-1. **Deterministic File/Data Output (pytest-snapshot):** For tests that generate complex but deterministic output—such as a large JSON object, an XML file, a CSV, or a formatted text report—you will use the pytest-snapshot plugin. This plugin captures the expected output in a separate snapshot file. On subsequent runs, it compares the new output to the saved snapshot. If there are any differences, the test fails. This is an exceptionally powerful technique for regression testing of data transformation pipelines, serializers, or any function that produces complex, structured output.36
+2. **Deterministic File/Data Output (pytest-snapshot):** For tests that generate complex but deterministic output—such as a large JSON object, an XML file, a CSV, or a formatted text report—you will use the pytest-snapshot plugin. This plugin captures the expected output in a separate snapshot file. On subsequent runs, it compares the new output to the saved snapshot. If there are any differences, the test fails. This is an exceptionally powerful technique for regression testing of data transformation pipelines, serializers, or any function that produces complex, structured output.36
 
 ### **3.3. Enforcing Performance with pytest-timeout**
 
@@ -122,10 +122,10 @@ Beyond repairing existing tests, you are tasked with strategically expanding the
 
 **Implementation:**
 
-- **Candidate Identification:** You will analyze the application's functionality to identify user-facing features, complex business logic workflows, or API endpoints that would benefit from being described in plain, unambiguous language. You will use the **Test Strategy Selection Guide** (Table 1) below to make these decisions.
-- **Structure:** New BDD tests will be organized according to best practices. You will create a tests/features/ directory to house the Gherkin .feature files and a corresponding tests/step_defs/ directory for the Python step definition implementation files.48
-- **Gherkin Scenarios:** Within the .feature files, you will write clear, declarative scenarios using the standard Gherkin syntax (Given, When, Then). These scenarios should describe a feature from the perspective of a user or stakeholder.49
-- **Step Definitions:** You will implement the Python functions that correspond to each Gherkin step. A key aspect of this implementation is to maximize code reuse by leveraging existing fixtures from the test suite for setting up the state described in the Given steps.
+* **Candidate Identification:** You will analyze the application's functionality to identify user-facing features, complex business logic workflows, or API endpoints that would benefit from being described in plain, unambiguous language. You will use the **Test Strategy Selection Guide** (Table 1) below to make these decisions.
+* **Structure:** New BDD tests will be organized according to best practices. You will create a tests/features/ directory to house the Gherkin .feature files and a corresponding tests/step\_defs/ directory for the Python step definition implementation files.48
+* **Gherkin Scenarios:** Within the .feature files, you will write clear, declarative scenarios using the standard Gherkin syntax (Given, When, Then). These scenarios should describe a feature from the perspective of a user or stakeholder.49
+* **Step Definitions:** You will implement the Python functions that correspond to each Gherkin step. A key aspect of this implementation is to maximize code reuse by leveraging existing fixtures from the test suite for setting up the state described in the Given steps.
 
 ### **4.2. Property-Based Testing with hypothesis**
 
@@ -133,9 +133,9 @@ Beyond repairing existing tests, you are tasked with strategically expanding the
 
 **Implementation:**
 
-- **Candidate Identification:** You will identify functions within the codebase that are pure or semi-pure and perform data processing, parsing, validation, or mathematical calculations. These functions are prime candidates for property-based testing. You will use the **Test Strategy Selection Guide** (Table 1) below to make these decisions.
-- **Property Definition:** For each candidate function, you will define a "property"—an invariant or a rule that should hold true for all valid inputs. For example, a property of a serialization function might be that "for any valid input object x, deserialize(serialize(x)) is equal to x".
-- **Strategies:** You will use the hypothesis.strategies module to define how to generate a wide range of valid (and sometimes invalid) input data for the function under test. You should use Hypothesis's rich library of built-in strategies (st.integers(), st.text(), st.builds(), etc.) wherever possible to cover a vast input space with minimal code.53
+* **Candidate Identification:** You will identify functions within the codebase that are pure or semi-pure and perform data processing, parsing, validation, or mathematical calculations. These functions are prime candidates for property-based testing. You will use the **Test Strategy Selection Guide** (Table 1) below to make these decisions.
+* **Property Definition:** For each candidate function, you will define a "property"—an invariant or a rule that should hold true for all valid inputs. For example, a property of a serialization function might be that "for any valid input object x, deserialize(serialize(x)) is equal to x".
+* **Strategies:** You will use the hypothesis.strategies module to define how to generate a wide range of valid (and sometimes invalid) input data for the function under test. You should use Hypothesis's rich library of built-in strategies (st.integers(), st.text(), st.builds(), etc.) wherever possible to cover a vast input space with minimal code.53
 
 Deciding when to use a standard test versus a more advanced methodology like BDD or property-based testing is crucial for building an effective and maintainable test suite. A standard test is excellent for verifying a single, known condition. BDD excels at describing and testing multi-step user behaviors. Hypothesis is unparalleled at finding unknown edge cases in data-handling logic. The following guide provides a clear heuristic framework for selecting the most appropriate testing strategy for a given scenario.
 
@@ -143,7 +143,7 @@ Deciding when to use a standard test versus a more advanced methodology like BDD
 
 | Test Type                | Primary Goal                                                                                            | Use When...                                                                                                                                                 | Example Scenario                                                                                                                       |
 | :----------------------- | :------------------------------------------------------------------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------- |
-| **Standard pytest Test** | Verify a specific, known outcome for a single unit of code.                                             | You are testing a single, well-defined input-output pair or a specific error condition.                                                                     | def test_add_positive_numbers(): assert add(2, 3) == 5                                                                                 |
+| **Standard pytest Test** | Verify a specific, known outcome for a single unit of code.                                             | You are testing a single, well-defined input-output pair or a specific error condition.                                                                     | def test\_add\_positive\_numbers(): assert add(2, 3) == 5                                                                                 |
 | **pytest-bdd**           | Document and verify application behavior from a user or stakeholder perspective.                        | The functionality represents a user story or a business rule that can be described in plain language. The test covers a multi-step interaction.             | Testing a login flow: Given a user is on the login page, When they enter valid credentials, Then they are redirected to the dashboard. |
 | **hypothesis**           | Discover edge cases and bugs by testing properties of a function across a wide range of generated data. | The function performs data processing, parsing, validation, or mathematical calculations. You want to ensure its logic is robust against unexpected inputs. | Testing a sort() function: "For any list of integers L, the output sort(L) should have the same length as L and be ordered."           |
 
@@ -157,14 +157,14 @@ This final section details the necessary configuration changes to the project's 
 
 **Implementation:**
 
-1. **Dependencies:** You will add all new testing dependencies—including pytest-check, pytest-recording, pytest-bdd, hypothesis, pytest-random-order, and pytest-sugar—to the [project.optional-dependencies] table under the test key. This ensures that all tools required to run the test suite are clearly declared and can be installed with a single command.55
-1. **Tool Configuration:** You will populate the pyproject.toml file with the comprehensive tool configurations detailed in the table below. This centralized approach to configuration is a modern Python best practice that improves project clarity and maintainability.59
+1. **Dependencies:** You will add all new testing dependencies—including pytest-check, pytest-recording, pytest-bdd, hypothesis, pytest-random-order, and pytest-sugar—to the \[project.optional-dependencies] table under the test key. This ensures that all tools required to run the test suite are clearly declared and can be installed with a single command.55
+2. **Tool Configuration:** You will populate the pyproject.toml file with the comprehensive tool configurations detailed in the table below. This centralized approach to configuration is a modern Python best practice that improves project clarity and maintainability.59
 
 ### **Table 2: pyproject.toml Tool Configuration**
 
 Ini, TOML
 
-[tool.pytest.ini_options]\
+\[tool.pytest.ini\_options]\
 \# Add common pytest command-line options to be used by default.\
 addopts =
 
@@ -172,34 +172,34 @@ addopts =
 timeout = 15
 
 \# Configure test discovery to look only in the 'tests' directory.\
-testpaths = ["tests"]
+testpaths = \["tests"]
 
 \# Register custom markers to avoid warnings and enable selective runs.\
 markers =
 
-[tool.mypy]\
+\[tool.mypy]\
 \# Specify the source directory for type checking.\
-mypy_path = "src"
+mypy\_path = "src"
 
 \# Enable a strict suite of type checking options for maximum safety.\
-check_untyped_defs = true\
-disallow_any_generics = true\
-disallow_incomplete_defs = true\
-disallow_untyped_defs = true\
-ignore_missing_imports = true # A pragmatic choice for projects with untyped 3rd-party dependencies.\
-no_implicit_optional = true\
-warn_redundant_casts = true\
-warn_return_any = true\
-warn_unused_ignores = true
+check\_untyped\_defs = true\
+disallow\_any\_generics = true\
+disallow\_incomplete\_defs = true\
+disallow\_untyped\_defs = true\
+ignore\_missing\_imports = true # A pragmatic choice for projects with untyped 3rd-party dependencies.\
+no\_implicit\_optional = true\
+warn\_redundant\_casts = true\
+warn\_return\_any = true\
+warn\_unused\_ignores = true
 
 \# Include error codes in output for easier debugging and suppression.\
-show_error_codes = true
+show\_error\_codes = true
 
 \# Disable messages that are often noisy or counterproductive in a pytest suite.\
 disable =
 
 \# Allow short variable names that are common and idiomatic in test contexts.\
-good-names = ["i", "j", "k", "e", "f", "db", "ex"]
+good-names = \["i", "j", "k", "e", "f", "db", "ex"]
 
 ### **5.2. Final Verification and Execution**
 
@@ -207,7 +207,7 @@ good-names = ["i", "j", "k", "e", "f", "db", "ex"]
 
 **Implementation:**
 
-1. **Install Dependencies:** From the project root, execute uv pip install -e.[test]. This command will use the newly configured pyproject.toml to create an editable install of the project and install all required testing dependencies into the virtual environment.
-1. **Execute Full Suite:** Run the complete, enhanced test suite using the command uv run pytest. This command must execute without any command-line arguments (relying on the pyproject.toml configuration) and must exit with a status code of 0. A zero exit code signifies that all tests passed, including all integrated mypy and pylint checks.
-1. **Self-Correction Checklist:** You must perform a final review of your changes against every requirement detailed in this document. If any requirement has not been fully and correctly met, you must iterate on your solution until it is 100% compliant.
-1. **Final Report:** As your final output, provide a concise summary of the fixes implemented, the refactoring performed, and the enhancements and new tests that have been added to the suite.
+1. **Install Dependencies:** From the project root, execute uv pip install -e.\[test]. This command will use the newly configured pyproject.toml to create an editable install of the project and install all required testing dependencies into the virtual environment.
+2. **Execute Full Suite:** Run the complete, enhanced test suite using the command uv run pytest. This command must execute without any command-line arguments (relying on the pyproject.toml configuration) and must exit with a status code of 0. A zero exit code signifies that all tests passed, including all integrated mypy and pylint checks.
+3. **Self-Correction Checklist:** You must perform a final review of your changes against every requirement detailed in this document. If any requirement has not been fully and correctly met, you must iterate on your solution until it is 100% compliant.
+4. **Final Report:** As your final output, provide a concise summary of the fixes implemented, the refactoring performed, and the enhancements and new tests that have been added to the suite.

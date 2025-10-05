@@ -15,8 +15,8 @@ from pyqa.tooling import ToolCatalogLoader
 from pyqa.tooling.strategies import command_download_binary
 from pyqa.tools.base import ToolContext
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-_CATALOG_ROOT = _PROJECT_ROOT / "tooling" / "catalog"
+_PYQA_ROOT = Path(__file__).resolve().parents[1]
+_CATALOG_ROOT = _PYQA_ROOT / "tooling" / "catalog"
 
 
 def _catalog_actionlint_config() -> dict[str, object]:

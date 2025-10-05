@@ -29,7 +29,7 @@
             "--quiet",
             "--no-color"
           ],
-      "appendFiles": true,
+          "appendFiles": true,
           "options": [
             { "setting": "config", "type": "path", "flag": "--config" },
             { "setting": "use", "type": "args", "flag": "--use" },

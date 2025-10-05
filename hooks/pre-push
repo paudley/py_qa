@@ -28,7 +28,7 @@ check_venv
 
 # Get the script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PYQA_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Store the name of the current branch
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
@@ -71,8 +71,8 @@ done
 
 # If we have commit messages, check them for banned words
 if [ -s "$COMMIT_MSGS_FILE" ]; then
-    if [ -f "$PROJECT_ROOT/py-qa/check-banned-words" ]; then
-        if ! "$PROJECT_ROOT/py-qa/check-banned-words" "$COMMIT_MSGS_FILE"; then
+    if [ -f "$PYQA_ROOT/py-qa/check-banned-words" ]; then
+        if ! "$PYQA_ROOT/py-qa/check-banned-words" "$COMMIT_MSGS_FILE"; then
             echo ""
             echo "❌ Push aborted due to banned words in commit messages!"
             echo "Please amend your commit messages before pushing."
@@ -92,9 +92,9 @@ echo ""
 
 # Run comprehensive security scan on all Python files
 echo "🔒 Running comprehensive security scan..."
-ALL_PY_FILES=$(find "$PROJECT_ROOT/src" "$PROJECT_ROOT/tests" -name "*.py" -type f 2>/dev/null | head -100)
-if [ -f "$PROJECT_ROOT/py-qa/security-scan" ]; then
-    if ! "$PROJECT_ROOT/py-qa/security-scan" $ALL_PY_FILES; then
+ALL_PY_FILES=$(find "$PYQA_ROOT/src" "$PYQA_ROOT/tests" -name "*.py" -type f 2>/dev/null | head -100)
+if [ -f "$PYQA_ROOT/py-qa/security-scan" ]; then
+    if ! "$PYQA_ROOT/py-qa/security-scan" $ALL_PY_FILES; then
         echo ""
         echo "❌ Security vulnerabilities detected!"
         echo "Please fix security issues before pushing."
@@ -105,9 +105,9 @@ echo ""
 
 # Run quality checks for the entire codebase
 echo "📋 Running comprehensive quality validation..."
-if [ -f "$PROJECT_ROOT/py-qa/check-quality" ]; then
+if [ -f "$PYQA_ROOT/py-qa/check-quality" ]; then
     # Check branch protection
-    if ! "$PROJECT_ROOT/py-qa/check-quality" branch --root "$PROJECT_ROOT"; then
+    if ! "$PYQA_ROOT/py-qa/check-quality" branch --root "$PYQA_ROOT"; then
         echo ""
         echo "❌ Cannot push directly to protected branch!"
         echo "Please create a feature branch and use pull requests."
@@ -115,7 +115,7 @@ if [ -f "$PROJECT_ROOT/py-qa/check-quality" ]; then
     fi
     
     # Check all source files for quality issues
-    if ! "$PROJECT_ROOT/py-qa/check-quality" --root "$PROJECT_ROOT"; then
+    if ! "$PYQA_ROOT/py-qa/check-quality" --root "$PYQA_ROOT"; then
         echo ""
         echo "⚠️  Quality warnings detected. Consider fixing before push."
         # Don't fail on warnings for push, just inform

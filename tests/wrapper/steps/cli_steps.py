@@ -10,7 +10,7 @@ from typing import Dict, Optional
 
 from pytest_bdd import given, parsers, then, when
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PYQA_ROOT = Path(__file__).resolve().parents[3]
 WRAPPER_ENV: Dict[str, str] = {}
 RESULT: Dict[str, Optional[subprocess.CompletedProcess[str]]] = {"process": None}
 ARTIFACT_ROOT: Path | None = None
@@ -20,7 +20,7 @@ ARTIFACT_ROOT: Path | None = None
 def set_project_root(tmp_path: Path) -> None:  # noqa: B018
     WRAPPER_ENV.clear()
     WRAPPER_ENV.update(os.environ)
-    WRAPPER_ENV.setdefault("PYTHONPATH", f"{PROJECT_ROOT / 'src'}")
+    WRAPPER_ENV.setdefault("PYTHONPATH", f"{PYQA_ROOT / 'src'}")
     WRAPPER_ENV["PYQA_WRAPPER_VERBOSE"] = "1"
     global ARTIFACT_ROOT
     ARTIFACT_ROOT = tmp_path / "wrapper-artifacts"
@@ -29,7 +29,7 @@ def set_project_root(tmp_path: Path) -> None:  # noqa: B018
 
 @given("the repository virtualenv is available")
 def ensure_repo_venv() -> None:
-    python_path = PROJECT_ROOT / ".venv" / "bin" / "python"
+    python_path = PYQA_ROOT / ".venv" / "bin" / "python"
     if not python_path.exists():
         raise RuntimeError(f"Expected virtualenv python at {python_path}")
 
@@ -48,11 +48,11 @@ def set_pyqa_uv(path: str) -> None:
 
 @when(parsers.parse('I run the "{wrapper}" wrapper with "{args}"'))
 def run_wrapper(wrapper: str, args: str) -> None:
-    command = [str(PROJECT_ROOT / wrapper), *filter(None, args.split())]
+    command = [str(PYQA_ROOT / wrapper), *filter(None, args.split())]
     RESULT["process"] = subprocess.run(
         command,
         env=WRAPPER_ENV,
-        cwd=PROJECT_ROOT,
+        cwd=PYQA_ROOT,
         capture_output=True,
         text=True,
     )

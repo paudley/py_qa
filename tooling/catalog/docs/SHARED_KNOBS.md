@@ -38,7 +38,7 @@ config override is supplied.
 | Sensitivity          | Line Length | Complexity (max / args) | Type Checking | Bandit (severity/confidence) | Pylint Fail-Under | Max Warnings (eslint/stylelint) |
 | -------------------- | ----------- | ----------------------- | ------------- | ---------------------------- | ----------------- | ------------------------------- |
 | `low`                | 140         | 15 / 7                  | lenient       | low / low                    | 8.0               | 200                             |
-| `medium` _(default)_ | 120         | 10 / 5                  | strict        | medium / medium              | 9.5               | cleared                         |
+| `medium` *(default)* | 120         | 10 / 5                  | strict        | medium / medium              | 9.5               | cleared                         |
 | `high`               | 110         | 8 / 4                   | strict        | high / high                  | 9.75              | 5                               |
 | `maximum`            | 100         | 6 / 3                   | strict        | high / high                  | 9.9               | 0                               |
 

@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Literal, cast
 
 from rich import box
+from rich.console import Console
 from rich.progress import (
     BarColumn,
     Progress,
@@ -16,9 +18,12 @@ from rich.progress import (
 )
 from rich.table import Table
 
+from ..config import Config
 from ..console import console_manager, is_tty
 from ..tool_env.models import PreparedCommand
+from ..tools.base import Tool
 from ..tools.registry import DEFAULT_REGISTRY
+from ._lint_preparation import PreparedLintState
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from ._lint_runtime import LintRuntimeContext
@@ -48,7 +53,16 @@ def render_fetch_all_tools(
     *,
     phase_order: tuple[str, ...],
 ) -> int:
-    """Fetch tool runtimes, emit a summary table, and return the exit status."""
+    """Fetch tool runtimes, emit a summary table, and return the exit status.
+
+    Args:
+        runtime: Prepared lint runtime context containing configuration and
+            orchestrator collaborators.
+        phase_order: Preferred ordering of tool phases for summary rendering.
+
+    Returns:
+        int: Zero when the fetch completes without orchestration failures.
+    """
 
     config = runtime.config
     state = runtime.state
@@ -70,9 +84,23 @@ def render_fetch_all_tools(
 def _fetch_with_progress(
     runtime: LintRuntimeContext,
     total_actions: int,
-    console,
+    console: Console,
     verbose: bool,
 ) -> FetchResult:
+    """Return fetch results while rendering a progress bar.
+
+    Args:
+        runtime: Prepared lint runtime context containing configuration and
+            orchestrator collaborators.
+        total_actions: Number of tool preparation actions across the registry.
+        console: Rich console used to render progress output.
+        verbose: Flag indicating whether verbose logging is enabled.
+
+    Returns:
+        FetchResult: Sequence describing the preparation outcome for each
+        tool action.
+    """
+
     logger = runtime.state.logger
     progress = Progress(
         SpinnerColumn(),
@@ -108,21 +136,34 @@ def _fetch_with_progress(
         )
 
     with progress:
-        results = runtime.orchestrator.fetch_all_tools(
-            runtime.config,
-            root=runtime.state.root,
-            callback=progress_callback,
+        results = cast(
+            FetchResult,
+            runtime.orchestrator.fetch_all_tools(
+                runtime.config,
+                root=runtime.state.root,
+                callback=progress_callback,
+            ),
         )
     return results
 
 
 def _render_fetch_summary(
-    console,
-    config,
-    state,
+    console: Console,
+    config: Config,
+    state: PreparedLintState,
     results: FetchResult,
     phase_order: tuple[str, ...],
 ) -> None:
+    """Render a summary table describing tool preparation results.
+
+    Args:
+        console: Rich console used for table rendering.
+        config: Effective configuration controlling output styling.
+        state: Prepared CLI state containing display toggles and logger.
+        results: Sequence describing the preparation outcome for each action.
+        phase_order: Preferred ordering of tool phases for summary rendering.
+    """
+
     if state.display.quiet:
         return
 
@@ -198,9 +239,21 @@ def _coerce_progress_record(payload: tuple[object, ...]) -> _FetchProgressRecord
 def _format_fetch_row(
     item: tuple[str, str, PreparedCommand | None, str | None],
     *,
-    tool_lookup,
+    tool_lookup: Mapping[str, Tool],
     color_enabled: bool,
 ) -> tuple[tuple[str, str, str, str, str, str], str | None]:
+    """Return a formatted summary row and optional failure message.
+
+    Args:
+        item: Tuple containing tool name, action, prepared command, and error.
+        tool_lookup: Mapping of tool names to registry tool instances.
+        color_enabled: Flag indicating whether colorized output is permitted.
+
+    Returns:
+        tuple[tuple[str, str, str, str, str, str], str | None]: Formatted row
+        columns plus a failure message when the preparation failed.
+    """
+
     tool_name, action_name, prepared, error = item
     phase = getattr(tool_lookup.get(tool_name), "phase", "-")
     if prepared is None:

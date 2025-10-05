@@ -39,15 +39,15 @@ check_venv
 
 # Get the script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PYQA_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Run security scan for credentials and secrets
 echo ""
 echo "🔒 Security scan for secrets and credentials..."
-if [ -f "$PROJECT_ROOT/py-qa/security-scan" ]; then
+if [ -f "$PYQA_ROOT/py-qa/security-scan" ]; then
     # Call security scanner without arguments to let it scan staged files automatically
     # This avoids command line length limits and runs bandit only once
-    if ! "$PROJECT_ROOT/py-qa/security-scan"; then
+    if ! "$PYQA_ROOT/py-qa/security-scan"; then
         echo ""
         echo "❌ Security check failed! Please remove sensitive data before committing."
         exit 1
@@ -59,8 +59,8 @@ fi
 # Run quality checks (license headers, file sizes, etc.)
 echo ""
 echo "📋 Running quality checks..."
-if [ -f "$PROJECT_ROOT/py-qa/check-quality" ]; then
-    if ! "$PROJECT_ROOT/py-qa/check-quality" --root "$PROJECT_ROOT" --staged --emoji; then
+if [ -f "$PYQA_ROOT/py-qa/check-quality" ]; then
+    if ! "$PYQA_ROOT/py-qa/check-quality" --root "$PYQA_ROOT" --staged --emoji; then
         echo ""
         echo "❌ Quality check failed! Please fix errors before committing."
         exit 1
@@ -80,7 +80,7 @@ fi
 # Run project linting script with all project-specific options
 echo ""
 echo "🔧 Running project linting checks..."
-if ! "$PROJECT_ROOT/py-qa/lint"; then
+if ! "$PYQA_ROOT/py-qa/lint"; then
     echo "❌ Linting issues found. Run './py-qa/lint' to see details and fix."
     exit 1
 fi
@@ -124,8 +124,8 @@ echo "🚫 Checking commit message for banned words..."
 # Get the commit message (for amending commits or commit -m)
 COMMIT_MSG_FILE=".git/COMMIT_EDITMSG"
 if [ -f "$COMMIT_MSG_FILE" ]; then
-    if [ -f "$PROJECT_ROOT/py-qa/check-banned-words" ]; then
-        if ! "$PROJECT_ROOT/py-qa/check-banned-words" "$COMMIT_MSG_FILE"; then
+    if [ -f "$PYQA_ROOT/py-qa/check-banned-words" ]; then
+        if ! "$PYQA_ROOT/py-qa/check-banned-words" "$COMMIT_MSG_FILE"; then
             echo ""
             echo "❌ Banned words detected in commit message!"
             echo "Please revise your commit message and try again."

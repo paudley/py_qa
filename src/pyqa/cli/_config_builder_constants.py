@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from enum import Enum
 from pathlib import Path
 from typing import Final, Literal
@@ -123,10 +124,33 @@ def build_default_tool_filters() -> ToolFilters:
 
     merged: ToolFilters = {tool: list(patterns) for tool, patterns in _BASE_TOOL_FILTERS.items()}
     for tool, patterns in flatten_test_suppressions().items():
-        merged.setdefault(tool, []).extend(patterns)
+        _extend_filter_patterns(merged, tool, patterns)
     for tool, patterns in catalog_general_suppressions().items():
-        merged.setdefault(tool, []).extend(patterns)
+        _extend_filter_patterns(merged, tool, patterns)
     return {tool: list(dict.fromkeys(patterns)) for tool, patterns in merged.items()}
+
+
+def _extend_filter_patterns(
+    target: ToolFilters,
+    tool: str,
+    patterns: Iterable[str],
+) -> None:
+    """Extend ``target`` with patterns for ``tool`` while preserving typing.
+
+    Args:
+        target: Mapping of tool identifiers to mutable filter lists.
+        tool: Tool identifier associated with the pattern sequence.
+        patterns: Iterable of patterns destined for the tool entry.
+
+    """
+
+    additions = [pattern for pattern in patterns if pattern]
+    if not additions:
+        return
+    if tool in target:
+        target[tool].extend(additions)
+    else:
+        target[tool] = additions
 
 
 DEFAULT_TOOL_FILTERS: Final[ToolFilters] = build_default_tool_filters()
