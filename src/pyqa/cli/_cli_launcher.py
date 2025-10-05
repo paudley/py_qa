@@ -9,7 +9,6 @@ while preserving the import contract for entry-point shims.
 from __future__ import annotations
 
 import ast
-import io
 import os
 import platform
 import shutil
@@ -22,7 +21,6 @@ from collections.abc import Iterable
 from enum import StrEnum
 from pathlib import Path
 from typing import Final
-
 
 PYQA_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
 SRC_DIR: Final[Path] = PYQA_ROOT / "src"
@@ -159,13 +157,34 @@ def _build_env(python_path: Path) -> dict[str, str]:
     existing = env.get("PYTHONPATH", "")
     src_path = str(SRC_DIR)
     parts = [segment for segment in existing.split(os.pathsep) if segment]
-    if src_path not in parts:
-        env["PYTHONPATH"] = os.pathsep.join([src_path, *parts]) if parts else src_path
+    updated_paths: list[str] = list(parts)
+
+    candidate_roots = [PYQA_ROOT / ".venv" / "lib", PYQA_ROOT / ".venv" / "Lib"]
+    for base in candidate_roots:
+        if not base.exists():
+            _debug(f"Skipping missing site-packages root for PYTHONPATH: {base}")
+            continue
+        for site_packages in base.glob("python*/site-packages"):
+            site_str = str(site_packages)
+            if site_str not in updated_paths:
+                updated_paths.insert(0, site_str)
+                _debug(f"Prepended site-packages to PYTHONPATH: {site_packages}")
+
+    if src_path not in updated_paths:
+        updated_paths.insert(0, src_path)
+        _debug(f"Prepended src directory to PYTHONPATH: {SRC_DIR}")
+    else:
+        _debug(f"Src directory already present on PYTHONPATH: {SRC_DIR}")
+
+    env["PYTHONPATH"] = os.pathsep.join(updated_paths)
 
     python_dir = str(python_path.parent)
     path_parts = [segment for segment in env.get("PATH", "").split(os.pathsep) if segment]
     if python_dir and python_dir not in path_parts:
         env["PATH"] = os.pathsep.join([python_dir, *path_parts]) if path_parts else python_dir
+        _debug(f"Prepended interpreter bin directory to PATH: {python_dir}")
+    else:
+        _debug(f"Interpreter bin directory already present on PATH: {python_dir}")
 
     return env
 
@@ -218,11 +237,35 @@ def _run_with_python(
 ) -> None:
     """Execute ``command`` using ``python_path`` within the repository environment."""
 
-    from pyqa.cli.app import app
+    current_executable = Path(sys.executable).resolve()
+    selected_executable = python_path.resolve()
+    _debug(
+        "Evaluating interpreter for in-process execution: current=%s selected=%s"
+        % (current_executable, selected_executable)
+    )
 
-    sys.argv = [PROG_NAME, command, *args]
-    os.environ.update(env)
-    app()
+    if current_executable == selected_executable:
+        _debug("Using current interpreter for in-process execution")
+        try:
+            from pyqa.cli.app import app
+        except ModuleNotFoundError as exc:
+            _debug("Local interpreter missing dependencies; falling back to uv: " f"{exc.__class__.__name__}: {exc}")
+            uv_path = _ensure_uv()
+            _run_with_uv(uv_path, command, args)
+            return
+
+        sys.argv = [PROG_NAME, command, *args]
+        os.environ.update(env)
+        app()
+        return
+
+    _debug("Spawning separate interpreter for CLI execution")
+    code = _build_cli_invocation_code([command, *args])
+    execution_cmd = [str(python_path), "-c", code]
+    _debug(f"Executing command: {execution_cmd}")
+    result = subprocess.run(execution_cmd, env=env, check=False)
+    _debug(f"Interpreter exited with return code {result.returncode}")
+    sys.exit(result.returncode)
 
 
 def _ensure_uv() -> Path:
@@ -235,9 +278,19 @@ def _ensure_uv() -> Path:
             raise FileNotFoundError(f"uv override not found: {resolved}")
         return resolved
 
+    candidate_paths = [
+        PYQA_ROOT / ".venv" / "bin" / "uv",
+        Path(shutil.which("uv") or ""),
+    ]
+    for candidate in candidate_paths:
+        if candidate and candidate.exists() and os.access(candidate, os.X_OK):
+            _debug(f"Using existing uv executable: {candidate}")
+            return candidate
+
     UV_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     target = UV_CACHE_DIR / "uv"
     if target.exists():
+        _debug(f"Reusing cached uv executable: {target}")
         return target
 
     system = platform.system().lower()
@@ -281,6 +334,34 @@ def _ensure_uv() -> Path:
 def _run_with_uv(uv_path: Path, command: str, args: list[str]) -> None:
     """Execute ``command`` using ``uv`` when a local interpreter is unsuitable."""
 
-    cmd = [str(uv_path), "run", "--project", str(PYQA_ROOT), "pyqa", command, *args]
-    _debug(f"Executing via uv: {' '.join(cmd)}")
-    subprocess.run(cmd, check=True)
+    _debug(f"Running with uv: {uv_path}")
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    code = _build_cli_invocation_code([command, *args])
+    cmd = [
+        str(uv_path),
+        "--project",
+        str(PYQA_ROOT),
+        "run",
+        "python",
+        "-c",
+        code,
+    ]
+    _debug(f"Executing via uv: {cmd}")
+    result = subprocess.run(cmd, env=env, check=False)
+    _debug(f"uv execution completed with return code {result.returncode}")
+    sys.exit(result.returncode)
+
+
+def _build_cli_invocation_code(argv_payload: Iterable[str]) -> str:
+    """Return a Python snippet that executes the Typer command directly."""
+
+    argv_list = list(argv_payload)
+    return (
+        "import sys\n"
+        "from typer.main import get_command\n"
+        "from pyqa.cli.app import app as _app\n"
+        f"argv = {argv_list!r}\n"
+        "command = get_command(_app)\n"
+        f"command.main(args=argv, prog_name={PROG_NAME!r})\n"
+    )
