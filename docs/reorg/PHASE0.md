@@ -1,3 +1,7 @@
+<!-- SPDX-License-Identifier: MIT -->
+
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # Phase 0 – Reorg Readiness
 
 This document captures the artefacts and decisions produced while executing

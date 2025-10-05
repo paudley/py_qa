@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Entry-point plugin loading helpers.
 
 These helpers provide a thin abstraction around :mod:`importlib.metadata`
@@ -9,10 +12,10 @@ mutation of the loaded plugin sequences.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Sequence
 from importlib import metadata
 from types import SimpleNamespace
-from typing import Any
-from collections.abc import Callable, Iterable, Sequence
+from typing import Any, cast
 
 CATALOG_PLUGIN_GROUP = "pyqa.catalog.plugins"
 CLI_PLUGIN_GROUP = "pyqa.cli.plugins"
@@ -35,22 +38,21 @@ def _discover_entry_points(group: str) -> Sequence[_EntryPointCallable]:
     gracefully ignores plugins that fail to resolve.
     """
 
-    try:
-        entries = metadata.entry_points()
-    except Exception:  # pragma: no cover - metadata import edge case
-        return ()
+    entries: Any = metadata.entry_points()
 
     selected: Iterable[Any]
     if hasattr(entries, "select"):
-        selected = entries.select(group=group)
-    else:  # pragma: no cover - compatibility path for older metadata API
-        selected = entries.get(group, ()) if isinstance(entries, dict) else ()
+        selected = cast(Iterable[Any], entries.select(group=group))
+    elif isinstance(entries, dict):  # pragma: no cover - compatibility path
+        selected = cast(Iterable[Any], entries.get(group, ()))
+    else:  # pragma: no cover - unexpected metadata shape
+        selected = ()
 
     callables: list[_EntryPointCallable] = []
     for entry in selected:
         try:
             callables.append(entry.load())
-        except Exception:
+        except (AttributeError, ImportError, ValueError):
             continue
     return tuple(callables)
 

@@ -1,3 +1,7 @@
+<!-- SPDX-License-Identifier: MIT -->
+
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # Phase 1 – Interfaces & Core Runtime Progress Log
 
 ## Completed
@@ -11,6 +15,11 @@
   CLI/orchestrator integration.
 * Added `pyqa.cache.in_memory.ttl_cache` decorator and regression tests so code
   can migrate away from ad-hoc `functools.cache` usage.
+* Converted `pyqa.config` into a package (`config/models.py`,
+  `config/loaders/sources.py`) laying the groundwork for Phase 2 config/cache
+  decomposition.
+* Registered plugin loaders with the DI container and added protocol contract
+  tests (`tests/interfaces/test_protocols.py`) to ensure runtime compliance.
 
 ## In Flight
 
@@ -18,6 +27,8 @@
   packages migrate.
 * Flesh out logging adapters once CLI/orchestrator refactors land (Phase 4).
 * Adopt interfaces in existing modules to reduce direct cross-package imports.
+* Decompose remaining configuration helpers (section mergers, resolver) into
+  the new `config/` subpackages during Phase 2.
 
 ## Next Steps
 

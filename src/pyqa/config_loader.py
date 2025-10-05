@@ -4,22 +4,16 @@
 
 from __future__ import annotations
 
-import copy
-import os
-from collections.abc import Callable, Iterable, Mapping, MutableMapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from operator import attrgetter
 from pathlib import Path
-from typing import Any, Final, Generic, Protocol, cast
-
-try:  # Python 3.11+ includes tomllib in the stdlib. Fallbacks unsupported.
-    import tomllib
-except ModuleNotFoundError as exc:
-    raise RuntimeError("tomllib is required to parse configuration files") from exc
+from typing import Any, Final, Generic, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .config import Config, ConfigError
+from .config.loaders import CONFIG_KEY, DefaultConfigSource, PyProjectConfigSource, TomlConfigSource
 from .config_loader_sections import (
     FieldName,
     ModelT,
@@ -31,17 +25,11 @@ from .config_loader_sections import (
 )
 from .config_utils import (
     _deep_merge,
-    _expand_env,
     _normalise_fragment,
-    _normalise_pyproject_payload,
     generate_config_schema,
 )
+from .interfaces.config import ConfigSource
 from .tools.settings import TOOL_SETTING_SCHEMA
-
-INCLUDE_KEY_DEFAULT: Final[str] = "include"
-PYPROJECT_TOOL_KEY: Final[str] = "tool"
-PYPROJECT_SECTION_KEY: Final[str] = "pyqa"
-CONFIG_KEY: Final[str] = "config"
 
 
 @dataclass(slots=True, frozen=True)
@@ -82,179 +70,6 @@ class _SectionProcessor(Generic[ModelT]):
             FieldUpdate(section=self.name, field=field, source=source, value=value) for field, value in changes.items()
         ]
         return updated_config, updates
-
-
-class ConfigSource(Protocol):
-    """Provide configuration fragments and metadata about their origin."""
-
-    name: str
-
-    def load(self) -> Mapping[str, Any]:
-        """Return a mapping of configuration overrides.
-
-        Returns:
-            Mapping[str, Any]: Concrete configuration fragment contributed by
-            the source.
-        """
-
-        raise NotImplementedError
-
-    def describe(self) -> str:
-        """Return a human-readable description of the source."""
-
-        raise NotImplementedError
-
-
-class DefaultConfigSource:
-    """Return the built-in defaults as a configuration fragment."""
-
-    name = "defaults"
-
-    def load(self) -> Mapping[str, Any]:
-        """Return an in-memory snapshot of baseline configuration values.
-
-        Returns:
-            Mapping[str, Any]: Serialised configuration produced from the
-            default :class:`Config` model.
-        """
-
-        return Config().to_dict()
-
-    def describe(self) -> str:
-        """Return a short identifier for UI/diagnostic use.
-
-        Returns:
-            str: Human-readable identifier for the source.
-        """
-
-        return "Built-in defaults"
-
-
-class TomlConfigSource:
-    """Load configuration data from a TOML document with include support."""
-
-    def __init__(
-        self,
-        path: Path,
-        *,
-        name: str | None = None,
-        include_key: str = INCLUDE_KEY_DEFAULT,
-        env: Mapping[str, str] | None = None,
-    ) -> None:
-        self._root_path = path
-        self.name = name or str(path)
-        self._include_key = include_key
-        self._env = env or os.environ
-
-    def load(self) -> Mapping[str, Any]:
-        """Load, expand, and merge the TOML document for this source.
-
-        Returns:
-            Mapping[str, Any]: Normalised configuration data aggregated across
-            include directives.
-        """
-
-        return self._load(self._root_path, ())
-
-    def _load(self, path: Path, stack: tuple[Path, ...]) -> Mapping[str, Any]:
-        """Return the merged document at ``path`` while guarding recursion.
-
-        Args:
-            path: TOML file to parse.
-            stack: Tuple recording the include traversal for cycle detection.
-
-        Returns:
-            Mapping[str, Any]: Parsed data with includes resolved.
-        """
-
-        if not path.exists():
-            return {}
-        if path in stack:
-            include_chain = " -> ".join(str(entry) for entry in (*stack, path))
-            raise ConfigError(f"Circular include detected: {include_chain}")
-        resolved = path.resolve()
-        stat = resolved.stat()
-        cache_key = (resolved, stat.st_mtime_ns)
-        if cached := _TOML_CACHE.get(cache_key):
-            data = copy.deepcopy(cached)
-        else:
-            with resolved.open("rb") as handle:
-                data = tomllib.load(handle)
-            _TOML_CACHE[cache_key] = copy.deepcopy(data)
-        if not isinstance(data, MutableMapping):
-            raise ConfigError(f"Configuration at {path} must be a table")
-        document: dict[str, Any] = dict(data)
-        includes = document.pop(self._include_key, None)
-        merged: dict[str, Any] = {}
-        for include_path in self._coerce_includes(includes, path.parent):
-            fragment = self._load(include_path, stack + (path,))
-            merged = _deep_merge(merged, fragment)
-        merged = _deep_merge(merged, document)
-        return _expand_env(merged, self._env)
-
-    def _coerce_includes(self, raw: Any, base_dir: Path) -> Iterable[Path]:
-        """Return absolute include paths derived from ``raw`` declarations.
-
-        Args:
-            raw: Raw include entries found in the TOML document.
-            base_dir: Directory used to resolve relative include references.
-
-        Returns:
-            Iterable[Path]: Absolute include paths to parse recursively.
-        """
-
-        if raw is None:
-            return []
-        if isinstance(raw, (str, Path)):
-            raw = [raw]
-        if not isinstance(raw, Iterable) or isinstance(raw, (bytes, str)):
-            raise ConfigError(f"Include declarations in {self._root_path} must be a string or list")
-        paths: list[Path] = []
-        for entry in raw:
-            if not isinstance(entry, (str, Path)):
-                raise ConfigError("Include entries must be strings or paths")
-            candidate = Path(entry).expanduser()
-            if not candidate.is_absolute():
-                candidate = (base_dir / candidate).resolve()
-            paths.append(candidate)
-        return paths
-
-    def describe(self) -> str:
-        """Return a short diagnostic string for this TOML source.
-
-        Returns:
-            str: Human-readable identifier for the source.
-        """
-
-        return f"TOML configuration at {self.name}"
-
-
-class PyProjectConfigSource(TomlConfigSource):
-    """Read configuration from ``[tool.pyqa]`` within ``pyproject.toml``."""
-
-    def __init__(self, path: Path) -> None:
-        super().__init__(path, name=str(path))
-
-    def load(self) -> Mapping[str, Any]:
-        """Return the ``tool.pyqa`` fragment from ``pyproject.toml`` if present."""
-
-        data = super().load()
-        tool_section = data.get(PYPROJECT_TOOL_KEY)
-        if not isinstance(tool_section, Mapping):
-            return {}
-        pyqa_section = tool_section.get(PYPROJECT_SECTION_KEY)
-        if not isinstance(pyqa_section, Mapping):
-            return {}
-        return _normalise_pyproject_payload(dict(pyqa_section))
-
-    def describe(self) -> str:
-        """Return a short diagnostic string for this ``pyproject`` source.
-
-        Returns:
-            str: Human-readable identifier for the source.
-        """
-
-        return f"pyproject.toml ({self.name})"
 
 
 class FieldUpdate(BaseModel):

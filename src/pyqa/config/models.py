@@ -14,7 +14,7 @@ from typing import Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .tools.catalog_metadata import catalog_duplicate_preference
+from ..tools.catalog_metadata import catalog_duplicate_preference
 
 
 class ConfigError(Exception):
@@ -888,11 +888,26 @@ class _MypySettingManager:
 
 
 __all__ = [
+    "BanditConfidence",
+    "BanditLevel",
+    "CleanConfig",
+    "ComplexityConfig",
     "Config",
     "ConfigError",
+    "ConfigOverrideKey",
     "DedupeConfig",
     "ExecutionConfig",
     "FileDiscoveryConfig",
+    "LicenseConfig",
     "OutputConfig",
+    "QualityConfigSection",
+    "SensitivityLevel",
+    "SensitivityPreset",
+    "SeverityConfig",
+    "SharedKnobSnapshot",
+    "StrictnessConfig",
+    "StrictnessLevel",
+    "ToolSpecificOverride",
+    "UpdateConfig",
     "default_parallel_jobs",
 ]

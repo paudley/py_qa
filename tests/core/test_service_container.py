@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 from __future__ import annotations
 
 from typing import Any
@@ -46,4 +49,7 @@ def test_register_default_services() -> None:
     assert callable(logger_factory)
     dumped = serializer.dump({"value": 1})
     assert serializer.load(dumped)["value"] == 1
-
+    assert callable(container.resolve("catalog_plugins"))
+    assert callable(container.resolve("cli_plugins"))
+    assert callable(container.resolve("diagnostics_plugins"))
+    assert callable(container.resolve("all_plugins"))

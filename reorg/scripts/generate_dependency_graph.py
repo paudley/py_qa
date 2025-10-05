@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Generate a module dependency graph for the ``pyqa`` package.
 
 The script walks ``src/pyqa`` and records direct intra-package imports
@@ -18,17 +21,18 @@ import argparse
 import ast
 import json
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from collections.abc import Iterable
 
 PACKAGE_ROOT = Path("src/pyqa").resolve()
 PACKAGE_PREFIX = "pyqa"
+_INIT_FILENAME = "__init__"
 
 
 def _module_name_from_path(path: Path) -> str:
     relative = path.relative_to(PACKAGE_ROOT)
     parts = list(relative.with_suffix("").parts)
-    if parts[-1] == "__init__":
+    if parts[-1] == _INIT_FILENAME:
         parts = parts[:-1]
     return ".".join([PACKAGE_PREFIX, *parts]) if parts else PACKAGE_PREFIX
 
@@ -64,6 +68,7 @@ def _collect_dependencies(path: Path, module_name: str) -> set[str]:
 
 
 def build_graph(root: Path) -> dict[str, list[str]]:
+    """Return adjacency list mapping modules to intra-package dependencies."""
     graph: dict[str, set[str]] = defaultdict(set)
     for path in root.rglob("*.py"):
         module_name = _module_name_from_path(path)
@@ -71,11 +76,13 @@ def build_graph(root: Path) -> dict[str, list[str]]:
     return {module: sorted(deps) for module, deps in sorted(graph.items())}
 
 
-def _dependency_histogram(graph: dict[str, Iterable[str]]) -> dict[str, int]:
-    return {module: len(list(deps)) for module, deps in graph.items()}
+def _dependency_histogram(graph: Mapping[str, Sequence[str]]) -> dict[str, int]:
+    """Return mapping of modules to dependency counts."""
+    return {module: len(deps) for module, deps in graph.items()}
 
 
 def main() -> None:
+    """Generate the dependency graph JSON artefact."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--output",

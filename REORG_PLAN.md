@@ -1,4 +1,5 @@
 <!-- SPDX-License-Identifier: MIT -->
+
 <!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
 
 # pyqa Module Reorg Implementation Plan
@@ -52,8 +53,8 @@ specification as a standalone project.
      modules that currently rely on `functools.cache` (available for adoption in
      subsequent phases).
 3. **Gateway tests**
-   * Provide contract fixtures ensuring components accept injected interfaces.
-   * Wire entry-point registries to the DI container (even if no external
+   * \[x] Provide contract fixtures ensuring components accept injected interfaces.
+   * \[x] Wire entry-point registries to the DI container (even if no external
      plugins exist yet) so the seams are proven.
 
 ## Phase 2 – Config, Cache, and Discovery (2 sprints)

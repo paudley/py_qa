@@ -1,12 +1,15 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """In-memory caching decorators shared across the project."""
 
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from functools import wraps
 from threading import Lock
 from typing import Any, ParamSpec, TypeVar
-from collections.abc import Callable
 
 P = ParamSpec("P")
 R = TypeVar("R")

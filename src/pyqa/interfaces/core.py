@@ -1,4 +1,9 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Core service interfaces shared across the project."""
+
+# pylint: disable=too-few-public-methods
 
 from __future__ import annotations
 
@@ -11,8 +16,7 @@ class ConsoleFactory(Protocol):
 
     def __call__(self, *, color: bool, emoji: bool) -> Any:
         """Return a console-like object supporting ``print``."""
-
-        ...
+        raise NotImplementedError
 
 
 @runtime_checkable
@@ -21,8 +25,7 @@ class LoggerFactory(Protocol):
 
     def __call__(self, name: str) -> Any:
         """Return a logger identified by ``name``."""
-
-        ...
+        raise NotImplementedError
 
 
 @runtime_checkable
@@ -31,10 +34,8 @@ class Serializer(Protocol):
 
     def dump(self, value: Any) -> str:
         """Return the serialized representation of ``value``."""
-
-        ...
+        raise NotImplementedError
 
     def load(self, payload: str) -> Any:
         """Return a model instance deserialized from ``payload``."""
-
-        ...
+        raise NotImplementedError

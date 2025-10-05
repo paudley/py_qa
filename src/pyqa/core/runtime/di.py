@@ -1,12 +1,22 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Minimal dependency injection container used across pyqa."""
 
 from __future__ import annotations
 
+import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Callable
 
 from ...console import console_manager
+from ...plugins import (
+    load_all_plugins,
+    load_catalog_plugins,
+    load_cli_plugins,
+    load_diagnostics_plugins,
+)
 
 
 class ServiceResolutionError(KeyError):
@@ -90,16 +100,37 @@ def register_default_services(container: ServiceContainer) -> None:
         lambda _: _JsonSerializer(),
     )
 
+    container.register(
+        "catalog_plugins",
+        lambda _: load_catalog_plugins,
+        singleton=False,
+    )
+    container.register(
+        "cli_plugins",
+        lambda _: load_cli_plugins,
+        singleton=False,
+    )
+    container.register(
+        "diagnostics_plugins",
+        lambda _: load_diagnostics_plugins,
+        singleton=False,
+    )
+    container.register(
+        "all_plugins",
+        lambda _: load_all_plugins,
+        singleton=False,
+    )
+
 
 class _JsonSerializer:
     """Simple JSON serializer used as the default service implementation."""
 
     def dump(self, value: Any) -> str:
-        import json
+        """Return a JSON string representation of ``value``."""
 
         return json.dumps(value, default=str)
 
     def load(self, payload: str) -> Any:
-        import json
+        """Deserialize ``payload`` back into a Python object."""
 
         return json.loads(payload)

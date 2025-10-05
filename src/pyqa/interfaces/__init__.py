@@ -1,10 +1,7 @@
-"""Domain interfaces supporting the pyqa reorganisation.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 
-Each module exposes protocols that higher-level packages will depend on.  By
-centralising these contracts we can invert dependencies and allow alternative
-implementations (including external plugins) to integrate without modifying the
-core code base.
-"""
+"""Domain interfaces supporting the pyqa reorganisation."""
 
 from __future__ import annotations
 
