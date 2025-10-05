@@ -79,12 +79,17 @@ def append_internal_quality_checks(
     if not quality_result.issues:
         return
 
-    diagnostics = [
-        diag
-        for issue in quality_result.issues
-        for diag in (_quality_issue_to_diagnostic(issue, root=root),)
-        if diag is not None
-    ]
+    diagnostics: list[Diagnostic] = []
+    stdout_lines: list[str] = []
+    for issue in quality_result.issues:
+        diagnostic = _quality_issue_to_diagnostic(issue, root=root)
+        if diagnostic is None:
+            continue
+        diagnostics.append(diagnostic)
+        location = diagnostic.file
+        if not location and issue.path is not None:
+            location = normalize_path_key(issue.path, base_dir=root)
+        stdout_lines.append(_format_quality_issue_output(diagnostic, location))
     if not diagnostics:
         return
 
@@ -93,7 +98,7 @@ def append_internal_quality_checks(
         tool="quality",
         action="license",
         returncode=1 if has_error else 0,
-        stdout=[],
+        stdout=stdout_lines,
         stderr=[],
         diagnostics=diagnostics,
     )
@@ -136,6 +141,14 @@ def _quality_issue_to_diagnostic(issue: QualityIssue, *, root: Path) -> Diagnost
         tool="quality",
         code=f"quality:{issue.level.value}",
     )
+
+
+def _format_quality_issue_output(diagnostic: Diagnostic, location: str | None) -> str:
+    """Return a human-readable summary for quality issue stdout."""
+
+    if location:
+        return f"[{diagnostic.severity.value}] {location}: {diagnostic.message}"
+    return f"[{diagnostic.severity.value}] {diagnostic.message}"
 
 
 _QUALITY_SEVERITY_MAP: dict[QualityIssueLevel, Severity] = {
