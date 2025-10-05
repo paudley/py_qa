@@ -5,25 +5,57 @@
 from __future__ import annotations
 
 import re
+import sys
 import tomllib
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Iterable, Mapping, MutableMapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from fnmatch import fnmatch
+from importlib import import_module
 from pathlib import Path
-from typing import Final
+from types import ModuleType
+from typing import Final, Protocol, TypeGuard, cast, runtime_checkable
 
-try:
-    from pyqa.config import LicenseConfig
-    from pyqa.constants import ALWAYS_EXCLUDE_DIRS
-except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
-    import sys
 
-    project_root = Path(__file__).resolve().parents[2]
-    if str(project_root) not in sys.path:
-        sys.path.insert(0, str(project_root))
-    from pyqa.config import LicenseConfig
-    from pyqa.constants import ALWAYS_EXCLUDE_DIRS
+@runtime_checkable
+class _LicenseConfigProtocol(Protocol):
+    """Contract implemented by ``pyqa.config.LicenseConfig`` for runtime checks."""
+
+    def model_dump(self, *, mode: str = "python") -> dict[str, object]:
+        """Return a serialisable representation of the configuration."""
+        raise NotImplementedError
+
+    def model_copy(
+        self,
+        *,
+        update: Mapping[str, object] | None = None,
+    ) -> LicenseConfigProtocol:
+        """Return a shallow copy of the configuration instance."""
+        raise NotImplementedError
+
+
+LicenseConfigProtocol = _LicenseConfigProtocol
+
+
+def _import_pyqa_module(module: str) -> ModuleType:
+    try:
+        return import_module(f"pyqa.{module}")
+    except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
+        project_root = Path(__file__).resolve().parents[2]
+        if str(project_root) not in sys.path:
+            sys.path.insert(0, str(project_root))
+        return import_module(f"pyqa.{module}")
+
+
+_config_module = _import_pyqa_module("config")
+_constants_module = _import_pyqa_module("constants")
+LicenseConfigRuntime = cast(
+    "type[LicenseConfigProtocol]",
+    _config_module.LicenseConfig,
+)
+ALWAYS_EXCLUDE_DIRS = frozenset(
+    cast(Iterable[str], _constants_module.ALWAYS_EXCLUDE_DIRS),
+)
 
 
 KNOWN_LICENSE_SNIPPETS: Final[Mapping[str, str]] = {
@@ -76,6 +108,12 @@ _NOTICE_PREFIX: Final[re.Pattern[str]] = re.compile(
 _YEAR_RANGE: Final[re.Pattern[str]] = re.compile(
     r"(?P<start>\d{4})(?:\s*[-–]\s*(?P<end>\d{4}))?",
 )
+
+
+def _is_license_config(candidate: object) -> TypeGuard[LicenseConfigProtocol]:
+    """Return ``True`` when ``candidate`` is a ``LicenseConfig`` instance."""
+
+    return isinstance(candidate, LicenseConfigRuntime)
 
 
 @dataclass(slots=True)
@@ -181,7 +219,7 @@ def load_project_license(root: Path) -> LicenseMetadata:
 
 def load_license_policy(
     root: Path,
-    overrides: LicenseConfig | Mapping[str, object] | None = None,
+    overrides: LicenseConfigProtocol | Mapping[str, object] | None = None,
 ) -> LicensePolicy:
     """Derive a license enforcement policy from project metadata and overrides.
 
@@ -193,9 +231,9 @@ def load_license_policy(
         LicensePolicy: Policy describing enforcement expectations.
     """
     metadata = load_project_license(root)
-    if isinstance(overrides, LicenseConfig):
+    if _is_license_config(overrides):
         config: dict[str, object] = _license_config_to_mapping(overrides)
-    elif overrides is not None:
+    elif isinstance(overrides, Mapping):
         config = dict(overrides)
     else:
         config = dict(metadata.overrides)
@@ -765,7 +803,7 @@ def _strip_comment_prefix(line: str) -> str:
     return cleaned.strip()
 
 
-def _license_config_to_mapping(config: LicenseConfig) -> dict[str, object]:
+def _license_config_to_mapping(config: LicenseConfigProtocol) -> dict[str, object]:
     """Return a mapping representation of ``config`` with empty values pruned.
 
     Args:

@@ -242,9 +242,8 @@ class AnnotationEngine:
         if self._nlp is not None:
             return self._nlp
         with self._nlp_lock:
-            if self._nlp is not None:
-                return self._nlp
-            self._nlp = self._initialise_spacy_model(self._model_name)
+            if self._nlp is None:
+                self._nlp = self._initialise_spacy_model(self._model_name)
             return self._nlp
 
     def _initialise_spacy_model(self, model_name: str) -> SpacyLanguage | None:

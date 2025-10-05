@@ -126,11 +126,9 @@ class _PathOptionBehavior:
             value: Raw option value containing path(s).
         """
 
-        entries: tuple[JSONValue, ...]
-        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-            entries = tuple(value)
-        else:
-            entries = (value,)
+        entries: tuple[JSONValue, ...] = (
+            tuple(value) if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)) else (value,)
+        )
         append_value = partial(_append_flagged, command, flag=self.flag)
         for entry in entries:
             if entry is None:

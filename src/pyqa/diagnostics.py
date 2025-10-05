@@ -221,7 +221,7 @@ def _prefer(existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig) -> D
             return existing
         if (candidate.tool or "").lower() == preferred_tool:
             return candidate
-    strategy = cfg.dedupe_by or _STRATEGY_FIRST
+    strategy = cfg.dedupe_by
     if strategy == _STRATEGY_FIRST:
         return existing
     if strategy == _STRATEGY_SEVERITY:

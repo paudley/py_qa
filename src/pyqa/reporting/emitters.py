@@ -507,10 +507,7 @@ def _build_summary_entries(
     entries: list[_SummaryEntry] = []
     for diagnostic, tool in diagnostics:
         location = _format_location(diagnostic)
-        if config.needs_highlight:
-            highlighted = _highlight_markdown(diagnostic.message)
-        else:
-            highlighted = diagnostic.message
+        highlighted = _highlight_markdown(diagnostic.message) if config.needs_highlight else diagnostic.message
         entries.append(
             _SummaryEntry(
                 diagnostic=diagnostic,

@@ -234,7 +234,7 @@ def _instantiate_parser(
         )
     factory = _resolve_strategy_callable(strategy_definition)
     config = _as_plain_json(reference.config)
-    parser = _call_strategy_factory(factory, config)
+    parser = cast(Parser, _call_strategy_factory(factory, config))
     if not hasattr(parser, "parse"):
         raise CatalogIntegrityError(f"{context}: parser strategy did not return a parser instance")
     return parser

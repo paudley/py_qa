@@ -708,10 +708,11 @@ class Orchestrator:
 
         if isinstance(preparer, CommandPreparer):
             return preparer.prepare_request
-        if hasattr(preparer, "prepare") and callable(getattr(preparer, "prepare")):
-            return getattr(preparer, "prepare")
+        prepare_method = getattr(preparer, "prepare", None)
+        if callable(prepare_method):
+            return cast(Callable[..., PreparedCommand], prepare_method)
         if callable(preparer):
-            return preparer
+            return cast(Callable[..., PreparedCommand], preparer)
         raise TypeError("cmd_preparer must be callable or expose a callable 'prepare' attribute")
 
     @staticmethod

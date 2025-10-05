@@ -32,7 +32,7 @@ class _DependencyMeta:
 class _AnalyzedCallback:
     """Capture Typer callback metadata required to build Click parameters."""
 
-    params: list[Any]
+    params: list[Argument | Option]
     convertors: dict[str, Callable[[Any], Any]]
     context_param_name: str | None
     dependencies: list[_DependencyMeta]
@@ -43,7 +43,7 @@ class _AnalyzedCallback:
 class _AnalysisState:
     """Mutable state accumulated while analysing a callback."""
 
-    params: list[Any]
+    params: list[Argument | Option]
     convertors: dict[str, Callable[[Any], Any]]
     dependencies: list[_DependencyMeta]
     cli_param_names: set[str]
@@ -108,20 +108,16 @@ def _install_dependency_support(original_get_click_param: Callable[[Any], tuple[
         return
 
     resolver = _DependencyResolver(original_get_click_param)
-    typer.main.get_params_convertors_ctx_param_name_from_function = cast(
-        TyperParamShim,
-        _build_dependency_param_adapter(resolver),
-    )
-    typer.main.get_callback = cast(
-        TyperCallbackShim,
-        _build_dependency_callback_adapter(resolver),
-    )
+    param_adapter: TyperParamShim = _build_dependency_param_adapter(resolver)
+    callback_adapter: TyperCallbackShim = _build_dependency_callback_adapter(resolver)
+    typer.main.get_params_convertors_ctx_param_name_from_function = param_adapter
+    typer.main.get_callback = callback_adapter
     setattr(typer.main, "_pyqa_dependency_support_installed", True)
 
 
 def _build_dependency_param_adapter(
     resolver: _DependencyResolver,
-) -> ParamsAdapter:
+) -> TyperParamShim:
     """Return a Typer helper that exposes dependency-aware parameter metadata.
 
     Args:
@@ -134,18 +130,22 @@ def _build_dependency_param_adapter(
 
     def _patched_get_params(
         callback: Callable[..., Any] | None,
-    ) -> ParamsMetadata:
+    ) -> tuple[list[Argument | Option], dict[str, Any], str | None]:
         if callback is None:
             return [], {}, None
         analysis = resolver.analyze(callback)
-        return analysis.params, analysis.convertors, analysis.context_param_name
+        return (
+            analysis.params,
+            cast(dict[str, Any], analysis.convertors),
+            analysis.context_param_name,
+        )
 
     return _patched_get_params
 
 
 def _build_dependency_callback_adapter(
     resolver: _DependencyResolver,
-) -> CallbackAdapter:
+) -> TyperCallbackShim:
     """Return a Typer helper that wires dependency resolution into callbacks.
 
     Args:
@@ -350,12 +350,14 @@ class _DependencyResolver:
         parameter: inspect.Parameter,
         annotation: Any,
         parameter_info: ParameterInfo | None,
-    ) -> tuple[Any, Callable[[Any], Any] | None]:
+    ) -> tuple[Argument | Option, Callable[[Any], Any] | None]:
         """Return the Click parameter + convertor for Typer metadata."""
 
         info = parameter_info or OptionInfo()
         updated_parameter = parameter.replace(annotation=annotation, default=info)
-        return self._get_click_param(updated_parameter)
+        click_param, convertor = self._get_click_param(updated_parameter)
+        typed_param = cast(Argument | Option, click_param)
+        return typed_param, convertor
 
     def _extract_dependency_values(
         self,
@@ -492,7 +494,7 @@ class SortedTyperCommand(TyperCommand):
         option_entries: list[tuple[tuple[str, int], tuple[str, str]]] = []
 
         for index, param in enumerate(self.get_params(ctx)):
-            record = param.get_help_record(ctx)
+            record = cast(tuple[str, str] | None, param.get_help_record(ctx))
             if record is None:
                 continue
             if getattr(param, "param_type_name", "") == ARGUMENT_PARAM_TYPE:

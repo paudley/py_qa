@@ -127,6 +127,7 @@ def wrap_runner(func: Callable[..., CompletedProcess[str]]) -> RunnerCallable:
 
 PYLINT_TOOL_NAME: Final[str] = "pylint"
 TOMBI_TOOL_NAME: Final[str] = "tombi"
+_IGNORED_CHECK_RETURN_CODES: Final[frozenset[int]] = frozenset({1})
 
 
 @dataclass(frozen=True, slots=True)
@@ -276,6 +277,7 @@ class ActionExecutor:
                 invocation.tool_name,
                 outcome.returncode,
                 outcome.diagnostics,
+                ignore_exit=invocation.action.ignore_exit,
             )
             outcome.returncode = adjusted
         state.outcomes[record.order] = outcome
@@ -343,7 +345,12 @@ class ActionExecutor:
             severity_rules=environment.severity_rules,
         )
         diagnostics = filter_diagnostics(diagnostics, invocation.tool_name, filters, environment.root)
-        adjusted_returncode = self._adjust_returncode(invocation.tool_name, completed.returncode, diagnostics)
+        adjusted_returncode = self._adjust_returncode(
+            invocation.tool_name,
+            completed.returncode,
+            diagnostics,
+            ignore_exit=invocation.action.ignore_exit,
+        )
 
         if diagnostics:
             CONTEXT_RESOLVER.annotate(diagnostics, root=environment.root)
@@ -486,6 +493,8 @@ class ActionExecutor:
         tool_name: str,
         original_returncode: int,
         diagnostics: Sequence[Diagnostic],
+        *,
+        ignore_exit: bool = False,
     ) -> int:
         """Return the adjusted exit status for ``tool_name``.
 
@@ -500,6 +509,8 @@ class ActionExecutor:
         if tool_name == PYLINT_TOOL_NAME and not diagnostics:
             return 0
         if tool_name == TOMBI_TOOL_NAME and not diagnostics:
+            return 0
+        if ignore_exit and not diagnostics and original_returncode in _IGNORED_CHECK_RETURN_CODES:
             return 0
         return original_returncode
 

@@ -180,11 +180,7 @@ class ToolCacheLayout:
         return tuple(unique)
 
     def ensure_directories(self) -> None:
-        """Create required cache directories when absent.
-
-        Returns:
-            None: This method does not return a value.
-        """
+        """Create required cache directories when absent."""
 
         for path in self.directories:
             path.mkdir(parents=True, exist_ok=True)

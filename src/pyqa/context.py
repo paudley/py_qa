@@ -49,7 +49,7 @@ class Language(str, Enum):
 class ParserFactory:
     """Factory capable of constructing tree-sitter parsers on demand."""
 
-    parser_cls: type[Any]
+    parser_cls: Callable[[], Any] | None
     get_parser: Callable[[str], Any] | None
     language_cls: type[Any] | None
 
@@ -84,10 +84,11 @@ class ParserFactory:
     def _build_parser(self) -> Any | None:
         """Return a fresh parser instance when available."""
 
-        if not callable(self.parser_cls):
+        parser_factory = self.parser_cls
+        if parser_factory is None:
             return None
         try:
-            return self.parser_cls()
+            return parser_factory()
         except (TypeError, ValueError):
             return None
 
@@ -468,8 +469,12 @@ class TreeSitterContextResolver:
         node_type = getattr(node, "type", None)
         if node_type in {"pair", "object", "array"}:
             key_node = getattr(node, "child_by_field_name", lambda _: None)("key")
-            if key_node is not None and hasattr(key_node, "text"):
-                return key_node.text.decode("utf-8")
+            if key_node is not None:
+                text_attr = getattr(key_node, "text", None)
+                if isinstance(text_attr, bytes):
+                    return text_attr.decode("utf-8")
+                if isinstance(text_attr, str):
+                    return text_attr
         return node_type if isinstance(node_type, str) else None
 
     def _json_fallback(self, path: Path, line: int) -> str | None:

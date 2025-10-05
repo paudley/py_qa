@@ -31,6 +31,48 @@ class LicensePolicyProtocol(Protocol):
         raise NotImplementedError
 
 
+class ExpectedNoticeFn(Protocol):
+    """Callable returning the canonical notice string for a file."""
+
+    def __call__(
+        self,
+        policy: LicensePolicyProtocol,
+        observed_notice: str | None,
+        *,
+        current_year: int | None = None,
+    ) -> str | None:  # pragma: no cover - protocol definition
+        """Return the expected copyright notice for the file."""
+        raise NotImplementedError
+
+    def __repr__(self) -> str:  # pragma: no cover - protocol definition
+        """Return a developer-friendly representation of the callable."""
+        raise NotImplementedError
+
+
+class ExtractSpdxFn(Protocol):
+    """Callable extracting SPDX identifiers from file content."""
+
+    def __call__(self, content: str) -> list[str]:  # pragma: no cover - protocol definition
+        """Return SPDX identifiers discovered in ``content``."""
+        raise NotImplementedError
+
+    def __repr__(self) -> str:  # pragma: no cover - protocol definition
+        """Return a developer-friendly representation of the callable."""
+        raise NotImplementedError
+
+
+class NormaliseNoticeFn(Protocol):
+    """Callable normalising copyright notice strings."""
+
+    def __call__(self, notice: str) -> str:  # pragma: no cover - protocol definition
+        """Return a canonical representation of ``notice``."""
+        raise NotImplementedError
+
+    def __repr__(self) -> str:  # pragma: no cover - protocol definition
+        """Return a developer-friendly representation of the callable."""
+        raise NotImplementedError
+
+
 try:
     _licenses_module = import_module("pyqa.checks.licenses")
 except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
@@ -41,10 +83,22 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
         sys.path.insert(0, str(project_root))
     _licenses_module = import_module("pyqa.checks.licenses")
 
-LicensePolicy = cast(type[LicensePolicyProtocol], _licenses_module.LicensePolicy)
-expected_notice = _licenses_module.expected_notice
-extract_spdx_identifiers = _licenses_module.extract_spdx_identifiers
-normalise_notice = _licenses_module.normalise_notice
+LicensePolicy = cast(
+    type[LicensePolicyProtocol],
+    _licenses_module.LicensePolicy,
+)
+expected_notice = cast(
+    ExpectedNoticeFn,
+    getattr(_licenses_module, "expected_notice"),
+)
+extract_spdx_identifiers = cast(
+    ExtractSpdxFn,
+    getattr(_licenses_module, "extract_spdx_identifiers"),
+)
+normalise_notice = cast(
+    NormaliseNoticeFn,
+    getattr(_licenses_module, "normalise_notice"),
+)
 
 
 class CommentStyle(str, Enum):
@@ -290,7 +344,9 @@ class LicenseHeaderFixer:
             suffix = path.suffix or path.name
             raise UnsupportedLicenseFixError(f"Unsupported file type for license header: {suffix}")
 
-        identifiers = extract_spdx_identifiers(content)
+        raw_identifiers = extract_spdx_identifiers(content)
+        identifiers = tuple(dict.fromkeys(raw_identifiers))
+        identifier_set = set(identifiers)
         if self.policy.spdx_id:
             alternate_ids = self.policy.allow_alternate_spdx or ()
             allowed = {spdx for spdx in (self.policy.spdx_id, *alternate_ids) if spdx}
@@ -298,7 +354,7 @@ class LicenseHeaderFixer:
             if conflicting:
                 raise ConflictingLicenseError(conflicting)
 
-        spdx_line = self._build_spdx_line(identifiers)
+        spdx_line = self._build_spdx_line(identifier_set)
         notice_line = self._build_notice_line(content)
         if spdx_line is None and notice_line is None:
             return None

@@ -144,10 +144,9 @@ def run_command(
         stdout = _ensure_text(exc.stdout) or ""
         stderr = _ensure_text(exc.stderr)
         timeout_value = resolved_options.timeout
-        if timeout_value is not None:
-            timeout_msg = f"Command timed out after {timeout_value:.1f}s"
-        else:
-            timeout_msg = "Command timed out"
+        timeout_msg = (
+            f"Command timed out after {timeout_value:.1f}s" if timeout_value is not None else "Command timed out"
+        )
         combined_stderr = f"{stderr}\n{timeout_msg}" if stderr else timeout_msg
         completed = subprocess.CompletedProcess(
             args=(list(exc.cmd) if isinstance(exc.cmd, (list, tuple)) else list(normalized)),

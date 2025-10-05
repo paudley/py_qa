@@ -143,7 +143,8 @@ def jsonify(value: Any) -> JsonValue:
     elif isinstance(value, BaseModel):
         result = jsonify(value.model_dump(mode="python", by_alias=True))
     elif hasattr(value, "to_dict"):
-        dumped = value.to_dict()  # type: ignore[call-arg, no-untyped-call]
+        to_dict = getattr(value, "to_dict")
+        dumped = to_dict() if callable(to_dict) else value
         result = jsonify(dumped)
     elif isinstance(value, Mapping):
         result = {str(key): jsonify(item) for key, item in value.items()}

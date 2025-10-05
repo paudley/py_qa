@@ -3,9 +3,9 @@
   "name": "prettier",
   "description": "Code formatter Prettier.",
   "extends": ["npm_runtime"],
-  "languages": ["javascript", "typescript", "json", "css", "markdown"],
+  "languages": ["javascript", "typescript", "json", "css"],
   "phase": "format",
-  "fileExtensions": [".js", ".jsx", ".ts", ".tsx", ".json", ".css", ".md"],
+  "fileExtensions": [".js", ".jsx", ".ts", ".tsx", ".json", ".css"],
   "configFiles": [".prettierrc", ".prettierrc.json", ".prettierrc.js", "prettier.config.js"],
   "runtime": {
     "type": "npm",

@@ -68,8 +68,8 @@ class _SectionProcessor(Generic[ModelT]):
             source: Source identifier for provenance reporting.
 
         Returns:
-            tuple[Config, list[FieldUpdate]]: Updated config plus FieldUpdate
-            entries describing mutations.
+            tuple[Config, list[FieldUpdate]]: Updated config plus
+            ``FieldUpdate`` entries describing mutations.
         """
 
         section_raw = data.get(self.name)
