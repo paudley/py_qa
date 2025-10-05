@@ -6,7 +6,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Generic, TypeVar, cast
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -100,7 +100,7 @@ def _model_replace(instance: ModelT, **updates: Any) -> ModelT:
 
     if not isinstance(instance, BaseModel):  # defensive guard for legacy usage
         raise TypeError("_model_replace expects a Pydantic BaseModel instance")
-    return cast("ModelT", instance.model_copy(update=updates, deep=True))
+    return instance.model_copy(update=updates, deep=True)
 
 
 def _coerce_optional_str_value(value: Any, current: str | None, context: str) -> str | None:

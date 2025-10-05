@@ -229,7 +229,7 @@ def _prefer(existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig) -> D
     if strategy == _STRATEGY_PREFER:
         preferred = _prefer_list(existing, candidate, cfg.dedupe_prefer)
         return preferred if preferred is not None else _higher_severity(existing, candidate)
-    return existing
+    raise ValueError(f"Unknown deduplication strategy: {strategy!r}")
 
 
 def _semantic_overlap(left: Diagnostic, right: Diagnostic) -> bool:

@@ -14,13 +14,12 @@ import os
 import re
 import subprocess
 import threading
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
+from importlib import import_module
 from shutil import which
 from typing import Final, Literal, Protocol, cast, runtime_checkable
-
-import spacy
 
 from .context import TreeSitterContextResolver
 from .models import RunResult
@@ -130,9 +129,19 @@ class SpacyLanguage(Protocol):
         """Return a parsed document for ``text``."""
         raise NotImplementedError
 
-    def pipe(self, texts: Iterable[str]) -> Iterable[DocLike]:  # pragma: no cover - protocol definition
+    def pipe(
+        self,
+        texts: Iterable[str],
+    ) -> Iterable[DocLike]:  # pragma: no cover - protocol definition
         """Yield parsed documents for a stream of input strings."""
         raise NotImplementedError
+
+
+_SPACY_MODULE = import_module("spacy")
+_SPACY_LOAD: Callable[[str], SpacyLanguage] = cast(
+    Callable[[str], SpacyLanguage],
+    getattr(_SPACY_MODULE, "load"),
+)
 
 
 HighlightKind = Literal[
@@ -176,7 +185,8 @@ class AnnotationEngine:
     """Annotate diagnostics using Tree-sitter context and spaCy NLP."""
 
     def __init__(self, model: str | None = None) -> None:
-        self._model_name = model or os.getenv("PYQA_NLP_MODEL", "en_core_web_sm")
+        env_model = os.getenv("PYQA_NLP_MODEL")
+        self._model_name: str = model or env_model or "en_core_web_sm"
         self._nlp: SpacyLanguage | None = None
         self._nlp_lock = threading.Lock()
         self._resolver = TreeSitterContextResolver()
@@ -227,26 +237,41 @@ class AnnotationEngine:
         return MessageAnalysis(spans=tuple(spans), signature=signature)
 
     def _get_nlp(self) -> SpacyLanguage | None:
+        """Return the cached spaCy pipeline, downloading the model if required."""
+
         if self._nlp is not None:
             return self._nlp
         with self._nlp_lock:
             if self._nlp is not None:
                 return self._nlp
-            try:
-                self._nlp = cast(SpacyLanguage, spacy.load(self._model_name))
-            except OSError:  # pragma: no cover - spaCy optional
-                should_retry = False
-                if not self._download_attempted:
-                    self._download_attempted = True
-                    should_retry = _download_spacy_model(self._model_name)
-                if should_retry:
-                    try:
-                        self._nlp = cast(SpacyLanguage, spacy.load(self._model_name))
-                    except OSError:
-                        self._nlp = None
-                else:
-                    self._nlp = None
+            self._nlp = self._initialise_spacy_model(self._model_name)
             return self._nlp
+
+    def _initialise_spacy_model(self, model_name: str) -> SpacyLanguage | None:
+        """Return a spaCy pipeline for ``model_name``, downloading it once.
+
+        Args:
+            model_name: spaCy model identifier requested by the caller.
+
+        Returns:
+            SpacyLanguage | None: Loaded pipeline instance when available;
+            otherwise ``None`` if the model is unavailable even after an
+            attempted download.
+        """
+
+        try:
+            return _SPACY_LOAD(model_name)
+        except OSError:  # pragma: no cover - spaCy optional
+            if self._download_attempted:
+                return None
+            self._download_attempted = True
+            did_download = _download_spacy_model(model_name)
+            if not did_download:
+                return None
+            try:
+                return _SPACY_LOAD(model_name)
+            except OSError:
+                return None
 
 
 def _heuristic_spans(message: str) -> tuple[list[MessageSpan], list[str]]:
@@ -498,7 +523,7 @@ def _download_spacy_model(model_name: str) -> bool:
     if not uv_path:
         return False
 
-    version = getattr(spacy, "__version__", None)
+    version = getattr(_SPACY_MODULE, "__version__", None)
     if not version:
         return False
 

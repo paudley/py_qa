@@ -10,7 +10,6 @@ from typing import Final, Literal
 
 from ..testing.suppressions import flatten_test_suppressions
 from ..tools.catalog_metadata import catalog_general_suppressions
-from .options import ToolFilters
 
 
 class LintOptionKey(str, Enum):
@@ -119,22 +118,28 @@ _BASE_TOOL_FILTERS: Final[dict[str, list[str]]] = {
 }
 
 
-def build_default_tool_filters() -> ToolFilters:
+def build_default_tool_filters() -> dict[str, list[str]]:
     """Return merged default tool filters with catalog and test suppressions."""
 
-    merged: ToolFilters = {tool: list(patterns) for tool, patterns in _BASE_TOOL_FILTERS.items()}
-    for tool, patterns in flatten_test_suppressions().items():
-        _extend_filter_patterns(merged, tool, patterns)
-    for tool, patterns in catalog_general_suppressions().items():
-        _extend_filter_patterns(merged, tool, patterns)
-    deduped: ToolFilters = {}
+    merged: dict[str, list[str]] = {tool: list(patterns) for tool, patterns in _BASE_TOOL_FILTERS.items()}
+    for tool, test_patterns in flatten_test_suppressions().items():
+        _extend_filter_patterns(merged, tool, test_patterns)
+    for tool, catalog_patterns in catalog_general_suppressions().items():
+        _extend_filter_patterns(merged, tool, catalog_patterns)
+    deduped: dict[str, list[str]] = {}
     for tool, patterns in merged.items():
-        deduped[tool] = list(dict.fromkeys(patterns))
+        seen: set[str] = set()
+        unique_patterns: list[str] = []
+        for pattern in patterns:
+            if pattern not in seen:
+                seen.add(pattern)
+                unique_patterns.append(pattern)
+        deduped[tool] = unique_patterns
     return deduped
 
 
 def _extend_filter_patterns(
-    target: ToolFilters,
+    target: dict[str, list[str]],
     tool: str,
     patterns: Iterable[str],
 ) -> None:
@@ -156,7 +161,7 @@ def _extend_filter_patterns(
         target[tool] = additions
 
 
-DEFAULT_TOOL_FILTERS: Final[ToolFilters] = build_default_tool_filters()
+DEFAULT_TOOL_FILTERS: Final[dict[str, list[str]]] = build_default_tool_filters()
 
 DEFAULT_EXCLUDES: Final[tuple[Path, ...]] = (
     Path(".venv"),

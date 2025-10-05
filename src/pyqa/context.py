@@ -110,7 +110,7 @@ class ParserFactory:
             return parser
         if hasattr(parser, "language"):
             try:
-                parser.language = language  # type: ignore[attr-defined]
+                setattr(parser, "language", language)
             except (AttributeError, TypeError, ValueError):
                 return None
             return parser

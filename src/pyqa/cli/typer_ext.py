@@ -7,12 +7,12 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from typing import Annotated, Any, Final, TypeVar, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, Final, TypeVar, cast, get_args, get_origin, get_type_hints
 
 import click
 import typer
 import typer.main
-from click.core import Context, Parameter
+from click.core import Argument, Context, Option, Parameter
 from click.formatting import HelpFormatter
 from typer.core import TyperCommand, TyperGroup
 from typer.models import OptionInfo, ParameterInfo
@@ -62,8 +62,10 @@ class _DirectParameterContext:
 ARGUMENT_PARAM_TYPE: Final[str] = "argument"
 
 ParamsMetadata = tuple[list[Any], dict[str, Callable[[Any], Any]], str | None]
-ParamsAdapter = Callable[[Callable[..., Any]], ParamsMetadata]
+ParamsAdapter = Callable[[Callable[..., Any] | None], ParamsMetadata]
 CallbackAdapter = Callable[..., Callable[..., Any] | None]
+TyperParamShim = Callable[..., tuple[list[Argument | Option], dict[str, Any], str | None]]
+TyperCallbackShim = Callable[..., Callable[..., Any] | None]
 
 
 def _install_param_decl_sanitizer() -> None:
@@ -106,8 +108,14 @@ def _install_dependency_support(original_get_click_param: Callable[[Any], tuple[
         return
 
     resolver = _DependencyResolver(original_get_click_param)
-    typer.main.get_params_convertors_ctx_param_name_from_function = _build_dependency_param_adapter(resolver)
-    typer.main.get_callback = _build_dependency_callback_adapter(resolver)
+    typer.main.get_params_convertors_ctx_param_name_from_function = cast(
+        TyperParamShim,
+        _build_dependency_param_adapter(resolver),
+    )
+    typer.main.get_callback = cast(
+        TyperCallbackShim,
+        _build_dependency_callback_adapter(resolver),
+    )
     setattr(typer.main, "_pyqa_dependency_support_installed", True)
 
 
@@ -125,8 +133,10 @@ def _build_dependency_param_adapter(
     """
 
     def _patched_get_params(
-        callback: Callable[..., Any],
+        callback: Callable[..., Any] | None,
     ) -> ParamsMetadata:
+        if callback is None:
+            return [], {}, None
         analysis = resolver.analyze(callback)
         return analysis.params, analysis.convertors, analysis.context_param_name
 

@@ -170,9 +170,8 @@ class TomlConfigSource:
         if not path.exists():
             return {}
         if path in stack:
-            raise ConfigError(
-                "Circular include detected: " + " -> ".join(str(entry) for entry in stack + (path,)),
-            )
+            include_chain = " -> ".join(str(entry) for entry in (*stack, path))
+            raise ConfigError(f"Circular include detected: {include_chain}")
         resolved = path.resolve()
         stat = resolved.stat()
         cache_key = (resolved, stat.st_mtime_ns)
@@ -422,7 +421,11 @@ class _ConfigMerger:
         warnings: list[str] = []
         merged_config = config
         for processor in self._sections:
-            merged_config, section_updates = processor.merge_into(merged_config, data, source=source)
+            merged_config, section_updates = processor.merge_into(
+                merged_config,
+                data,
+                source=source,
+            )
             updates.extend(section_updates)
 
         tool_settings, tool_updates, tool_warnings = _merge_tool_settings(
@@ -433,12 +436,20 @@ class _ConfigMerger:
         warnings.extend(tool_warnings)
         if tool_updates:
             merged_config = _model_replace(merged_config, tool_settings=tool_settings)
-            updates.extend(
-                FieldUpdate(section="tool_settings", field=tool, source=source, value=value)
-                for tool, value in tool_updates.items()
-            )
+            for tool, value in tool_updates.items():
+                updates.append(
+                    FieldUpdate(
+                        section="tool_settings",
+                        field=tool,
+                        source=source,
+                        value=value,
+                    )
+                )
 
-        severity_rules = _merge_severity_rules(merged_config.severity_rules, data.get("severity_rules"))
+        severity_rules = _merge_severity_rules(
+            merged_config.severity_rules,
+            data.get("severity_rules"),
+        )
         if severity_rules != merged_config.severity_rules:
             merged_config = _model_replace(merged_config, severity_rules=severity_rules)
             updates.append(
@@ -464,15 +475,18 @@ class _ConfigMerger:
         return tuple(processor.name for processor in self._sections)
 
     @staticmethod
-    def _build_section(merger: _SectionMerger, attr_name: str) -> _SectionProcessor[Any]:
+    def _build_section(
+        merger: _SectionMerger[ModelT],
+        attr_name: str,
+    ) -> _SectionProcessor[ModelT]:
         """Return a section processor binding ``merger`` to a config attribute."""
 
-        getter = cast(Callable[[Config], Any], attrgetter(attr_name))
+        getter = cast(Callable[[Config], ModelT], attrgetter(attr_name))
 
-        def setter(config: Config, value: Any, *, name: str = attr_name) -> Config:
+        def setter(config: Config, value: ModelT, *, name: str = attr_name) -> Config:
             return _model_replace(config, **{name: value})
 
-        return _SectionProcessor[Any](
+        return _SectionProcessor[ModelT](
             name=merger.section,
             merger=merger,
             getter=getter,

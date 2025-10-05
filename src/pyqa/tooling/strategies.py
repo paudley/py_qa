@@ -440,11 +440,7 @@ def _parse_target_selector(entry: Any, *, context: str) -> _TargetSelector:
         field_name="pathMustInclude",
         context=context,
     )
-    path_requires = tuple(
-        requirement
-        for item in raw_requires
-        if (requirement := _normalise_path_requirement(item))
-    )
+    path_requires = tuple(requirement for item in raw_requires if (requirement := _normalise_path_requirement(item)))
 
     fallback_directory = _coerce_optional_non_empty_string(
         entry.get("fallbackDirectory"),

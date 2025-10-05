@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterable
 from functools import cache
+from itertools import chain
 from pathlib import Path
 
 from .logging import warn
@@ -37,9 +38,11 @@ def get_pyqa_root() -> Path:
 
     detected = _auto_detect_pyqa_root()
     if detected is None:
-        raise RuntimeError(
-            "Unable to locate the py_qa project root; set PYQA_ROOT to the directory " "containing pyproject.toml."
-        )
+        message_parts = [
+            "Unable to locate the py_qa project root; set PYQA_ROOT to the",
+            "directory containing pyproject.toml.",
+        ]
+        raise RuntimeError(" ".join(message_parts))
     _warn_on_suspicious_layout(detected, source="auto-detected root")
     return detected
 
@@ -55,16 +58,15 @@ def _auto_detect_pyqa_root() -> Path | None:
 
 
 def _iter_candidates(start: Path) -> Iterable[Path]:
+    """Yield unique parent directories starting at ``start`` up to root."""
+
     seen: set[Path] = set()
-    current = start
-    while True:
-        if current in seen:
-            break
-        seen.add(current)
-        yield current
-        if current.parent == current:
-            break
-        current = current.parent
+    for candidate in chain([start], start.parents):
+        resolved = candidate.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        yield resolved
 
 
 def _validate_candidate(path: Path) -> Path:

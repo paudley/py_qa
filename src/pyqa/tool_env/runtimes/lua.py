@@ -83,12 +83,11 @@ class LuaRuntime(RuntimeHandler):
 
         if lua_paths.binary.exists() and lua_paths.meta_file.exists():
             metadata = self._load_json(lua_paths.meta_file)
-            if (
-                metadata
-                and metadata.get("package") == package
-                and metadata.get("version") == version
-            ):
-                return lua_paths.binary
+            if metadata is not None:
+                package_match = metadata.get("package") == package
+                version_match = metadata.get("version") == version
+                if package_match and version_match:
+                    return lua_paths.binary
 
         lua_paths.prefix.mkdir(parents=True, exist_ok=True)
         lua_paths.meta_file.parent.mkdir(parents=True, exist_ok=True)
@@ -111,9 +110,8 @@ class LuaRuntime(RuntimeHandler):
             raise RuntimeError(msg)
 
         shutil.copy2(target, lua_paths.binary)
-        lua_paths.binary.chmod(
-            lua_paths.binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
-        )
+        current_mode = lua_paths.binary.stat().st_mode
+        lua_paths.binary.chmod(current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         lua_paths.meta_file.write_text(
             json.dumps({"package": package, "version": version}),
             encoding="utf-8",

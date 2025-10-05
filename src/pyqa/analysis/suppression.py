@@ -162,7 +162,7 @@ def _extract_arguments(diag: Diagnostic, engine: AnnotationEngine) -> list[str]:
     spans = engine.message_spans(diag.message)
     args: list[str] = []
     for span in spans:
-        if span.kind == DiagnosticSpanKind.ARGUMENT:
+        if span.kind is not None and span.kind == DiagnosticSpanKind.ARGUMENT:
             args.append(diag.message[span.start : span.end])
     return list(dict.fromkeys(args))
 

@@ -507,7 +507,10 @@ def _build_summary_entries(
     entries: list[_SummaryEntry] = []
     for diagnostic, tool in diagnostics:
         location = _format_location(diagnostic)
-        highlighted = _highlight_markdown(diagnostic.message) if config.needs_highlight else diagnostic.message
+        if config.needs_highlight:
+            highlighted = _highlight_markdown(diagnostic.message)
+        else:
+            highlighted = diagnostic.message
         entries.append(
             _SummaryEntry(
                 diagnostic=diagnostic,
@@ -737,7 +740,7 @@ def _highlight_markdown(message: str) -> str:
     spans = _ANNOTATION_ENGINE.message_spans(message)
     if not spans:
         return message
-    spans = sorted(spans, key=lambda span: (span.start, span.end))
+    sorted_spans = sorted(spans, key=lambda span: (span.start, span.end))
     wrappers: dict[HighlightKind, tuple[str, str]] = {
         "function": ("**`", "`**"),
         "class": ("**`", "`**"),
@@ -748,7 +751,7 @@ def _highlight_markdown(message: str) -> str:
     }
     result: list[str] = []
     cursor = 0
-    for span in spans:
+    for span in sorted_spans:
         start, end = span.start, span.end
         if start < cursor:
             continue

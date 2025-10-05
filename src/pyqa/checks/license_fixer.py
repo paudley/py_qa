@@ -5,41 +5,46 @@
 from __future__ import annotations
 
 import re
-import sys
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from importlib import import_module
 from pathlib import Path
-from types import ModuleType
-from typing import Final
-
-from ..paths import get_pyqa_root
+from typing import Final, Protocol, cast
 
 
-def _load_licenses_module() -> ModuleType:
-    """Return the licenses module, extending ``sys.path`` when necessary.
+class LicensePolicyProtocol(Protocol):
+    """Contract describing the license policy data required by the fixer."""
 
-    Returns:
-        ModuleType: Imported ``pyqa.checks.licenses`` module.
-    """
+    spdx_id: str | None
+    allow_alternate_spdx: tuple[str, ...]
+    require_spdx: bool
+    require_notice: bool
 
-    try:
-        return import_module("pyqa.checks.licenses")
-    except ModuleNotFoundError:
-        project_root = get_pyqa_root() / "src"
-        if str(project_root) not in sys.path:
-            sys.path.insert(0, str(project_root))
-        return import_module("pyqa.checks.licenses")
+    def match_notice(self, content: str) -> str | None:  # pragma: no cover - protocol definition
+        """Return the matched copyright notice or ``None`` when missing."""
+        raise NotImplementedError
+
+    def should_skip(self, path: Path, root: Path) -> bool:  # pragma: no cover - protocol definition
+        """Return whether the given path should be excluded from enforcement."""
+        raise NotImplementedError
 
 
-_licenses = _load_licenses_module()
+try:
+    _licenses_module = import_module("pyqa.checks.licenses")
+except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
+    import sys
 
-LicensePolicy = _licenses.LicensePolicy
-expected_notice = _licenses.expected_notice
-extract_spdx_identifiers = _licenses.extract_spdx_identifiers
-normalise_notice = _licenses.normalise_notice
+    project_root = Path(__file__).resolve().parents[2]
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+    _licenses_module = import_module("pyqa.checks.licenses")
+
+LicensePolicy = cast(type[LicensePolicyProtocol], _licenses_module.LicensePolicy)
+expected_notice = _licenses_module.expected_notice
+extract_spdx_identifiers = _licenses_module.extract_spdx_identifiers
+normalise_notice = _licenses_module.normalise_notice
 
 
 class CommentStyle(str, Enum):
@@ -265,7 +270,7 @@ def _default_year() -> int:
 class LicenseHeaderFixer:
     """Add or update SPDX tags and copyright notices in source files."""
 
-    policy: LicensePolicy
+    policy: LicensePolicyProtocol
     current_year: int = field(default_factory=_default_year)
 
     def apply(self, path: Path, content: str) -> str | None:

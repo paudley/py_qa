@@ -5,50 +5,26 @@
 from __future__ import annotations
 
 import re
-import sys
 import tomllib
 from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from fnmatch import fnmatch
-from importlib import import_module
 from pathlib import Path
-from types import ModuleType
 from typing import Final
 
-from ..paths import get_pyqa_root
+try:
+    from pyqa.config import LicenseConfig
+    from pyqa.constants import ALWAYS_EXCLUDE_DIRS
+except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
+    import sys
 
-
-def _load_pyqa_module(module: str) -> ModuleType:
-    """Return a ``pyqa`` submodule, updating ``sys.path`` if required.
-
-    Args:
-        module: Dotted suffix of the module to import relative to ``pyqa``.
-
-    Returns:
-        ModuleType: Imported module instance.
-    """
-
-    candidates = [f"pyqa.{module}"]
-    if __package__:
-        base = __package__.split(".", maxsplit=1)[0]
-        candidates.append(f"{base}.{module}")
-    for candidate in candidates:
-        try:
-            return import_module(candidate)
-        except ModuleNotFoundError:
-            continue
-    project_root = get_pyqa_root() / "src"
+    project_root = Path(__file__).resolve().parents[2]
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
-    return import_module(f"pyqa.{module}")
+    from pyqa.config import LicenseConfig
+    from pyqa.constants import ALWAYS_EXCLUDE_DIRS
 
-
-_config = _load_pyqa_module("config")
-_constants = _load_pyqa_module("constants")
-
-LicenseConfig = _config.LicenseConfig
-ALWAYS_EXCLUDE_DIRS = _constants.ALWAYS_EXCLUDE_DIRS
 
 KNOWN_LICENSE_SNIPPETS: Final[Mapping[str, str]] = {
     "MIT": "Permission is hereby granted, free of charge",

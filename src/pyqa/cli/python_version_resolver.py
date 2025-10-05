@@ -165,7 +165,7 @@ def _load_pyproject_data(path: Path) -> Mapping[str, object] | None:
     except OSError:
         return None
     try:
-        parsed = tomllib.loads(raw)
+        parsed: object = tomllib.loads(raw)
     except tomllib.TOMLDecodeError:
         return None
     if isinstance(parsed, dict):

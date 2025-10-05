@@ -10,7 +10,7 @@ import shutil
 # external tool execution, normalising arguments and disabling ``shell=True``.
 import subprocess  # nosec B404
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -44,20 +44,20 @@ class CommandOptions:
             TypeError: If ``overrides`` includes an unknown option name.
         """
 
-        data = {
-            "cwd": self.cwd,
-            "env": self.env,
-            "check": self.check,
-            "capture_output": self.capture_output,
-            "text": self.text,
-            "timeout": self.timeout,
-            "discard_stdin": self.discard_stdin,
+        valid_keys = {
+            "cwd",
+            "env",
+            "check",
+            "capture_output",
+            "text",
+            "timeout",
+            "discard_stdin",
         }
-        for key, value in overrides.items():
-            if key not in data:
-                raise TypeError(f"Unknown command option '{key}'")
-            data[key] = value
-        return CommandOptions(**data)
+        unknown = [key for key in overrides if key not in valid_keys]
+        if unknown:
+            message = ", ".join(sorted(unknown))
+            raise TypeError(f"Unknown command option(s): {message}")
+        return replace(self, **overrides)
 
 
 class SubprocessExecutionError(RuntimeError):
@@ -144,9 +144,10 @@ def run_command(
         stdout = _ensure_text(exc.stdout) or ""
         stderr = _ensure_text(exc.stderr)
         timeout_value = resolved_options.timeout
-        timeout_msg = (
-            f"Command timed out after {timeout_value:.1f}s" if timeout_value is not None else "Command timed out"
-        )
+        if timeout_value is not None:
+            timeout_msg = f"Command timed out after {timeout_value:.1f}s"
+        else:
+            timeout_msg = "Command timed out"
         combined_stderr = f"{stderr}\n{timeout_msg}" if stderr else timeout_msg
         completed = subprocess.CompletedProcess(
             args=(list(exc.cmd) if isinstance(exc.cmd, (list, tuple)) else list(normalized)),

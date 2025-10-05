@@ -9,7 +9,7 @@ import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, TypedDict
+from typing import Final, Literal, TypedDict
 
 from pydantic import BaseModel, ConfigDict
 
@@ -18,11 +18,11 @@ from ..models import ToolOutcome
 from ..serialization import deserialize_outcome, safe_int, serialize_outcome
 
 COMMAND_DELIMITER: Final[bytes] = b"::"
-FILES_FIELD: Final[str] = "files"
-FILE_METRICS_FIELD: Final[str] = "file_metrics"
-PATH_FIELD: Final[str] = "path"
-MTIME_FIELD: Final[str] = "mtime_ns"
-SIZE_FIELD: Final[str] = "size"
+FILES_FIELD: Final[Literal["files"]] = "files"
+FILE_METRICS_FIELD: Final[Literal["file_metrics"]] = "file_metrics"
+PATH_FIELD: Final[Literal["path"]] = "path"
+MTIME_FIELD: Final[Literal["mtime_ns"]] = "mtime_ns"
+SIZE_FIELD: Final[Literal["size"]] = "size"
 
 
 class StatePayload(TypedDict, total=False):
