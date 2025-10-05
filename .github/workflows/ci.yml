@@ -37,7 +37,8 @@ jobs:
       - name: Run quality checks
         run: uv run pyqa check-quality
 
+      - name: Validate catalog schemas
+        run: ./lint --validate-schema --no-color --no-emoji
+
       - name: Verify tool schema
-        run: |
-          uv run pyqa config export-tools ref_docs/tool-schema.json
-          git diff --exit-code ref_docs/tool-schema.json
+        run: uv run pyqa config export-tools --check ref_docs/tool-schema.json

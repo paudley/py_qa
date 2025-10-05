@@ -1,0 +1,161 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "cpplint",
+  "description": "Google style C/C++ linter.",
+  "languages": ["cpp"],
+  "phase": "lint",
+  "runtime": {
+    "type": "python",
+    "package": "cpplint",
+    "minVersion": "2.0.2",
+    "versionCommand": ["cpplint", "--version"]
+  },
+  "options": [
+    {
+      "name": "line-length",
+      "type": "int",
+      "description": "Maximum allowed line length.",
+      "aliases": ["linelength"]
+    },
+    {
+      "name": "filter",
+      "type": "list[str]",
+      "description": "Category filters applied to cpplint diagnostics."
+    },
+    {
+      "name": "exclude",
+      "type": "path",
+      "description": "Paths excluded from linting."
+    },
+    {
+      "name": "extensions",
+      "type": "list[str]",
+      "description": "Additional file extensions treated as C/C++ sources."
+    },
+    {
+      "name": "headers",
+      "type": "list[str]",
+      "description": "Header extensions treated as C/C++ headers."
+    },
+    {
+      "name": "includeorder",
+      "type": "str",
+      "description": "Override include ordering category."
+    },
+    {
+      "name": "counting",
+      "type": "str",
+      "description": "Whether to count errors as extensions or real errors (quiet, total)."
+    },
+    {
+      "name": "repository",
+      "type": "path",
+      "description": "Repository root used to normalize include paths."
+    },
+    {
+      "name": "root",
+      "type": "path",
+      "description": "Project root for header detection."
+    },
+    {
+      "name": "pretty",
+      "type": "bool",
+      "description": "Enable pretty printing (ANSI colors)."
+    },
+    {
+      "name": "incremental",
+      "type": "bool",
+      "description": "Incremental mode that only reports new errors."
+    },
+    {
+      "name": "watch",
+      "type": "bool",
+      "description": "Watch files and rerun automatically."
+    },
+    {
+      "name": "recursive",
+      "type": "bool",
+      "description": "Recursively lint directories."
+    },
+    {
+      "name": "skip-lib-check",
+      "type": "bool",
+      "description": "Skip checking system libraries.",
+      "aliases": ["skip_lib_check"]
+    },
+    {
+      "name": "strict",
+      "type": "bool",
+      "description": "Enable strict mode."
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to cpplint."
+    }
+  ],
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["cpplint", "--output=emacs"],
+          "appendFiles": false,
+          "options": [
+            {
+              "setting": ["linelength", "line-length"],
+              "type": "value",
+              "flag": "--linelength=",
+              "defaultFrom": "execution.line_length"
+            },
+            { "setting": "filter", "type": "args", "flag": "--filter=", "joinWith": "," },
+            { "setting": "exclude", "type": "path", "flag": "--exclude=" },
+            { "setting": "extensions", "type": "args", "flag": "--extensions=", "joinWith": "," },
+            { "setting": "headers", "type": "args", "flag": "--headers=", "joinWith": "," },
+            { "setting": "includeorder", "type": "value", "flag": "--includeorder=" },
+            { "setting": "counting", "type": "value", "flag": "--counting=" },
+            { "setting": "repository", "type": "path", "flag": "--repository=" },
+            { "setting": "root", "type": "path", "flag": "--root=" },
+            {
+              "setting": "pretty",
+              "type": "value",
+              "flag": "--pretty",
+              "transform": "bool_to_str"
+            },
+            { "setting": "incremental", "type": "flag", "flag": "--incremental" },
+            { "setting": "watch", "type": "flag", "flag": "--watch" },
+            { "setting": "recursive", "type": "flag", "flag": "--recursive" },
+            {
+              "setting": ["skip-lib-check", "skip_lib_check"],
+              "type": "flag",
+              "flag": "--skipLibCheck"
+            },
+            { "setting": "strict", "type": "flag", "flag": "--strict" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "description": "Lint C and C++ sources with cpplint.",
+      "parser": {
+        "strategy": "parser_text",
+        "config": {
+          "transform": "pyqa.parsers.misc.parse_cpplint"
+        }
+      }
+    }
+  ],
+  "extends": ["python_defaults"],
+  "fileExtensions": [".c", ".cc", ".cpp", ".cxx", ".c++", ".cu", ".cuh", ".h", ".hh", ".hpp", ".h++", ".hxx"],
+  "configFiles": ["CPPLINT.cfg"],
+  "documentation": {
+    "help": {
+      "path": "docs/cpplint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/cpplint_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

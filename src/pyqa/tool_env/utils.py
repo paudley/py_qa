@@ -5,33 +5,38 @@
 from __future__ import annotations
 
 import re
+from typing import Final
 
 from ..tools.base import Tool
 
+SCOPED_PACKAGE_PREFIX: Final[str] = "@"
+PACKAGE_SEPARATOR: Final[str] = "@"
+SCOPED_SPLIT_THRESHOLD: Final[int] = 2
 
-def slugify(value: str) -> str:
+
+def _slugify(value: str) -> str:
     """Return a filesystem-friendly slug for *value*."""
     return re.sub(r"[^A-Za-z0-9_.-]+", "-", value)
 
 
-def extract_version(text: str | None) -> str | None:
+def _extract_version(text: str | None) -> str | None:
     if not text:
         return None
     match = re.search(r"(\d+(?:\.\d+)+)", text)
     return match.group(1) if match else None
 
 
-def split_package_spec(spec: str) -> tuple[str, str | None]:
+def _split_package_spec(spec: str) -> tuple[str, str | None]:
     """Split a package specifier into name and version components."""
     if spec.startswith("git+") or spec.startswith("file:") or spec.startswith("http"):
         return spec, None
-    if spec.startswith("@"):
-        if spec.count("@") >= 2:
-            name, version = spec.rsplit("@", 1)
+    if spec.startswith(SCOPED_PACKAGE_PREFIX):
+        if spec.count(PACKAGE_SEPARATOR) >= SCOPED_SPLIT_THRESHOLD:
+            name, version = spec.rsplit(PACKAGE_SEPARATOR, 1)
             return name, version
         return spec, None
-    if "@" in spec:
-        name, version = spec.rsplit("@", 1)
+    if PACKAGE_SEPARATOR in spec:
+        name, version = spec.rsplit(PACKAGE_SEPARATOR, 1)
         return name, version
     return spec, None
 
@@ -39,8 +44,8 @@ def split_package_spec(spec: str) -> tuple[str, str | None]:
 def desired_version(tool: Tool) -> str | None:
     """Determine the target version expected for *tool*."""
     if tool.package:
-        _, specified = split_package_spec(tool.package)
-        extracted = extract_version(specified)
+        _, specified = _split_package_spec(tool.package)
+        extracted = _extract_version(specified)
         if extracted:
             return extracted
     if tool.min_version:
@@ -48,14 +53,9 @@ def desired_version(tool: Tool) -> str | None:
     return None
 
 
-_slugify = slugify
-_extract_version = extract_version
-_split_package_spec = split_package_spec
-
-
 __all__ = [
+    "_extract_version",
+    "_slugify",
+    "_split_package_spec",
     "desired_version",
-    "extract_version",
-    "slugify",
-    "split_package_spec",
 ]

@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "selene",
+  "description": "Modern Lua linter powered by selene.",
+  "languages": ["lua"],
+  "phase": "lint",
+  "runtime": {
+    "type": "rust",
+    "package": "selene",
+    "minVersion": "0.29.0",
+    "versionCommand": ["selene", "--version"]
+  },
+  "options": [
+    {
+      "name": "display-style",
+      "type": "str",
+      "description": "Output display style (Json2, Compact, Pretty)."
+    },
+    {
+      "name": "color",
+      "type": "str",
+      "description": "Color output preference (Never, Auto, Always)."
+    },
+    {
+      "name": "config",
+      "type": "path",
+      "description": "Selene configuration file."
+    },
+    {
+      "name": "pattern",
+      "type": "list[str]",
+      "description": "Glob patterns to lint instead of the default file set."
+    },
+    {
+      "name": "num-threads",
+      "type": "int",
+      "description": "Number of worker threads."
+    },
+    {
+      "name": "allow-warnings",
+      "type": "bool",
+      "description": "Allow warnings without failing the run."
+    },
+    {
+      "name": "no-exclude",
+      "type": "bool",
+      "description": "Disable built-in exclude patterns."
+    },
+    {
+      "name": "quiet",
+      "type": "bool",
+      "description": "Suppress non-error output."
+    },
+    {
+      "name": "no-summary",
+      "type": "bool",
+      "description": "Disable summary output."
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to selene."
+    }
+  ],
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["selene"],
+          "appendFiles": false,
+          "options": [
+            {
+              "setting": "display-style",
+              "type": "value",
+              "flag": "--display-style",
+              "default": "Json2"
+            },
+            { "setting": "color", "type": "value", "flag": "--color", "default": "Never" },
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "pattern", "type": "args", "flag": "--pattern" },
+            { "setting": ["num-threads", "num_threads"], "type": "value", "flag": "--num-threads" },
+            {
+              "setting": ["allow-warnings", "allow_warnings"],
+              "type": "flag",
+              "flag": "--allow-warnings"
+            },
+            { "setting": ["no-exclude", "no_exclude"], "type": "flag", "flag": "--no-exclude" },
+            { "setting": "quiet", "type": "flag", "flag": "--quiet" },
+            { "setting": ["no-summary", "no_summary"], "type": "flag", "flag": "--no-summary" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "description": "Lint Lua sources with Selene.",
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.python.parse_selene"
+        }
+      }
+    }
+  ],
+  "fileExtensions": [".lua"],
+  "configFiles": ["selene.toml"],
+  "tags": ["requires-cargo"],
+  "documentation": {
+    "help": {
+      "path": "docs/selene_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/selene_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "lualint",
+  "description": "Lua bytecode-based global usage linter.",
+  "languages": ["lua"],
+  "phase": "lint",
+  "runtime": {
+    "type": "binary"
+  },
+  "options": [
+    {
+      "name": "relaxed",
+      "type": "bool",
+      "description": "Enable relaxed linting mode (-r)."
+    },
+    {
+      "name": "strict",
+      "type": "bool",
+      "description": "Enable strict linting mode (-s)."
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to lualint."
+    }
+  ],
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_download_binary",
+        "config": {
+          "download": {
+            "name": "lualint",
+            "cacheSubdir": "lualint",
+            "targets": [
+              {
+                "url": "https://raw.githubusercontent.com/philips/lualint/master/lualint",
+                "filename": "lualint.lua",
+                "chmod": true
+              }
+            ]
+          },
+          "base": ["lua", "${binary}"],
+          "options": [
+            { "setting": "relaxed", "type": "flag", "flag": "-r" },
+            { "setting": "strict", "type": "flag", "flag": "-s" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "description": "Static analysis for Lua globals via lualint.",
+      "parser": {
+        "strategy": "parser_text",
+        "config": {
+          "transform": "pyqa.parsers.lua.parse_lualint"
+        }
+      }
+    }
+  ],
+  "fileExtensions": [".lua"],
+  "tags": ["requires-lua"],
+  "documentation": {
+    "help": {
+      "path": "docs/lualint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/lualint_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

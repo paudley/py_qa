@@ -4,41 +4,52 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Any
+from collections.abc import Mapping, Sequence
+from typing import Any, Final
 
 from ..models import RawDiagnostic
 from ..severity import Severity
 from ..tools.base import ToolContext
-from .base import _coerce_dict_sequence, _coerce_object_mapping, _coerce_optional_str
+from .base import (
+    DiagnosticDetails,
+    DiagnosticLocation,
+    _coerce_dict_sequence,
+    _coerce_object_mapping,
+    _coerce_optional_str,
+    append_raw_diagnostic,
+    create_spec,
+    iter_dicts,
+    map_severity,
+)
 
 
-def parse_actionlint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse actionlint JSON diagnostics."""
-    items = payload if isinstance(payload, list) else []
+def parse_actionlint(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse actionlint JSON diagnostics into raw diagnostic objects.
+
+    Args:
+        payload: JSON payload emitted by actionlint.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Normalised diagnostics describing actionable issues.
+    """
+    del context
     results: list[RawDiagnostic] = []
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        path = item.get("path")
+    for item in iter_dicts(payload):
+        path = _coerce_optional_str(item.get("filepath") or item.get("path"))
         message = str(item.get("message", "")).strip()
-        severity = str(item.get("severity", "error")).lower()
+        severity = item.get("severity", "error")
         code = item.get("kind")
-        sev_enum = {
-            "error": Severity.ERROR,
-            "warning": Severity.WARNING,
-            "note": Severity.NOTE,
-        }.get(severity, Severity.WARNING)
-        results.append(
-            RawDiagnostic(
-                file=path,
-                line=item.get("line"),
-                column=item.get("column"),
-                severity=sev_enum,
-                message=message,
-                code=str(code) if code else None,
-                tool="actionlint",
-            ),
+        sev_enum = map_severity(severity, ACTIONLINT_SEVERITY_MAP, Severity.WARNING)
+        location = DiagnosticLocation(
+            file=path,
+            line=item.get("line"),
+            column=item.get("column"),
+        )
+        details = _build_actionlint_details(sev_enum, message, code)
+        append_raw_diagnostic(
+            results,
+            spec=create_spec(location=location, details=details),
         )
     return results
 
@@ -80,16 +91,9 @@ def parse_kube_linter(payload: Any, _context: ToolContext) -> Sequence[RawDiagno
 
 def parse_dockerfilelint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse dockerfilelint JSON output."""
-    files = []
-    if isinstance(payload, dict):
-        files = payload.get("files", [])
-    elif isinstance(payload, list):
-        files = payload
-
     results: list[RawDiagnostic] = []
-    for entry in files:
-        if not isinstance(entry, dict):
-            continue
+    source = payload.get("files") if isinstance(payload, Mapping) else payload
+    for entry in iter_dicts(source):
         file_path = entry.get("file")
         issues = entry.get("issues")
         if not isinstance(issues, list):
@@ -99,9 +103,12 @@ def parse_dockerfilelint(payload: Any, _context: ToolContext) -> Sequence[RawDia
                 continue
             title = str(issue.get("title", "")).strip()
             description = str(issue.get("description", "")).strip()
-            message = (
-                title if description == "" else f"{title}: {description}" if title else description
-            )
+            if title and description:
+                message = f"{title}: {description}"
+            elif title:
+                message = title
+            else:
+                message = description
             if not message:
                 continue
             results.append(
@@ -118,71 +125,24 @@ def parse_dockerfilelint(payload: Any, _context: ToolContext) -> Sequence[RawDia
     return results
 
 
-def parse_hadolint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse hadolint JSON output."""
-    items = payload if isinstance(payload, list) else []
-    results: list[RawDiagnostic] = []
-    for entry in items:
-        if not isinstance(entry, dict):
-            continue
-        message = str(entry.get("message", "")).strip()
-        if not message:
-            continue
-        level = str(entry.get("level", "warning")).lower()
-        severity = {
-            "error": Severity.ERROR,
-            "warning": Severity.WARNING,
-            "info": Severity.NOTICE,
-            "style": Severity.NOTE,
-        }.get(level, Severity.WARNING)
-        results.append(
-            RawDiagnostic(
-                file=entry.get("file"),
-                line=entry.get("line"),
-                column=entry.get("column"),
-                severity=severity,
-                message=message,
-                code=str(entry.get("code")) if entry.get("code") else None,
-                tool="hadolint",
-            ),
-        )
-    return results
+ACTIONLINT_SEVERITY_MAP: Final[dict[str, Severity]] = {
+    "error": Severity.ERROR,
+    "warning": Severity.WARNING,
+    "note": Severity.NOTE,
+}
 
 
-def parse_bandit(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse Bandit security findings."""
-    if not isinstance(payload, dict):
-        return []
-    results: list[RawDiagnostic] = []
-    for result in payload.get("results", []):
-        if not isinstance(result, dict):
-            continue
-        path = result.get("filename")
-        line = result.get("line_number")
-        severity = str(result.get("issue_severity", "MEDIUM")).upper()
-        sev_enum = {
-            "HIGH": Severity.ERROR,
-            "MEDIUM": Severity.WARNING,
-            "LOW": Severity.NOTICE,
-        }.get(severity, Severity.WARNING)
-        results.append(
-            RawDiagnostic(
-                file=path,
-                line=line,
-                column=None,
-                severity=sev_enum,
-                message=str(result.get("issue_text", "")).strip(),
-                code=result.get("test_id"),
-                tool="bandit",
-            ),
-        )
-    return results
+def _build_actionlint_details(
+    severity: Severity,
+    message: str,
+    code: object | None,
+) -> DiagnosticDetails:
+    """Return normalised actionlint diagnostic metadata."""
 
-
-__all__ = [
-    "parse_actionlint",
-    "parse_bandit",
-    "parse_dockerfilelint",
-    "parse_hadolint",
-    "parse_kube_linter",
-]
+    rule = str(code) if code else None
+    return DiagnosticDetails(
+        severity=severity,
+        message=message,
+        tool="actionlint",
+        code=rule,
+    )

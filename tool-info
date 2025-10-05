@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""Entry point for the tool-info command."""
+
+from __future__ import annotations
+
+import importlib.util
+import os
+import sys
+from pathlib import Path
+
+PYQA_ROOT = Path(__file__).resolve().parent
+SRC_DIR = PYQA_ROOT / "src"
+CLI_LAUNCHER_PATH = SRC_DIR / "pyqa" / "cli" / "_cli_launcher.py"
+VERBOSE_ENV = "PYQA_WRAPPER_VERBOSE"
+
+
+def _debug(message: str) -> None:
+    if os.environ.get(VERBOSE_ENV):
+        print(message, file=sys.stderr)
+
+
+def _extend_sys_path(root: Path) -> None:
+    """Inject virtualenv site-packages directories into ``sys.path``."""
+
+    candidate_roots = [root / ".venv" / "lib", root / ".venv" / "Lib"]
+    for base in candidate_roots:
+        if not base.exists():
+            _debug(f"Skipping missing site-packages root: {base}")
+            continue
+        for site_packages in base.glob("python*/site-packages"):
+            site_str = str(site_packages)
+            if site_str not in sys.path:
+                sys.path.insert(0, site_str)
+                _debug(f"Prepended site-packages to sys.path: {site_packages}")
+            else:
+                _debug(f"Site-packages already on sys.path: {site_packages}")
+
+
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+    _debug(f"Prepended src directory to sys.path: {SRC_DIR}")
+else:
+    _debug(f"Src directory already on sys.path: {SRC_DIR}")
+
+
+_extend_sys_path(PYQA_ROOT)
+
+
+loader_spec = importlib.util.spec_from_file_location("_pyqa_cli_launcher", CLI_LAUNCHER_PATH)
+if loader_spec is None:
+    raise ImportError(f"Unable to locate CLI launcher at {CLI_LAUNCHER_PATH}")
+module = importlib.util.module_from_spec(loader_spec)
+if loader_spec.loader is None:
+    raise ImportError("CLI launcher loader is not available")
+loader_spec.loader.exec_module(module)
+_debug(f"Loaded CLI launcher from {CLI_LAUNCHER_PATH}")
+
+launch = module.launch
+
+
+def main() -> None:
+    """Launch the tool-info command."""
+
+    launch("tool-info")
+
+
+if __name__ == "__main__":
+    main()

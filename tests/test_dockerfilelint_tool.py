@@ -8,8 +8,21 @@ from __future__ import annotations
 from pathlib import Path
 
 from pyqa.config import Config
+from pyqa.tooling import ToolCatalogLoader
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import DockerfilelintCommand
+
+_PYQA_ROOT = Path(__file__).resolve().parents[1]
+_CATALOG_ROOT = _PYQA_ROOT / "tooling" / "catalog"
+
+
+def _dockerfilelint_config() -> dict[str, object]:
+    loader = ToolCatalogLoader(catalog_root=_CATALOG_ROOT)
+    snapshot = loader.load_snapshot()
+    for definition in snapshot.tools:
+        if definition.name == "dockerfilelint":
+            return dict(definition.actions[0].command.reference.config)
+    raise AssertionError("dockerfilelint command configuration missing from catalog")
 
 
 def test_dockerfilelint_command_build(tmp_path: Path) -> None:
@@ -21,17 +34,11 @@ def test_dockerfilelint_command_build(tmp_path: Path) -> None:
         settings={"config": tmp_path / ".dockerfilelintrc"},
     )
 
-    action = ToolAction(
-        name="lint",
-        command=DockerfilelintCommand(base=("dockerfilelint", "--output", "json")),
-        append_files=True,
-    )
-
+    builder = command_option_map(_dockerfilelint_config())
+    action = ToolAction(name="lint", command=builder)
     command = action.build_command(ctx)
+
     assert command[0] == "dockerfilelint"
-    assert "--output" in command
-    assert "json" in command
-    config_path = str(tmp_path / ".dockerfilelintrc")
-    assert "--config" in command
-    assert config_path in command
+    assert "--output" in command and "json" in command
+    assert "--config" in command and str((tmp_path / ".dockerfilelintrc").resolve()) in command
     assert command[-1].endswith("Dockerfile")

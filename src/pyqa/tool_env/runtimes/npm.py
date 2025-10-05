@@ -7,17 +7,18 @@ from __future__ import annotations
 import json
 import os
 import shlex
-import shutil
-from collections.abc import Mapping, Sequence
+import shutil as _shutil
+from collections.abc import Mapping
 from pathlib import Path
 
 from ...environments import inject_node_defaults
 from ...process_utils import SubprocessExecutionError, run_command
 from ...tools.base import Tool
-from .. import constants as tool_constants
 from ..models import PreparedCommand
-from ..utils import desired_version, slugify, split_package_spec
-from .base import RuntimeHandler
+from ..utils import _slugify, _split_package_spec, desired_version
+from .base import RuntimeContext, RuntimeHandler
+
+shutil = _shutil
 
 
 class NpmRuntime(RuntimeHandler):
@@ -25,46 +26,23 @@ class NpmRuntime(RuntimeHandler):
 
     META_FILE = ".pyqa-meta.json"
 
-    def _try_system(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand | None:
-        executable = shutil.which(base_cmd[0])
-        if not executable:
-            return None
-        version = None
-        if tool.version_command:
-            version = self._versions.capture(tool.version_command)
-        if not self._versions.is_compatible(version, target_version):
-            return None
-        return PreparedCommand.from_parts(cmd=base_cmd, env=None, version=version, source="system")
+    def _try_project(self, context: RuntimeContext) -> PreparedCommand | None:
+        """Use a project-local Node binary located under ``node_modules/.bin``."""
 
-    def _try_project(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand | None:
-        bin_dir = root / "node_modules" / ".bin"
-        executable = bin_dir / base_cmd[0]
+        bin_dir = context.root / "node_modules" / ".bin"
+        executable = bin_dir / context.executable
         if not executable.exists():
             return None
-        env_overrides = self._project_env(bin_dir, root)
+        env_overrides = self._project_env(context, bin_dir)
         version = None
-        if tool.version_command:
+        if context.tool.version_command:
             version = self._versions.capture(
-                tool.version_command,
+                context.tool.version_command,
                 env=self._merge_env(env_overrides),
             )
-        if not self._versions.is_compatible(version, target_version):
+        if not self._versions.is_compatible(version, context.target_version):
             return None
-        cmd = list(base_cmd)
+        cmd = context.command_list()
         cmd[0] = str(executable)
         return PreparedCommand.from_parts(
             cmd=cmd,
@@ -73,47 +51,41 @@ class NpmRuntime(RuntimeHandler):
             source="project",
         )
 
-    def _prepare_local(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand:
-        prefix, cached_version = self._ensure_local_package(tool)
+    def _prepare_local(self, context: RuntimeContext) -> PreparedCommand:
+        """Install npm packages into the cache and return the local command."""
+
+        prefix, cached_version = self._ensure_local_package(context)
         bin_dir = prefix / "node_modules" / ".bin"
-        executable = bin_dir / base_cmd[0]
-        cmd = list(base_cmd)
+        executable = bin_dir / context.executable
+        cmd = context.command_list()
         cmd[0] = str(executable)
-        env = self._local_env(bin_dir, prefix, root)
+        env = self._local_env(context, bin_dir, prefix)
         version = cached_version
-        if version is None and tool.version_command:
-            version = self._versions.capture(tool.version_command, env=self._merge_env(env))
+        if version is None and context.tool.version_command:
+            version = self._versions.capture(context.tool.version_command, env=self._merge_env(env))
         return PreparedCommand.from_parts(cmd=cmd, env=env, version=version, source="local")
 
-    def _ensure_local_package(self, tool: Tool) -> tuple[Path, str | None]:
+    def _ensure_local_package(self, context: RuntimeContext) -> tuple[Path, str | None]:
+        tool = context.tool
+        layout = context.cache_layout
         requirement = self._npm_requirement(tool)
         packages = shlex.split(requirement)
         if not packages:
             raise RuntimeError("No npm packages specified for tool")
-        slug = slugify(" ".join(packages))
-        prefix = tool_constants.NODE_CACHE_DIR / slug
+        slug = _slugify(" ".join(packages))
+        prefix = layout.node_cache_dir / slug
         meta_path = prefix / self.META_FILE
         bin_dir = prefix / "node_modules" / ".bin"
         if meta_path.is_file() and bin_dir.exists():
-            try:
-                data = json.loads(meta_path.read_text(encoding="utf-8"))
-                if data.get("requirement") == requirement:
-                    return prefix, data.get("version")
-            except json.JSONDecodeError:
-                pass
+            data = self._load_json(meta_path)
+            if data and data.get("requirement") == requirement:
+                return prefix, data.get("version")
 
         prefix.mkdir(parents=True, exist_ok=True)
         env = os.environ.copy()
         inject_node_defaults(env)
-        env.setdefault("NPM_CONFIG_CACHE", str(tool_constants.NPM_CACHE_DIR))
-        env.setdefault("npm_config_cache", str(tool_constants.NPM_CACHE_DIR))
+        env.setdefault("NPM_CONFIG_CACHE", str(layout.npm_cache_dir))
+        env.setdefault("npm_config_cache", str(layout.npm_cache_dir))
         env.setdefault("NPM_CONFIG_PREFIX", str(prefix))
         env.setdefault("npm_config_prefix", str(prefix))
         run_command(
@@ -138,7 +110,7 @@ class NpmRuntime(RuntimeHandler):
         packages = shlex.split(requirement)
         if not packages:
             return None
-        package_name, _ = split_package_spec(packages[0])
+        package_name, _ = _split_package_spec(packages[0])
         try:
             result = run_command(
                 [
@@ -156,9 +128,8 @@ class NpmRuntime(RuntimeHandler):
             )
         except (OSError, SubprocessExecutionError):
             return None
-        try:
-            payload = json.loads(result.stdout)
-        except json.JSONDecodeError:
+        payload = self._parse_json(result.stdout)
+        if payload is None:
             return None
         deps = payload.get("dependencies") or {}
         entry = deps.get(package_name)
@@ -167,25 +138,25 @@ class NpmRuntime(RuntimeHandler):
         return None
 
     @staticmethod
-    def _project_env(bin_dir: Path, root: Path) -> dict[str, str]:
+    def _project_env(context: RuntimeContext, bin_dir: Path) -> dict[str, str]:
         path_value = os.environ.get("PATH", "")
         combined = f"{bin_dir}{os.pathsep}{path_value}" if path_value else str(bin_dir)
         return {
             "PATH": combined,
-            "PWD": str(root),
-            "NPM_CONFIG_CACHE": str(tool_constants.NPM_CACHE_DIR),
-            "npm_config_cache": str(tool_constants.NPM_CACHE_DIR),
+            "PWD": str(context.root),
+            "NPM_CONFIG_CACHE": str(context.cache_layout.npm_cache_dir),
+            "npm_config_cache": str(context.cache_layout.npm_cache_dir),
         }
 
     @staticmethod
-    def _local_env(bin_dir: Path, prefix: Path, root: Path) -> dict[str, str]:
+    def _local_env(context: RuntimeContext, bin_dir: Path, prefix: Path) -> dict[str, str]:
         path_value = os.environ.get("PATH", "")
         combined = f"{bin_dir}{os.pathsep}{path_value}" if path_value else str(bin_dir)
         return {
             "PATH": combined,
-            "PWD": str(root),
-            "NPM_CONFIG_CACHE": str(tool_constants.NPM_CACHE_DIR),
-            "npm_config_cache": str(tool_constants.NPM_CACHE_DIR),
+            "PWD": str(context.root),
+            "NPM_CONFIG_CACHE": str(context.cache_layout.npm_cache_dir),
+            "npm_config_cache": str(context.cache_layout.npm_cache_dir),
             "NPM_CONFIG_PREFIX": str(prefix),
             "npm_config_prefix": str(prefix),
         }

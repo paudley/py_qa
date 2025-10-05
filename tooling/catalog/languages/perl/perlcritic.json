@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "perlcritic",
+  "description": "Perl static analysis via Perl::Critic.",
+  "languages": ["perl"],
+  "phase": "lint",
+  "runtime": {
+    "type": "perl",
+    "package": "Perl::Critic",
+    "minVersion": "1.151",
+    "versionCommand": ["perlcritic", "--version"]
+  },
+  "options": [
+    {
+      "name": "severity",
+      "type": "str",
+      "description": "Minimum severity level reported by perlcritic (1-5)."
+    },
+    {
+      "name": "theme",
+      "type": "str",
+      "description": "Perlcritic policy theme to enable (e.g. core, maintenance)."
+    },
+    {
+      "name": "profile",
+      "type": "path",
+      "description": "Perlcritic profile file to load.",
+      "aliases": ["configuration"]
+    },
+    {
+      "name": "include",
+      "type": "list[str]",
+      "description": "Policy names to include."
+    },
+    {
+      "name": "exclude",
+      "type": "list[str]",
+      "description": "Policy names to exclude."
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to perlcritic."
+    }
+  ],
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["perlcritic", "--nocolor", "--verbose", "%f:%l:%c:%m (%p)"],
+          "appendFiles": false,
+          "options": [
+            { "setting": "severity", "type": "value", "flag": "--severity" },
+            { "setting": "theme", "type": "value", "flag": "--theme" },
+            { "setting": ["profile", "configuration"], "type": "path", "flag": "--profile" },
+            { "setting": "include", "type": "args", "flag": "--include" },
+            { "setting": "exclude", "type": "args", "flag": "--exclude" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "description": "Run Perl::Critic static analysis.",
+      "parser": {
+        "strategy": "parser_text",
+        "config": {
+          "transform": "pyqa.parsers.misc.parse_perlcritic"
+        }
+      }
+    }
+  ],
+  "fileExtensions": [".pl", ".pm", ".t", ".phtml"],
+  "tags": ["requires-cpanm"],
+  "documentation": {
+    "help": {
+      "path": "docs/perlcritic_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/perlcritic_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

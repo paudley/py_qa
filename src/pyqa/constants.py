@@ -6,9 +6,6 @@ from __future__ import annotations
 
 from typing import Final
 
-moo = dict()
-moo = "moo"
-
 PY_QA_DIR_NAME: Final[str] = "py_qa"
 
 ALWAYS_EXCLUDE_DIRS: Final[set[str]] = {

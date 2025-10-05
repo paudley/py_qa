@@ -39,7 +39,7 @@ class UserService:\
 def \_\_init\_\_(self):\
 \# The UserService is responsible for creating its own dependency.\
 \# This creates a tight coupling to the DatabaseConnection class.\
-self.db_connection = DatabaseConnection()
+self.db\_connection = DatabaseConnection()
 
 ```
 def get\_all\_users(self):
@@ -47,8 +47,8 @@ def get\_all\_users(self):
 ```
 
 \# Usage\
-user_service = UserService()\
-users = user_service.get_all_users()
+user\_service = UserService()\
+users = user\_service.get\_all\_users()
 
 In this model, UserService is inextricably linked to the concrete DatabaseConnection class. Swapping the database or testing UserService in isolation is difficult.4
 
@@ -70,8 +70,8 @@ def fetch\_users(self):
 class UserService:\
 \# The dependency is "injected" through the constructor.\
 \# UserService now depends on an abstraction, not a concrete implementation.\
-def \_\_init\_\_(self, db_connection):\
-self.db_connection = db_connection
+def \_\_init\_\_(self, db\_connection):\
+self.db\_connection = db\_connection
 
 ```
 def get\_all\_users(self):
@@ -79,9 +79,9 @@ def get\_all\_users(self):
 ```
 
 \# Usage: An external entity (the "injector") creates and provides the dependency.\
-db_conn = DatabaseConnection()\
-user_service = UserService(db_connection=db_conn)\
-users = user_service.get_all_users()
+db\_conn = DatabaseConnection()\
+user\_service = UserService(db\_connection=db\_conn)\
+users = user\_service.get\_all\_users()
 
 This refactoring introduces DI. UserService no longer creates DatabaseConnection; it receives it. This simple change is the foundation of the pattern.
 
@@ -91,8 +91,8 @@ DI is a specific implementation of a broader principle known as **Inversion of C
 
 The primary goals of DI are to decrease coupling and increase cohesion within a software system.6
 
-- **Coupling** refers to the degree of interdependence between software modules. High coupling means modules are tightly bound, making changes in one module likely to necessitate changes in others. This is analogous to using superglue to connect components—disassembly is destructive and difficult.6
-- **Cohesion** refers to the degree to which the elements inside a module belong together. High cohesion is the desired state, where a module has a single, well-defined purpose. Loose coupling is a direct consequence of high cohesion.6
+* **Coupling** refers to the degree of interdependence between software modules. High coupling means modules are tightly bound, making changes in one module likely to necessitate changes in others. This is analogous to using superglue to connect components—disassembly is destructive and difficult.6
+* **Cohesion** refers to the degree to which the elements inside a module belong together. High cohesion is the desired state, where a module has a single, well-defined purpose. Loose coupling is a direct consequence of high cohesion.6
 
 DI promotes **loose coupling** by ensuring that a client object (e.g., UserService) does not depend on the concrete implementation of its service (e.g., DatabaseConnection). Instead, it depends on an abstract interface or contract. The dependency injector is responsible for binding this abstraction to a concrete implementation at runtime.2
 
@@ -104,9 +104,9 @@ dependency-injector is not merely about enabling DI; its primary value is to *fo
 
 Adopting a formal DI pattern provides three principal advantages that are critical for the long-term health of a software project.6
 
-- **Enhanced Testability:** This is one of the most immediate and significant benefits. DI allows dependencies to be easily replaced with mock objects or stubs during testing.3 This is architecturally superior to monkey-patching. Monkey-patching is a fragile process that targets the internal implementation details of a module, which can change during refactoring and break tests unexpectedly.6 DI, by contrast, establishes a formal, public contract for providing dependencies. Replacing a real dependency with a mock is a planned, explicit action that respects the component's interface, leading to more robust and reliable tests.6
-- **Improved Maintainability and Clearness:** DI forces dependencies to be explicit. Instead of searching through code to discover where an object is created and what its dependencies are, the entire object graph is defined in a centralized, declarative location—the container.6 This aligns perfectly with the Zen of Python's tenet: "Explicit is better than implicit".6 This centralized blueprint of the application's architecture makes the system easier to understand, reason about, and modify.
-- **Increased Flexibility and Reusability:** Because components are loosely coupled, their implementations can be swapped with minimal effort. For example, an application could be reconfigured to use a different database, a new caching layer, or an alternative external API provider simply by changing the configuration in the DI container.6 No changes are required in the business logic that consumes these services. This makes the system highly adaptable to changing requirements and promotes the reuse of components across different parts of an application or even in different projects.5
+* **Enhanced Testability:** This is one of the most immediate and significant benefits. DI allows dependencies to be easily replaced with mock objects or stubs during testing.3 This is architecturally superior to monkey-patching. Monkey-patching is a fragile process that targets the internal implementation details of a module, which can change during refactoring and break tests unexpectedly.6 DI, by contrast, establishes a formal, public contract for providing dependencies. Replacing a real dependency with a mock is a planned, explicit action that respects the component's interface, leading to more robust and reliable tests.6
+* **Improved Maintainability and Clearness:** DI forces dependencies to be explicit. Instead of searching through code to discover where an object is created and what its dependencies are, the entire object graph is defined in a centralized, declarative location—the container.6 This aligns perfectly with the Zen of Python's tenet: "Explicit is better than implicit".6 This centralized blueprint of the application's architecture makes the system easier to understand, reason about, and modify.
+* **Increased Flexibility and Reusability:** Because components are loosely coupled, their implementations can be swapped with minimal effort. For example, an application could be reconfigured to use a different database, a new caching layer, or an alternative external API provider simply by changing the configuration in the DI container.6 No changes are required in the business logic that consumes these services. This makes the system highly adaptable to changing requirements and promotes the reuse of components across different parts of an application or even in different projects.5
 
 ## **Part II: The dependency-injector Framework: Core Architecture**
 
@@ -126,16 +126,16 @@ The containers.DeclarativeContainer is the standard and most commonly used type 
 
 Python
 
-from dependency_injector import containers, providers
+from dependency\_injector import containers, providers
 
 \# Define application components (services)\
 class ApiClient:\
-def \_\_init\_\_(self, api_key: str):\
-self.api_key = api_key
+def \_\_init\_\_(self, api\_key: str):\
+self.api\_key = api\_key
 
 class AnalyticsService:\
-def \_\_init\_\_(self, api_client: ApiClient):\
-self.api_client = api_client
+def \_\_init\_\_(self, api\_client: ApiClient):\
+self.api\_client = api\_client
 
 \# Define a declarative container\
 class AppContainer(containers.DeclarativeContainer):\
@@ -168,12 +168,12 @@ The containers.DynamicContainer allows providers to be added, replaced, or remov
 
 **Providers** are the core building blocks within a container. A provider is a callable object that encapsulates the strategy for creating and providing a specific object.2 Each provider is like a recipe: it knows what class to instantiate, what arguments (which are often other providers) to pass to its constructor, and what the lifecycle of the created object should be.
 
-When a provider is called (e.g., container.analytics_service()), it first resolves its own dependencies by calling the providers they reference (e.g., container.api_client()). This triggers a cascading effect that assembles a complete, fully-formed object graph on demand.12
+When a provider is called (e.g., container.analytics\_service()), it first resolves its own dependencies by calling the providers they reference (e.g., container.api\_client()). This triggers a cascading effect that assembles a complete, fully-formed object graph on demand.12
 
 The architecture of Containers and Providers creates a powerful separation of concerns between **configuration** and **execution**.
 
 1. **Configuration:** The container, with its collection of providers, defines *how* the application's components are assembled. This is the architectural blueprint. It specifies which concrete classes to use, how they connect to each other, and their lifetimes.
-1. **Execution:** The application's business logic simply *uses* the objects provided by the container. It declares *what* it needs (e.g., an AnalyticsService) but remains completely unaware of the complex process of its creation.
+2. **Execution:** The application's business logic simply *uses* the objects provided by the container. It declares *what* it needs (e.g., an AnalyticsService) but remains completely unaware of the complex process of its creation.
 
 This separation is the key to unlocking the benefits of DI. The entire object graph can be reconfigured for different environments (e.g., production vs. testing) by modifying or replacing the container, without altering a single line of the application's business logic. This profound architectural advantage enables true modularity and unparalleled testability.
 
@@ -183,37 +183,37 @@ The choice of provider is a critical architectural decision that dictates the li
 
 ### **3.1 Factory Provider**
 
-- **Lifecycle:** Transient.
+* **Lifecycle:** Transient.
 
-- **Description:** A Factory provider creates a new instance of the specified class every single time it is called.2
+* **Description:** A Factory provider creates a new instance of the specified class every single time it is called.2
 
-- **Use Case:** Ideal for stateful objects where each consumer requires a unique, isolated instance. This prevents state from one operation from leaking into another. Examples include services that handle a specific web request, objects that perform a single data transformation, or any component that maintains a per-call state.
+* **Use Case:** Ideal for stateful objects where each consumer requires a unique, isolated instance. This prevents state from one operation from leaking into another. Examples include services that handle a specific web request, objects that perform a single data transformation, or any component that maintains a per-call state.
 
-- **Code Example:**\
+* **Code Example:**\
   Python\
   class RequestHandler:\
-  def \_\_init\_\_(self, request_id: str):\
-  self.request_id = request_id\
-  print(f"Created RequestHandler with id {self.request_id}")
+  def \_\_init\_\_(self, request\_id: str):\
+  self.request\_id = request\_id\
+  print(f"Created RequestHandler with id {self.request\_id}")
 
   class Container(containers.DeclarativeContainer):\
-  request_handler = providers.Factory(RequestHandler)
+  request\_handler = providers.Factory(RequestHandler)
 
   container = Container()\
   \# Each call to the provider creates a new instance\
-  handler1 = container.request_handler(request_id="abc-123")\
-  handler2 = container.request_handler(request_id="xyz-789")\
+  handler1 = container.request\_handler(request\_id="abc-123")\
+  handler2 = container.request\_handler(request\_id="xyz-789")\
   assert id(handler1)!= id(handler2)
 
 ### **3.2 Singleton Provider**
 
-- **Lifecycle:** Singleton.
+* **Lifecycle:** Singleton.
 
-- **Description:** A Singleton provider creates an instance of the specified class only on its very first call. Every subsequent call returns the exact same, cached instance.2
+* **Description:** A Singleton provider creates an instance of the specified class only on its very first call. Every subsequent call returns the exact same, cached instance.2
 
-- **Use Case:** Best for objects that are stateless, expensive to create, or manage a shared, global resource. Common examples include API clients that maintain a persistent connection, database connection pools, application configuration objects, and stateless utility services.6
+* **Use Case:** Best for objects that are stateless, expensive to create, or manage a shared, global resource. Common examples include API clients that maintain a persistent connection, database connection pools, application configuration objects, and stateless utility services.6
 
-- **Code Example:**\
+* **Code Example:**\
   Python\
   class DatabaseConnectionPool:\
   def \_\_init\_\_(self):\
@@ -221,51 +221,51 @@ The choice of provider is a critical architectural decision that dictates the li
   \# Expensive initialization logic here
 
   class Container(containers.DeclarativeContainer):\
-  db_pool = providers.Singleton(DatabaseConnectionPool)
+  db\_pool = providers.Singleton(DatabaseConnectionPool)
 
   container = Container()\
   \# The first call creates the instance\
-  pool1 = container.db_pool()\
+  pool1 = container.db\_pool()\
   \# All subsequent calls return the same instance\
-  pool2 = container.db_pool()\
+  pool2 = container.db\_pool()\
   assert id(pool1) == id(pool2)
 
 ### **3.3 Configuration Provider**
 
-- **Lifecycle:** Singleton.
+* **Lifecycle:** Singleton.
 
-- **Description:** A specialized provider designed to read, store, and provide access to application configuration settings. It supports loading from various sources and provides a hierarchical, dot-accessible interface.8
+* **Description:** A specialized provider designed to read, store, and provide access to application configuration settings. It supports loading from various sources and provides a hierarchical, dot-accessible interface.8
 
-- **Use Case:** Centralizing all application configuration, from database credentials and API keys to feature flags and logging levels. It is the standard way to manage configuration within the framework.
+* **Use Case:** Centralizing all application configuration, from database credentials and API keys to feature flags and logging levels. It is the standard way to manage configuration within the framework.
 
-- **Code Example:**\
+* **Code Example:**\
   Python\
   class Container(containers.DeclarativeContainer):\
   config = providers.Configuration(name="settings")
 
   container = Container()\
   \# Configuration is loaded later from a file or environment\
-  container.config.from_dict({"database": {"host": "localhost", "port": 5432}})
+  container.config.from\_dict({"database": {"host": "localhost", "port": 5432}})
 
   \# Access config values using dot notation\
-  db_host = container.config.database.host()\
-  assert db_host == "localhost"
+  db\_host = container.config.database.host()\
+  assert db\_host == "localhost"
 
 ### **3.4 Resource Provider**
 
-- **Lifecycle:** Managed.
+* **Lifecycle:** Managed.
 
-- **Description:** A Resource provider is designed for objects that require explicit initialization and shutdown procedures to manage their lifecycle correctly. This prevents resource leaks.8
+* **Description:** A Resource provider is designed for objects that require explicit initialization and shutdown procedures to manage their lifecycle correctly. This prevents resource leaks.8
 
-- **Use Case:** Essential for managing external resources like database connections, network sockets, message queue clients, or thread/process pools. It ensures that startup logic is executed before the resource is used and shutdown logic is executed when the application terminates.
+* **Use Case:** Essential for managing external resources like database connections, network sockets, message queue clients, or thread/process pools. It ensures that startup logic is executed before the resource is used and shutdown logic is executed when the application terminates.
 
-- **Code Example:**\
+* **Code Example:**\
   Python\
   import time
 
   class MessageQueueClient:\
   def \_\_init\_\_(self):\
-  self.\_is_connected = False
+  self.\_is\_connected = False
 
   ```
   def connect(self):
@@ -278,19 +278,19 @@ The choice of provider is a critical architectural decision that dictates the li
       self.\_is\_connected \= False
   ```
 
-  def init_mq_client():\
+  def init\_mq\_client():\
   client = MessageQueueClient()\
   client.connect()\
   yield client # The client is now available for use\
   client.shutdown() # This is called on shutdown
 
   class Container(containers.DeclarativeContainer):\
-  mq_client = providers.Resource(init_mq_client)
+  mq\_client = providers.Resource(init\_mq\_client)
 
   async def main():\
   container = Container()\
   \# Initialize all resources in the container\
-  await container.init_resources()
+  await container.init\_resources()
 
   ```
   client \= await container.mq\_client()
@@ -303,50 +303,50 @@ The choice of provider is a critical architectural decision that dictates the li
 
 ### **3.5 Callable & Coroutine Providers**
 
-- **Lifecycle:** Transient.
+* **Lifecycle:** Transient.
 
-- **Description:** These providers wrap an existing function (Callable) or an async function (Coroutine) and use its return value as the provided object. Each call to the provider invokes the wrapped function.12
+* **Description:** These providers wrap an existing function (Callable) or an async function (Coroutine) and use its return value as the provided object. Each call to the provider invokes the wrapped function.12
 
-- **Use Case:** Useful for integrating legacy factory functions or simple utility functions into the DI container without needing to wrap them in a class.
+* **Use Case:** Useful for integrating legacy factory functions or simple utility functions into the DI container without needing to wrap them in a class.
 
-- **Code Example:**\
+* **Code Example:**\
   Python\
   import datetime
 
-  def get_current_timestamp() -> float:\
+  def get\_current\_timestamp() -> float:\
   return datetime.datetime.utcnow().timestamp()
 
   class Container(containers.DeclarativeContainer):\
-  timestamp_provider = providers.Callable(get_current_timestamp)
+  timestamp\_provider = providers.Callable(get\_current\_timestamp)
 
   container = Container()\
-  ts1 = container.timestamp_provider()\
+  ts1 = container.timestamp\_provider()\
   time.sleep(0.1)\
-  ts2 = container.timestamp_provider()\
+  ts2 = container.timestamp\_provider()\
   assert ts1!= ts2
 
 ### **3.6 Object Provider**
 
-- **Lifecycle:** Static.
+* **Lifecycle:** Static.
 
-- **Description:** The Object provider simply returns a pre-existing object instance "as is." It does not perform any instantiation.2
+* **Description:** The Object provider simply returns a pre-existing object instance "as is." It does not perform any instantiation.2
 
-- **Use Case:** For injecting simple constants, pre-configured objects created outside the container's control, or system-wide objects like sys.stdout.
+* **Use Case:** For injecting simple constants, pre-configured objects created outside the container's control, or system-wide objects like sys.stdout.
 
-- **Code Example:**\
+* **Code Example:**\
   Python\
   import sys
 
   \# An object created outside the container\
-  PRECONFIGURED_LOGGER = "my_app_logger"
+  PRECONFIGURED\_LOGGER = "my\_app\_logger"
 
   class Container(containers.DeclarativeContainer):\
-  app_name = providers.Object("Awesome App")\
-  logger_name = providers.Object(PRECONFIGURED_LOGGER)\
+  app\_name = providers.Object("Awesome App")\
+  logger\_name = providers.Object(PRECONFIGURED\_LOGGER)\
   stdout = providers.Object(sys.stdout)
 
   container = Container()\
-  name = container.app_name()\
+  name = container.app\_name()\
   assert name == "Awesome App"
 
 ### **Provider Comparison Summary**
@@ -358,7 +358,7 @@ The following table provides a high-density summary to facilitate the selection 
 | **Factory**       | Transient | Stateful or request-specific services.                   | Creates a new instance on every call.                        |
 | **Singleton**     | Singleton | Stateless services, shared resources, expensive objects. | Creates one instance and reuses it for all subsequent calls. |
 | **Configuration** | Singleton | Managing application settings from various sources.      | Provides hierarchical, dot-notation access to configuration. |
-| **Resource**      | Managed   | Objects requiring explicit startup and shutdown.         | Integrates with init_resources() and shutdown_resources().   |
+| **Resource**      | Managed   | Objects requiring explicit startup and shutdown.         | Integrates with init\_resources() and shutdown\_resources().   |
 | **Callable**      | Transient | Integrating existing factory functions.                  | Wraps a standard function; calls it on every request.        |
 | **Coroutine**     | Transient | Integrating existing async factory functions.            | Wraps a coroutine function; calls it on every request.       |
 | **Object**        | Static    | Injecting pre-existing instances or constants.           | Returns the provided object directly without instantiation.  |
@@ -375,9 +375,9 @@ The configuration provider acts as a specialized singleton for hierarchical conf
 
 Storing configuration in files is a common practice for separating settings from code.
 
-#### **4.2.1 Loading from YAML (.from_yaml())**
+#### **4.2.1 Loading from YAML (.from\_yaml())**
 
-YAML is a popular choice for configuration due to its human-readable syntax. To use this feature, the PyYAML library must be installed: pip install dependency-injector[yaml].13
+YAML is a popular choice for configuration due to its human-readable syntax. To use this feature, the PyYAML library must be installed: pip install dependency-injector\[yaml].13
 
 **config.yml:**
 
@@ -386,7 +386,7 @@ YAML
 database:\
 host: localhost\
 port: 5432\
-user: dev_user
+user: dev\_user
 
 api:\
 key: "default-key"\
@@ -396,21 +396,21 @@ timeout: 10
 
 Python
 
-from dependency_injector import containers, providers
+from dependency\_injector import containers, providers
 
 class Container(containers.DeclarativeContainer):\
 config = providers.Configuration()
 
 container = Container()\
 \# Load settings from the YAML file\
-container.config.from_yaml("config.yml")
+container.config.from\_yaml("config.yml")
 
 assert container.config.database.host() == "localhost"\
 assert container.config.api.timeout() == 10
 
 13
 
-#### **4.2.2 Loading from INI (.from_ini())**
+#### **4.2.2 Loading from INI (.from\_ini())**
 
 INI files are another common format, supported natively without extra dependencies.
 
@@ -418,12 +418,12 @@ INI files are another common format, supported natively without extra dependenci
 
 Ini, TOML
 
-[database]\
+\[database]\
 host = localhost\
 port = 5432\
-user = dev_user
+user = dev\_user
 
-[api]\
+\[api]\
 key = default-key\
 timeout = 10
 
@@ -431,14 +431,14 @@ timeout = 10
 
 Python
 
-from dependency_injector import containers, providers
+from dependency\_injector import containers, providers
 
 class Container(containers.DeclarativeContainer):\
 config = providers.Configuration()
 
 container = Container()\
 \# Load settings from the INI file\
-container.config.from_ini("config.ini")
+container.config.from\_ini("config.ini")
 
 assert container.config.database.port() == "5432" # Note: INI values are strings by default\
 assert container.config.api.key() == "default-key"
@@ -449,14 +449,14 @@ assert container.config.api.key() == "default-key"
 
 For modern, containerized applications (e.g., using Docker), loading configuration from environment variables is a best practice aligned with the Twelve-Factor App methodology.
 
-#### **4.3.1 Loading from Environment Variables (.from_env())**
+#### **4.3.1 Loading from Environment Variables (.from\_env())**
 
 This method is used to load a specific configuration value from a single environment variable. It is the most secure way to handle secrets like API keys or database passwords.8
 
 Python
 
 import os\
-from dependency_injector import containers, providers
+from dependency\_injector import containers, providers
 
 os.environ = "secret-key-from-env"\
 os.environ = "5433"
@@ -466,21 +466,21 @@ config = providers.Configuration()
 
 container = Container()\
 \# Load individual values from environment variables\
-container.config.api.key.from_env("API_KEY")\
-container.config.database.port.from_env("DB_PORT")
+container.config.api.key.from\_env("API\_KEY")\
+container.config.database.port.from\_env("DB\_PORT")
 
 assert container.config.api.key() == "secret-key-from-env"\
 assert container.config.database.port() == "5433"
 
-#### **4.3.2 Loading from Python Dictionaries (.from_dict())**
+#### **4.3.2 Loading from Python Dictionaries (.from\_dict())**
 
 This method is useful for setting default values directly in code or for loading configuration from a custom source that produces a dictionary.13
 
 Python
 
-from dependency_injector import containers, providers
+from dependency\_injector import containers, providers
 
-default_config = {\
+default\_config = {\
 "logging": {\
 "level": "INFO",\
 "format": "%(asctime)s - %(levelname)s - %(message)s"\
@@ -491,7 +491,7 @@ class Container(containers.DeclarativeContainer):\
 config = providers.Configuration()
 
 container = Container()\
-container.config.from_dict(default_config)
+container.config.from\_dict(default\_config)
 
 assert container.config.logging.level() == "INFO"
 
@@ -499,25 +499,25 @@ assert container.config.logging.level() == "INFO"
 
 The Configuration provider supports several advanced features that enable robust and flexible configuration management.
 
-- **Required Flags:** When loading from files or environment variables, you can specify required=True. If the file does not exist or the environment variable is not set, the framework will raise an error, preventing the application from starting with a missing configuration.8\
+* **Required Flags:** When loading from files or environment variables, you can specify required=True. If the file does not exist or the environment variable is not set, the framework will raise an error, preventing the application from starting with a missing configuration.8\
   Python\
-  container.config.api.key.from_env("API_KEY", required=True)\
-  container.config.from_yaml("config.production.yml", required=True)
+  container.config.api.key.from\_env("API\_KEY", required=True)\
+  container.config.from\_yaml("config.production.yml", required=True)
 
-- **Type Casting:** Values from environment variables and INI files are typically strings. The as\_ argument can be used to automatically cast these values to the correct type, such as int, float, or bool.8\
+* **Type Casting:** Values from environment variables and INI files are typically strings. The as\_ argument can be used to automatically cast these values to the correct type, such as int, float, or bool.8\
   Python\
-  container.config.api.timeout.from_env("TIMEOUT", as\_=int, default=5)\
-  container.config.feature.enabled.from_env("ENABLE_FEATURE", as\_=bool, default=False)
+  container.config.api.timeout.from\_env("TIMEOUT", as\_=int, default=5)\
+  container.config.feature.enabled.from\_env("ENABLE\_FEATURE", as\_=bool, default=False)
 
-- **Environment Variable Interpolation:** This powerful feature allows you to embed environment variable lookups directly within your YAML or INI files. The syntax is ${ENV\_VAR} for a required variable or $\{ENV_VAR:default_value} to provide a fallback. This allows for a base configuration file to be checked into version control, with sensitive or environment-specific values being injected from the environment at runtime.13\
+* **Environment Variable Interpolation:** This powerful feature allows you to embed environment variable lookups directly within your YAML or INI files. The syntax is ${ENV\_VAR} for a required variable or ${ENV\_VAR:default\_value} to provide a fallback. This allows for a base configuration file to be checked into version control, with sensitive or environment-specific values being injected from the environment at runtime.13\
   **config.yml with interpolation:**\
   YAML\
   database:\
   host: ${DB\_HOST:localhost}
-  port: $\{DB_PORT:5432}\
-  password: \$\{DB_PASSWORD} # This must be set in the environment
+  port: ${DB\_PORT:5432}\
+  password: ${DB\_PASSWORD} # This must be set in the environment
 
-  When container.config.from_yaml("config.yml") is called, the provider will automatically substitute these placeholders with the corresponding environment variable values.
+  When container.config.from\_yaml("config.yml") is called, the provider will automatically substitute these placeholders with the corresponding environment variable values.
 
 This layered approach, facilitated by the Configuration provider, is a best practice. An application can define defaults in a dictionary, override them with a base config.yml, and finally override specific values with environment variables. This creates a configuration system that is secure, flexible, and easily manageable across development, staging, and production environments.
 
@@ -532,8 +532,8 @@ The framework's approach to wiring is intentionally explicit to maintain clarity
 The wiring mechanism is built on three core components that work together 15:
 
 1. **The @inject Decorator:** This decorator is placed on any function or method that needs to have dependencies injected. It acts as a marker, signaling to the container that this function is a target for the wiring process.
-1. **The Provide Marker:** This special object is used as the default value for a function argument. It specifies *which* provider from the container should be injected into that argument. The syntax Provide[Container.provider_name] creates an unambiguous link between the function argument and its corresponding provider.
-1. **The container.wire() Method:** This is the explicit activation step. You call this method, typically at application startup, and provide it with a list of modules or packages to scan. The container will then inspect only these specified modules for functions decorated with @inject and prepare them for injection.
+2. **The Provide Marker:** This special object is used as the default value for a function argument. It specifies *which* provider from the container should be injected into that argument. The syntax Provide\[Container.provider\_name] creates an unambiguous link between the function argument and its corresponding provider.
+3. **The container.wire() Method:** This is the explicit activation step. You call this method, typically at application startup, and provide it with a list of modules or packages to scan. The container will then inspect only these specified modules for functions decorated with @inject and prepare them for injection.
 
 ### **5.2 Step-by-Step Implementation**
 
@@ -542,15 +542,15 @@ The following is a complete, self-contained example demonstrating the wiring pro
 Python
 
 import sys\
-from dependency_injector import containers, providers\
-from dependency_injector.wiring import inject, Provide
+from dependency\_injector import containers, providers\
+from dependency\_injector.wiring import inject, Provide
 
 \# 1. Define application components (services)\
 class ApiClient:\
-def \_\_init\_\_(self, api_key: str, timeout: int):\
-self.api_key = api_key\
+def \_\_init\_\_(self, api\_key: str, timeout: int):\
+self.api\_key = api\_key\
 self.timeout = timeout\
-print(f"ApiClient created with key '...{api_key[-4:]}' and timeout \{timeout}s")
+print(f"ApiClient created with key '...{api\_key\[-4:]}' and timeout {timeout}s")
 
 ```
 def get\_data(self):
@@ -558,8 +558,8 @@ def get\_data(self):
 ```
 
 class DataService:\
-def \_\_init\_\_(self, api_client: ApiClient):\
-self.api_client = api_client
+def \_\_init\_\_(self, api\_client: ApiClient):\
+self.api\_client = api\_client
 
 ```
 def process\_data(self):
@@ -589,15 +589,15 @@ data\_service \= providers.Factory(
 \# 3. Define a function that uses the dependency\
 @inject\
 def main(\
-data_service: DataService = Provide[Container.data_service],\
+data\_service: DataService = Provide\[Container.data\_service],\
 ) -> None:\
 """\
 This function requires a DataService instance.\
 The @inject decorator and Provide marker handle the injection.\
 """\
 print("main: starting application logic.")\
-result_length = data_service.process_data()\
-print(f"main: processed data length is \{result_length}.")
+result\_length = data\_service.process\_data()\
+print(f"main: processed data length is {result\_length}.")
 
 \# 4. Instantiate the container and run the application\
 if \_\_name\_\_ == "\_\_main\_\_":\
@@ -621,7 +621,7 @@ main()
 
 8
 
-When main() is called, the framework intercepts the call, sees the Provide marker, retrieves the data_service provider from the Container, builds the DataService instance (which in turn builds the ApiClient singleton), and passes the fully-formed object into the function.
+When main() is called, the framework intercepts the call, sees the Provide marker, retrieves the data\_service provider from the Container, builds the DataService instance (which in turn builds the ApiClient singleton), and passes the fully-formed object into the function.
 
 ### **5.3 Integration with Web Frameworks**
 
@@ -634,22 +634,22 @@ For Flask, you can directly decorate route functions with @inject.
 Python
 
 from flask import Flask\
-from dependency_injector.wiring import inject, Provide
+from dependency\_injector.wiring import inject, Provide
 
 \# Assuming the Container and services from the previous example are defined
 
 app = Flask(\_\_name\_\_)\
 container = Container()\
-container.config.api.key.from_value("flask-app-key")\
-container.config.api.timeout.from_value("10")\
-container.wire(modules=[\_\_name\_\_])
+container.config.api.key.from\_value("flask-app-key")\
+container.config.api.timeout.from\_value("10")\
+container.wire(modules=\[\_\_name\_\_])
 
 @app.route("/")\
 @inject\
-def index(data_service: DataService = Provide[Container.data_service]):\
-\# The data_service is automatically injected for each request.\
-processed_length = data_service.process_data()\
-return f"Processed data length: \{processed_length}"
+def index(data\_service: DataService = Provide\[Container.data\_service]):\
+\# The data\_service is automatically injected for each request.\
+processed\_length = data\_service.process\_data()\
+return f"Processed data length: {processed\_length}"
 
 \# To run: flask --app \<filename> run
 
@@ -662,26 +662,26 @@ FastAPI has its own powerful dependency injection system. dependency-injector in
 Python
 
 from fastapi import FastAPI, Depends\
-from dependency_injector.wiring import inject, Provide
+from dependency\_injector.wiring import inject, Provide
 
 \# Assuming the Container and services are defined
 
 container = Container()\
-container.config.api.key.from_value("fastapi-app-key")\
-container.config.api.timeout.from_value("15")\
-container.wire(modules=[\_\_name\_\_])
+container.config.api.key.from\_value("fastapi-app-key")\
+container.config.api.timeout.from\_value("15")\
+container.wire(modules=\[\_\_name\_\_])
 
 app = FastAPI()
 
 @app.get("/")\
 @inject\
-def read_root(\
-data_service: DataService = Depends(Provide[Container.data_service]),\
+def read\_root(\
+data\_service: DataService = Depends(Provide\[Container.data\_service]),\
 ):\
 \# FastAPI handles the dependency resolution, which in turn calls\
 \# the dependency-injector provider.\
-processed_length = data_service.process_data()\
-return {"processed_length": processed_length}
+processed\_length = data\_service.process\_data()\
+return {"processed\_length": processed\_length}
 
 \# To run: uvicorn \<filename>:app --reload
 
@@ -695,18 +695,18 @@ Python
 
 import asyncio
 
-async def init_async_db_client():\
+async def init\_async\_db\_client():\
 print("Async DB: connecting...")\
 await asyncio.sleep(0.1)\
 yield "Async DB Client"\
 print("Async DB: disconnecting...")
 
 class Container(containers.DeclarativeContainer):\
-db_client = providers.Resource(init_async_db_client)
+db\_client = providers.Resource(init\_async\_db\_client)
 
 @inject\
-async def fetch_data_from_db(db = Provide[Container.db_client]):\
-print(f"Fetching data using: \{db}")\
+async def fetch\_data\_from\_db(db = Provide\[Container.db\_client]):\
+print(f"Fetching data using: {db}")\
 await asyncio.sleep(0.2)\
 return "some data"
 
@@ -720,9 +720,9 @@ Provider overriding is arguably the most powerful feature of the dependency-inje
 
 The primary goal of a unit test is to verify the logic of a single "unit" of code (a function or a class) in complete isolation from its external dependencies.6 Real dependencies, such as databases, external APIs, or file systems, are slow, unreliable, and introduce external state that can make tests non-deterministic. Overriding allows these real dependencies to be replaced with fast, predictable, and controllable mock objects.6
 
-This approach is architecturally superior to alternatives like monkey-patching. Monkey-patching (unittest.mock.patch) works by modifying a module's internal state at runtime, targeting an object by its string import path (e.g., 'my_app.services.api.client'). This creates a brittle coupling between the test suite and the physical file structure of the application. If a developer refactors the code by moving a file, the tests will break even if the application's logic is unchanged.
+This approach is architecturally superior to alternatives like monkey-patching. Monkey-patching (unittest.mock.patch) works by modifying a module's internal state at runtime, targeting an object by its string import path (e.g., 'my\_app.services.api.client'). This creates a brittle coupling between the test suite and the physical file structure of the application. If a developer refactors the code by moving a file, the tests will break even if the application's logic is unchanged.
 
-Provider overriding, in contrast, targets a semantic name within the container (e.g., Container.api_client). The test is coupled to the container's public contract, not the code's file layout. The container can be reconfigured to point to a refactored module, and the test code, which only references Container.api_client, remains unchanged. This decouples tests from the physical code structure, making the entire test suite more resilient to refactoring.
+Provider overriding, in contrast, targets a semantic name within the container (e.g., Container.api\_client). The test is coupled to the container's public contract, not the code's file layout. The container can be reconfigured to point to a refactored module, and the test code, which only references Container.api\_client, remains unchanged. This decouples tests from the physical code structure, making the entire test suite more resilient to refactoring.
 
 ### **6.2 Techniques for Overriding**
 
@@ -738,17 +738,17 @@ Python
 
 import unittest\
 from unittest.mock import Mock\
-from dependency_injector import containers, providers
+from dependency\_injector import containers, providers
 
 \# --- Application Code (from previous examples) ---\
 class ApiClient:\
-def get_data(self):\
+def get\_data(self):\
 \# In a real app, this would make a network call\
 raise NotImplementedError("Real API calls are disabled in tests")
 
 class DataService:\
-def \_\_init\_\_(self, api_client: ApiClient):\
-self.api_client = api_client
+def \_\_init\_\_(self, api\_client: ApiClient):\
+self.api\_client = api\_client
 
 ```
 def process\_and\_get\_data\_length(self):
@@ -759,8 +759,8 @@ def process\_and\_get\_data\_length(self):
 ```
 
 class Container(containers.DeclarativeContainer):\
-api_client = providers.Singleton(ApiClient)\
-data_service = providers.Factory(DataService, api_client=api_client)
+api\_client = providers.Singleton(ApiClient)\
+data\_service = providers.Factory(DataService, api\_client=api\_client)
 
 \# --- Test Code ---\
 class DataServiceTest(unittest.TestCase):\
@@ -822,13 +822,13 @@ You can also manually apply and reset overrides. This is less common for testing
 Python
 
 \# Manually override the provider\
-stub_api_client = StubApiClient() # A fake implementation for local dev\
-container.api_client.override(stub_api_client)
+stub\_api\_client = StubApiClient() # A fake implementation for local dev\
+container.api\_client.override(stub\_api\_client)
 
-#... use the container with the stub...
+\#... use the container with the stub...
 
 \# Manually reset the override to restore original behavior\
-container.api_client.reset_override()
+container.api\_client.reset\_override()
 
 18
 
@@ -843,22 +843,22 @@ from unittest.mock import Mock
 \# The main application container\
 class AppContainer(containers.DeclarativeContainer):\
 database = providers.Singleton(RealDatabaseConnection)\
-api_client = providers.Singleton(RealApiClient)
+api\_client = providers.Singleton(RealApiClient)
 
 \# A container specifically for testing, which provides mocks\
 @containers.override(AppContainer)\
 class TestContainer(containers.DeclarativeContainer):\
 database = providers.Singleton(Mock) # Override with a Mock class\
-api_client = providers.Singleton(Mock)
+api\_client = providers.Singleton(Mock)
 
 \# In the test setup:\
 container = AppContainer()\
 \# Now, when accessing providers, the ones from TestContainer are used.\
-db_mock = container.database()\
-api_mock = container.api_client()
+db\_mock = container.database()\
+api\_mock = container.api\_client()
 
-assert isinstance(db_mock, Mock)\
-assert isinstance(api_mock, Mock)
+assert isinstance(db\_mock, Mock)\
+assert isinstance(api\_mock, Mock)
 
 19
 
@@ -872,62 +872,62 @@ Adopting dependency-injector is more than a library choice; it is a commitment t
 
 The organization of containers is a key architectural decision.
 
-- **Single Container:** For many small to medium-sized applications, a single, centralized container is sufficient. It provides a clear and complete overview of the entire application's dependency graph in one place.6
-- **Multiple Containers:** In large, modular applications or systems based on microservices, using multiple containers is the recommended approach. Each major feature, domain, or package can define its own container. This promotes better decoupling, as each module manages its own internal dependencies. These containers can then be composed, with one container depending on services provided by another. This aligns well with development teams that have ownership over specific domains of the application.6
+* **Single Container:** For many small to medium-sized applications, a single, centralized container is sufficient. It provides a clear and complete overview of the entire application's dependency graph in one place.6
+* **Multiple Containers:** In large, modular applications or systems based on microservices, using multiple containers is the recommended approach. Each major feature, domain, or package can define its own container. This promotes better decoupling, as each module manages its own internal dependencies. These containers can then be composed, with one container depending on services provided by another. This aligns well with development teams that have ownership over specific domains of the application.6
 
 ### **7.2 The Principle of Explicitness**
 
 dependency-injector intentionally avoids autowiring, a feature in some frameworks that automatically resolves dependencies based on type hints alone. This is a deliberate design choice rooted in the Zen of Python: "Explicit is better than implicit".11 The explicit definition of every dependency in a container serves several crucial purposes:
 
-- **Architectural Documentation:** The container becomes a single source of truth that clearly documents the application's structure and the relationships between its components.
-- **Clarity and Predictability:** There is no "magic." It is always clear where an object comes from and how it was constructed, which simplifies debugging and maintenance.
-- **Refactoring Safety:** Explicit bindings are more resilient to refactoring than implicit, name-based, or type-based resolution schemes.
+* **Architectural Documentation:** The container becomes a single source of truth that clearly documents the application's structure and the relationships between its components.
+* **Clarity and Predictability:** There is no "magic." It is always clear where an object comes from and how it was constructed, which simplifies debugging and maintenance.
+* **Refactoring Safety:** Explicit bindings are more resilient to refactoring than implicit, name-based, or type-based resolution schemes.
 
 ### **7.3 Common Pitfalls and How to Avoid Them**
 
-- **Circular Dependencies:** A circular dependency occurs when Service A depends on Service B, and Service B, in turn, depends on Service A (either directly or through a longer chain). The framework will detect this during object creation and raise a dependency_injector.errors.CircularDependencyError. This is not a limitation of the framework but a signal of a potential design flaw in the application's architecture. The solution is to refactor the components to break the cycle, often by extracting a third, lower-level dependency that both services can depend on.
+* **Circular Dependencies:** A circular dependency occurs when Service A depends on Service B, and Service B, in turn, depends on Service A (either directly or through a longer chain). The framework will detect this during object creation and raise a dependency\_injector.errors.CircularDependencyError. This is not a limitation of the framework but a signal of a potential design flaw in the application's architecture. The solution is to refactor the components to break the cycle, often by extracting a third, lower-level dependency that both services can depend on.
 
-- **Injecting the Container Itself (Service Locator Anti-Pattern):** It is possible to inject the entire container into a service. This should be avoided. This practice, known as the Service Locator anti-pattern, violates the principle of explicit dependencies. A service that receives the container has access to *every* object in the application, making its true dependencies hidden and creating a high degree of coupling to the container itself. Services should declare only the specific dependencies they need in their constructors.21\
+* **Injecting the Container Itself (Service Locator Anti-Pattern):** It is possible to inject the entire container into a service. This should be avoided. This practice, known as the Service Locator anti-pattern, violates the principle of explicit dependencies. A service that receives the container has access to *every* object in the application, making its true dependencies hidden and creating a high degree of coupling to the container itself. Services should declare only the specific dependencies they need in their constructors.21\
   **Avoid:**\
   Python\
   class BadService:\
   @inject\
-  def \_\_init\_\_(self, container: Container = Provide["\<container>"]):\
-  self.\_api_client = container.api_client() # Hidden dependency
+  def \_\_init\_\_(self, container: Container = Provide\["\<container>"]):\
+  self.\_api\_client = container.api\_client() # Hidden dependency
 
   **Prefer:**\
   Python\
   class GoodService:\
-  def \_\_init\_\_(self, api_client: ApiClient): # Explicit dependency\
-  self.\_api_client = api_client
+  def \_\_init\_\_(self, api\_client: ApiClient): # Explicit dependency\
+  self.\_api\_client = api\_client
 
 ### **7.4 Recommendations for Maintaining Clarity**
 
-- **Code to an Abstraction:** While Python does not have formal interfaces like Java or C#, the principle still applies. Components should depend on an abstract contract rather than a concrete implementation. In dependency-injector, the provider in the container *is* this abstraction point. The business logic depends on Container.database, not on PostgresDatabaseConnection or SqliteDatabaseConnection.20
-- **Centralize Container Definitions:** For discoverability, container definitions should be placed in a well-known location within the project structure, such as a dedicated containers.py module within each application or package.
-- **Delegate Lifecycle Management:** Trust the providers to manage object lifecycles. Do not manually manage the state or lifetime of shared objects. Use Singleton for shared, long-lived objects and Resource for objects that require managed setup and teardown. This prevents bugs related to resource management and shared state.
-- **Be Specific with Wiring:** When calling container.wire(), be explicit about which modules or packages should be wired. Avoid overly broad wiring (e.g., wiring an entire top-level package) to improve startup performance and maintain clarity about which parts of the application use automatic injection.
+* **Code to an Abstraction:** While Python does not have formal interfaces like Java or C#, the principle still applies. Components should depend on an abstract contract rather than a concrete implementation. In dependency-injector, the provider in the container *is* this abstraction point. The business logic depends on Container.database, not on PostgresDatabaseConnection or SqliteDatabaseConnection.20
+* **Centralize Container Definitions:** For discoverability, container definitions should be placed in a well-known location within the project structure, such as a dedicated containers.py module within each application or package.
+* **Delegate Lifecycle Management:** Trust the providers to manage object lifecycles. Do not manually manage the state or lifetime of shared objects. Use Singleton for shared, long-lived objects and Resource for objects that require managed setup and teardown. This prevents bugs related to resource management and shared state.
+* **Be Specific with Wiring:** When calling container.wire(), be explicit about which modules or packages should be wired. Avoid overly broad wiring (e.g., wiring an entire top-level package) to improve startup performance and maintain clarity about which parts of the application use automatic injection.
 
 #### **Works cited**
 
 1. Dependency injection - .NET | Microsoft Learn, accessed September 3, 2025, <https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection>
-1. dependency-injector - PyPI, accessed September 3, 2025, <https://pypi.org/project/dependency-injector/3.15.0/>
-1. Dependency Injection in Python: A Complete Guide to Cleaner, Scalable Code - Medium, accessed September 3, 2025, <https://medium.com/@rohanmistry231/dependency-injection-in-python-a-complete-guide-to-cleaner-scalable-code-9c6b38d1b924>
-1. Dependency Injection in Python | Better Stack Community, accessed September 3, 2025, <https://betterstack.com/community/guides/scaling-python/python-dependency-injection/>
-1. Dependency injection in Python | Snyk, accessed September 3, 2025, <https://snyk.io/blog/dependency-injection-python/>
-1. Dependency injection and inversion of control in Python ..., accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/introduction/di_in_python.html>
-1. Injector 0.22.0 documentation, accessed September 3, 2025, <https://injector.readthedocs.io/>
-1. dependency-injector - PyPI, accessed September 3, 2025, <https://pypi.org/project/dependency-injector/>
-1. ets-labs/python-dependency-injector: Dependency injection framework for Python - GitHub, accessed September 3, 2025, <https://github.com/ets-labs/python-dependency-injector>
-1. Key features — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/introduction/key_features.html>
-1. dependency-injector - PyPI, accessed September 3, 2025, <https://pypi.org/project/dependency-injector/4.0.0a2/>
-1. Providers — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/providers/index.html>
-1. Configuration provider — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/providers/configuration.html>
-1. providers.Configuration(ini_files=...) doesn't seem to work · Issue #564 · ets-labs/python-dependency-injector - GitHub, accessed September 3, 2025, <https://github.com/ets-labs/python-dependency-injector/issues/564>
-1. Wiring — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/wiring.html>
-1. dependency_injector.wiring — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/api/wiring.html>
-1. Python Dependency Injection: Build Modular and Testable Code - DataCamp, accessed September 3, 2025, <https://www.datacamp.com/tutorial/python-dependency-injection>
-1. Provider overriding — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/providers/overriding.html>
-1. Container overriding — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/containers/overriding.html>
-1. Mastering Python Dependency Injection | Startup House, accessed September 3, 2025, <https://startup-house.com/blog/python-dependency-injection-guide>
-1. Good and bad practices - Injector 0.22.0 documentation, accessed September 3, 2025, <https://injector.readthedocs.io/en/latest/practices.html>
+2. dependency-injector - PyPI, accessed September 3, 2025, <https://pypi.org/project/dependency-injector/3.15.0/>
+3. Dependency Injection in Python: A Complete Guide to Cleaner, Scalable Code - Medium, accessed September 3, 2025, <https://medium.com/@rohanmistry231/dependency-injection-in-python-a-complete-guide-to-cleaner-scalable-code-9c6b38d1b924>
+4. Dependency Injection in Python | Better Stack Community, accessed September 3, 2025, <https://betterstack.com/community/guides/scaling-python/python-dependency-injection/>
+5. Dependency injection in Python | Snyk, accessed September 3, 2025, <https://snyk.io/blog/dependency-injection-python/>
+6. Dependency injection and inversion of control in Python ..., accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/introduction/di_in_python.html>
+7. Injector 0.22.0 documentation, accessed September 3, 2025, <https://injector.readthedocs.io/>
+8. dependency-injector - PyPI, accessed September 3, 2025, <https://pypi.org/project/dependency-injector/>
+9. ets-labs/python-dependency-injector: Dependency injection framework for Python - GitHub, accessed September 3, 2025, <https://github.com/ets-labs/python-dependency-injector>
+10. Key features — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/introduction/key_features.html>
+11. dependency-injector - PyPI, accessed September 3, 2025, <https://pypi.org/project/dependency-injector/4.0.0a2/>
+12. Providers — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/providers/index.html>
+13. Configuration provider — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/providers/configuration.html>
+14. providers.Configuration(ini\_files=...) doesn't seem to work · Issue #564 · ets-labs/python-dependency-injector - GitHub, accessed September 3, 2025, <https://github.com/ets-labs/python-dependency-injector/issues/564>
+15. Wiring — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/wiring.html>
+16. dependency\_injector.wiring — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/api/wiring.html>
+17. Python Dependency Injection: Build Modular and Testable Code - DataCamp, accessed September 3, 2025, <https://www.datacamp.com/tutorial/python-dependency-injection>
+18. Provider overriding — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/providers/overriding.html>
+19. Container overriding — Dependency Injector 4.48.1 documentation, accessed September 3, 2025, <https://python-dependency-injector.ets-labs.org/containers/overriding.html>
+20. Mastering Python Dependency Injection | Startup House, accessed September 3, 2025, <https://startup-house.com/blog/python-dependency-injection-guide>
+21. Good and bad practices - Injector 0.22.0 documentation, accessed September 3, 2025, <https://injector.readthedocs.io/en/latest/practices.html>

@@ -7,12 +7,12 @@ from __future__ import annotations
 from collections.abc import Iterable, MutableMapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
-from pathlib import Path
+from enum import Enum
+from typing import Final
 
 from .annotations import AnnotationEngine
 from .config import DedupeConfig
 from .models import Diagnostic, RawDiagnostic, RunResult
-from .path_utils import normalize_reported_path
 from .severity import (
     DEFAULT_SEVERITY_RULES,
     Severity,
@@ -29,15 +29,47 @@ _SEVERITY_RANK: MutableMapping[Severity, int] = {
     Severity.NOTE: 0,
 }
 
-_CROSS_TOOL_EQUIVALENT_CODES = {
-    frozenset({"override", "W0221"}),
-    frozenset({"TC002", "reportPrivateImportUsage"}),
-    frozenset({"F822", "reportUnsupportedDunderAll"}),
-    frozenset({"F821", "reportUndefinedVariable"}),
-    frozenset({"PLR2004", "R2004"}),
+_CROSS_TOOL_EQUIVALENT_CODES: Final[set[frozenset[str]]] = {
+    frozenset({"override", "w0221"}),
+    frozenset({"tc002", "reportprivateimportusage"}),
+    frozenset({"f822", "reportunsupporteddunderall"}),
+    frozenset({"f821", "reportundefinedvariable"}),
+    frozenset({"f821", "undefined-variable"}),
+    frozenset({"plr2004", "r2004"}),
+    frozenset({"undefined-variable", "reportundefinedvariable"}),
+    frozenset({"arg-type", "reportargumenttype"}),
+}
+
+_CODE_PREFERENCE: Final[dict[frozenset[str], str]] = {
+    frozenset({"arg-type", "reportArgumentType"}): "pyright",
 }
 
 _ANNOTATION_ENGINE = AnnotationEngine()
+
+
+class IssueTag(str, Enum):
+    """Enumerate semantic categories recognised during deduplication."""
+
+    COMPLEXITY = "complexity"
+    MAGIC_NUMBER = "magic-number"
+    TYPING = "typing"
+    DOCSTRING = "docstring"
+    ENCAPSULATION = "encapsulation"
+
+
+_COMPLEXITY_SIGNATURE_TOKENS: Final[frozenset[str]] = frozenset({"complex", "complexity"})
+_MAGIC_SIGNATURE_TOKENS: Final[frozenset[str]] = frozenset({"magic"})
+_DOCSTRING_SIGNATURE_TOKENS: Final[frozenset[str]] = frozenset({"docstring"})
+_ENCAPSULATION_TOKENS: Final[frozenset[str]] = frozenset({"private", "import"})
+_TYPING_SIGNATURE_TOKENS: Final[frozenset[str]] = frozenset({"annotation", "typed"})
+_COMPLEXITY_CODES: Final[frozenset[str]] = frozenset({"C901", "R0915", "PLR0915", "R1260"})
+_MAGIC_NUMBER_CODES: Final[frozenset[str]] = frozenset({"PLR2004", "R2004"})
+_DOCSTRING_CODE_PREFIX: Final[str] = "D1"
+_ANNOTATION_PREFIX: Final[str] = "ANN"
+_DEFAULT_DISTANCE: Final[int] = 10**6
+_STRATEGY_FIRST: Final[str] = "first"
+_STRATEGY_SEVERITY: Final[str] = "severity"
+_STRATEGY_PREFER: Final[str] = "prefer"
 
 
 def build_severity_rules(custom_rules: Iterable[str]) -> SeverityRuleMap:
@@ -53,17 +85,14 @@ def normalize_diagnostics(
     *,
     tool_name: str,
     severity_rules: SeverityRuleView,
-    root: Path | None = None,
 ) -> list[Diagnostic]:
     """Normalize diagnostics into the canonical :class:`Diagnostic` form."""
     normalized: list[Diagnostic] = []
     for candidate in candidates:
         if isinstance(candidate, Diagnostic):
-            normalized.append(_normalize_existing(candidate, root=root))
+            normalized.append(candidate)
             continue
-        normalized.append(
-            _normalize_raw(candidate, tool_name, severity_rules, root=root),
-        )
+        normalized.append(_normalize_raw(candidate, tool_name, severity_rules))
     return normalized
 
 
@@ -71,8 +100,6 @@ def _normalize_raw(
     raw: RawDiagnostic,
     tool_name: str,
     severity_rules: SeverityRuleView,
-    *,
-    root: Path | None,
 ) -> Diagnostic:
     message = raw.message.strip()
     code = raw.code
@@ -99,7 +126,7 @@ def _normalize_raw(
     severity = apply_severity_rules(tool, code or message, severity, rules=severity_rules)
 
     return Diagnostic(
-        file=_normalize_file_path(raw.file, root=root),
+        file=raw.file,
         line=raw.line,
         column=raw.column,
         severity=severity,
@@ -120,17 +147,6 @@ def _coerce_severity(value: Severity | str | None) -> Severity:
         except ValueError:
             return Severity.WARNING
     return Severity.WARNING
-
-
-def _normalize_existing(diagnostic: Diagnostic, *, root: Path | None) -> Diagnostic:
-    normalized_path = _normalize_file_path(diagnostic.file, root=root)
-    if normalized_path == diagnostic.file:
-        return diagnostic
-    return diagnostic.model_copy(update={"file": normalized_path})
-
-
-def _normalize_file_path(file_path: str | None, *, root: Path | None) -> str | None:
-    return normalize_reported_path(file_path, root=root)
 
 
 @dataclass
@@ -175,59 +191,49 @@ def dedupe_outcomes(result: RunResult, cfg: DedupeConfig) -> None:
 
 
 def _is_duplicate(existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig) -> bool:
-    if cfg.dedupe_same_file_only and existing.file != candidate.file:
+    if not _within_same_scope(existing, candidate, cfg):
         return False
 
-    existing_code = existing.code or ""
-    candidate_code = candidate.code or ""
-    if existing_code != candidate_code:
-        if existing.function == candidate.function and existing.line == candidate.line:
-            pair = frozenset(code for code in (existing_code, candidate_code) if code)
-            if pair in _CROSS_TOOL_EQUIVALENT_CODES:
-                return True
-        semantic_match = _semantic_overlap(existing, candidate)
-        if semantic_match:
-            return True
-        return False
+    if _codes_match(existing, candidate):
+        return _messages_compatible(existing, candidate) and _lines_within_fuzz(
+            existing,
+            candidate,
+            cfg.dedupe_line_fuzz,
+        )
 
-    if existing.message != candidate.message:
-        semantic_match = _semantic_overlap(existing, candidate)
-        if not semantic_match:
-            return False
+    if _cross_tool_equivalent(existing, candidate):
+        return True
 
-    if cfg.dedupe_same_file_only and existing.file is None and candidate.file is not None:
-        return False
-
-    if (existing.function or "") != (candidate.function or ""):
-        return False
-
-    if not cfg.dedupe_same_file_only and existing.file != candidate.file:
-        # Allow dedupe across files when requested; rely on message/code equality
-        pass
-
-    return _line_distance(existing.line, candidate.line) <= cfg.dedupe_line_fuzz
+    return _semantic_overlap(existing, candidate)
 
 
 def _line_distance(lhs: int | None, rhs: int | None) -> int:
     if lhs is None or rhs is None:
-        return 0 if lhs == rhs else 10**6
+        return 0 if lhs == rhs else _DEFAULT_DISTANCE
     return abs(lhs - rhs)
 
 
 def _prefer(existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig) -> Diagnostic:
-    if cfg.dedupe_by == "first":
+    pair = frozenset(code for code in (existing.code, candidate.code) if code)
+    preferred_tool = _CODE_PREFERENCE.get(pair)
+    if preferred_tool:
+        if (existing.tool or "").lower() == preferred_tool:
+            return existing
+        if (candidate.tool or "").lower() == preferred_tool:
+            return candidate
+    strategy = cfg.dedupe_by
+    if strategy == _STRATEGY_FIRST:
         return existing
-    if cfg.dedupe_by == "severity":
+    if strategy == _STRATEGY_SEVERITY:
         return _higher_severity(existing, candidate)
-    if cfg.dedupe_by == "prefer":
+    if strategy == _STRATEGY_PREFER:
         preferred = _prefer_list(existing, candidate, cfg.dedupe_prefer)
-        if preferred is not None:
-            return preferred
-        return _higher_severity(existing, candidate)
-    return existing
+        return preferred if preferred is not None else _higher_severity(existing, candidate)
+    raise ValueError(f"Unknown deduplication strategy: {strategy!r}")
 
 
 def _semantic_overlap(left: Diagnostic, right: Diagnostic) -> bool:
+    """Return ``True`` when diagnostics describe the same semantic issue."""
     if (left.file or "") != (right.file or ""):
         return False
 
@@ -235,60 +241,35 @@ def _semantic_overlap(left: Diagnostic, right: Diagnostic) -> bool:
         return False
 
     tag_left = _issue_tag(left)
-    if not tag_left:
-        return False
-    tag_right = _issue_tag(right)
-    if tag_left != tag_right:
+    if tag_left is None or tag_left != _issue_tag(right):
         return False
 
     signature_left = set(_ANNOTATION_ENGINE.message_signature(left.message))
     signature_right = set(_ANNOTATION_ENGINE.message_signature(right.message))
+    signature_equal = _signatures_match(left, right, signature_left, signature_right)
 
-    if left.code and right.code and left.code == right.code:
-        signature_equal = True
-    else:
-        signature_equal = signature_left == signature_right
-
-    if not signature_equal and tag_left not in {"complexity", "typing"}:
-        return False
-
-    if tag_left == "typing":
-        if left.line != right.line:
-            return False
-        overlap = signature_left & signature_right
-        if not overlap:
-            return False
-
-    if tag_left == "complexity" and not signature_equal:
-        common = {"complex", "complexity", "statement", "branch"}
-        if not (signature_left & signature_right & common):
-            return False
-
-    return True
+    if tag_left is IssueTag.TYPING:
+        return _typing_overlap(left, right, signature_left, signature_right)
+    if tag_left is IssueTag.COMPLEXITY:
+        return _complexity_overlap(signature_left, signature_right, signature_equal)
+    return signature_equal
 
 
-def _issue_tag(diag: Diagnostic) -> str | None:
+def _issue_tag(diag: Diagnostic) -> IssueTag | None:
+    """Return the semantic category inferred from a diagnostic."""
     code = (diag.code or "").upper()
-    message = diag.message.lower()
     signature = set(_ANNOTATION_ENGINE.message_signature(diag.message))
 
-    if (
-        code in {"C901", "R0915", "PLR0915", "R1260"}
-        or {
-            "complex",
-            "complexity",
-        }
-        & signature
-    ):
-        return "complexity"
-    if code in {"PLR2004", "R2004"} or "magic" in signature:
-        return "magic-number"
-    if code.startswith("ANN") or "annotation" in signature or "typed" in signature:
-        return "typing"
-    if "docstring" in signature or code.startswith("D1"):
-        return "docstring"
-    if "private" in signature and "import" in signature:
-        return "encapsulation"
+    if code in _COMPLEXITY_CODES or signature & _COMPLEXITY_SIGNATURE_TOKENS:
+        return IssueTag.COMPLEXITY
+    if code in _MAGIC_NUMBER_CODES or signature & _MAGIC_SIGNATURE_TOKENS:
+        return IssueTag.MAGIC_NUMBER
+    if code.startswith(_ANNOTATION_PREFIX) or signature & _TYPING_SIGNATURE_TOKENS:
+        return IssueTag.TYPING
+    if code.startswith(_DOCSTRING_CODE_PREFIX) or signature & _DOCSTRING_SIGNATURE_TOKENS:
+        return IssueTag.DOCSTRING
+    if signature.issuperset(_ENCAPSULATION_TOKENS):
+        return IssueTag.ENCAPSULATION
     return None
 
 
@@ -326,3 +307,81 @@ __all__ = [
     "dedupe_outcomes",
     "normalize_diagnostics",
 ]
+
+
+def _within_same_scope(existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig) -> bool:
+    """Return ``True`` when diagnostics belong to the same logical scope."""
+    if cfg.dedupe_same_file_only:
+        if existing.file != candidate.file:
+            return False
+        if existing.file is None and candidate.file is not None:
+            return False
+    if (existing.function or "") != (candidate.function or ""):
+        return False
+    return True
+
+
+def _codes_match(existing: Diagnostic, candidate: Diagnostic) -> bool:
+    """Return ``True`` when diagnostic codes are equivalent."""
+    return _normalized_code(existing) == _normalized_code(candidate)
+
+
+def _messages_compatible(existing: Diagnostic, candidate: Diagnostic) -> bool:
+    """Return ``True`` when diagnostic messages reference the same issue."""
+    if existing.message == candidate.message:
+        return True
+    return _semantic_overlap(existing, candidate)
+
+
+def _cross_tool_equivalent(existing: Diagnostic, candidate: Diagnostic) -> bool:
+    """Return ``True`` when cross-tool equivalence maps the diagnostics."""
+    if existing.function != candidate.function or existing.line != candidate.line:
+        return False
+    codes = {code for code in (_normalized_code(existing), _normalized_code(candidate)) if code}
+    return bool(codes) and frozenset(codes) in _CROSS_TOOL_EQUIVALENT_CODES
+
+
+def _lines_within_fuzz(existing: Diagnostic, candidate: Diagnostic, fuzz: int) -> bool:
+    """Return ``True`` when diagnostics appear within the configured fuzz range."""
+    return _line_distance(existing.line, candidate.line) <= fuzz
+
+
+def _signatures_match(
+    left: Diagnostic,
+    right: Diagnostic,
+    left_signature: set[str],
+    right_signature: set[str],
+) -> bool:
+    """Return ``True`` when message signatures indicate the same content."""
+    if left.code and right.code and left.code == right.code:
+        return True
+    return left_signature == right_signature
+
+
+def _typing_overlap(
+    left: Diagnostic,
+    right: Diagnostic,
+    left_signature: set[str],
+    right_signature: set[str],
+) -> bool:
+    """Return ``True`` when typing diagnostics describe the same symbol."""
+    if left.line != right.line:
+        return False
+    return bool(left_signature & right_signature)
+
+
+def _complexity_overlap(
+    left_signature: set[str],
+    right_signature: set[str],
+    signature_equal: bool,
+) -> bool:
+    """Return ``True`` when complexity diagnostics target the same construct."""
+    if signature_equal:
+        return True
+    common = {"complex", "complexity", "statement", "branch"}
+    return bool(left_signature & right_signature & common)
+
+
+def _normalized_code(diag: Diagnostic) -> str:
+    """Return a normalized diagnostic code for comparison purposes."""
+    return (diag.code or "").lower()

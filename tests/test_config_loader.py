@@ -140,9 +140,7 @@ report_out = "reports/output.json"
 
     assert cfg.execution.jobs == 4
     assert not cfg.execution.cache_enabled
-    assert (project_root / "build").resolve() in {
-        path.resolve() for path in cfg.file_discovery.excludes
-    }
+    assert (project_root / "build").resolve() in {path.resolve() for path in cfg.file_discovery.excludes}
     assert cfg.output.report_out == (project_root / "reports/output.json").resolve()
 
 
@@ -217,18 +215,19 @@ def test_generate_config_schema_exposes_defaults() -> None:
     assert schema["file_discovery"]["roots"]["default"] == ["."]
     assert schema["output"]["emoji"]["default"] is True
     defaults = schema["tool_settings"]["default"]
-    assert defaults["black"]["line-length"] == 120
-    assert defaults["isort"]["line-length"] == 120
-    assert defaults["luacheck"]["max-cyclomatic-complexity"] == 10
-    assert defaults["mypy"]["strict"] is True
+    assert defaults.get("black", {}).get("line-length") is None
+    assert defaults.get("isort", {}).get("line-length") is None
+    assert defaults.get("luacheck", {}).get("max-cyclomatic-complexity") is None
+    assert "strict" not in defaults["mypy"]
     assert defaults["mypy"]["show-error-codes"] is True
-    assert defaults["tsc"]["strict"] is True
+    tsc_defaults = defaults.get("tsc", {})
+    assert "strict" not in tsc_defaults
     tools_schema = schema["tool_settings"]["tools"]
     assert "max-complexity" in tools_schema["pylint"]
     assert "max-args" in tools_schema["pylint"]
     assert "max-cyclomatic-complexity" in tools_schema["luacheck"]
     assert schema["complexity"]["max_complexity"]["default"] == 10
-    assert schema["strictness"]["type_checking"]["default"] == "strict"
+    assert schema["strictness"]["type_checking"]["default"] == "standard"
     assert schema["execution"]["line_length"]["default"] == 120
     assert schema["severity"]["bandit_level"]["default"] == "medium"
     assert schema["severity"]["pylint_fail_under"]["default"] == 9.5

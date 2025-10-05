@@ -6,62 +6,184 @@ from __future__ import annotations
 
 import math
 import os
-from collections.abc import Collection
-from dataclasses import dataclass
+from collections.abc import Collection, Mapping, MutableMapping, Sequence
+from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
-from typing import Any, Final, Literal, cast
+from typing import Final, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .tools.catalog_metadata import catalog_duplicate_preference
 
 
 class ConfigError(Exception):
     """Raised when configuration input is invalid."""
 
 
+class StrictnessLevel(str, Enum):
+    """Enumerate supported type-checking strictness levels."""
+
+    LENIENT = "lenient"
+    STANDARD = "standard"
+    STRICT = "strict"
+
+
+class SensitivityLevel(str, Enum):
+    """Enumerate sensitivity presets available to callers."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    MAXIMUM = "maximum"
+
+
+class BanditLevel(str, Enum):
+    """Enumerate severity levels supported by Bandit."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class BanditConfidence(str, Enum):
+    """Enumerate confidence levels supported by Bandit."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class ConfigOverrideKey(str, Enum):
+    """Enumerate override keys recognised by sensitivity profiles."""
+
+    LINE_LENGTH = "line_length"
+    MAX_COMPLEXITY = "max_complexity"
+    MAX_ARGUMENTS = "max_arguments"
+    TYPE_CHECKING = "type_checking"
+    BANDIT_LEVEL = "bandit_severity"
+    BANDIT_CONFIDENCE = "bandit_confidence"
+    PYLINT_FAIL_UNDER = "pylint_fail_under"
+    MAX_WARNINGS = "max_warnings"
+
+    @classmethod
+    def from_raw(cls, raw: str) -> ConfigOverrideKey | None:
+        """Return the enum member matching a raw CLI override token.
+
+        Args:
+            raw: String token provided via CLI overrides.
+
+        Returns:
+            ConfigOverrideKey | None: Matching enum instance when recognised;
+            otherwise ``None``.
+
+        """
+        try:
+            return cls(raw)
+        except ValueError:
+            return None
+
+    def apply(self, config: Config, value: SensitivityOverrideValue) -> None:
+        """Apply the override value to the appropriate config section.
+
+        Args:
+            config: Mutable configuration instance receiving the override.
+            value: Override value resolved from the sensitivity preset.
+
+        """
+        if self is ConfigOverrideKey.LINE_LENGTH:
+            numeric_value = cast(int | float, value)
+            config.execution = config.execution.model_copy(
+                update={"line_length": int(numeric_value)},
+            )
+        elif self is ConfigOverrideKey.MAX_COMPLEXITY:
+            config.complexity = config.complexity.model_copy(
+                update={"max_complexity": cast(int | None, value)},
+            )
+        elif self is ConfigOverrideKey.MAX_ARGUMENTS:
+            config.complexity = config.complexity.model_copy(
+                update={"max_arguments": cast(int | None, value)},
+            )
+        elif self is ConfigOverrideKey.TYPE_CHECKING:
+            config.strictness = config.strictness.model_copy(
+                update={"type_checking": cast(StrictnessLevel, value)},
+            )
+        elif self is ConfigOverrideKey.BANDIT_LEVEL:
+            config.update_severity(bandit_level=cast(BanditLevel, value))
+        elif self is ConfigOverrideKey.BANDIT_CONFIDENCE:
+            config.update_severity(bandit_confidence=cast(BanditConfidence, value))
+        elif self is ConfigOverrideKey.PYLINT_FAIL_UNDER:
+            config.update_severity(pylint_fail_under=cast(float | None, value))
+        elif self is ConfigOverrideKey.MAX_WARNINGS:
+            config.update_severity(max_warnings=cast(int | None, value))
+
+
+SensitivityOverrideValue = int | float | None | StrictnessLevel | BanditLevel | BanditConfidence
+ToolOverrideValue = bool | int | float | str | Sequence[str] | None
+
+
 def default_parallel_jobs() -> int:
-    """Return 75% of available CPU cores (minimum of 1)."""
+    """Return a CPU count scaled down for concurrent linting.
+
+    Returns:
+        int: Rounded-down count representing roughly 75% of available CPU
+        cores while guaranteeing a minimum of one worker.
+
+    """
     cores = os.cpu_count() or 1
     proposed = max(1, math.floor(cores * 0.75))
     return proposed
 
 
-def _expected_mypy_profile(
-    strict_level: Literal["lenient", "standard", "strict"],
-) -> dict[str, object]:
-    """Return the expected mypy settings for a given strictness level."""
-    profile: dict[str, object] = {
-        "exclude-gitignore": True,
-        "sqlite-cache": True,
-        "show-error-codes": True,
-        "show-column-numbers": True,
-        "strict": strict_level == "strict",
-    }
-    strict_flags = (
-        "warn-redundant-casts",
-        "warn-unused-ignores",
-        "warn-unreachable",
-        "disallow-untyped-decorators",
-        "disallow-any-generics",
-        "check-untyped-defs",
-        "no-implicit-reexport",
-    )
-    if strict_level == "strict":
-        for flag in strict_flags:
-            profile[flag] = True
-    else:
-        for flag in strict_flags:
-            profile[flag] = False
-    if strict_level == "lenient":
-        profile["ignore-missing-imports"] = True
-    else:
-        profile["ignore-missing-imports"] = False
+_MYPY_BASE_TRUE_FLAGS: Final[tuple[str, ...]] = (
+    "exclude-gitignore",
+    "sqlite-cache",
+    "show-error-codes",
+    "show-column-numbers",
+)
+_MYPY_STRICT_FLAGS: Final[tuple[str, ...]] = (
+    "warn-redundant-casts",
+    "warn-unused-ignores",
+    "warn-unreachable",
+    "disallow-untyped-decorators",
+    "disallow-any-generics",
+    "check-untyped-defs",
+    "no-implicit-reexport",
+)
+
+
+def _expected_mypy_profile(strict_level: StrictnessLevel) -> dict[str, object]:
+    """Return the expected mypy settings for a given strictness level.
+
+    Args:
+        strict_level: Desired strictness level for type checking.
+
+    Returns:
+        dict[str, object]: Expected mypy INI-style configuration values.
+
+    """
+    profile: dict[str, object] = {flag: True for flag in _MYPY_BASE_TRUE_FLAGS}
+    profile["strict"] = strict_level is StrictnessLevel.STRICT
+    for flag in _MYPY_STRICT_FLAGS:
+        profile[flag] = strict_level is StrictnessLevel.STRICT
+    profile["ignore-missing-imports"] = strict_level is StrictnessLevel.LENIENT
     return profile
 
 
 def _expected_mypy_value_for(
     key: str,
-    strict_level: Literal["lenient", "standard", "strict"],
+    strict_level: StrictnessLevel,
 ) -> object:
+    """Return the default mypy setting for a specific configuration key.
+
+    Args:
+        key: Target mypy configuration key.
+        strict_level: Strictness profile used to derive defaults.
+
+    Returns:
+        object: Default value when known; otherwise ``NO_BASELINE``.
+
+    """
     profile = _expected_mypy_profile(strict_level)
     return profile.get(key, NO_BASELINE)
 
@@ -147,25 +269,6 @@ class DedupeConfig(BaseModel):
     dedupe_same_file_only: bool = True
 
 
-class DuplicateDetectionConfig(BaseModel):
-    """Configure structural duplicate detection and DRY heuristics."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    enabled: bool = True
-    ast_enabled: bool = True
-    ast_min_lines: int = 6
-    ast_min_nodes: int = 25
-    ast_include_tests: bool = False
-    cross_diagnostics: bool = True
-    cross_message_threshold: int = 3
-    navigator_tags: bool = True
-    doc_similarity_enabled: bool = True
-    doc_similarity_threshold: float = 0.85
-    doc_min_chars: int = 60
-    doc_include_tests: bool = False
-
-
 DEFAULT_QUALITY_CHECKS: Final[list[str]] = ["license", "file-size", "schema", "python"]
 DEFAULT_SCHEMA_TARGETS: Final[list[Path]] = [Path("ref_docs/tool-schema.json")]
 DEFAULT_PROTECTED_BRANCHES: Final[list[str]] = ["main", "master"]
@@ -192,8 +295,48 @@ DEFAULT_UPDATE_SKIP_PATTERNS: Final[list[str]] = ["pyreadstat", ".git/modules"]
 
 
 def _default_tool_settings() -> dict[str, dict[str, object]]:
-    """Return baseline tool settings that mirror the legacy lint script."""
+    """Return baseline tool settings that mirror the legacy lint script.
+
+    Returns:
+        dict[str, dict[str, object]]: Default tool configuration mapping.
+
+    """
     return {}
+
+
+def _normalize_override_keys(
+    cli_overrides: Collection[str] | None,
+) -> set[ConfigOverrideKey]:
+    """Translate CLI override tokens into structured override keys.
+
+    Args:
+        cli_overrides: Raw override tokens supplied via the command line.
+
+    Returns:
+        set[ConfigOverrideKey]: Normalised override keys recognised by the
+        configuration layer.
+
+    """
+    overrides: set[ConfigOverrideKey] = set()
+    if not cli_overrides:
+        return overrides
+    for token in cli_overrides:
+        key = ConfigOverrideKey.from_raw(token)
+        if key is not None:
+            overrides.add(key)
+    return overrides
+
+
+def _load_duplicate_preference() -> tuple[str, ...]:
+    """Return tool duplicate preference metadata when available.
+
+    Returns:
+        tuple[str, ...]: Ordered tool identifiers expressing duplicate
+        resolution preference. An empty tuple is returned when no preference is
+        defined.
+
+    """
+    return catalog_duplicate_preference()
 
 
 class ComplexityConfig(BaseModel):
@@ -210,7 +353,7 @@ class StrictnessConfig(BaseModel):
 
     model_config = ConfigDict(validate_assignment=True)
 
-    type_checking: Literal["lenient", "standard", "strict"] = "strict"
+    type_checking: StrictnessLevel = StrictnessLevel.STANDARD
 
 
 class SeverityConfig(BaseModel):
@@ -218,122 +361,220 @@ class SeverityConfig(BaseModel):
 
     model_config = ConfigDict(validate_assignment=True)
 
-    bandit_level: Literal["low", "medium", "high"] = "medium"
-    bandit_confidence: Literal["low", "medium", "high"] = "medium"
+    bandit_level: BanditLevel = BanditLevel.MEDIUM
+    bandit_confidence: BanditConfidence = BanditConfidence.MEDIUM
     pylint_fail_under: float | None = 9.5
     max_warnings: int | None = None
-    sensitivity: Literal["low", "medium", "high", "maximum"] = "medium"
+    sensitivity: SensitivityLevel = SensitivityLevel.MEDIUM
 
 
 UNSET: Final[object] = object()
 NO_BASELINE: Final[object] = object()
+MYPY_TOOL_KEY: Final[str] = "mypy"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
+class ToolSpecificOverride:
+    """Describe a tool-specific override applied by sensitivity presets."""
+
+    key: str
+    value: ToolOverrideValue
+    skip_if_truthy: bool = False
+
+    def apply(self, tool_settings: MutableMapping[str, object]) -> None:
+        """Apply the configured override onto a tool-specific mapping.
+
+        Args:
+            tool_settings: Mutable mapping of tool configuration values.
+
+        """
+        existing = tool_settings.get(self.key, UNSET)
+        if existing is not UNSET:
+            if self.skip_if_truthy and bool(existing):
+                return
+            if not self.skip_if_truthy:
+                return
+        if isinstance(self.value, Sequence) and not isinstance(self.value, (str, bytes)):
+            tool_settings[self.key] = list(self.value)
+        else:
+            tool_settings[self.key] = self.value
+
+
+@dataclass(frozen=True, slots=True)
 class SensitivityPreset:
     """Preset values driven by overall sensitivity."""
 
-    line_length: int | object = UNSET
-    max_complexity: int | object = UNSET
-    max_arguments: int | object = UNSET
-    type_checking: Literal["lenient", "standard", "strict"] | object = UNSET
-    bandit_level: Literal["low", "medium", "high"] | object = UNSET
-    bandit_confidence: Literal["low", "medium", "high"] | object = UNSET
-    pylint_fail_under: float | None | object = UNSET
-    max_warnings: int | None | object = UNSET
-    ruff_select: tuple[str, ...] | object = UNSET
-    pylint_init_import: bool | object = UNSET
+    config_overrides: Mapping[ConfigOverrideKey, SensitivityOverrideValue] = field(
+        default_factory=dict,
+    )
+    tool_overrides: Mapping[str, tuple[ToolSpecificOverride, ...]] = field(default_factory=dict)
+
+    def apply(
+        self,
+        config: Config,
+        *,
+        skip_keys: set[ConfigOverrideKey],
+    ) -> None:
+        """Apply overrides contained in the preset to the provided config.
+
+        Args:
+            config: Configuration instance receiving the overrides.
+            skip_keys: Override keys that should be skipped due to CLI input.
+
+        """
+        for key, value in self.config_overrides.items():
+            if key in skip_keys:
+                continue
+            key.apply(config, value)
+        for tool, overrides in self.tool_overrides.items():
+            tool_settings = config.tool_settings.setdefault(tool, {})
+            for override in overrides:
+                override.apply(tool_settings)
 
 
-SENSITIVITY_PRESETS: Final[dict[str, SensitivityPreset]] = {
-    "low": SensitivityPreset(
-        line_length=140,
-        max_complexity=15,
-        max_arguments=7,
-        type_checking="lenient",
-        bandit_level="low",
-        bandit_confidence="low",
-        pylint_fail_under=8.0,
-        max_warnings=200,
+SENSITIVITY_PRESETS: Final[dict[SensitivityLevel, SensitivityPreset]] = {
+    SensitivityLevel.LOW: SensitivityPreset(
+        config_overrides={
+            ConfigOverrideKey.LINE_LENGTH: 140,
+            ConfigOverrideKey.MAX_COMPLEXITY: 15,
+            ConfigOverrideKey.MAX_ARGUMENTS: 7,
+            ConfigOverrideKey.TYPE_CHECKING: StrictnessLevel.LENIENT,
+            ConfigOverrideKey.BANDIT_LEVEL: BanditLevel.LOW,
+            ConfigOverrideKey.BANDIT_CONFIDENCE: BanditConfidence.LOW,
+            ConfigOverrideKey.PYLINT_FAIL_UNDER: 8.0,
+            ConfigOverrideKey.MAX_WARNINGS: 200,
+        },
     ),
-    "medium": SensitivityPreset(
-        line_length=120,
-        max_complexity=10,
-        max_arguments=5,
-        type_checking="strict",
-        bandit_level="medium",
-        bandit_confidence="medium",
-        pylint_fail_under=9.5,
-        max_warnings=None,
+    SensitivityLevel.MEDIUM: SensitivityPreset(
+        config_overrides={
+            ConfigOverrideKey.LINE_LENGTH: 120,
+            ConfigOverrideKey.MAX_COMPLEXITY: 10,
+            ConfigOverrideKey.MAX_ARGUMENTS: 5,
+            ConfigOverrideKey.TYPE_CHECKING: StrictnessLevel.STRICT,
+            ConfigOverrideKey.BANDIT_LEVEL: BanditLevel.MEDIUM,
+            ConfigOverrideKey.BANDIT_CONFIDENCE: BanditConfidence.MEDIUM,
+            ConfigOverrideKey.PYLINT_FAIL_UNDER: 9.5,
+            ConfigOverrideKey.MAX_WARNINGS: None,
+        },
     ),
-    "high": SensitivityPreset(
-        line_length=110,
-        max_complexity=8,
-        max_arguments=4,
-        type_checking="strict",
-        bandit_level="high",
-        bandit_confidence="high",
-        pylint_fail_under=9.75,
-        max_warnings=5,
+    SensitivityLevel.HIGH: SensitivityPreset(
+        config_overrides={
+            ConfigOverrideKey.LINE_LENGTH: 110,
+            ConfigOverrideKey.MAX_COMPLEXITY: 8,
+            ConfigOverrideKey.MAX_ARGUMENTS: 4,
+            ConfigOverrideKey.TYPE_CHECKING: StrictnessLevel.STRICT,
+            ConfigOverrideKey.BANDIT_LEVEL: BanditLevel.HIGH,
+            ConfigOverrideKey.BANDIT_CONFIDENCE: BanditConfidence.HIGH,
+            ConfigOverrideKey.PYLINT_FAIL_UNDER: 9.75,
+            ConfigOverrideKey.MAX_WARNINGS: 5,
+        },
     ),
-    "maximum": SensitivityPreset(
-        line_length=100,
-        max_complexity=6,
-        max_arguments=3,
-        type_checking="strict",
-        bandit_level="high",
-        bandit_confidence="high",
-        pylint_fail_under=9.9,
-        max_warnings=0,
-        ruff_select=("ALL",),
-        pylint_init_import=True,
+    SensitivityLevel.MAXIMUM: SensitivityPreset(
+        config_overrides={
+            ConfigOverrideKey.LINE_LENGTH: 100,
+            ConfigOverrideKey.MAX_COMPLEXITY: 6,
+            ConfigOverrideKey.MAX_ARGUMENTS: 3,
+            ConfigOverrideKey.TYPE_CHECKING: StrictnessLevel.STRICT,
+            ConfigOverrideKey.BANDIT_LEVEL: BanditLevel.HIGH,
+            ConfigOverrideKey.BANDIT_CONFIDENCE: BanditConfidence.HIGH,
+            ConfigOverrideKey.PYLINT_FAIL_UNDER: 9.9,
+            ConfigOverrideKey.MAX_WARNINGS: 0,
+        },
+        tool_overrides={
+            "ruff": (ToolSpecificOverride(key="select", value=("ALL",), skip_if_truthy=True),),
+            "pylint": (ToolSpecificOverride(key="init-import", value=True),),
+        },
     ),
 }
 
+_STRICT_DEDUPE_SENSITIVITY_LEVELS: Final[set[SensitivityLevel]] = {
+    SensitivityLevel.HIGH,
+    SensitivityLevel.MAXIMUM,
+}
 
-@dataclass(frozen=True)
+
+_TOOL_KNOB_MAPPING: Final[dict[tuple[str, str], ConfigOverrideKey]] = {
+    ("black", "line-length"): ConfigOverrideKey.LINE_LENGTH,
+    ("isort", "line-length"): ConfigOverrideKey.LINE_LENGTH,
+    ("ruff", "line-length"): ConfigOverrideKey.LINE_LENGTH,
+    ("ruff-format", "line-length"): ConfigOverrideKey.LINE_LENGTH,
+    ("pylint", "max-line-length"): ConfigOverrideKey.LINE_LENGTH,
+    ("luacheck", "max-line-length"): ConfigOverrideKey.LINE_LENGTH,
+    ("luacheck", "max-code-line-length"): ConfigOverrideKey.LINE_LENGTH,
+    ("luacheck", "max-string-line-length"): ConfigOverrideKey.LINE_LENGTH,
+    ("luacheck", "max-comment-line-length"): ConfigOverrideKey.LINE_LENGTH,
+    ("prettier", "print-width"): ConfigOverrideKey.LINE_LENGTH,
+    ("pylint", "max-complexity"): ConfigOverrideKey.MAX_COMPLEXITY,
+    ("luacheck", "max-cyclomatic-complexity"): ConfigOverrideKey.MAX_COMPLEXITY,
+    ("pylint", "max-args"): ConfigOverrideKey.MAX_ARGUMENTS,
+    ("pylint", "max-positional-arguments"): ConfigOverrideKey.MAX_ARGUMENTS,
+    ("bandit", "severity"): ConfigOverrideKey.BANDIT_LEVEL,
+    ("bandit", "confidence"): ConfigOverrideKey.BANDIT_CONFIDENCE,
+    ("pylint", "fail-under"): ConfigOverrideKey.PYLINT_FAIL_UNDER,
+    ("stylelint", "max-warnings"): ConfigOverrideKey.MAX_WARNINGS,
+    ("eslint", "max-warnings"): ConfigOverrideKey.MAX_WARNINGS,
+}
+
+
+@dataclass(frozen=True, slots=True)
 class SharedKnobSnapshot:
     """Snapshot of shared configuration knobs before recalculating defaults."""
 
-    line_length: int
-    max_complexity: int | None
-    max_arguments: int | None
-    type_checking: Literal["lenient", "standard", "strict"]
-    bandit_level: Literal["low", "medium", "high"]
-    bandit_confidence: Literal["low", "medium", "high"]
-    pylint_fail_under: float | None
-    max_warnings: int | None
+    knob_values: Mapping[ConfigOverrideKey, SensitivityOverrideValue]
     pylint_init_import: bool | None
 
     def value_for(self, tool: str, key: str) -> object:
-        mapping: dict[tuple[str, str], object] = {
-            ("black", "line-length"): self.line_length,
-            ("isort", "line-length"): self.line_length,
-            ("ruff", "line-length"): self.line_length,
-            ("ruff-format", "line-length"): self.line_length,
-            ("pylint", "max-line-length"): self.line_length,
-            ("luacheck", "max-line-length"): self.line_length,
-            ("luacheck", "max-code-line-length"): self.line_length,
-            ("luacheck", "max-string-line-length"): self.line_length,
-            ("luacheck", "max-comment-line-length"): self.line_length,
-            ("prettier", "print-width"): self.line_length,
-            ("pylint", "max-complexity"): self.max_complexity,
-            ("luacheck", "max-cyclomatic-complexity"): self.max_complexity,
-            ("pylint", "max-args"): self.max_arguments,
-            ("pylint", "max-positional-arguments"): self.max_arguments,
-            ("bandit", "severity"): self.bandit_level,
-            ("bandit", "confidence"): self.bandit_confidence,
-            ("pylint", "fail-under"): self.pylint_fail_under,
-            ("pylint", "init-import"): self.pylint_init_import,
-            ("stylelint", "max-warnings"): self.max_warnings,
-            ("eslint", "max-warnings"): self.max_warnings,
-            ("tsc", "strict"): self.type_checking == "strict",
-        }
-        if (tool, key) in mapping:
-            return mapping[(tool, key)]
-        if tool == "mypy":
-            return _expected_mypy_value_for(key, self.type_checking)
+        """Return the baseline value for the given tool configuration key.
+
+        Args:
+            tool: Identifier for the tool requesting a baseline value.
+            key: Tool-specific configuration option identifier.
+
+        Returns:
+            object: Baseline value when maintained, or ``NO_BASELINE`` when
+            the shared configuration does not manage the requested key.
+
+        """
+        mapping_key = (tool, key)
+        if mapping_key in _TOOL_KNOB_MAPPING:
+            knob = _TOOL_KNOB_MAPPING[mapping_key]
+            return self._normalise_value(self.knob_values.get(knob, NO_BASELINE))
+        if mapping_key == ("pylint", "init-import"):
+            return self.pylint_init_import if self.pylint_init_import is not None else NO_BASELINE
+        if mapping_key == ("tsc", "strict"):
+            strictness = cast(
+                StrictnessLevel,
+                self.knob_values.get(
+                    ConfigOverrideKey.TYPE_CHECKING,
+                    StrictnessLevel.STANDARD,
+                ),
+            )
+            return strictness is StrictnessLevel.STRICT
+        if tool == MYPY_TOOL_KEY:
+            strictness = cast(
+                StrictnessLevel,
+                self.knob_values.get(
+                    ConfigOverrideKey.TYPE_CHECKING,
+                    StrictnessLevel.STANDARD,
+                ),
+            )
+            return _expected_mypy_value_for(key, strictness)
         return NO_BASELINE
+
+    @staticmethod
+    def _normalise_value(value: object) -> object:
+        """Convert enum values to their serialisable counterparts.
+
+        Args:
+            value: Raw value retrieved from the snapshot mapping.
+
+        Returns:
+            object: Serialisable value suitable for downstream comparisons.
+
+        """
+        if isinstance(value, Enum):
+            return value.value
+        return value
 
 
 class LicenseConfig(BaseModel):
@@ -362,6 +603,7 @@ class QualityConfigSection(BaseModel):
     warn_file_size: int = 5 * 1024 * 1024
     max_file_size: int = 10 * 1024 * 1024
     protected_branches: list[str] = Field(default_factory=lambda: list(DEFAULT_PROTECTED_BRANCHES))
+    enforce_in_lint: bool = False
 
 
 class CleanConfig(BaseModel):
@@ -391,7 +633,6 @@ class Config(BaseModel):
     output: OutputConfig = Field(default_factory=OutputConfig)
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
     dedupe: DedupeConfig = Field(default_factory=DedupeConfig)
-    duplicates: DuplicateDetectionConfig = Field(default_factory=DuplicateDetectionConfig)
     severity_rules: list[str] = Field(default_factory=list)
     tool_settings: dict[str, dict[str, object]] = Field(default_factory=_default_tool_settings)
     license: LicenseConfig = Field(default_factory=LicenseConfig)
@@ -403,10 +644,14 @@ class Config(BaseModel):
     severity: SeverityConfig = Field(default_factory=SeverityConfig)
 
     def to_dict(self) -> dict[str, object]:
-        """Return a dictionary representation suitable for serialization."""
+        """Return a dictionary representation suitable for serialization.
+
+        Returns:
+            dict[str, object]: Serialisable mapping of configuration values.
+
+        """
         payload: dict[str, object] = dict(self.model_dump(mode="python"))
         payload["severity_rules"] = list(self.severity_rules)
-        quality_cfg = cast("QualityConfigSection", self.quality)
         raw_tool_settings = payload.get("tool_settings", {})
         if isinstance(raw_tool_settings, dict):
             tool_settings_map: dict[str, dict[str, object]] = {}
@@ -416,92 +661,67 @@ class Config(BaseModel):
             payload["tool_settings"] = tool_settings_map
         quality_section = payload.get("quality", {})
         if isinstance(quality_section, dict):
-            schema_targets = getattr(quality_cfg, "schema_targets", [])
-            quality_section["schema_targets"] = [str(path) for path in schema_targets]
+            quality_section["schema_targets"] = [str(path) for path in self.quality.schema_targets]
             payload["quality"] = quality_section
         return payload
 
-    def model_post_init(self, __context: Any) -> None:  # pragma: no cover - pydantic hook
-        self.apply_shared_defaults()
+    @model_validator(mode="after")
+    def _apply_defaults_post_validation(self) -> Config:
+        """Apply derived defaults after model validation.
 
-    def apply_sensitivity_profile(self, *, cli_overrides: Collection[str] | None = None) -> None:
-        """Mutate shared knobs based on the sensitivity preset."""
+        Returns:
+            Config: Configuration instance with shared defaults applied.
+
+        """
+        self.apply_shared_defaults()
+        return self
+
+    def apply_sensitivity_profile(
+        self,
+        *,
+        cli_overrides: Collection[str] | None = None,
+    ) -> None:
+        """Mutate shared knobs based on the selected sensitivity preset.
+
+        Args:
+            cli_overrides: Raw override tokens supplied by the CLI to opt out
+                of specific preset-provided values.
+
+        """
         preset = SENSITIVITY_PRESETS.get(self.severity.sensitivity)
         if preset is None:
             return
-
-        overrides = set(cli_overrides or ())
-
-        self._apply_preset_scalars(preset, overrides)
-        self._apply_tool_setting_defaults(preset)
-        if self.severity.sensitivity in {"high", "maximum"}:
-            self._enforce_high_sensitivity_defaults()
+        override_keys = _normalize_override_keys(cli_overrides)
+        preset.apply(self, skip_keys=override_keys)
+        if self.severity.sensitivity in _STRICT_DEDUPE_SENSITIVITY_LEVELS:
+            self._enable_strict_dedupe()
 
     def snapshot_shared_knobs(self) -> SharedKnobSnapshot:
-        """Capture the shared knob values to compare during recalculation."""
-        return SharedKnobSnapshot(
-            line_length=self.execution.line_length,
-            max_complexity=self.complexity.max_complexity,
-            max_arguments=self.complexity.max_arguments,
-            type_checking=self.strictness.type_checking,
-            bandit_level=self.severity.bandit_level,
-            bandit_confidence=self.severity.bandit_confidence,
-            pylint_fail_under=self.severity.pylint_fail_under,
-            max_warnings=self.severity.max_warnings,
-            pylint_init_import=cast(
-                "bool | None",
-                self.tool_settings.get("pylint", {}).get("init-import"),
-            ),
+        """Capture the shared knob values to compare during recalculation.
+
+        Returns:
+            SharedKnobSnapshot: Immutable snapshot of shared configuration
+            settings that influence multiple tools.
+
+        """
+        knob_values: dict[ConfigOverrideKey, SensitivityOverrideValue] = {
+            ConfigOverrideKey.LINE_LENGTH: self.execution.line_length,
+            ConfigOverrideKey.MAX_COMPLEXITY: self.complexity.max_complexity,
+            ConfigOverrideKey.MAX_ARGUMENTS: self.complexity.max_arguments,
+            ConfigOverrideKey.TYPE_CHECKING: self.strictness.type_checking,
+            ConfigOverrideKey.BANDIT_LEVEL: self.severity.bandit_level,
+            ConfigOverrideKey.BANDIT_CONFIDENCE: self.severity.bandit_confidence,
+            ConfigOverrideKey.PYLINT_FAIL_UNDER: self.severity.pylint_fail_under,
+            ConfigOverrideKey.MAX_WARNINGS: self.severity.max_warnings,
+        }
+        pylint_init_import = cast(
+            bool | None,
+            self.tool_settings.get("pylint", {}).get("init-import"),
         )
-
-    def _apply_preset_scalars(
-        self,
-        preset: SensitivityPreset,
-        overrides: set[str],
-    ) -> None:
-        if preset.line_length is not UNSET and "line_length" not in overrides:
-            self.execution.line_length = cast("int", preset.line_length)
-        if preset.max_complexity is not UNSET and "max_complexity" not in overrides:
-            self.complexity.max_complexity = cast("int", preset.max_complexity)
-        if preset.max_arguments is not UNSET and "max_arguments" not in overrides:
-            self.complexity.max_arguments = cast("int", preset.max_arguments)
-        if preset.type_checking is not UNSET and "type_checking" not in overrides:
-            self.strictness.type_checking = cast(
-                "Literal['lenient', 'standard', 'strict']",
-                preset.type_checking,
-            )
-        if preset.bandit_level is not UNSET and "bandit_severity" not in overrides:
-            self.severity.bandit_level = cast(
-                "Literal['low', 'medium', 'high']", preset.bandit_level
-            )
-        if preset.bandit_confidence is not UNSET and "bandit_confidence" not in overrides:
-            self.severity.bandit_confidence = cast(
-                "Literal['low', 'medium', 'high']",
-                preset.bandit_confidence,
-            )
-        if preset.pylint_fail_under is not UNSET and "pylint_fail_under" not in overrides:
-            self.severity.pylint_fail_under = cast("float | None", preset.pylint_fail_under)
-        if preset.max_warnings is not UNSET:
-            self.severity.max_warnings = cast("int | None", preset.max_warnings)
-
-    def _apply_tool_setting_defaults(self, preset: SensitivityPreset) -> None:
-        if preset.ruff_select is not UNSET:
-            ruff_settings = self.tool_settings.setdefault("ruff", {})
-            if not ruff_settings.get("select"):
-                ruff_settings["select"] = list(cast("tuple[str, ...]", preset.ruff_select))
-        if preset.pylint_init_import is not UNSET:
-            pylint_settings = self.tool_settings.setdefault("pylint", {})
-            if "init-import" not in pylint_settings:
-                pylint_settings["init-import"] = cast("bool", preset.pylint_init_import)
-
-    def _enforce_high_sensitivity_defaults(self) -> None:
-        self.dedupe.dedupe = True
-        self.dedupe.dedupe_by = "prefer"
-        prefer_list = list(self.dedupe.dedupe_prefer)
-        for tool_name in ("mypy", "pyright"):
-            if tool_name not in prefer_list:
-                prefer_list.append(tool_name)
-        self.dedupe.dedupe_prefer = prefer_list
+        return SharedKnobSnapshot(
+            knob_values=knob_values,
+            pylint_init_import=pylint_init_import,
+        )
 
     def apply_shared_defaults(
         self,
@@ -509,142 +729,168 @@ class Config(BaseModel):
         override: bool = False,
         baseline: SharedKnobSnapshot | None = None,
     ) -> None:
-        """Ensure shared configuration defaults are reflected in tool settings."""
-        settings = self.tool_settings
+        """Ensure shared configuration defaults are reflected in tool settings.
 
-        def baseline_value(tool: str, key: str) -> object:
-            if baseline is None:
-                return NO_BASELINE
-            return baseline.value_for(tool, key)
+        Args:
+            override: When ``True`` override values that match the baseline.
+            baseline: Snapshot representing previously applied shared values.
 
-        def matches_baseline(tool: str, key: str, existing: object) -> bool:
-            expected = baseline_value(tool, key)
-            if expected is NO_BASELINE:
-                return existing is UNSET
-            if existing is UNSET:
-                return expected is None
-            return existing == expected
+        """
+        duplicate_preference = _load_duplicate_preference()
+        if duplicate_preference:
+            self._merge_dedupe_preferences(duplicate_preference)
+        self._apply_mypy_defaults(override=override, baseline=baseline)
 
-        def ensure(tool: str, key: str, value: object | None) -> None:
-            tool_map = settings.setdefault(tool, {})
-            existing = tool_map.get(key, UNSET)
-            if override:
-                if value is None:
-                    if existing is UNSET or not matches_baseline(tool, key, existing):
-                        return
-                    tool_map.pop(key, None)
-                else:
-                    if existing is not UNSET and not matches_baseline(tool, key, existing):
-                        return
-                    tool_map[key] = value
-                if not tool_map:
-                    settings.pop(tool, None)
-            elif value is not None:
-                tool_map.setdefault(key, value)
+    def update_severity(
+        self,
+        *,
+        bandit_level: BanditLevel | object = UNSET,
+        bandit_confidence: BanditConfidence | object = UNSET,
+        pylint_fail_under: float | None | object = UNSET,
+        max_warnings: int | None | object = UNSET,
+    ) -> None:
+        """Apply targeted updates to the severity configuration section.
 
-        line_length = self.execution.line_length
-        for tool_name, key in (
-            ("black", "line-length"),
-            ("isort", "line-length"),
-            ("ruff", "line-length"),
-            ("ruff-format", "line-length"),
-            ("pylint", "max-line-length"),
-            ("luacheck", "max-line-length"),
-            ("luacheck", "max-code-line-length"),
-            ("luacheck", "max-string-line-length"),
-            ("luacheck", "max-comment-line-length"),
-            ("prettier", "print-width"),
-        ):
-            ensure(tool_name, key, line_length)
+        Args:
+            bandit_level: Optional override for Bandit's severity level.
+            bandit_confidence: Optional override for Bandit's confidence level.
+            pylint_fail_under: Optional override for Pylint's fail-under score.
+            max_warnings: Optional override for maximum tolerable warnings.
 
-        complexity = self.complexity
-        ensure("pylint", "max-complexity", complexity.max_complexity)
-        ensure("luacheck", "max-cyclomatic-complexity", complexity.max_complexity)
-        ensure("pylint", "max-args", complexity.max_arguments)
-        ensure("pylint", "max-positional-arguments", complexity.max_arguments)
-
-        strict_level = self.strictness.type_checking
-        mypy_settings = settings.setdefault("mypy", {})
-        baseline_mypy = (
-            _expected_mypy_profile(baseline.type_checking) if baseline is not None else {}
+        """
+        self._update_severity(
+            bandit_level=bandit_level,
+            bandit_confidence=bandit_confidence,
+            pylint_fail_under=pylint_fail_under,
+            max_warnings=max_warnings,
         )
 
-        def set_mypy(key: str, value: object | None) -> None:
-            existing = mypy_settings.get(key, UNSET)
-            baseline_value = baseline_mypy.get(key, NO_BASELINE)
-            if override:
-                if value is None:
-                    if existing is UNSET:
-                        return
-                    if baseline_value is not NO_BASELINE and existing != baseline_value:
-                        return
-                    mypy_settings.pop(key, None)
-                else:
-                    if (
-                        existing is not UNSET
-                        and baseline_value is not NO_BASELINE
-                        and existing != baseline_value
-                    ):
-                        return
-                    mypy_settings[key] = value
-            elif value is not None:
-                mypy_settings.setdefault(key, value)
+    def _update_severity(
+        self,
+        *,
+        bandit_level: BanditLevel | object = UNSET,
+        bandit_confidence: BanditConfidence | object = UNSET,
+        pylint_fail_under: float | None | object = UNSET,
+        max_warnings: int | None | object = UNSET,
+    ) -> None:
+        """Apply targeted updates to the severity configuration section.
 
-        set_mypy("exclude-gitignore", True)
-        set_mypy("sqlite-cache", True)
-        set_mypy("show-error-codes", True)
-        set_mypy("show-column-numbers", True)
+        Args:
+            bandit_level: Optional override for Bandit's severity level.
+            bandit_confidence: Optional override for Bandit's confidence level.
+            pylint_fail_under: Optional override for Pylint's fail-under score.
+            max_warnings: Optional override for maximum tolerable warnings.
 
-        strict_flags = (
-            "warn-redundant-casts",
-            "warn-unused-ignores",
-            "warn-unreachable",
-            "disallow-untyped-decorators",
-            "disallow-any-generics",
-            "check-untyped-defs",
-            "no-implicit-reexport",
+        """
+        updates: dict[str, object | None] = {}
+        if bandit_level is not UNSET:
+            updates["bandit_level"] = cast(BanditLevel, bandit_level)
+        if bandit_confidence is not UNSET:
+            updates["bandit_confidence"] = cast(BanditConfidence, bandit_confidence)
+        if pylint_fail_under is not UNSET:
+            updates["pylint_fail_under"] = cast(float | None, pylint_fail_under)
+        if max_warnings is not UNSET:
+            updates["max_warnings"] = cast(int | None, max_warnings)
+        if updates:
+            self.severity = self.severity.model_copy(update=updates)
+
+    def _enable_strict_dedupe(self) -> None:
+        """Tighten dedupe behaviour for strict sensitivity presets."""
+        self.dedupe.dedupe = True
+        self.dedupe.dedupe_by = "prefer"
+        prefer_list = list(self.dedupe.dedupe_prefer)
+        for tool_name in ("pyright", "mypy"):
+            if tool_name not in prefer_list:
+                prefer_list.append(tool_name)
+        self.dedupe.dedupe_prefer = prefer_list
+
+    def _merge_dedupe_preferences(self, preferred_order: Sequence[str]) -> None:
+        """Merge catalog-provided dedupe preferences with user settings.
+
+        Args:
+            preferred_order: Ordered sequence of tool identifiers drawn from
+                catalog metadata.
+
+        """
+        prefer_list = list(self.dedupe.dedupe_prefer)
+        for tool_name in preferred_order:
+            if tool_name not in prefer_list:
+                prefer_list.append(tool_name)
+        self.dedupe.dedupe_prefer = prefer_list
+
+    def _apply_mypy_defaults(
+        self,
+        *,
+        override: bool,
+        baseline: SharedKnobSnapshot | None,
+    ) -> None:
+        """Synchronise mypy configuration defaults with shared settings.
+
+        Args:
+            override: When ``True`` apply updates even when settings exist.
+            baseline: Prior snapshot to respect manual adjustments.
+
+        """
+        mypy_settings = self.tool_settings.setdefault("mypy", {})
+        baseline_profile: Mapping[str, object] = {}
+        strictness = self.strictness.type_checking
+        if baseline is not None:
+            strictness = cast(
+                StrictnessLevel,
+                baseline.knob_values.get(
+                    ConfigOverrideKey.TYPE_CHECKING,
+                    strictness,
+                ),
+            )
+            baseline_profile = _expected_mypy_profile(strictness)
+        manager = _MypySettingManager(
+            settings=mypy_settings,
+            baseline=baseline_profile,
+            override=override,
         )
-        if strict_level == "strict":
-            set_mypy("strict", True)
-            for flag in strict_flags:
-                set_mypy(flag, True)
-            if override:
-                mypy_settings.pop("ignore-missing-imports", None)
-        else:
-            set_mypy("strict", False)
-            if override:
-                for flag in strict_flags:
-                    mypy_settings.pop(flag, None)
-            if strict_level == "lenient":
-                set_mypy("ignore-missing-imports", True)
-            elif override:
-                mypy_settings.pop("ignore-missing-imports", None)
+        for key in _MYPY_BASE_TRUE_FLAGS:
+            manager.set_default(key, True)
+        manager.set_default("strict", None)
+        for key in _MYPY_STRICT_FLAGS:
+            manager.set_default(key, None)
+        manager.set_default("ignore-missing-imports", None)
 
-        ensure("tsc", "strict", strict_level == "strict")
 
-        severity = self.severity
-        ensure("bandit", "severity", severity.bandit_level)
-        ensure("bandit", "confidence", severity.bandit_confidence)
+@dataclass(slots=True)
+class _MypySettingManager:
+    """Manage mypy defaults while respecting override semantics."""
 
-        ensure("pylint", "fail-under", severity.pylint_fail_under)
-        pylint_settings_snapshot = self.tool_settings.get("pylint", {})
-        init_import_value = (
-            pylint_settings_snapshot.get("init-import")
-            if isinstance(pylint_settings_snapshot, dict)
-            else None
-        )
-        ensure("pylint", "init-import", init_import_value)
-        ensure("stylelint", "max-warnings", severity.max_warnings)
-        ensure("eslint", "max-warnings", severity.max_warnings)
-        for spurious in ("duplicates", "complexity", "strictness", "severity"):
-            self.tool_settings.pop(spurious, None)
+    settings: dict[str, object]
+    baseline: Mapping[str, object]
+    override: bool
+
+    def set_default(self, key: str, value: object | None) -> None:
+        """Set or remove a mypy setting following override rules.
+
+        Args:
+            key: Name of the mypy configuration option to manage.
+            value: Desired default value, or ``None`` to remove the key.
+
+        """
+        existing = self.settings.get(key, UNSET)
+        baseline_value = self.baseline.get(key, NO_BASELINE)
+        if value is None:
+            if self.override and (
+                existing is UNSET or (baseline_value is not NO_BASELINE and existing != baseline_value)
+            ):
+                return
+            self.settings.pop(key, None)
+            return
+        if self.override and existing is not UNSET and baseline_value is not NO_BASELINE and existing != baseline_value:
+            return
+        if self.override or existing is UNSET:
+            self.settings[key] = value
 
 
 __all__ = [
     "Config",
     "ConfigError",
     "DedupeConfig",
-    "DuplicateDetectionConfig",
     "ExecutionConfig",
     "FileDiscoveryConfig",
     "OutputConfig",

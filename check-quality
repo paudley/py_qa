@@ -1,45 +1,68 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: MIT
-# Copyright (c) 2025 Blackcat Informatics® Inc.
-"""Legacy compatibility entry point for the Python quality check command."""
+"""Entry point for the check-quality command."""
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
-
-COMMAND = "check-quality"
-
-
-def _run_via_uv() -> None:
-    os.execvp(
-        "uv",
-        [
-            "uv",
-            "--project",
-            str(PROJECT_ROOT),
-            "run",
-            "pyqa",
-            COMMAND,
-            *sys.argv[1:],
-        ],
-    )
+PYQA_ROOT = Path(__file__).resolve().parent
+SRC_DIR = PYQA_ROOT / "src"
+CLI_LAUNCHER_PATH = SRC_DIR / "pyqa" / "cli" / "_cli_launcher.py"
+VERBOSE_ENV = "PYQA_WRAPPER_VERBOSE"
 
 
-try:
-    from pyqa.cli import app
-except ModuleNotFoundError:
-    _run_via_uv()
+def _debug(message: str) -> None:
+    if os.environ.get(VERBOSE_ENV):
+        print(message, file=sys.stderr)
 
 
-def main() -> int:
-    sys.argv.insert(1, COMMAND)
-    return app()
+def _extend_sys_path(root: Path) -> None:
+    """Inject virtualenv site-packages directories into ``sys.path``."""
+
+    candidate_roots = [root / ".venv" / "lib", root / ".venv" / "Lib"]
+    for base in candidate_roots:
+        if not base.exists():
+            _debug(f"Skipping missing site-packages root: {base}")
+            continue
+        for site_packages in base.glob("python*/site-packages"):
+            site_str = str(site_packages)
+            if site_str not in sys.path:
+                sys.path.insert(0, site_str)
+                _debug(f"Prepended site-packages to sys.path: {site_packages}")
+            else:
+                _debug(f"Site-packages already on sys.path: {site_packages}")
+
+
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+    _debug(f"Prepended src directory to sys.path: {SRC_DIR}")
+else:
+    _debug(f"Src directory already on sys.path: {SRC_DIR}")
+
+
+_extend_sys_path(PYQA_ROOT)
+
+
+loader_spec = importlib.util.spec_from_file_location("_pyqa_cli_launcher", CLI_LAUNCHER_PATH)
+if loader_spec is None:
+    raise ImportError(f"Unable to locate CLI launcher at {CLI_LAUNCHER_PATH}")
+module = importlib.util.module_from_spec(loader_spec)
+if loader_spec.loader is None:
+    raise ImportError("CLI launcher loader is not available")
+loader_spec.loader.exec_module(module)
+_debug(f"Loaded CLI launcher from {CLI_LAUNCHER_PATH}")
+
+launch = module.launch
+
+
+def main() -> None:
+    """Launch the quality command."""
+
+    launch("check-quality")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

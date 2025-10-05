@@ -7,9 +7,10 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from pyqa.config import Config
-from pyqa.execution.orchestrator import Orchestrator
+from pyqa.execution.orchestrator import Orchestrator, OrchestratorOverrides
 from pyqa.models import RawDiagnostic
 from pyqa.testing import flatten_test_suppressions
+from pyqa.tool_env.models import PreparedCommand
 from pyqa.tools.base import DeferredCommand, Tool, ToolAction, ToolContext
 from pyqa.tools.registry import ToolRegistry
 
@@ -40,6 +41,45 @@ class SettingsCommand:
         return cmd
 
 
+def _create_orchestrator(
+    *,
+    registry: ToolRegistry,
+    discovery: FakeDiscovery,
+    runner=None,
+    hooks=None,
+    cmd_preparer=None,
+):
+    overrides = OrchestratorOverrides(runner=runner, hooks=hooks, cmd_preparer=cmd_preparer)
+    if runner is None and hooks is None and cmd_preparer is None:
+        return Orchestrator(registry=registry, discovery=discovery)
+    return Orchestrator(registry=registry, discovery=discovery, overrides=overrides)
+
+
+class StubPreparer:
+    """Stub command preparer capturing tool/action ordering."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def prepare(
+        self,
+        *,
+        tool: Tool,
+        base_cmd: Sequence[str],
+        root: Path,
+        cache_dir: Path,
+        system_preferred: bool,
+        use_local_override: bool,
+    ) -> PreparedCommand:
+        self.calls.append(tool.name)
+        return PreparedCommand.from_parts(
+            cmd=base_cmd,
+            env={},
+            version="1",
+            source="system",
+        )
+
+
 def test_orchestrator_runs_registered_tool(tmp_path: Path) -> None:
     target = tmp_path / "module.py"
     target.write_text(
@@ -67,11 +107,13 @@ def test_orchestrator_runs_registered_tool(tmp_path: Path) -> None:
         assert cmd[0] == "dummy"
         assert cmd[1] == "--flag"
         assert Path(cmd[2]) == target
-        env = kwargs.get("env", {})
+        options = kwargs.get("options")
+        assert options is not None
+        env = options.env or {}
         assert env.get("DUMMY_ENV") == "1"
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="output", stderr="")
 
-    orchestrator = Orchestrator(
+    orchestrator = _create_orchestrator(
         registry=registry,
         discovery=FakeDiscovery([target]),
         runner=runner,
@@ -89,8 +131,8 @@ def test_orchestrator_runs_registered_tool(tmp_path: Path) -> None:
     outcome = result.outcomes[0]
     assert outcome.tool == "dummy"
     assert outcome.returncode == 0
-    assert outcome.stdout == "output"
-    assert not outcome.stderr
+    assert outcome.stdout == ["output"]
+    assert outcome.stderr == []
 
 
 def test_orchestrator_uses_cache(tmp_path: Path) -> None:
@@ -123,7 +165,7 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
         calls.append(list(cmd))
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="output", stderr="")
 
-    orchestrator = Orchestrator(
+    orchestrator = _create_orchestrator(
         registry=registry,
         discovery=FakeDiscovery([target]),
         runner=runner,
@@ -134,7 +176,7 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
     def runner_fail(cmd, **_kwargs):
         raise AssertionError(f"cache miss for {cmd}")
 
-    orchestrator_cached = Orchestrator(
+    orchestrator_cached = _create_orchestrator(
         registry=registry,
         discovery=FakeDiscovery([target]),
         runner=runner_fail,
@@ -142,7 +184,7 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
     result = orchestrator_cached.run(cfg, root=tmp_path)
 
     assert len(result.outcomes) == 1
-    assert result.outcomes[0].stdout == "output"
+    assert result.outcomes[0].stdout == ["output"]
 
     cfg.tool_settings["dummy"] = {"args": ["--different"]}
     calls_after: list[list[str]] = []
@@ -151,14 +193,14 @@ def test_orchestrator_uses_cache(tmp_path: Path) -> None:
         calls_after.append(list(cmd))
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="updated", stderr="")
 
-    orchestrator_settings = Orchestrator(
+    orchestrator_settings = _create_orchestrator(
         registry=registry,
         discovery=FakeDiscovery([target]),
         runner=runner_settings,
     )
     result_settings = orchestrator_settings.run(cfg, root=tmp_path)
     assert len(calls_after) == 1
-    assert result_settings.outcomes[0].stdout == "updated"
+    assert result_settings.outcomes[0].stdout == ["updated"]
 
 
 def test_orchestrator_filters_suppressed_diagnostics(tmp_path: Path) -> None:
@@ -172,8 +214,8 @@ def test_orchestrator_filters_suppressed_diagnostics(tmp_path: Path) -> None:
 
         def parse(
             self,
-            stdout: str,
-            stderr: str,
+            stdout: Sequence[str],
+            stderr: Sequence[str],
             *,
             context: ToolContext,
         ) -> Sequence[RawDiagnostic]:
@@ -225,7 +267,7 @@ def test_orchestrator_filters_suppressed_diagnostics(tmp_path: Path) -> None:
     def runner(cmd, **_kwargs):
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
 
-    orchestrator = Orchestrator(
+    orchestrator = _create_orchestrator(
         registry=registry,
         discovery=FakeDiscovery([target]),
         runner=runner,
@@ -238,5 +280,216 @@ def test_orchestrator_filters_suppressed_diagnostics(tmp_path: Path) -> None:
 
     assert len(result.outcomes) == 1
     outcome = result.outcomes[0]
-    assert outcome.stdout == ""
+    assert outcome.stdout == []
     assert outcome.diagnostics == []
+
+
+def test_orchestrator_prefers_non_test_duplicate_anchor(tmp_path: Path) -> None:
+    target = tmp_path / "tests" / "test_module.py"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("print('ok')\n", encoding="utf-8")
+
+    class StaticParser:
+        def __init__(self, *diagnostics: RawDiagnostic) -> None:
+            self._diagnostics = list(diagnostics)
+
+        def parse(
+            self,
+            stdout: Sequence[str],
+            stderr: Sequence[str],
+            *,
+            context: ToolContext,
+        ) -> Sequence[RawDiagnostic]:
+            del stdout, stderr, context
+            return list(self._diagnostics)
+
+    duplicate_message = (
+        "Similar lines in 2 files\n"
+        "==src.pyqa.cli.lint:[44:51]\n"
+        "==src.pyqa.tools.base:[189:196]\n"
+        '    "lint",\n'
+        '    "format",\n'
+    )
+
+    duplicate_tests = RawDiagnostic(
+        file="tests/tooling/sample_strategies.py",
+        line=1,
+        column=None,
+        severity="refactor",
+        message=duplicate_message,
+        code="R0801",
+        tool="pylint",
+    )
+
+    duplicate_src = RawDiagnostic(
+        file="src/pyqa/tools/base.py",
+        line=189,
+        column=None,
+        severity="refactor",
+        message=duplicate_message,
+        code="R0801",
+        tool="pylint",
+    )
+
+    registry = ToolRegistry()
+    registry.register(
+        Tool(
+            name="pylint",
+            actions=(
+                ToolAction(
+                    name="lint",
+                    command=DeferredCommand(("pylint",)),
+                    append_files=False,
+                    parser=StaticParser(duplicate_tests, duplicate_src),
+                ),
+            ),
+            file_extensions=(".py",),
+            runtime="binary",
+        ),
+    )
+
+    def runner(cmd, **_kwargs):
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    orchestrator = _create_orchestrator(
+        registry=registry,
+        discovery=FakeDiscovery([target]),
+        runner=runner,
+    )
+
+    cfg = Config()
+
+    result = orchestrator.run(cfg, root=tmp_path)
+
+    assert len(result.outcomes) == 1
+    outcome = result.outcomes[0]
+    assert len(outcome.diagnostics) == 1
+    diagnostic = outcome.diagnostics[0]
+    assert diagnostic.file in {"src/pyqa/cli/lint.py", "src/pyqa/tools/base.py"}
+    expected_lines = {
+        "src/pyqa/cli/lint.py": 44,
+        "src/pyqa/tools/base.py": 189,
+    }
+    assert diagnostic.line == expected_lines[diagnostic.file]
+
+
+def test_fetch_all_tools_respects_phase_order(tmp_path: Path) -> None:
+    registry = ToolRegistry()
+
+    format_tool = Tool(
+        name="format-tool",
+        phase="format",
+        actions=(
+            ToolAction(
+                name="format",
+                command=DeferredCommand(("fmt",)),
+            ),
+        ),
+        runtime="binary",
+    )
+    lint_tool = Tool(
+        name="lint-tool",
+        phase="lint",
+        actions=(
+            ToolAction(
+                name="lint",
+                command=DeferredCommand(("lint",)),
+            ),
+        ),
+        runtime="binary",
+    )
+    format_b = Tool(
+        name="format-b",
+        phase="format",
+        before=("format-tool",),
+        actions=(
+            ToolAction(
+                name="format",
+                command=DeferredCommand(("fmt-b",)),
+            ),
+        ),
+        runtime="binary",
+    )
+    analysis_tool = Tool(
+        name="analysis-tool",
+        phase="analysis",
+        after=("format-tool",),
+        actions=(
+            ToolAction(
+                name="analyze",
+                command=DeferredCommand(("analyze",)),
+            ),
+        ),
+        runtime="binary",
+    )
+
+    registry.register(format_tool)
+    registry.register(lint_tool)
+    registry.register(format_b)
+    registry.register(analysis_tool)
+
+    preparer = StubPreparer()
+    orchestrator = _create_orchestrator(
+        registry=registry,
+        discovery=FakeDiscovery([]),
+        cmd_preparer=preparer,
+    )
+
+    cfg = Config()
+    cfg.execution.only = [
+        "format-tool",
+        "analysis-tool",
+        "lint-tool",
+        "format-b",
+    ]
+
+    orchestrator.fetch_all_tools(cfg, root=tmp_path)
+
+    assert preparer.calls == [
+        "format-b",
+        "format-tool",
+        "lint-tool",
+        "analysis-tool",
+    ]
+
+
+def test_installers_run_once(tmp_path: Path) -> None:
+    calls: list[Path] = []
+
+    def installer(context: ToolContext) -> None:
+        calls.append(context.root)
+
+    registry = ToolRegistry()
+    registry.register(
+        Tool(
+            name="demo",
+            actions=(
+                ToolAction(
+                    name="lint",
+                    command=DeferredCommand(("demo",)),
+                ),
+            ),
+            runtime="binary",
+            installers=(installer,),
+        ),
+    )
+
+    orchestrator = _create_orchestrator(
+        registry=registry,
+        discovery=FakeDiscovery([]),
+    )
+
+    cfg = Config()
+    orchestrator.fetch_all_tools(cfg, root=tmp_path)
+    assert len(calls) == 1
+
+    def runner(cmd, **_kwargs):
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    orchestrator_runtime = _create_orchestrator(
+        registry=registry,
+        discovery=FakeDiscovery([]),
+        runner=runner,
+    )
+    orchestrator_runtime.run(cfg, root=tmp_path)
+    assert len(calls) == 2

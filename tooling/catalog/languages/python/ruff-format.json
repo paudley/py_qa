@@ -1,0 +1,126 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "ruff-format",
+  "description": "Code formatter provided by Ruff.",
+  "extends": ["python_defaults"],
+  "languages": ["python"],
+  "phase": "format",
+  "fileExtensions": [".py", ".pyi"],
+  "runtime": {
+    "type": "python",
+    "package": "ruff",
+    "minVersion": "0.6.8",
+    "versionCommand": ["ruff", "--version"]
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments for the formatter."
+    },
+    {
+      "name": "config",
+      "type": "path",
+      "description": "Specific ruff formatter configuration file to use."
+    },
+    {
+      "name": "exclude",
+      "type": "list[str]",
+      "description": "Paths or globs to exclude from formatting."
+    },
+    {
+      "name": "extend-exclude",
+      "type": "list[str]",
+      "description": "Additional exclusion patterns evaluated after defaults."
+    },
+    {
+      "name": "line-length",
+      "type": "int",
+      "description": "Override formatter line length."
+    },
+    {
+      "name": "preview",
+      "type": "bool",
+      "description": "Enable preview / unstable formatting behaviour."
+    },
+    {
+      "name": "respect-gitignore",
+      "type": "bool",
+      "description": "Whether to honour .gitignore during formatting."
+    },
+    {
+      "name": "stdin-filename",
+      "type": "str",
+      "description": "Filename to associate with STDIN content."
+    },
+    {
+      "name": "target-version",
+      "type": "str",
+      "description": "Python version passed to the formatter.",
+      "choices": ["py37", "py38", "py39", "py310", "py311", "py312", "py313"]
+    }
+  ],
+  "actions": [
+    {
+      "name": "format",
+      "isFix": true,
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["ruff", "format", "--force-exclude"],
+          "appendFiles": false,
+          "options": [
+            { "setting": "config", "type": "path", "flag": "--config" },
+            {
+              "setting": "line-length",
+              "type": "value",
+              "flag": "--line-length",
+              "defaultFrom": "execution.line_length"
+            },
+            {
+              "setting": "target-version",
+              "type": "args",
+              "flag": "--target-version",
+              "defaultFrom": "python.target_version_tag"
+            },
+            { "setting": "exclude", "type": "args", "flag": "--exclude", "joinWith": "," },
+            {
+              "setting": "extend-exclude",
+              "type": "args",
+              "flag": "--extend-exclude",
+              "joinWith": ","
+            },
+            {
+              "setting": "respect-gitignore",
+              "type": "flag",
+              "flag": "--respect-gitignore",
+              "negateFlag": "--no-respect-gitignore"
+            },
+            {
+              "setting": "preview",
+              "type": "flag",
+              "flag": "--preview",
+              "negateFlag": "--no-preview"
+            },
+            { "setting": "stdin-filename", "type": "value", "flag": "--stdin-filename" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/ruff-format_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/ruff-format_cmd_help.txt",
+      "format": "text"
+    },
+    "shared": {
+      "path": "docs/SHARED_KNOBS.md",
+      "format": "markdown"
+    }
+  }
+}

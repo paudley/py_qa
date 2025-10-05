@@ -1,0 +1,163 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "black",
+  "description": "Python formatter Black.",
+  "extends": ["python_defaults"],
+  "languages": ["python"],
+  "phase": "format",
+  "fileExtensions": [".py", ".pyi"],
+  "configFiles": ["pyproject.toml", "black.toml"],
+  "runtime": {
+    "type": "python",
+    "package": "black",
+    "minVersion": "25.1.0",
+    "versionCommand": ["black", "--version"]
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to Black."
+    },
+    {
+      "name": "config",
+      "type": "path",
+      "description": "Black configuration file."
+    },
+    {
+      "name": "line-length",
+      "type": "int",
+      "description": "Maximum line length enforced by Black."
+    },
+    {
+      "name": "preview",
+      "type": "bool",
+      "description": "Enable Black preview mode."
+    },
+    {
+      "name": "skip-magic-trailing-comma",
+      "type": "bool",
+      "description": "Disable automatic trailing comma insertion."
+    },
+    {
+      "name": "skip-string-normalization",
+      "type": "bool",
+      "description": "Disable quote normalization transformations."
+    },
+    {
+      "name": "target-version",
+      "type": "list[str]",
+      "description": "Allowed Python target versions (e.g. py311).",
+      "choices": ["py37", "py38", "py39", "py310", "py311", "py312", "py313"]
+    },
+    {
+      "name": "workers",
+      "type": "int",
+      "description": "Number of worker processes (-j)."
+    }
+  ],
+  "actions": [
+    {
+      "name": "format",
+      "isFix": true,
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["black"],
+          "appendFiles": false,
+          "options": [
+            { "setting": "config", "type": "path", "flag": "--config" },
+            {
+              "setting": "line-length",
+              "type": "value",
+              "flag": "--line-length",
+              "defaultFrom": "execution.line_length"
+            },
+            {
+              "setting": "target-version",
+              "type": "args",
+              "flag": "--target-version",
+              "defaultFrom": "python.target_version_tag"
+            },
+            {
+              "setting": "preview",
+              "type": "flag",
+              "flag": "--preview",
+              "negateFlag": "--no-preview"
+            },
+            {
+              "setting": "skip-string-normalization",
+              "type": "flag",
+              "flag": "--skip-string-normalization"
+            },
+            {
+              "setting": "skip-magic-trailing-comma",
+              "type": "flag",
+              "flag": "--skip-magic-trailing-comma"
+            },
+            { "setting": "workers", "type": "value", "flag": "-j" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "check",
+      "ignoreExit": true,
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["black", "--check"],
+          "appendFiles": false,
+          "options": [
+            { "setting": "config", "type": "path", "flag": "--config" },
+            {
+              "setting": "line-length",
+              "type": "value",
+              "flag": "--line-length",
+              "defaultFrom": "execution.line_length"
+            },
+            {
+              "setting": "target-version",
+              "type": "args",
+              "flag": "--target-version",
+              "defaultFrom": "python.target_version_tag"
+            },
+            {
+              "setting": "preview",
+              "type": "flag",
+              "flag": "--preview",
+              "negateFlag": "--no-preview"
+            },
+            {
+              "setting": "skip-string-normalization",
+              "type": "flag",
+              "flag": "--skip-string-normalization"
+            },
+            {
+              "setting": "skip-magic-trailing-comma",
+              "type": "flag",
+              "flag": "--skip-magic-trailing-comma"
+            },
+            { "setting": "workers", "type": "value", "flag": "-j" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/black_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/black_cmd_help.txt",
+      "format": "text"
+    },
+    "shared": {
+      "path": "docs/SHARED_KNOBS.md",
+      "format": "markdown"
+    }
+  }
+}

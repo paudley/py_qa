@@ -1,0 +1,170 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "bandit",
+  "description": "Python security linting via Bandit.",
+  "languages": ["python"],
+  "phase": "lint",
+  "runtime": {
+    "type": "python",
+    "package": "bandit[baseline,sarif,toml]",
+    "minVersion": "1.8.6",
+    "versionCommand": ["bandit", "--version"]
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to bandit."
+    },
+    {
+      "name": "baseline",
+      "type": "path",
+      "description": "Baseline results file path."
+    },
+    {
+      "name": "confidence",
+      "type": "str",
+      "description": "Minimum confidence level (low/medium/high).",
+      "choices": ["low", "medium", "high"]
+    },
+    {
+      "name": "config",
+      "type": "path",
+      "description": "Bandit configuration file path."
+    },
+    {
+      "name": "exclude",
+      "type": "list[str]",
+      "description": "Additional directories/files to exclude from scanning."
+    },
+    {
+      "name": "format",
+      "type": "str",
+      "description": "Output format (json, txt, etc.).",
+      "choices": ["json", "txt", "yaml", "xml"]
+    },
+    {
+      "name": "severity",
+      "type": "str",
+      "description": "Minimum severity level (low/medium/high).",
+      "choices": ["low", "medium", "high"]
+    },
+    {
+      "name": "skip",
+      "type": "list[str]",
+      "description": "Tests to skip (e.g. S101)."
+    },
+    {
+      "name": "targets",
+      "type": "list[str]",
+      "description": "Extra directories to include when scanning."
+    }
+  ],
+  "actions": [
+    {
+      "name": "security",
+      "command": {
+        "strategy": "command_project_scanner",
+        "config": {
+          "base": ["bandit", "-q", "-f", "json", "--exit-zero"],
+          "exclude": {
+            "settings": ["exclude"],
+            "includeDiscovery": true,
+            "flag": "-x",
+            "separator": ","
+          },
+          "targets": {
+            "settings": ["targets"],
+            "includeDiscoveryRoots": true,
+            "includeDiscoveryExplicit": true,
+            "fallback": ["src"],
+            "defaultToRoot": true,
+            "filterExcluded": true,
+            "prefix": "-r"
+          },
+          "options": [
+            {
+              "setting": ["config", "configfile"],
+              "flag": "-c",
+              "type": "path"
+            },
+            {
+              "setting": "baseline",
+              "flag": "--baseline",
+              "type": "path"
+            },
+            {
+              "setting": "format",
+              "flag": "--format",
+              "type": "value"
+            },
+            {
+              "setting": ["severity", "severity_level"],
+              "flag": "--severity-level",
+              "type": "value",
+              "defaultFrom": "severity.bandit_level"
+            },
+            {
+              "setting": ["confidence", "confidence_level"],
+              "flag": "--confidence-level",
+              "type": "value",
+              "defaultFrom": "severity.bandit_confidence"
+            },
+            {
+              "setting": ["skip", "skips"],
+              "flag": "--skip",
+              "type": "args",
+              "joinWith": ","
+            },
+            {
+              "setting": "args",
+              "type": "args"
+            }
+          ]
+        }
+      },
+      "appendFiles": false,
+      "description": "Bandit security analysis for Python code.",
+      "parser": {
+        "strategy": "parser_json_diagnostics",
+        "config": {
+          "path": "results[*]",
+          "mappings": {
+            "file": "filename",
+            "line": "line_number",
+            "code": "test_id",
+            "message": "issue_text",
+            "severity": {
+              "path": "issue_severity",
+              "map": {
+                "low": "notice",
+                "medium": "warning",
+                "high": "error"
+              },
+              "default": "warning"
+            },
+            "tool": {
+              "value": "bandit"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "extends": ["python_defaults"],
+  "fileExtensions": [".py"],
+  "documentation": {
+    "help": {
+      "path": "docs/bandit_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/bandit_cmd_help.txt",
+      "format": "text"
+    },
+    "shared": {
+      "path": "docs/SHARED_KNOBS.md",
+      "format": "markdown"
+    }
+  }
+}

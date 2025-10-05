@@ -5,9 +5,6 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[dependency-groups]
-dev = []
-
 [project]
 name = "pyqa"
 version = "0.1.0"
@@ -17,6 +14,7 @@ license = { file = "LICENSE" }
 requires-python = ">=3.12"
 dependencies = [
     "cython>=3.1.4",
+    "jsonschema>=4.23.0",
     "packaging>=24.1",
     "pydantic>=2.9.2",
     "sqlfluff>=3.4.2",
@@ -38,6 +36,7 @@ dependencies = [
     "tree-sitter>=0.25.1",
     "typer>=0.12",
     "spacy>=3.8.7",
+    "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
     "autopep8>=2.3.2",
     "black>=25.1.0",
     "botocore-stubs>=1.40.32",
@@ -80,6 +79,8 @@ dependencies = [
     "uv>=0.8.17",
     "vulture>=2.14",
     "bandit>=1.8.6",
+    "yamllint>=1.37.1",
+    "pytest-bdd>=8.1.0",
 ]
 
 [project.scripts]
@@ -100,4 +101,49 @@ pythonpath = ["src"]
 [tool.pyqa.quality]
 skip_globs = [
     "ref_docs/**",
+    "py_qa/**",
 ]
+
+[dependency-groups]
+dev = [
+    "autopep8>=2.3.2",
+    "bandit[baseline,sarif,toml]>=1.8.6",
+    "black>=25.9.0",
+    "bs4>=0.0.2",
+    "isort>=6.0.1",
+    "markdown>=3.9",
+    "mypy>=1.18.2",
+    "mypy-extensions>=1.1.0",
+    "pycodestyle>=2.14.0",
+    "pyflakes>=3.4.0",
+    "pylint>=3.3.8",
+    "pylint-htmf>=0.1.1",
+    "pylint-plugin-utils>=0.9.0",
+    "pylint-pydantic>=0.3.5",
+    "pyright>=1.1.405",
+    "pyupgrade>=3.20.0",
+    "ruff>=0.13.2",
+    "twine>=6.2.0",
+    "types-aiofiles>=24.1.0.20250822",
+    "types-cffi>=1.17.0.20250915",
+    "types-colorama>=0.4.15.20250801",
+    "types-decorator>=5.2.0.20250324",
+    "types-docutils>=0.22.2.20250924",
+    "types-html5lib>=1.1.11.20250917",
+    "types-jsonschema>=4.25.1.20250822",
+    "types-markdown>=3.9.0.20250906",
+    "types-pexpect>=4.9.0.20250916",
+    "types-pygments>=2.19.0.20250809",
+    "types-pyyaml>=6.0.12.20250915",
+    "types-regex>=2025.9.18.20250921",
+    "types-requests>=2.32.4.20250913",
+    "types-setuptools>=80.9.0.20250822",
+    "types-tqdm>=4.67.0.20250809",
+    "typing-extensions>=4.15.0",
+    "typing-inspection>=0.4.1",
+    "uv>=0.8.22",
+    "vulture>=2.14",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true

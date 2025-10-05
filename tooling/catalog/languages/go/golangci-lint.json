@@ -1,0 +1,114 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "golangci-lint",
+  "description": "Aggregated Go lint tool using golangci-lint.",
+  "languages": ["go"],
+  "phase": "lint",
+  "runtime": {
+    "type": "go",
+    "package": "github.com/golangci/golangci-lint/cmd/golangci-lint@v1.60.3",
+    "minVersion": "1.60.3",
+    "versionCommand": ["golangci-lint", "--version"]
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to golangci-lint run."
+    },
+    {
+      "name": "build-tags",
+      "type": "list[str]",
+      "description": "Go build tags supplied to the run."
+    },
+    {
+      "name": "config",
+      "type": "path",
+      "description": "golangci-lint configuration file path."
+    },
+    {
+      "name": "deadline",
+      "type": "str",
+      "description": "Timeout value passed to --deadline."
+    },
+    {
+      "name": "disable",
+      "type": "list[str]",
+      "description": "Linters to disable explicitly."
+    },
+    {
+      "name": "enable",
+      "type": "list[str]",
+      "description": "Linters to enable explicitly."
+    },
+    {
+      "name": "issues-exit-code",
+      "type": "int",
+      "description": "Custom exit code when issues are found."
+    },
+    {
+      "name": "skip-dirs",
+      "type": "list[str]",
+      "description": "Regex patterns of directories to skip."
+    },
+    {
+      "name": "skip-files",
+      "type": "list[str]",
+      "description": "Regex patterns of files to skip."
+    },
+    {
+      "name": "tests",
+      "type": "bool",
+      "description": "Include tests in lint run."
+    }
+  ],
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["golangci-lint", "run", "--out-format", "json"],
+          "appendFiles": false,
+          "options": [
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "deadline", "type": "value", "flag": "--deadline" },
+            {
+              "setting": ["enable-all", "enable_all"],
+              "type": "flag",
+              "flag": "--enable-all",
+              "default": true
+            },
+            { "setting": "enable", "type": "args", "flag": "--enable" },
+            { "setting": "disable", "type": "args", "flag": "--disable" },
+            { "setting": "tests", "type": "value", "flag": "--tests", "transform": "bool_to_str" },
+            { "setting": "issues-exit-code", "type": "value", "flag": "--issues-exit-code" },
+            { "setting": "build-tags", "type": "args", "flag": "--build-tags", "joinWith": "," },
+            { "setting": "skip-dirs", "type": "args", "flag": "--skip-dirs" },
+            { "setting": "skip-files", "type": "args", "flag": "--skip-files" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "description": "Run golangci-lint across Go packages.",
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.misc.parse_golangci_lint"
+        }
+      }
+    }
+  ],
+  "extends": ["go_runtime"],
+  "fileExtensions": [".go"],
+  "documentation": {
+    "help": {
+      "path": "docs/golangci-lint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/golangci-lint_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

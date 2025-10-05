@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "perltidy",
+  "description": "Perl formatter using perltidy.",
+  "languages": ["perl"],
+  "phase": "lint",
+  "runtime": {
+    "type": "perl",
+    "package": "Perl::Tidy",
+    "minVersion": "20240112",
+    "versionCommand": ["perltidy", "--version"]
+  },
+  "options": [
+    {
+      "name": "profile",
+      "type": "path",
+      "description": "Perltidy profile file controlling formatting.",
+      "aliases": ["configuration"]
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to perltidy."
+    }
+  ],
+  "actions": [
+    {
+      "name": "format",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["perltidy", "-b", "-bext=\"\"", "-q"],
+          "appendFiles": false,
+          "options": [
+            { "setting": ["profile", "configuration"], "type": "path", "flag": "--profile" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "isFix": true,
+      "description": "Format Perl code using perltidy."
+    },
+    {
+      "name": "check",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["perltidy", "--check-only", "-q"],
+          "appendFiles": false,
+          "options": [
+            { "setting": ["profile", "configuration"], "type": "path", "flag": "--profile" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "description": "Verify Perl formatting without modifying files."
+    }
+  ],
+  "fileExtensions": [".pl", ".pm", ".t", ".phtml"],
+  "tags": ["requires-cpanm"],
+  "documentation": {
+    "help": {
+      "path": "docs/perltidy_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/perltidy_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

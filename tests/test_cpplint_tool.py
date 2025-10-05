@@ -8,8 +8,21 @@ from __future__ import annotations
 from pathlib import Path
 
 from pyqa.config import Config
+from pyqa.tooling import ToolCatalogLoader
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import CpplintCommand
+
+_PYQA_ROOT = Path(__file__).resolve().parents[1]
+_CATALOG_ROOT = _PYQA_ROOT / "tooling" / "catalog"
+
+
+def _cpplint_config() -> dict[str, object]:
+    loader = ToolCatalogLoader(catalog_root=_CATALOG_ROOT)
+    snapshot = loader.load_snapshot()
+    for definition in snapshot.tools:
+        if definition.name == "cpplint":
+            return dict(definition.actions[0].command.reference.config)
+    raise AssertionError("cpplint command configuration missing from catalog")
 
 
 def test_cpplint_command_build(tmp_path: Path) -> None:
@@ -32,13 +45,10 @@ def test_cpplint_command_build(tmp_path: Path) -> None:
         },
     )
 
-    action = ToolAction(
-        name="lint",
-        command=CpplintCommand(base=("cpplint", "--output=emacs")),
-        append_files=True,
-    )
-
+    builder = command_option_map(_cpplint_config())
+    action = ToolAction(name="lint", command=builder, append_files=False)
     command = action.build_command(ctx)
+
     assert command[0] == "cpplint"
     assert "--output=emacs" in command
     assert "--linelength=140" in command
@@ -49,4 +59,4 @@ def test_cpplint_command_build(tmp_path: Path) -> None:
     assert "--recursive" in command
     assert "--counting=detailed" in command
     assert "--includeorder=standardcfirst" in command
-    assert command[-1].endswith("foo.cc")
+    assert command[-1] == "--verbose=3"

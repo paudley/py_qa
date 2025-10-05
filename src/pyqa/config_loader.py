@@ -6,55 +6,82 @@ from __future__ import annotations
 
 import copy
 import os
-from collections.abc import Iterable, Mapping, MutableMapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, MutableMapping, Sequence
+from dataclasses import dataclass
+from operator import attrgetter
 from pathlib import Path
-from typing import (
-    Any,
-    Protocol,
-    TypeVar,
-    cast,
-)
+from typing import Any, Final, Generic, Protocol, cast
 
 try:  # Python 3.11+ includes tomllib in the stdlib. Fallbacks unsupported.
-    import tomllib  # type: ignore[attr-defined]
+    import tomllib
 except ModuleNotFoundError as exc:
     raise RuntimeError("tomllib is required to parse configuration files") from exc
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
-from .config import (
-    CleanConfig,
-    Config,
-    ConfigError,
-    DedupeConfig,
-    DuplicateDetectionConfig,
-    ExecutionConfig,
-    FileDiscoveryConfig,
-    LicenseConfig,
-    OutputConfig,
-    QualityConfigSection,
-    UpdateConfig,
+from .config import Config, ConfigError
+from .config_loader_sections import (
+    FieldName,
+    ModelT,
+    PathResolver,
+    SectionName,
+    _model_replace,
+    _SectionMerger,
+    build_section_mergers,
 )
 from .config_utils import (
-    _coerce_iterable,
-    _coerce_optional_float,
-    _coerce_optional_int,
-    _coerce_string_sequence,
     _deep_merge,
-    _existing_unique_paths,
     _expand_env,
     _normalise_fragment,
     _normalise_pyproject_payload,
-    _normalize_min_severity,
-    _normalize_output_mode,
-    _normalize_tool_filters,
-    _unique_paths,
     generate_config_schema,
 )
 from .tools.settings import TOOL_SETTING_SCHEMA
 
-SectionName = str
-FieldName = str
+INCLUDE_KEY_DEFAULT: Final[str] = "include"
+PYPROJECT_TOOL_KEY: Final[str] = "tool"
+PYPROJECT_SECTION_KEY: Final[str] = "pyqa"
+CONFIG_KEY: Final[str] = "config"
+
+
+@dataclass(slots=True, frozen=True)
+class _SectionProcessor(Generic[ModelT]):
+    """Apply a section-specific merger to a :class:`Config` instance."""
+
+    name: SectionName
+    merger: _SectionMerger[ModelT]
+    getter: Callable[[Config], ModelT]
+    setter: Callable[[Config, ModelT], Config]
+
+    def merge_into(
+        self,
+        config: Config,
+        data: Mapping[str, Any],
+        *,
+        source: str,
+    ) -> tuple[Config, list[FieldUpdate]]:
+        """Merge raw section data into ``config`` and return updates.
+
+        Args:
+            config: Configuration instance to update.
+            data: Raw mapping containing section overrides.
+            source: Source identifier for provenance reporting.
+
+        Returns:
+            tuple[Config, list[FieldUpdate]]: Updated config plus
+            ``FieldUpdate`` entries describing mutations.
+        """
+
+        section_raw = data.get(self.name)
+        current_model = self.getter(config)
+        merged_model, changes = self.merger.merge(current_model, section_raw)
+        if not changes:
+            return config, []
+        updated_config = self.setter(config, merged_model)
+        updates = [
+            FieldUpdate(section=self.name, field=field, source=source, value=value) for field, value in changes.items()
+        ]
+        return updated_config, updates
 
 
 class ConfigSource(Protocol):
@@ -63,7 +90,18 @@ class ConfigSource(Protocol):
     name: str
 
     def load(self) -> Mapping[str, Any]:
-        """Return a mapping of configuration overrides."""
+        """Return a mapping of configuration overrides.
+
+        Returns:
+            Mapping[str, Any]: Concrete configuration fragment contributed by
+            the source.
+        """
+
+        raise NotImplementedError
+
+    def describe(self) -> str:
+        """Return a human-readable description of the source."""
+
         raise NotImplementedError
 
 
@@ -73,7 +111,23 @@ class DefaultConfigSource:
     name = "defaults"
 
     def load(self) -> Mapping[str, Any]:
+        """Return an in-memory snapshot of baseline configuration values.
+
+        Returns:
+            Mapping[str, Any]: Serialised configuration produced from the
+            default :class:`Config` model.
+        """
+
         return Config().to_dict()
+
+    def describe(self) -> str:
+        """Return a short identifier for UI/diagnostic use.
+
+        Returns:
+            str: Human-readable identifier for the source.
+        """
+
+        return "Built-in defaults"
 
 
 class TomlConfigSource:
@@ -84,7 +138,7 @@ class TomlConfigSource:
         path: Path,
         *,
         name: str | None = None,
-        include_key: str = "include",
+        include_key: str = INCLUDE_KEY_DEFAULT,
         env: Mapping[str, str] | None = None,
     ) -> None:
         self._root_path = path
@@ -93,25 +147,39 @@ class TomlConfigSource:
         self._env = env or os.environ
 
     def load(self) -> Mapping[str, Any]:
+        """Load, expand, and merge the TOML document for this source.
+
+        Returns:
+            Mapping[str, Any]: Normalised configuration data aggregated across
+            include directives.
+        """
+
         return self._load(self._root_path, ())
 
     def _load(self, path: Path, stack: tuple[Path, ...]) -> Mapping[str, Any]:
+        """Return the merged document at ``path`` while guarding recursion.
+
+        Args:
+            path: TOML file to parse.
+            stack: Tuple recording the include traversal for cycle detection.
+
+        Returns:
+            Mapping[str, Any]: Parsed data with includes resolved.
+        """
+
         if not path.exists():
             return {}
         if path in stack:
-            raise ConfigError(
-                "Circular include detected: "
-                + " -> ".join(str(entry) for entry in stack + (path,)),
-            )
+            include_chain = " -> ".join(str(entry) for entry in (*stack, path))
+            raise ConfigError(f"Circular include detected: {include_chain}")
         resolved = path.resolve()
         stat = resolved.stat()
         cache_key = (resolved, stat.st_mtime_ns)
-        cached = _TOML_CACHE.get(cache_key)
-        if cached is not None:
+        if cached := _TOML_CACHE.get(cache_key):
             data = copy.deepcopy(cached)
         else:
             with resolved.open("rb") as handle:
-                data = cast("MutableMapping[str, Any]", tomllib.load(handle))
+                data = tomllib.load(handle)
             _TOML_CACHE[cache_key] = copy.deepcopy(data)
         if not isinstance(data, MutableMapping):
             raise ConfigError(f"Configuration at {path} must be a table")
@@ -124,7 +192,17 @@ class TomlConfigSource:
         merged = _deep_merge(merged, document)
         return _expand_env(merged, self._env)
 
-    def _coerce_includes(self, raw: Any, base_dir: Path) -> tuple[Path, ...]:
+    def _coerce_includes(self, raw: Any, base_dir: Path) -> Iterable[Path]:
+        """Return absolute include paths derived from ``raw`` declarations.
+
+        Args:
+            raw: Raw include entries found in the TOML document.
+            base_dir: Directory used to resolve relative include references.
+
+        Returns:
+            Iterable[Path]: Absolute include paths to parse recursively.
+        """
+
         if raw is None:
             return []
         if isinstance(raw, (str, Path)):
@@ -139,7 +217,16 @@ class TomlConfigSource:
             if not candidate.is_absolute():
                 candidate = (base_dir / candidate).resolve()
             paths.append(candidate)
-        return tuple(paths)
+        return paths
+
+    def describe(self) -> str:
+        """Return a short diagnostic string for this TOML source.
+
+        Returns:
+            str: Human-readable identifier for the source.
+        """
+
+        return f"TOML configuration at {self.name}"
 
 
 class PyProjectConfigSource(TomlConfigSource):
@@ -149,45 +236,30 @@ class PyProjectConfigSource(TomlConfigSource):
         super().__init__(path, name=str(path))
 
     def load(self) -> Mapping[str, Any]:
+        """Return the ``tool.pyqa`` fragment from ``pyproject.toml`` if present."""
+
         data = super().load()
-        tool = data.get("tool")
-        if not tool:
+        tool_section = data.get(PYPROJECT_TOOL_KEY)
+        if not isinstance(tool_section, Mapping):
             return {}
-        pyqa_data = tool.get("pyqa") if isinstance(tool, Mapping) else None
-        if not isinstance(pyqa_data, Mapping):
+        pyqa_section = tool_section.get(PYPROJECT_SECTION_KEY)
+        if not isinstance(pyqa_section, Mapping):
             return {}
-        return _normalise_pyproject_payload(dict(pyqa_data))
+        return _normalise_pyproject_payload(dict(pyqa_section))
 
+    def describe(self) -> str:
+        """Return a short diagnostic string for this ``pyproject`` source.
 
-class PathResolver(BaseModel):
-    """Convert path-like values relative to the project root."""
+        Returns:
+            str: Human-readable identifier for the source.
+        """
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    project_root: Path
-
-    @model_validator(mode="after")
-    def _normalise_root(self) -> PathResolver:
-        object.__setattr__(self, "project_root", self.project_root.resolve())
-        return self
-
-    def resolve(self, value: Path | str) -> Path:
-        candidate = value if isinstance(value, Path) else Path(value)
-        candidate = candidate.expanduser()
-        if candidate.is_absolute():
-            return candidate.resolve()
-        return (self.project_root / candidate).resolve()
-
-    def resolve_optional(self, value: Path | str | None) -> Path | None:
-        if value is None:
-            return None
-        return self.resolve(value)
-
-    def resolve_iterable(self, values: Iterable[Path | str]) -> list[Path]:
-        return [self.resolve(value) for value in values]
+        return f"pyproject.toml ({self.name})"
 
 
 class FieldUpdate(BaseModel):
+    """Description of a single configuration field mutation."""
+
     model_config = ConfigDict(validate_assignment=True)
 
     section: SectionName
@@ -197,6 +269,8 @@ class FieldUpdate(BaseModel):
 
 
 class ConfigLoadResult(BaseModel):
+    """Container bundling a resolved config with provenance metadata."""
+
     model_config = ConfigDict(validate_assignment=True)
 
     config: Config
@@ -215,6 +289,15 @@ class ConfigLoader:
         sources: Sequence[ConfigSource],
         resolver: PathResolver | None = None,
     ) -> None:
+        """Initialise a loader that merges the supplied configuration sources.
+
+        Args:
+            project_root: Directory that anchors relative paths.
+            sources: Ordered collection of configuration sources.
+            resolver: Optional resolver override enabling tests to inject
+                alternate root semantics.
+        """
+
         if not sources:
             raise ValueError("at least one configuration source is required")
         self._sources = list(sources)
@@ -230,7 +313,17 @@ class ConfigLoader:
         user_config: Path | None = None,
         project_config: Path | None = None,
     ) -> ConfigLoader:
-        """Build a loader with default tiered sources."""
+        """Build a loader that respects user, project, and default sources.
+
+        Args:
+            project_root: Workspace root used to discover configuration files.
+            user_config: Optional path to a user-level override.
+            project_config: Optional project-level override path.
+
+        Returns:
+            ConfigLoader: Loader configured with default precedence ordering.
+        """
+
         root = project_root.resolve()
         home_config = user_config if user_config is not None else Path.home() / ".py_qa.toml"
         project_file = project_config if project_config is not None else root / ".py_qa.toml"
@@ -245,29 +338,42 @@ class ConfigLoader:
         return cls(project_root=root, sources=sources)
 
     def load(self, *, strict: bool = False) -> Config:
+        """Return the resolved configuration without provenance metadata.
+
+        Args:
+            strict: When ``True`` any collected warnings raise a
+                :class:`ConfigError`.
+
+        Returns:
+            Config: Fully merged configuration model.
+        """
+
         return self.load_with_trace(strict=strict).config
 
     def load_with_trace(self, *, strict: bool = False) -> ConfigLoadResult:
+        """Return the resolved configuration with trace metadata.
+
+        Args:
+            strict: When ``True`` raise if warnings were emitted during merge.
+
+        Returns:
+            ConfigLoadResult: Resolved configuration and provenance details.
+        """
+
         config = Config().model_copy(deep=True)
         updates: list[FieldUpdate] = []
         warnings: list[str] = []
         snapshots: dict[str, dict[str, Any]] = {}
         for source in self._sources:
-            fragment = source.load()
-            if not fragment:
+            if not (fragment := source.load()):
                 continue
-            normalised = _normalise_fragment(fragment)
-            if not normalised:
+            if not (normalised := _normalise_fragment(fragment)):
                 continue
             config, changed, new_warnings = self._merger.apply(config, normalised, source.name)
             updates.extend(changed)
             warnings.extend(new_warnings)
             snapshots[source.name] = _config_to_snapshot(config)
-        auto_updates = _auto_discover_tool_settings(
-            config,
-            self._project_root,
-        )
-        if auto_updates:
+        if auto_updates := _auto_discover_tool_settings(config, self._project_root):
             updates.extend(auto_updates)
             snapshots["auto"] = _config_to_snapshot(config)
         snapshots["final"] = _config_to_snapshot(config)
@@ -290,16 +396,8 @@ class _ConfigMerger:
     """Apply mapping data onto strongly typed configuration objects."""
 
     def __init__(self, resolver: PathResolver) -> None:
-        self._resolver = resolver
-        self._file_section = _FileDiscoverySection(resolver)
-        self._output_section = _OutputSection(resolver)
-        self._execution_section = _ExecutionSection(resolver)
-        self._dedupe_section = _DedupeSection()
-        self._duplicates_section = _DuplicateSection()
-        self._license_section = _LicenseSection()
-        self._quality_section = _QualitySection(resolver)
-        self._clean_section = _CleanSection()
-        self._update_section = _UpdateSection()
+        section_specs = build_section_mergers(resolver)
+        self._sections = tuple(self._build_section(merger, attr_name) for attr_name, merger in section_specs)
 
     def apply(
         self,
@@ -307,100 +405,53 @@ class _ConfigMerger:
         data: Mapping[str, Any],
         source: str,
     ) -> tuple[Config, list[FieldUpdate], list[str]]:
+        """Apply ``data`` to ``config`` returning the updated model.
+
+        Args:
+            config: Existing configuration instance.
+            data: Raw mapping of overrides.
+            source: Identifier describing the origin of the overrides.
+
+        Returns:
+            tuple[Config, list[FieldUpdate], list[str]]: Updated configuration,
+            accumulated field updates, and warnings emitted during merge.
+        """
+
         updates: list[FieldUpdate] = []
         warnings: list[str] = []
-
-        file_config, file_updates = self._file_section.merge(
-            config.file_discovery,
-            data.get("file_discovery"),
-        )
-        updates.extend(
-            FieldUpdate(section="file_discovery", field=field, source=source, value=value)
-            for field, value in file_updates.items()
-        )
-
-        output_config, output_updates = self._output_section.merge(
-            config.output,
-            data.get("output"),
-        )
-        updates.extend(
-            FieldUpdate(section="output", field=field, source=source, value=value)
-            for field, value in output_updates.items()
-        )
-
-        execution_config, execution_updates = self._execution_section.merge(
-            config.execution,
-            data.get("execution"),
-        )
-        updates.extend(
-            FieldUpdate(section="execution", field=field, source=source, value=value)
-            for field, value in execution_updates.items()
-        )
-
-        dedupe_config, dedupe_updates = self._dedupe_section.merge(
-            config.dedupe,
-            data.get("dedupe"),
-        )
-        updates.extend(
-            FieldUpdate(section="dedupe", field=field, source=source, value=value)
-            for field, value in dedupe_updates.items()
-        )
-
-        duplicates_config, duplicates_updates = self._duplicates_section.merge(
-            config.duplicates,
-            data.get("duplicates"),
-        )
-        updates.extend(
-            FieldUpdate(section="duplicates", field=field, source=source, value=value)
-            for field, value in duplicates_updates.items()
-        )
-
-        license_config, license_updates = self._license_section.merge(
-            config.license,
-            data.get("license"),
-        )
-        updates.extend(
-            FieldUpdate(section="license", field=field, source=source, value=value)
-            for field, value in license_updates.items()
-        )
-
-        quality_config, quality_updates = self._quality_section.merge(
-            config.quality,
-            data.get("quality"),
-        )
-        updates.extend(
-            FieldUpdate(section="quality", field=field, source=source, value=value)
-            for field, value in quality_updates.items()
-        )
-
-        clean_config, clean_updates = self._clean_section.merge(config.clean, data.get("clean"))
-        updates.extend(
-            FieldUpdate(section="clean", field=field, source=source, value=value)
-            for field, value in clean_updates.items()
-        )
-
-        update_config, update_updates = self._update_section.merge(
-            config.update,
-            data.get("update"),
-        )
-        updates.extend(
-            FieldUpdate(section="update", field=field, source=source, value=value)
-            for field, value in update_updates.items()
-        )
+        merged_config = config
+        for processor in self._sections:
+            merged_config, section_updates = processor.merge_into(
+                merged_config,
+                data,
+                source=source,
+            )
+            updates.extend(section_updates)
 
         tool_settings, tool_updates, tool_warnings = _merge_tool_settings(
-            config.tool_settings,
+            merged_config.tool_settings,
             data.get("tools"),
             source,
         )
         warnings.extend(tool_warnings)
-        updates.extend(
-            FieldUpdate(section="tool_settings", field=tool, source=source, value=value)
-            for tool, value in tool_updates.items()
-        )
+        if tool_updates:
+            merged_config = _model_replace(merged_config, tool_settings=tool_settings)
+            for tool, value in tool_updates.items():
+                updates.append(
+                    FieldUpdate(
+                        section="tool_settings",
+                        field=tool,
+                        source=source,
+                        value=value,
+                    )
+                )
 
-        severity_rules = _merge_severity_rules(config.severity_rules, data.get("severity_rules"))
-        if severity_rules != config.severity_rules:
+        severity_rules = _merge_severity_rules(
+            merged_config.severity_rules,
+            data.get("severity_rules"),
+        )
+        if severity_rules != merged_config.severity_rules:
+            merged_config = _model_replace(merged_config, severity_rules=severity_rules)
             updates.append(
                 FieldUpdate(
                     section="root",
@@ -410,524 +461,50 @@ class _ConfigMerger:
                 ),
             )
 
-        merged = _model_replace(
-            config,
-            file_discovery=file_config,
-            output=output_config,
-            execution=execution_config,
-            dedupe=dedupe_config,
-            duplicates=duplicates_config,
-            severity_rules=severity_rules,
-            tool_settings=tool_settings,
-            license=license_config,
-            quality=quality_config,
-            clean=clean_config,
-            update=update_config,
-        )
-        return merged, updates, warnings
+        return merged_config, updates, warnings
 
+    def sections(self) -> tuple[SectionName, ...]:
+        """Return section identifiers managed by this merger instance.
 
-class _SectionMerger:
-    """Base utilities for section-specific merge implementations."""
+        Returns:
+            tuple[SectionName, ...]: Ordered section identifiers processed
+            during configuration merges.
 
-    section: SectionName
+        """
+
+        return tuple(processor.name for processor in self._sections)
 
     @staticmethod
-    def _ensure_mapping(raw: Any, section: str) -> Mapping[str, Any]:
-        if raw is None:
-            return {}
-        if not isinstance(raw, Mapping):
-            raise ConfigError(f"{section} section must be a table")
-        return raw
+    def _build_section(
+        merger: _SectionMerger[ModelT],
+        attr_name: str,
+    ) -> _SectionProcessor[ModelT]:
+        """Return a section processor binding ``merger`` to a config attribute."""
 
-    @staticmethod
-    def _diff_model(current: BaseModel, updated: BaseModel) -> dict[str, Any]:
-        current_data = current.model_dump(mode="python")
-        updated_data = updated.model_dump(mode="python")
-        result: dict[str, Any] = {}
-        for key, value in updated_data.items():
-            if current_data.get(key) != value:
-                result[key] = value
-        return result
+        getter = cast(Callable[[Config], ModelT], attrgetter(attr_name))
 
+        def setter(config: Config, value: ModelT, *, name: str = attr_name) -> Config:
+            return _model_replace(config, **{name: value})
 
-class _FileDiscoverySection(_SectionMerger):
-    section = "file_discovery"
-
-    def __init__(self, resolver: PathResolver) -> None:
-        self._resolver = resolver
-
-    def merge(
-        self,
-        current: FileDiscoveryConfig,
-        raw: Any,
-    ) -> tuple[FileDiscoveryConfig, dict[str, Any]]:
-        data = self._ensure_mapping(raw, self.section)
-        roots = list(current.roots)
-        if "roots" in data:
-            raw_roots = _coerce_iterable(data["roots"], "file_discovery.roots")
-            roots = _unique_paths(self._resolver.resolve_iterable(raw_roots))
-        elif not roots:
-            roots = [self._resolver.project_root]
-
-        excludes = _unique_paths(current.excludes)
-        if "excludes" in data:
-            raw_excludes = _coerce_iterable(data["excludes"], "file_discovery.excludes")
-            for resolved in self._resolver.resolve_iterable(raw_excludes):
-                candidate = resolved.resolve()
-                if candidate not in excludes:
-                    excludes.append(candidate)
-
-        explicit_files = _existing_unique_paths(current.explicit_files)
-        if "explicit_files" in data:
-            raw_explicit = _coerce_iterable(data["explicit_files"], "file_discovery.explicit_files")
-            for resolved in self._resolver.resolve_iterable(raw_explicit):
-                candidate = resolved.resolve()
-                if candidate.exists() and candidate not in explicit_files:
-                    explicit_files.append(candidate)
-
-        limit_to = _unique_paths(current.limit_to)
-        if "limit_to" in data:
-            raw_limits = _coerce_iterable(data["limit_to"], "file_discovery.limit_to")
-            limit_to = _unique_paths(self._resolver.resolve_iterable(raw_limits))
-
-        updated = _model_replace(
-            current,
-            roots=roots,
-            excludes=excludes,
-            explicit_files=explicit_files,
-            paths_from_stdin=data.get("paths_from_stdin", current.paths_from_stdin),
-            changed_only=data.get("changed_only", current.changed_only),
-            diff_ref=data.get("diff_ref", current.diff_ref),
-            include_untracked=data.get("include_untracked", current.include_untracked),
-            base_branch=data.get("base_branch", current.base_branch),
-            limit_to=limit_to,
+        return _SectionProcessor[ModelT](
+            name=merger.section,
+            merger=merger,
+            getter=getter,
+            setter=setter,
         )
-        return updated, self._diff_model(current, updated)
-
-
-class _OutputSection(_SectionMerger):
-    section = "output"
-
-    def __init__(self, resolver: PathResolver) -> None:
-        self._resolver = resolver
-
-    def merge(self, current: OutputConfig, raw: Any) -> tuple[OutputConfig, dict[str, Any]]:
-        data = self._ensure_mapping(raw, self.section)
-
-        tool_filters = self._merge_tool_filters(current.tool_filters, data)
-        report_out, sarif_out, pr_summary_out = self._resolve_output_paths(current, data)
-        normalized_output = self._normalize_output_mode_value(data.get("output", current.output))
-        normalized_min = self._normalize_pr_summary_min(data, current)
-        flag_updates = self._collect_flag_updates(current, data)
-
-        updates: dict[str, Any] = {
-            **flag_updates,
-            "output": normalized_output,
-            "report_out": report_out,
-            "sarif_out": sarif_out,
-            "pr_summary_out": pr_summary_out,
-            "pr_summary_min_severity": normalized_min,
-        }
-        if tool_filters:
-            updates["tool_filters"] = tool_filters
-
-        updated = _model_replace(current, **updates)
-        if updated.quiet:
-            updated = _model_replace(updated, show_passing=False)
-        return updated, self._diff_model(current, updated)
-
-    def _merge_tool_filters(
-        self,
-        existing: Mapping[str, list[str]],
-        data: Mapping[str, Any],
-    ) -> dict[str, list[str]]:
-        merged = {tool: patterns.copy() for tool, patterns in existing.items()}
-        if "tool_filters" in data:
-            return _normalize_tool_filters(data["tool_filters"], existing)
-        return merged
-
-    def _resolve_output_paths(
-        self,
-        current: OutputConfig,
-        data: Mapping[str, Any],
-    ) -> tuple[Path | None, Path | None, Path | None]:
-        pr_summary_out = self._resolver.resolve_optional(
-            data.get("pr_summary_out", current.pr_summary_out),
-        )
-        report_out = self._resolver.resolve_optional(data.get("report_out", current.report_out))
-        sarif_out = self._resolver.resolve_optional(data.get("sarif_out", current.sarif_out))
-        return report_out, sarif_out, pr_summary_out
-
-    @staticmethod
-    def _normalize_output_mode_value(value: Any) -> str:
-        if not isinstance(value, str):
-            raise ConfigError("output.mode must be a string")
-        return _normalize_output_mode(value)
-
-    @staticmethod
-    def _normalize_pr_summary_min(
-        data: Mapping[str, Any],
-        current: OutputConfig,
-    ) -> str:
-        candidate = data.get("pr_summary_min_severity", current.pr_summary_min_severity)
-        if not isinstance(candidate, str):
-            raise ConfigError("output.pr_summary_min_severity must be a string")
-        return _normalize_min_severity(candidate)
-
-    @staticmethod
-    def _collect_flag_updates(
-        current: OutputConfig,
-        data: Mapping[str, Any],
-    ) -> dict[str, Any]:
-        keys = (
-            "verbose",
-            "emoji",
-            "color",
-            "show_passing",
-            "pretty_format",
-            "group_by_code",
-            "report",
-            "report_include_raw",
-            "pr_summary_limit",
-            "pr_summary_template",
-            "gha_annotations",
-            "annotations_use_json",
-            "quiet",
-        )
-        return {key: data.get(key, getattr(current, key)) for key in keys}
-
-
-class _ExecutionSection(_SectionMerger):
-    section = "execution"
-
-    def __init__(self, resolver: PathResolver) -> None:
-        self._resolver = resolver
-
-    def merge(self, current: ExecutionConfig, raw: Any) -> tuple[ExecutionConfig, dict[str, Any]]:
-        data = self._ensure_mapping(raw, self.section)
-        cache_dir_value = data.get("cache_dir", current.cache_dir)
-        cache_dir = (
-            self._resolver.resolve(cache_dir_value)
-            if cache_dir_value is not None
-            else current.cache_dir
-        )
-
-        jobs = data.get("jobs", current.jobs)
-        bail = data.get("bail", current.bail)
-        if bail:
-            jobs = 1
-
-        only = (
-            list(_coerce_iterable(data["only"], "execution.only"))
-            if "only" in data
-            else list(current.only)
-        )
-        languages = (
-            list(_coerce_iterable(data["languages"], "execution.languages"))
-            if "languages" in data
-            else list(current.languages)
-        )
-        enable = (
-            list(_coerce_iterable(data["enable"], "execution.enable"))
-            if "enable" in data
-            else list(current.enable)
-        )
-
-        updated = _model_replace(
-            current,
-            only=only,
-            languages=languages,
-            enable=enable,
-            strict=data.get("strict", current.strict),
-            jobs=jobs,
-            fix_only=data.get("fix_only", current.fix_only),
-            check_only=data.get("check_only", current.check_only),
-            force_all=data.get("force_all", current.force_all),
-            respect_config=data.get("respect_config", current.respect_config),
-            cache_enabled=data.get("cache_enabled", current.cache_enabled),
-            cache_dir=cache_dir,
-            bail=bail,
-            use_local_linters=data.get("use_local_linters", current.use_local_linters),
-        )
-        return updated, self._diff_model(current, updated)
-
-
-class _LicenseSection(_SectionMerger):
-    section = "license"
-
-    def merge(self, current: LicenseConfig, raw: Any) -> tuple[LicenseConfig, dict[str, Any]]:
-        data = self._ensure_mapping(raw, self.section)
-
-        spdx = _coerce_optional_str_value(data.get("spdx"), current.spdx, "license.spdx")
-        notice = _coerce_optional_str_value(data.get("notice"), current.notice, "license.notice")
-        copyright_value = _coerce_optional_str_value(
-            data.get("copyright"),
-            current.copyright,
-            "license.copyright",
-        )
-        year = _coerce_optional_str_value(data.get("year"), current.year, "license.year")
-
-        require_spdx = _coerce_optional_bool(
-            data.get("require_spdx"),
-            current.require_spdx,
-            "license.require_spdx",
-        )
-        require_notice = _coerce_optional_bool(
-            data.get("require_notice"),
-            current.require_notice,
-            "license.require_notice",
-        )
-
-        allow_alternate = list(current.allow_alternate_spdx)
-        if "allow_alternate_spdx" in data:
-            allow_alternate = _coerce_string_sequence(
-                data["allow_alternate_spdx"],
-                "license.allow_alternate_spdx",
-            )
-
-        exceptions = list(current.exceptions)
-        if "exceptions" in data:
-            exceptions = _coerce_string_sequence(data["exceptions"], "license.exceptions")
-
-        updated = _model_replace(
-            current,
-            spdx=spdx,
-            notice=notice,
-            copyright=copyright_value,
-            year=year,
-            require_spdx=require_spdx,
-            require_notice=require_notice,
-            allow_alternate_spdx=allow_alternate,
-            exceptions=exceptions,
-        )
-        return updated, self._diff_model(current, updated)
-
-
-class _QualitySection(_SectionMerger):
-    section = "quality"
-
-    def __init__(self, resolver: PathResolver) -> None:
-        self._resolver = resolver
-
-    def merge(
-        self,
-        current: QualityConfigSection,
-        raw: Any,
-    ) -> tuple[QualityConfigSection, dict[str, Any]]:
-        data = self._ensure_mapping(raw, self.section)
-
-        checks = list(current.checks)
-        if "checks" in data:
-            checks = _coerce_string_sequence(data["checks"], "quality.checks")
-
-        skip_globs = list(current.skip_globs)
-        if "skip_globs" in data:
-            skip_globs = _coerce_string_sequence(data["skip_globs"], "quality.skip_globs")
-
-        schema_targets = current.schema_targets
-        if "schema_targets" in data:
-            raw_targets = _coerce_iterable(data["schema_targets"], "quality.schema_targets")
-            resolved: list[Path] = []
-            seen: set[Path] = set()
-            for entry in raw_targets:
-                if not isinstance(entry, (str, Path)):
-                    raise ConfigError("quality.schema_targets entries must be paths")
-                candidate = self._resolver.resolve(entry)
-                if candidate not in seen:
-                    seen.add(candidate)
-                    resolved.append(candidate)
-            schema_targets = resolved
-
-        warn_file_size = _coerce_optional_int(
-            data.get("warn_file_size"),
-            current.warn_file_size,
-            "quality.warn_file_size",
-        )
-        max_file_size = _coerce_optional_int(
-            data.get("max_file_size"),
-            current.max_file_size,
-            "quality.max_file_size",
-        )
-
-        protected_branches = list(current.protected_branches)
-        if "protected_branches" in data:
-            protected_branches = _coerce_string_sequence(
-                data["protected_branches"],
-                "quality.protected_branches",
-            )
-
-        updated = _model_replace(
-            current,
-            checks=checks,
-            skip_globs=skip_globs,
-            schema_targets=schema_targets,
-            warn_file_size=warn_file_size,
-            max_file_size=max_file_size,
-            protected_branches=protected_branches,
-        )
-        return updated, self._diff_model(current, updated)
-
-
-class _CleanSection(_SectionMerger):
-    section = "clean"
-
-    def merge(self, current: CleanConfig, raw: Any) -> tuple[CleanConfig, dict[str, Any]]:
-        data = self._ensure_mapping(raw, self.section)
-        patterns = list(current.patterns)
-        if "patterns" in data:
-            patterns = _coerce_string_sequence(data["patterns"], "clean.patterns")
-
-        trees = list(current.trees)
-        if "trees" in data:
-            trees = _coerce_string_sequence(data["trees"], "clean.trees")
-
-        updated = _model_replace(current, patterns=patterns, trees=trees)
-        return updated, self._diff_model(current, updated)
-
-
-class _UpdateSection(_SectionMerger):
-    section = "update"
-
-    def merge(self, current: UpdateConfig, raw: Any) -> tuple[UpdateConfig, dict[str, Any]]:
-        data = self._ensure_mapping(raw, self.section)
-
-        skip_patterns = list(current.skip_patterns)
-        if "skip_patterns" in data:
-            skip_patterns = _coerce_string_sequence(data["skip_patterns"], "update.skip_patterns")
-
-        enabled_managers = list(current.enabled_managers)
-        if "enabled_managers" in data:
-            enabled_managers = _coerce_string_sequence(
-                data["enabled_managers"],
-                "update.enabled_managers",
-            )
-
-        updated = _model_replace(
-            current,
-            skip_patterns=skip_patterns,
-            enabled_managers=enabled_managers,
-        )
-        return updated, self._diff_model(current, updated)
-
-
-class _DedupeSection(_SectionMerger):
-    section = "dedupe"
-
-    def merge(self, current: DedupeConfig, raw: Any) -> tuple[DedupeConfig, dict[str, Any]]:
-        data = self._ensure_mapping(raw, self.section)
-        updated = _model_replace(
-            current,
-            dedupe=data.get("dedupe", current.dedupe),
-            dedupe_by=data.get("dedupe_by", current.dedupe_by),
-            dedupe_prefer=list(data.get("dedupe_prefer", current.dedupe_prefer)),
-            dedupe_line_fuzz=data.get("dedupe_line_fuzz", current.dedupe_line_fuzz),
-            dedupe_same_file_only=data.get("dedupe_same_file_only", current.dedupe_same_file_only),
-        )
-        return updated, self._diff_model(current, updated)
-
-
-class _DuplicateSection(_SectionMerger):
-    section = "duplicates"
-
-    def merge(
-        self,
-        current: DuplicateDetectionConfig,
-        raw: Any,
-    ) -> tuple[DuplicateDetectionConfig, dict[str, Any]]:
-        data = self._ensure_mapping(raw, self.section)
-
-        enabled = _coerce_optional_bool(data.get("enabled"), current.enabled, "duplicates.enabled")
-        ast_enabled = _coerce_optional_bool(
-            data.get("ast_enabled"),
-            current.ast_enabled,
-            "duplicates.ast_enabled",
-        )
-        ast_include_tests = _coerce_optional_bool(
-            data.get("ast_include_tests"),
-            current.ast_include_tests,
-            "duplicates.ast_include_tests",
-        )
-        cross_diagnostics = _coerce_optional_bool(
-            data.get("cross_diagnostics"),
-            current.cross_diagnostics,
-            "duplicates.cross_diagnostics",
-        )
-        navigator_tags = _coerce_optional_bool(
-            data.get("navigator_tags"),
-            current.navigator_tags,
-            "duplicates.navigator_tags",
-        )
-        doc_similarity_enabled = _coerce_optional_bool(
-            data.get("doc_similarity_enabled"),
-            current.doc_similarity_enabled,
-            "duplicates.doc_similarity_enabled",
-        )
-        doc_include_tests = _coerce_optional_bool(
-            data.get("doc_include_tests"),
-            current.doc_include_tests,
-            "duplicates.doc_include_tests",
-        )
-
-        ast_min_lines = _coerce_optional_int(
-            data.get("ast_min_lines"),
-            current.ast_min_lines,
-            "duplicates.ast_min_lines",
-        )
-        if ast_min_lines < 1:
-            raise ConfigError("duplicates.ast_min_lines must be >= 1")
-
-        ast_min_nodes = _coerce_optional_int(
-            data.get("ast_min_nodes"),
-            current.ast_min_nodes,
-            "duplicates.ast_min_nodes",
-        )
-        if ast_min_nodes < 1:
-            raise ConfigError("duplicates.ast_min_nodes must be >= 1")
-
-        cross_threshold = _coerce_optional_int(
-            data.get("cross_message_threshold"),
-            current.cross_message_threshold,
-            "duplicates.cross_message_threshold",
-        )
-        if cross_threshold < 2:
-            raise ConfigError("duplicates.cross_message_threshold must be >= 2")
-
-        doc_min_chars = _coerce_optional_int(
-            data.get("doc_min_chars"),
-            current.doc_min_chars,
-            "duplicates.doc_min_chars",
-        )
-        if doc_min_chars < 1:
-            raise ConfigError("duplicates.doc_min_chars must be >= 1")
-
-        doc_threshold = _coerce_optional_float(
-            data.get("doc_similarity_threshold"),
-            current.doc_similarity_threshold,
-            "duplicates.doc_similarity_threshold",
-        )
-        if not 0 <= doc_threshold <= 1:
-            raise ConfigError("duplicates.doc_similarity_threshold must be between 0 and 1")
-
-        updated = _model_replace(
-            current,
-            enabled=enabled,
-            ast_enabled=ast_enabled,
-            ast_min_lines=ast_min_lines,
-            ast_min_nodes=ast_min_nodes,
-            ast_include_tests=ast_include_tests,
-            cross_diagnostics=cross_diagnostics,
-            cross_message_threshold=cross_threshold,
-            navigator_tags=navigator_tags,
-            doc_similarity_enabled=doc_similarity_enabled,
-            doc_similarity_threshold=doc_threshold,
-            doc_min_chars=doc_min_chars,
-            doc_include_tests=doc_include_tests,
-        )
-        return updated, self._diff_model(current, updated)
 
 
 def _merge_severity_rules(current: list[str], raw: Any) -> list[str]:
+    """Return the merged severity rules list while validating inputs.
+
+    Args:
+        current: Existing severity rule list.
+        raw: Raw iterable of severity rule strings or ``None``.
+
+    Returns:
+        list[str]: Updated severity rule list preserving order.
+    """
+
     if raw is None:
         return list(current)
     if not isinstance(raw, Iterable) or isinstance(raw, (str, bytes)):
@@ -945,6 +522,18 @@ def _merge_tool_settings(
     raw: Any,
     source: str,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]], list[str]]:
+    """Merge tool-specific configuration dictionaries.
+
+    Args:
+        current: Existing tool configuration mapping.
+        raw: Raw mapping containing overrides.
+        source: Source identifier used for warning messages.
+
+    Returns:
+        tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]], list[str]]:
+            Updated tool settings, per-tool diffs, and warnings.
+    """
+
     result: dict[str, dict[str, Any]] = {tool: dict(settings) for tool, settings in current.items()}
     if raw is None:
         return result, {}, []
@@ -953,46 +542,63 @@ def _merge_tool_settings(
     updates: dict[str, dict[str, Any]] = {}
     warnings: list[str] = []
     for tool, value in raw.items():
-        if not isinstance(value, Mapping):
-            raise ConfigError(f"tools.{tool} section must be a table")
-        if tool in {"duplicates", "complexity", "strictness", "severity"}:
-            # Legacy sections moved out of tool_settings; ignore without warning.
-            continue
-        schema = TOOL_SETTING_SCHEMA.get(tool)
-        if schema is None:
-            warnings.append(f"[{source}] Unknown tool '{tool}' in tool settings")
-        existing = result.get(tool, {})
-        merged = _deep_merge(existing, value)
-        if merged != existing:
-            result[tool] = merged
-            updates[tool] = merged
-        if schema:
-            for key in value.keys():
-                if key not in schema:
-                    warnings.append(
-                        f"[{source}] Unknown option '{key}' for tool '{tool}' in tool settings",
-                    )
+        merged, tool_update, tool_warnings = _merge_tool_entry(
+            tool,
+            value,
+            result.get(tool, {}),
+            source,
+        )
+        result[tool] = merged
+        if tool_update is not None:
+            updates[tool] = tool_update
+        warnings.extend(tool_warnings)
     return result, updates, warnings
 
 
-def _coerce_optional_str_value(value: Any, current: str | None, context: str) -> str | None:
-    if value is None:
-        return current
-    if isinstance(value, str):
-        stripped = value.strip()
-        return stripped or None
-    raise ConfigError(f"{context} must be a string")
+_RESERVED_TOOL_KEYS: Final[frozenset[str]] = frozenset({"duplicates", "complexity", "strictness", "severity"})
 
 
-def _coerce_optional_bool(value: Any, current: bool, context: str) -> bool:
-    if value is None:
-        return current
-    if isinstance(value, bool):
-        return value
-    raise ConfigError(f"{context} must be a boolean")
+def _merge_tool_entry(
+    tool: str,
+    raw_value: Any,
+    existing: Mapping[str, Any],
+    source: str,
+) -> tuple[dict[str, Any], dict[str, Any] | None, list[str]]:
+    """Merge a single tool configuration mapping while collecting warnings."""
+
+    if tool in _RESERVED_TOOL_KEYS:
+        return dict(existing), None, []
+    if not isinstance(raw_value, Mapping):
+        raise ConfigError(f"tools.{tool} section must be a table")
+
+    schema = TOOL_SETTING_SCHEMA.get(tool)
+    warnings: list[str] = []
+    if schema is None:
+        warnings.append(f"[{source}] Unknown tool '{tool}' in tool settings")
+
+    merged = _deep_merge(existing, raw_value)
+    update = merged if merged != existing else None
+
+    if schema:
+        unknown_keys = [key for key in raw_value.keys() if key not in schema]
+        for key in unknown_keys:
+            warnings.append(
+                f"[{source}] Unknown option '{key}' for tool '{tool}' in tool settings",
+            )
+
+    return merged, update, warnings
 
 
 def _config_to_snapshot(config: Config) -> dict[str, Any]:
+    """Produce a serialisable snapshot of the configuration model.
+
+    Args:
+        config: Configuration model to serialise.
+
+    Returns:
+        dict[str, Any]: Serialisable payload capturing the configuration.
+    """
+
     snapshot = config.to_dict()
     tools = snapshot.pop("tools", {})
     snapshot["tool_settings"] = tools
@@ -1000,11 +606,21 @@ def _config_to_snapshot(config: Config) -> dict[str, Any]:
 
 
 def _auto_discover_tool_settings(config: Config, root: Path) -> list[FieldUpdate]:
+    """Populate tool settings with auto-discovered config file references.
+
+    Args:
+        config: Configuration model to mutate in place.
+        root: Project root to inspect for tool-specific configuration files.
+
+    Returns:
+        list[FieldUpdate]: Field updates recording discovered tool settings.
+    """
+
     updates: list[FieldUpdate] = []
     for tool, filenames in AUTO_TOOL_CONFIG_FILES.items():
         existing = config.tool_settings.get(tool)
         current_settings = dict(existing) if existing else {}
-        if "config" in current_settings:
+        if CONFIG_KEY in current_settings:
             continue
         selected: str | None = None
         for name in filenames:
@@ -1017,7 +633,7 @@ def _auto_discover_tool_settings(config: Config, root: Path) -> list[FieldUpdate
                 break
         if selected is None:
             continue
-        current_settings["config"] = selected
+        current_settings[CONFIG_KEY] = selected
         config.tool_settings[tool] = current_settings
         updates.append(
             FieldUpdate(
@@ -1064,21 +680,13 @@ AUTO_TOOL_CONFIG_FILES: dict[str, list[str]] = {
 }
 
 
-ModelT = TypeVar("ModelT", bound=BaseModel)
-
-
-def _model_replace(instance: ModelT, **updates: Any) -> ModelT:
-    if not isinstance(instance, BaseModel):  # defensive guard for legacy usage
-        raise TypeError("_model_replace expects a Pydantic BaseModel instance")
-    return cast("ModelT", instance.model_copy(update=updates, deep=True))
-
-
 _TOML_CACHE: dict[tuple[Path, int], Mapping[str, Any]] = {}
 
 
 __all__ = [
     "ConfigLoadResult",
     "ConfigLoader",
+    "ConfigError",
     "FieldUpdate",
     "generate_config_schema",
     "load_config",

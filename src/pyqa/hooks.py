@@ -16,6 +16,8 @@ HOOK_NAMES = ("pre-commit", "pre-push", "commit-msg")
 
 @dataclass
 class InstallResult:
+    """Aggregate outcome from attempting to install git hooks."""
+
     installed: list[Path]
     skipped: list[Path]
     backups: list[Path]

@@ -10,7 +10,7 @@ import shutil
 from dataclasses import dataclass
 from importlib import metadata as importlib_metadata
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
 from rich import box
 from rich.console import Console
@@ -23,8 +23,9 @@ from ..config import Config, ConfigError
 from ..config_loader import ConfigLoader, ConfigLoadResult
 from ..context import TreeSitterContextResolver
 from ..process_utils import run_command
+from ..tools.builtins import initialize_registry
 from ..tools.registry import DEFAULT_REGISTRY
-from .utils import ToolStatus, check_tool_status
+from .utils import ToolAvailability, ToolStatus, check_tool_status
 
 
 @dataclass(slots=True)
@@ -32,7 +33,7 @@ class EnvironmentCheck:
     """Represents the outcome of a doctor environment probe."""
 
     name: str
-    status: str
+    status: EnvironmentStatusLiteral
     ok: bool
     detail: str
 
@@ -65,6 +66,8 @@ def run_doctor(root: Path, *, console: Console | None = None) -> int:
     load_result = _load_configuration(root, console)
     if load_result is None:
         return 1
+
+    initialize_registry(registry=DEFAULT_REGISTRY)
 
     _render_environment_section(console)
     _render_grammar_section(console)
@@ -165,17 +168,28 @@ def _render_configuration_section(console: Console, result: ConfigLoadResult) ->
     console.print(table)
 
 
-TOOL_STATUS_STYLE: Final[dict[str, str]] = {
-    "ok": "green",
-    "vendored": "cyan",
-    "outdated": "yellow",
-    "unknown": "yellow",
-    "not ok": "red",
-    "uninstalled": "red",
+TOOL_STATUS_STYLE: Final[dict[ToolAvailability, str]] = {
+    ToolAvailability.OK: "green",
+    ToolAvailability.VENDORED: "cyan",
+    ToolAvailability.OUTDATED: "yellow",
+    ToolAvailability.UNKNOWN: "yellow",
+    ToolAvailability.NOT_OK: "red",
+    ToolAvailability.UNINSTALLED: "red",
 }
 
 
 def _render_tooling_section(console: Console, config: Config) -> bool:
+    """Render tooling availability and return ``True`` when issues are detected.
+
+    Args:
+        console: Rich console used for rendering the table.
+        config: Loaded configuration providing override information.
+
+    Returns:
+        bool: ``True`` when any tool is considered unhealthy.
+
+    """
+
     summaries = _collect_tool_summaries(config)
     table = Table(title="Tooling Status", box=box.SIMPLE, expand=True)
     table.add_column("Tool", style="bold")
@@ -189,8 +203,8 @@ def _render_tooling_section(console: Console, config: Config) -> bool:
     unhealthy = False
     for summary in summaries:
         status = summary.status
-        style = TOOL_STATUS_STYLE.get(status.status, "red" if status.status else "yellow")
-        if status.status in {"not ok", "uninstalled"}:
+        style = TOOL_STATUS_STYLE.get(status.availability, "yellow")
+        if status.availability in {ToolAvailability.NOT_OK, ToolAvailability.UNINSTALLED}:
             unhealthy = True
         default_label = "yes" if summary.default_enabled else "no"
         if summary.has_override:
@@ -199,9 +213,9 @@ def _render_tooling_section(console: Console, config: Config) -> bool:
             status.name,
             summary.runtime,
             default_label,
-            f"[{style}]{status.status}[/]",
-            status.version or "-",
-            status.min_version or "-",
+            f"[{style}]{status.availability.value}[/]",
+            status.version.detected or "-",
+            status.version.minimum or "-",
             status.notes or "-",
         )
 
@@ -224,7 +238,7 @@ def _collect_environment_checks() -> list[EnvironmentCheck]:
     checks.append(
         EnvironmentCheck(
             name="Python",
-            status="ok",
+            status=STATUS_OK,
             ok=True,
             detail=platform.python_version(),
         ),
@@ -240,8 +254,8 @@ def _probe_program(executable: str, required: bool) -> EnvironmentCheck:
     if path:
         version = _capture_version(executable)
         detail = version or path
-        return EnvironmentCheck(name=executable, status="ok", ok=True, detail=detail)
-    status = "missing" if required else "missing (optional)"
+        return EnvironmentCheck(name=executable, status=STATUS_OK, ok=True, detail=detail)
+    status = STATUS_MISSING if required else STATUS_MISSING_OPTIONAL
     return EnvironmentCheck(
         name=executable,
         status=status,
@@ -254,10 +268,10 @@ def _probe_module(module: str, optional: bool) -> EnvironmentCheck:
     try:
         importlib.import_module(module)
     except ImportError as exc:
-        status = "missing" if optional else "not ok"
+        status = STATUS_MISSING if optional else STATUS_NOT_OK
         detail = f"{type(exc).__name__}: {exc}"
         return EnvironmentCheck(name=module, status=status, ok=optional, detail=detail)
-    return EnvironmentCheck(name=module, status="ok", ok=True, detail="Import successful")
+    return EnvironmentCheck(name=module, status=STATUS_OK, ok=True, detail="Import successful")
 
 
 def _collect_tool_summaries(config: Config) -> list[ToolSummary]:
@@ -276,17 +290,13 @@ def _collect_tool_summaries(config: Config) -> list[ToolSummary]:
 
 
 def _collect_grammar_statuses() -> list[GrammarStatus]:
+    """Return the availability and version status for bundled Tree-sitter grammars."""
+
     resolver = TreeSitterContextResolver()
     statuses: list[GrammarStatus] = []
     for language, grammar in sorted(resolver.grammar_modules().items()):
         module_name = f"tree_sitter_{grammar.replace('-', '_')}"
-        try:
-            module = importlib.import_module(module_name)
-            available = True
-            version = _grammar_version(module_name, module)
-        except ModuleNotFoundError:
-            available = False
-            version = None
+        available, version = _resolve_grammar_module(module_name)
         statuses.append(
             GrammarStatus(
                 language=language,
@@ -296,6 +306,17 @@ def _collect_grammar_statuses() -> list[GrammarStatus]:
             ),
         )
     return statuses
+
+
+def _resolve_grammar_module(module_name: str) -> tuple[bool, str | None]:
+    """Return availability flag and version for the requested grammar module."""
+
+    try:
+        module = importlib.import_module(module_name)
+    except ModuleNotFoundError:
+        return False, None
+    version = _grammar_version(module_name, module)
+    return True, version
 
 
 def _grammar_version(module_name: str, module: object) -> str | None:
@@ -328,3 +349,9 @@ def _capture_version(executable: str) -> str | None:
 
 
 __all__ = ["EnvironmentCheck", "GrammarStatus", "ToolSummary", "run_doctor"]
+EnvironmentStatusLiteral = Literal["ok", "missing", "missing (optional)", "not ok"]
+
+STATUS_OK: Final[EnvironmentStatusLiteral] = "ok"
+STATUS_MISSING: Final[EnvironmentStatusLiteral] = "missing"
+STATUS_MISSING_OPTIONAL: Final[EnvironmentStatusLiteral] = "missing (optional)"
+STATUS_NOT_OK: Final[EnvironmentStatusLiteral] = "not ok"

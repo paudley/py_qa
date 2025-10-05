@@ -8,9 +8,12 @@ import json
 import re
 import shutil
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from subprocess import CompletedProcess
+from typing import Final
 
 from .logging import fail, info, ok, warn
 from .process_utils import run_command
@@ -62,6 +65,8 @@ _DOC_ENV_PATTERNS = re.compile(
     r"os\.environ|process\.env|ENV\[|getenv\(|-e [A-Z_]+=|export [A-Z_]+=|\$\{?[A-Z_]+\}?",
 )
 
+_MARKDOWN_SUFFIX: Final[str] = ".md"
+
 _SKIP_PII_FILES = (
     "CONTRIBUTING.md",
     "CODE_OF_CONDUCT.md",
@@ -83,6 +88,15 @@ _TMP_FILE_SUFFIXES = (
     ".env",
 )
 
+_BANDIT_SUCCESS_CODES: Final[set[int]] = {0, 1}
+_BANDIT_REPORT_SUFFIX: Final[str] = ".json"
+_BINARY_SNIFF_BYTES: Final[int] = 4096
+_NULL_BYTE: Final[bytes] = b"\x00"
+BANDIT_HIGH_TOKEN: Final[str] = "HIGH"
+BANDIT_HIGH_SYMBOL: Final[str] = "❌"
+BANDIT_WARNING_SYMBOL: Final[str] = "⚠️"
+BANDIT_GUIDANCE: Final[str] = "Run 'bandit -r src/ --format screen' for full details."
+
 
 @dataclass
 class SecurityScanResult:
@@ -97,18 +111,26 @@ class SecurityScanResult:
     warnings: list[str] = field(default_factory=list)
 
     def register_secret(self, path: Path, message: str) -> None:
+        """Record a potential secret finding for ``path``."""
+
         self.secret_files.setdefault(path, []).append(message)
         self.findings += 1
 
     def register_pii(self, path: Path, message: str) -> None:
+        """Record potential personally identifiable information for ``path``."""
+
         self.pii_files.setdefault(path, []).append(message)
         self.findings += 1
 
     def register_temp(self, path: Path) -> None:
+        """Record a temporary or backup file that should not be committed."""
+
         self.temp_files.append(path)
         self.findings += 1
 
     def register_bandit(self, metrics: dict[str, int], samples: list[str]) -> None:
+        """Record results from a Bandit security scan."""
+
         self.bandit_issues = metrics
         self.bandit_samples = samples
         self.findings += max(sum(metrics.values()), 1)
@@ -124,6 +146,8 @@ class SecurityScanner:
     excludes_file: Path | None = None
 
     def run(self, files: Sequence[Path]) -> SecurityScanResult:
+        """Run configured security checks against ``files``."""
+
         result = SecurityScanResult()
         resolved_files = self._resolve_files(files)
 
@@ -138,6 +162,8 @@ class SecurityScanner:
 
     # ------------------------------------------------------------------
     def _resolve_files(self, files: Sequence[Path]) -> list[Path]:
+        """Resolve ``files`` relative to :attr:`root` and drop missing entries."""
+
         resolved: list[Path] = []
         for file in files:
             candidate = (self.root / file).resolve() if not file.is_absolute() else file
@@ -146,6 +172,8 @@ class SecurityScanner:
         return resolved
 
     def _should_exclude(self, path: Path) -> bool:
+        """Return whether ``path`` matches the exclude configuration."""
+
         excludes_path = self.excludes_file or (self.root / ".security-check-excludes")
         if not excludes_path.exists():
             return False
@@ -159,19 +187,27 @@ class SecurityScanner:
         return False
 
     def _is_binary(self, path: Path) -> bool:
+        """Return ``True`` when ``path`` appears to contain binary data."""
+
         try:
-            chunk = path.read_bytes()
+            handle = path.open("rb")
         except OSError:
             return False
-        return b"\x00" in chunk
+        with handle:
+            chunk = handle.read(_BINARY_SNIFF_BYTES)
+        return _NULL_BYTE in chunk
 
     def _read_text(self, path: Path) -> str:
+        """Return the textual contents of ``path`` or an empty string on failure."""
+
         try:
             return path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             return ""
 
     def _scan_file(self, path: Path, result: SecurityScanResult) -> None:
+        """Scan ``path`` for secrets, PII, temp files, and aggregate findings."""
+
         if not self._is_scan_candidate(path):
             return
 
@@ -198,6 +234,8 @@ class SecurityScanner:
             warn(f"Potential PII found in {relative_path}", use_emoji=self.use_emoji)
 
     def _is_scan_candidate(self, path: Path) -> bool:
+        """Return ``True`` when ``path`` is eligible for scanning."""
+
         if not path.is_file() or self._should_exclude(path):
             return False
         if path.suffix in {".lock", ".json"} and path.name.endswith("lock.json"):
@@ -213,6 +251,8 @@ class SecurityScanner:
         lines: Sequence[str],
         result: SecurityScanResult,
     ) -> bool:
+        """Scan ``lines`` for secret patterns and record findings."""
+
         found = False
         for pattern in _SECRET_PATTERNS:
             matches = _match_pattern(pattern, lines)
@@ -229,6 +269,8 @@ class SecurityScanner:
         lines: Sequence[str],
         result: SecurityScanResult,
     ) -> bool:
+        """Scan ``lines`` for high-entropy strings indicative of secrets."""
+
         matches = _match_pattern(_ENTROPY_PATTERN, lines)
         filtered = _filter_entropy(matches)
         if not filtered:
@@ -241,6 +283,8 @@ class SecurityScanner:
         return True
 
     def _scan_temp_files(self, relative_path: Path, result: SecurityScanResult) -> bool:
+        """Identify temporary or backup files that should not be committed."""
+
         if relative_path.suffix in _TMP_FILE_SUFFIXES or relative_path.name.endswith("~"):
             result.register_temp(relative_path)
             return True
@@ -253,6 +297,8 @@ class SecurityScanner:
         lines: Sequence[str],
         result: SecurityScanResult,
     ) -> bool:
+        """Scan ``lines`` for PII matches and record potential findings."""
+
         if _should_skip_pii(path):
             return False
         found = False
@@ -284,67 +330,85 @@ class SecurityScanner:
             return
 
         info("Running bandit security analysis...", use_emoji=self.use_emoji)
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as handle:
-            report_path = Path(handle.name)
-        try:
-            completed = run_command(
-                [
-                    "bandit",
-                    "-r",
-                    str(src_dir),
-                    "-f",
-                    "json",
-                    "-o",
-                    str(report_path),
-                    "--quiet",
-                ],
-                capture_output=True,
-                check=False,
-            )
+        with _temporary_report_path(_BANDIT_REPORT_SUFFIX) as report_path:
+            completed = self._invoke_bandit(src_dir, report_path)
             if completed.returncode == 0:
                 ok(
                     "Bandit scan completed - no security issues found",
                     use_emoji=self.use_emoji,
                 )
                 return
-            if completed.returncode not in {0, 1}:
-                warn(
-                    f"Bandit scan encountered an error (exit code {completed.returncode}).",
-                    use_emoji=self.use_emoji,
-                )
-                warn(completed.stderr.strip(), use_emoji=self.use_emoji)
+            if completed.returncode not in _BANDIT_SUCCESS_CODES:
+                self._log_bandit_failure(completed)
                 return
 
-            data = json.loads(report_path.read_text(encoding="utf-8"))
-            totals = data.get("metrics", {}).get("_totals", {})
-            metrics = {
-                "SEVERITY.HIGH": int(totals.get("SEVERITY.HIGH", 0)),
-                "SEVERITY.MEDIUM": int(totals.get("SEVERITY.MEDIUM", 0)),
-                "SEVERITY.LOW": int(totals.get("SEVERITY.LOW", 0)),
-            }
-            samples = [
-                f"{item.get('filename')}:{item.get('line_number')} - {item.get('issue_text')}"
-                for item in data.get("results", [])[:3]
-            ]
-            result.register_bandit(metrics, samples)
-            fail("Bandit found security vulnerabilities", use_emoji=self.use_emoji)
-            for level, count in metrics.items():
-                symbol = "❌" if "HIGH" in level else "⚠️"
-                suffix = level.rsplit(".", maxsplit=1)[-1].title()
-                info(
-                    f"{symbol} {suffix} severity: {count}",
-                    use_emoji=self.use_emoji,
-                )
-            if samples:
-                info("Sample issues:", use_emoji=self.use_emoji)
-                for sample in samples:
-                    info(f"  {sample}", use_emoji=self.use_emoji)
-            info(
-                "Run 'bandit -r src/ --format screen' for full details.",
-                use_emoji=self.use_emoji,
-            )
-        finally:
-            report_path.unlink(missing_ok=True)
+            metrics, samples = self._summarise_bandit_report(report_path)
+            self._report_bandit_findings(metrics, samples, result)
+
+    def _invoke_bandit(self, src_dir: Path, report_path: Path) -> CompletedProcess[str]:
+        """Run Bandit against ``src_dir`` capturing the JSON report at ``report_path``."""
+
+        return run_command(
+            [
+                "bandit",
+                "-r",
+                str(src_dir),
+                "-f",
+                "json",
+                "-o",
+                str(report_path),
+                "--quiet",
+            ],
+            capture_output=True,
+            check=False,
+        )
+
+    def _log_bandit_failure(self, completed: CompletedProcess[str]) -> None:
+        """Emit log messages when Bandit exits with an unexpected error."""
+
+        warn(
+            f"Bandit scan encountered an error (exit code {completed.returncode}).",
+            use_emoji=self.use_emoji,
+        )
+        stderr = completed.stderr.strip()
+        if stderr:
+            warn(stderr, use_emoji=self.use_emoji)
+
+    def _summarise_bandit_report(self, report_path: Path) -> tuple[dict[str, int], list[str]]:
+        """Return metrics and representative samples from the Bandit report."""
+
+        data = json.loads(report_path.read_text(encoding="utf-8"))
+        totals = data.get("metrics", {}).get("_totals", {})
+        metrics = {
+            "SEVERITY.HIGH": int(totals.get("SEVERITY.HIGH", 0)),
+            "SEVERITY.MEDIUM": int(totals.get("SEVERITY.MEDIUM", 0)),
+            "SEVERITY.LOW": int(totals.get("SEVERITY.LOW", 0)),
+        }
+        samples = [
+            f"{item.get('filename')}:{item.get('line_number')} - {item.get('issue_text')}"
+            for item in data.get("results", [])[:3]
+        ]
+        return metrics, samples
+
+    def _report_bandit_findings(
+        self,
+        metrics: dict[str, int],
+        samples: list[str],
+        result: SecurityScanResult,
+    ) -> None:
+        """Record Bandit findings and emit a textual summary."""
+
+        result.register_bandit(metrics, samples)
+        fail("Bandit found security vulnerabilities", use_emoji=self.use_emoji)
+        for level, count in metrics.items():
+            symbol = BANDIT_HIGH_SYMBOL if BANDIT_HIGH_TOKEN in level else BANDIT_WARNING_SYMBOL
+            suffix = level.rsplit(".", maxsplit=1)[-1].title()
+            print(f"  {symbol} {suffix} severity: {count}")
+        if samples:
+            print("\n  Sample issues:")
+            for sample in samples:
+                print(f"    {sample}")
+        print(f"\n  {BANDIT_GUIDANCE}")
 
 
 def _match_pattern(
@@ -362,6 +426,8 @@ def _match_pattern(
 
 
 def _should_skip_pii(path: Path) -> bool:
+    """Return ``True`` when PII scanning should skip ``path``."""
+
     if path.name in _SKIP_PII_FILES:
         return True
     return any(fragment in path.as_posix() for fragment in _SKIP_PII_PATH_FRAGMENTS)
@@ -372,12 +438,16 @@ def _should_skip_markdown(
     path: Path,
     matches: list[tuple[int, str]],
 ) -> bool:
-    if path.suffix.lower() != ".md":
+    """Return ``True`` when Markdown matches likely reference docs rather than secrets."""
+
+    if path.suffix.lower() != _MARKDOWN_SUFFIX:
         return False
     return all(_DOC_ENV_PATTERNS.search(line) for _, line in matches)
 
 
 def _filter_entropy(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    """Filter entropy matches to remove obvious non-secret content."""
+
     filtered: list[tuple[int, str]] = []
     for idx, line in matches:
         if re.search(r"sha256|md5|hash|digest|test|example|sample|hexsha", line, re.IGNORECASE):
@@ -389,11 +459,24 @@ def _filter_entropy(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
 
 
 def _filter_comments(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    """Return matches excluding comments to reduce false positives."""
+
     return [
-        (idx, line)
-        for idx, line in matches
-        if not line.lstrip().startswith("#") and not line.lstrip().startswith("//")
+        (idx, line) for idx, line in matches if not line.lstrip().startswith("#") and not line.lstrip().startswith("//")
     ]
+
+
+@contextmanager
+def _temporary_report_path(suffix: str) -> Iterator[Path]:
+    """Yield a temporary file path that is cleaned up afterwards."""
+
+    handle = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    handle.close()
+    path = Path(handle.name)
+    try:
+        yield path
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def get_staged_files(root: Path) -> list[Path]:
@@ -405,8 +488,8 @@ def get_staged_files(root: Path) -> list[Path]:
             check=False,
             cwd=root,
         )
-        if completed.returncode != 0:
-            return []
-        return [root / line.strip() for line in completed.stdout.splitlines() if line.strip()]
     except FileNotFoundError:  # git not installed
         return []
+    if completed.returncode != 0:
+        return []
+    return [root / line.strip() for line in completed.stdout.splitlines() if line.strip()]

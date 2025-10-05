@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0.0",
+  "diagnostics": {
+    "severityMapping": {},
+    "dedupe": {
+      "code": "{code}:{message}"
+    }
+  },
+  "suppressions": {
+    "general": ["^.+, (?:.+/)?\\.github/.*"],
+    "duplicates": []
+  }
+}

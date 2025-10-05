@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "yamllint",
+  "description": "Lint YAML files using yamllint.",
+  "languages": ["yaml"],
+  "phase": "lint",
+  "fileExtensions": [".yml", ".yaml"],
+  "runtime": {
+    "type": "python",
+    "package": "yamllint",
+    "versionCommand": ["yamllint", "--version"]
+  },
+  "options": [
+    {
+      "name": "config-file",
+      "type": "path",
+      "description": "Configuration file passed to yamllint.",
+      "aliases": ["config_file"]
+    },
+    {
+      "name": "config-data",
+      "type": "str",
+      "description": "Inline YAML configuration data."
+    },
+    {
+      "name": "strict",
+      "type": "bool",
+      "description": "Fail when warnings are emitted."
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to yamllint."
+    }
+  ],
+  "actions": [
+    {
+      "name": "lint",
+      "appendFiles": true,
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["yamllint", "--format", "parsable"],
+          "appendFiles": false,
+          "options": [
+            { "setting": ["config-file", "config_file"], "type": "path", "flag": "--config-file" },
+            { "setting": ["config-data", "config_data"], "type": "value", "flag": "--config-data" },
+            { "setting": "strict", "type": "flag", "flag": "--strict" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.config.parse_yamllint"
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/yamllint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/yamllint_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

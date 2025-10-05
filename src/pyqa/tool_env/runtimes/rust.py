@@ -8,157 +8,215 @@ import json
 import os
 import shutil
 import stat
-from collections.abc import Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ...process_utils import run_command
 from ...tools.base import Tool
-from .. import constants as tool_constants
+from ..constants import ToolCacheLayout
 from ..models import PreparedCommand
-from ..utils import slugify, split_package_spec
-from .base import RuntimeHandler
+from ..utils import _slugify, _split_package_spec
+from .base import RuntimeContext, RuntimeHandler
+
+
+@dataclass(frozen=True, slots=True)
+class RustInstallPlan:
+    """Describe the filesystem layout for a cached Rust tool installation."""
+
+    layout: ToolCacheLayout
+    slug: str
+    binary_name: str
+    prefix: Path = field(init=False)
+    binary: Path = field(init=False)
+    meta_file: Path = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Initialise derived paths for the installation plan.
+
+        Returns:
+            None: Initialisation mutates frozen attributes via ``object.__setattr__``.
+        """
+
+        rust_paths = self.layout.rust
+        prefix = rust_paths.cache_dir / self.slug
+        object.__setattr__(self, "prefix", prefix)
+        object.__setattr__(self, "binary", prefix / "bin" / self.binary_name)
+        object.__setattr__(self, "meta_file", rust_paths.meta_dir / f"{self.slug}.json")
+
+
+@dataclass(frozen=True, slots=True)
+class CargoRequirement:
+    """Describe a cargo installation requirement extracted from the catalog."""
+
+    crate: str
+    version_spec: str | None
+    requirement: str
+    tool_name: str
 
 
 class RustRuntime(RuntimeHandler):
     """Provision Rust tooling using ``cargo install`` with caching."""
 
-    def _try_system(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand | None:
-        executable = shutil.which(base_cmd[0])
-        if not executable:
+    def _try_project(self, context: RuntimeContext) -> PreparedCommand | None:
+        """Reuse project ``bin`` directory for Rust tooling when available."""
+
+        project_cmd = self._project_binary(context)
+        if project_cmd is None:
             return None
         version = None
-        if tool.version_command:
-            version = self._versions.capture(tool.version_command)
-        if not self._versions.is_compatible(version, target_version):
-            return None
-        return PreparedCommand.from_parts(cmd=base_cmd, env=None, version=version, source="system")
+        if context.tool.version_command:
+            version = self._versions.capture(context.tool.version_command)
+        project_cmd.version = version
+        return project_cmd
 
-    def _try_project(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand | None:
-        del cache_dir, target_version
-        binary_name = Path(base_cmd[0]).name
-        candidate = root / "bin" / binary_name
-        if not candidate.exists():
-            return None
-        cmd = list(base_cmd)
-        cmd[0] = str(candidate)
-        version = None
-        if tool.version_command:
-            version = self._versions.capture(tool.version_command)
-        return PreparedCommand.from_parts(
-            cmd=cmd,
-            env=None,
-            version=version,
-            source="project",
-        )
+    def _prepare_local(self, context: RuntimeContext) -> PreparedCommand:
+        """Install Rust tooling via cargo and return the cached command."""
 
-    def _prepare_local(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand:
         if not shutil.which("cargo"):
             raise RuntimeError("Cargo toolchain is required to install rust-based linters")
 
-        binary_name = Path(base_cmd[0]).name
-        binary_path = self._ensure_local_tool(tool, binary_name)
-        cmd = list(base_cmd)
-        cmd[0] = str(binary_path)
+        return self._prepare_cached_command(
+            context,
+            self._ensure_local_tool,
+            self._rust_env,
+        )
 
-        env: dict[str, str] = {}
-        version = None
-        if tool.version_command:
-            version = self._versions.capture(tool.version_command)
-        return PreparedCommand.from_parts(cmd=cmd, env=env, version=version, source="local")
-
-    def _ensure_local_tool(self, tool: Tool, binary_name: str) -> Path:
+    def _ensure_local_tool(self, context: RuntimeContext, binary_name: str) -> Path:
+        """Install or reuse a cargo-installed binary for ``tool``."""
+        tool = context.tool
+        layout = context.cache_layout
         crate, version_spec = self._crate_spec(tool)
         if crate.startswith("rustup:"):
             component = crate.split(":", 1)[1]
-            requirement = f"rustup:{component}"
-            slug = slugify(requirement)
-            meta_file = tool_constants.RUST_META_DIR / f"{slug}.json"
-            meta_file.parent.mkdir(parents=True, exist_ok=True)
-            if not meta_file.exists():
-                self._install_rustup_component(component)
-                meta_file.write_text(json.dumps({"requirement": requirement}), encoding="utf-8")
-            cargo_path = shutil.which("cargo")
-            if not cargo_path:
-                raise RuntimeError("cargo executable not found for rust tool")
-            return Path(cargo_path)
+            return self._ensure_rustup_tool(layout, component)
 
         requirement = f"{crate}@{version_spec}" if version_spec else crate
-        slug = slugify(requirement)
-        prefix = tool_constants.RUST_CACHE_DIR / slug
-        binary = prefix / "bin" / binary_name
-        meta_file = tool_constants.RUST_META_DIR / f"{slug}.json"
+        plan = RustInstallPlan(layout=layout, slug=_slugify(requirement), binary_name=binary_name)
+        if self._is_existing_binary(plan, requirement):
+            return plan.binary
 
-        if binary.exists() and meta_file.exists():
-            try:
-                meta = json.loads(meta_file.read_text(encoding="utf-8"))
-                if meta.get("requirement") == requirement:
-                    return binary
-            except json.JSONDecodeError:
-                pass
-
-        meta_file.parent.mkdir(parents=True, exist_ok=True)
-        (prefix / "bin").mkdir(parents=True, exist_ok=True)
-        (prefix / "cargo").mkdir(parents=True, exist_ok=True)
-        (prefix / "target").mkdir(parents=True, exist_ok=True)
-
-        env = os.environ.copy()
-        env.setdefault("CARGO_HOME", str(prefix / "cargo"))
-        env.setdefault("CARGO_TARGET_DIR", str(prefix / "target"))
-
-        install_cmd = [
-            "cargo",
-            "install",
-            crate,
-            "--root",
-            str(prefix),
-            "--locked",
-        ]
-        if version_spec:
-            install_cmd.extend(["--version", str(version_spec)])
-
-        run_command(install_cmd, capture_output=True, env=env)
-
-        if not binary.exists():
-            raise RuntimeError(f"Failed to install rust tool '{tool.name}'")
-
-        meta_file.write_text(json.dumps({"requirement": requirement}), encoding="utf-8")
-        binary.chmod(binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-        return binary
+        spec = CargoRequirement(
+            crate=crate,
+            version_spec=version_spec,
+            requirement=requirement,
+            tool_name=tool.name,
+        )
+        self._install_cargo_tool(plan, spec)
+        return plan.binary
 
     @staticmethod
     def _crate_spec(tool: Tool) -> tuple[str, str | None]:
+        """Return crate name and version derived from ``tool`` metadata."""
         if tool.package:
-            crate, version = split_package_spec(tool.package)
+            crate, version = _split_package_spec(tool.package)
             if version is None:
                 version = tool.min_version
             return crate, version
         return tool.name, tool.min_version
 
     def _install_rustup_component(self, component: str) -> None:
+        """Install a rustup component required by a tool."""
         if not shutil.which("rustup"):
             raise RuntimeError("rustup is required to install rustup components")
         run_command(["rustup", "component", "add", component], capture_output=True)
+
+    def _ensure_rustup_tool(self, layout: ToolCacheLayout, component: str) -> Path:
+        """Return the cargo executable after ensuring a rustup component exists.
+
+        Args:
+            layout: Cache layout used to persist metadata.
+            component: Rustup component identifier to install when missing.
+
+        Returns:
+            Path: Resolved cargo executable path after ensuring dependencies.
+        """
+
+        requirement = f"rustup:{component}"
+        slug = _slugify(requirement)
+        meta_file = layout.rust.meta_dir / f"{slug}.json"
+        meta_file.parent.mkdir(parents=True, exist_ok=True)
+        if not meta_file.exists():
+            self._install_rustup_component(component)
+            meta_file.write_text(json.dumps({"requirement": requirement}), encoding="utf-8")
+        cargo_path = shutil.which("cargo")
+        if not cargo_path:
+            raise RuntimeError("cargo executable not found for rust tool")
+        return Path(cargo_path)
+
+    def _is_existing_binary(self, plan: RustInstallPlan, requirement: str) -> bool:
+        """Return whether ``plan`` already satisfies the installation requirement.
+
+        Args:
+            plan: Installation plan describing cached filesystem paths.
+            requirement: Requirement string previously recorded for the tool.
+
+        Returns:
+            bool: ``True`` when the cached binary exists and metadata matches.
+        """
+
+        if not (plan.binary.exists() and plan.meta_file.exists()):
+            return False
+        metadata = self._load_json(plan.meta_file)
+        return bool(metadata and metadata.get("requirement") == requirement)
+
+    def _install_cargo_tool(self, plan: RustInstallPlan, spec: CargoRequirement) -> None:
+        """Install ``crate`` into the cached tool environment described by ``plan``.
+
+        Args:
+            plan: Installation plan describing the cache layout.
+            spec: Cargo requirement metadata for the requested tool.
+
+        Returns:
+            None: This method raises if installation fails and otherwise
+            completes silently.
+        """
+
+        plan.meta_file.parent.mkdir(parents=True, exist_ok=True)
+        plan.binary.parent.mkdir(parents=True, exist_ok=True)
+        cargo_home = plan.prefix / "cargo"
+        target_dir = plan.prefix / "target"
+        cargo_home.mkdir(parents=True, exist_ok=True)
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        env = os.environ.copy()
+        env.setdefault("CARGO_HOME", str(cargo_home))
+        env.setdefault("CARGO_TARGET_DIR", str(target_dir))
+
+        install_cmd = [
+            "cargo",
+            "install",
+            spec.crate,
+            "--root",
+            str(plan.prefix),
+            "--locked",
+        ]
+        if spec.version_spec:
+            install_cmd.extend(["--version", str(spec.version_spec)])
+
+        run_command(install_cmd, capture_output=True, env=env)
+
+        if not plan.binary.exists():
+            raise RuntimeError(f"Failed to install rust tool '{spec.tool_name}'")
+
+        plan.meta_file.write_text(
+            json.dumps({"requirement": spec.requirement}),
+            encoding="utf-8",
+        )
+        plan.binary.chmod(plan.binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    @staticmethod
+    def _rust_env(_: RuntimeContext) -> dict[str, str]:
+        """Return environment variables for Rust tools (none required).
+
+        Args:
+            _: Runtime context parameter (unused for Rust tooling).
+
+        Returns:
+            dict[str, str]: Empty mapping because Rust commands rely on
+            inherited environment variables.
+        """
+
+        return {}
 
 
 __all__ = ["RustRuntime"]

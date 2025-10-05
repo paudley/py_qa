@@ -5,21 +5,28 @@
 from __future__ import annotations
 
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 from pyqa.config import Config
 from pyqa.tools.base import Tool, ToolContext
-from pyqa.tools.builtins import builtin_tools
+from pyqa.tools.builtin_registry import initialize_registry
 from pyqa.tools.registry import ToolRegistry
 
 
 def _tool(name: str) -> Tool:
-    registry = ToolRegistry()
-    for tool in builtin_tools():
-        registry.register(tool)
-    if (result := registry.try_get(name)) is None:
+    registry = _catalog_registry()
+    result = registry.try_get(name)
+    if result is None:
         raise AssertionError(f"Tool {name} missing")
     return result
+
+
+@lru_cache(maxsize=1)
+def _catalog_registry() -> ToolRegistry:
+    registry = ToolRegistry()
+    initialize_registry(registry=registry)
+    return registry
 
 
 def test_ruff_settings_inject_flags(tmp_path: Path) -> None:
@@ -44,10 +51,8 @@ def test_ruff_settings_inject_flags(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--select" in cmd
-    assert "E,F" in cmd
-    assert "--target-version" in cmd
-    assert "py311" in cmd
+    assert "--select" in cmd and "E,F" in cmd
+    assert "--target-version" in cmd and "py311" in cmd
     assert "--config" in cmd
     assert any("ruff.toml" in part for part in cmd)
     assert "--show-source" in cmd
@@ -90,10 +95,8 @@ def test_black_settings_inject_flags(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--line-length" in cmd
-    assert "100" in cmd
-    assert "--target-version" in cmd
-    assert "py311" in cmd
+    assert "--line-length" in cmd and "100" in cmd
+    assert "--target-version" in cmd and "py311" in cmd
     assert "--preview" in cmd
     assert "--diff" in cmd
 
@@ -140,16 +143,32 @@ def test_bandit_settings_extend_command(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--severity-level" in cmd
-    assert "medium" in cmd
-    assert "--confidence-level" in cmd
-    assert "high" in cmd
-    assert "--format" in cmd
-    assert "txt" in cmd
+    assert "--severity-level" in cmd and "medium" in cmd
+    assert "--confidence-level" in cmd and "high" in cmd
+    assert "--format" in cmd and "txt" in cmd
     assert "--baseline" in cmd
     assert "--skip" not in cmd
     assert "--quiet" in cmd
     assert any(str((tmp_path / "custom").resolve()) in part for part in cmd)
+
+
+def test_bandit_defaults_follow_config(tmp_path: Path) -> None:
+    cfg = Config()
+    cfg.severity.bandit_level = "high"
+    cfg.severity.bandit_confidence = "low"
+    cfg.tool_settings["bandit"] = {}
+    tool = _tool("bandit")
+    action = tool.actions[0]
+    ctx = ToolContext(
+        cfg=cfg,
+        root=tmp_path,
+        files=[],
+        settings=cfg.tool_settings["bandit"],
+    )
+
+    cmd = action.build_command(ctx)
+    assert "--severity-level" in cmd and "high" in cmd
+    assert "--confidence-level" in cmd and "low" in cmd
 
 
 def test_isort_settings(tmp_path: Path) -> None:
@@ -174,15 +193,10 @@ def test_isort_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--line-length" in cmd
-    assert "120" in cmd
-    assert "--profile" in cmd
-    assert "black" in cmd
-    assert "--skip" in cmd
-    assert "__init__.py" in cmd
-    src_root = str((tmp_path / "src").resolve())
-    assert "--src" in cmd
-    assert src_root in cmd
+    assert "--line-length" in cmd and "120" in cmd
+    assert "--profile" in cmd and "black" in cmd
+    assert "--skip" in cmd and "__init__.py" in cmd
+    assert "--src" in cmd and str((tmp_path / "src").resolve()) in cmd
     assert "--color" in cmd
 
 
@@ -240,18 +254,13 @@ def test_pylint_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    assert "--rcfile" in cmd
-    assert str(rc) in cmd
-    assert "--disable" in cmd
-    assert "C0114" in cmd
+    assert "--rcfile" in cmd and str(rc) in cmd
+    assert "--disable" in cmd and "C0114" in cmd
     assert "--exit-zero" in cmd
     expected_py = f"{sys.version_info.major}.{sys.version_info.minor}"
-    assert "--py-version" in cmd
-    assert expected_py in cmd
-    assert "--max-complexity" in cmd
-    assert "10" in cmd
-    assert "--max-args" in cmd
-    assert "5" in cmd
+    assert "--py-version" in cmd and expected_py in cmd
+    assert "--max-complexity" in cmd and "10" in cmd
+    assert "--max-args" in cmd and "5" in cmd
 
 
 def test_pylint_init_import_flag(tmp_path: Path) -> None:
@@ -288,7 +297,7 @@ def test_pylint_init_import_false(tmp_path: Path) -> None:
     assert "--init-import=n" in cmd
 
 
-def test_mypy_defaults_include_strict_flags(tmp_path: Path) -> None:
+def test_mypy_defaults_are_standard_mode(tmp_path: Path) -> None:
     cfg = Config()
     tool = _tool("mypy")
     action = tool.actions[0]
@@ -304,7 +313,16 @@ def test_mypy_defaults_include_strict_flags(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    expected_flags = {
+    baseline_flags = {
+        "--show-error-codes",
+        "--show-column-numbers",
+        "--exclude-gitignore",
+        "--sqlite-cache",
+    }
+    for flag in baseline_flags:
+        assert flag in cmd
+
+    strict_flags = {
         "--strict",
         "--warn-unused-ignores",
         "--warn-redundant-casts",
@@ -313,13 +331,63 @@ def test_mypy_defaults_include_strict_flags(tmp_path: Path) -> None:
         "--disallow-any-generics",
         "--check-untyped-defs",
         "--no-implicit-reexport",
-        "--show-error-codes",
-        "--show-column-numbers",
-        "--exclude-gitignore",
-        "--sqlite-cache",
     }
-    for flag in expected_flags:
+    for flag in strict_flags:
+        assert flag not in cmd
+    assert "--ignore-missing-imports" not in cmd
+
+
+def test_mypy_strict_mode_flags(tmp_path: Path) -> None:
+    cfg = Config()
+    cfg.strictness.type_checking = "strict"
+    tool = _tool("mypy")
+    action = tool.actions[0]
+
+    module = tmp_path / "module.py"
+    module.write_text("from typing import Any\n", encoding="utf-8")
+
+    ctx = ToolContext(
+        cfg=cfg,
+        root=tmp_path,
+        files=[module],
+        settings=cfg.tool_settings["mypy"],
+    )
+
+    cmd = action.build_command(ctx)
+    strict_flags = {
+        "--strict",
+        "--warn-unused-ignores",
+        "--warn-redundant-casts",
+        "--warn-unreachable",
+        "--disallow-untyped-decorators",
+        "--disallow-any-generics",
+        "--check-untyped-defs",
+        "--no-implicit-reexport",
+    }
+    for flag in strict_flags:
         assert flag in cmd
+    assert "--ignore-missing-imports" not in cmd
+
+
+def test_mypy_lenient_mode_enables_ignore_missing(tmp_path: Path) -> None:
+    cfg = Config()
+    cfg.strictness.type_checking = "lenient"
+    tool = _tool("mypy")
+    action = tool.actions[0]
+
+    module = tmp_path / "module.py"
+    module.write_text("from typing import Any\n", encoding="utf-8")
+
+    ctx = ToolContext(
+        cfg=cfg,
+        root=tmp_path,
+        files=[module],
+        settings=cfg.tool_settings["mypy"],
+    )
+
+    cmd = action.build_command(ctx)
+    assert "--strict" not in cmd
+    assert "--ignore-missing-imports" in cmd
 
 
 def test_mypy_defaults_python_version(tmp_path: Path) -> None:
@@ -383,11 +451,8 @@ def test_pyright_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    project_file = str((tmp_path / "pyprojectconfig.json").resolve())
-    assert "--project" in cmd
-    assert project_file in cmd
-    assert "--pythonversion" in cmd
-    assert "3.11" in cmd
+    assert "--project" in cmd and str((tmp_path / "pyprojectconfig.json").resolve()) in cmd
+    assert "--pythonversion" in cmd and "3.11" in cmd
     assert "--warnings" in cmd
 
 
@@ -475,13 +540,9 @@ def test_eslint_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    eslint_config = str((tmp_path / "eslint.config.js").resolve())
-    assert "--config" in cmd
-    assert eslint_config in cmd
-    assert "--ext" in cmd
-    assert ".ts" in cmd
-    assert "--max-warnings" in cmd
-    assert "0" in cmd
+    assert "--config" in cmd and str((tmp_path / "eslint.config.js").resolve()) in cmd
+    assert "--ext" in cmd and ".ts" in cmd
+    assert "--max-warnings" in cmd and "0" in cmd
     assert "--cache" in cmd
     assert "--no-inline-config" in cmd
 
@@ -508,14 +569,10 @@ def test_prettier_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    prettier_config = str((tmp_path / "prettier.config.cjs").resolve())
-    assert "--config" in cmd
-    assert prettier_config in cmd
+    assert "--config" in cmd and str((tmp_path / "prettier.config.cjs").resolve()) in cmd
     assert "--single-quote" in cmd
-    assert "--tab-width" in cmd
-    assert "2" in cmd
-    assert "--parser" in cmd
-    assert "typescript" in cmd
+    assert "--tab-width" in cmd and "2" in cmd
+    assert "--parser" in cmd and "typescript" in cmd
     assert "--no-error-on-unmatched-pattern" in cmd
 
 
@@ -538,10 +595,37 @@ def test_tsc_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    tsconfig = str((tmp_path / "tsconfig.json").resolve())
-    assert "--project" in cmd
-    assert tsconfig in cmd
+    assert "--project" in cmd and str((tmp_path / "tsconfig.json").resolve()) in cmd
     assert "--watch" in cmd
+
+
+def test_tsc_defaults_follow_strictness(tmp_path: Path) -> None:
+    cfg = Config()
+    cfg.strictness.type_checking = "strict"
+    tool = _tool("tsc")
+    action = tool.actions[0]
+    ctx = ToolContext(
+        cfg=cfg,
+        root=tmp_path,
+        files=[],
+        settings=cfg.tool_settings.setdefault("tsc", {}),
+    )
+
+    cmd = action.build_command(ctx)
+    assert "--strict" in cmd
+
+    cfg_lenient = Config()
+    cfg_lenient.tool_settings.pop("tsc", None)
+    cfg_lenient.strictness.type_checking = "lenient"
+    ctx_lenient = ToolContext(
+        cfg=cfg_lenient,
+        root=tmp_path,
+        files=[],
+        settings=cfg_lenient.tool_settings.setdefault("tsc", {}),
+    )
+
+    cmd_lenient = action.build_command(ctx_lenient)
+    assert "--strict" not in cmd_lenient
 
 
 def test_golangci_settings(tmp_path: Path) -> None:
@@ -565,12 +649,7 @@ def test_golangci_settings(tmp_path: Path) -> None:
     )
 
     cmd = action.build_command(ctx)
-    golangci = str((tmp_path / "golangci.yml").resolve())
-    assert "--config" in cmd
-    assert golangci in cmd
-    assert "--enable" in cmd
-    assert "gofmt" in cmd
-    assert "--disable" in cmd
-    assert "lll" in cmd
-    assert "--deadline" in cmd
-    assert "2m" in cmd
+    assert "--config" in cmd and str((tmp_path / "golangci.yml").resolve()) in cmd
+    assert "--enable" in cmd and "gofmt" in cmd
+    assert "--disable" in cmd and "lll" in cmd
+    assert "--deadline" in cmd and "2m" in cmd

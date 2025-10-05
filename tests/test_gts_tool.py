@@ -6,8 +6,24 @@ from __future__ import annotations
 from pathlib import Path
 
 from pyqa.config import Config, ExecutionConfig, OutputConfig
+from pyqa.tooling import ToolCatalogLoader
+from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import GtsCommand
+
+_PYQA_ROOT = Path(__file__).resolve().parents[1]
+_CATALOG_ROOT = _PYQA_ROOT / "tooling" / "catalog"
+
+
+def _gts_config(action: str) -> dict[str, object]:
+    loader = ToolCatalogLoader(catalog_root=_CATALOG_ROOT)
+    snapshot = loader.load_snapshot()
+    for definition in snapshot.tools:
+        if definition.name != "gts":
+            continue
+        for candidate in definition.actions:
+            if candidate.name == action:
+                return dict(candidate.command.reference.config)
+    raise AssertionError(f"gts command configuration for action '{action}' missing from catalog")
 
 
 def _context(tmp_path: Path) -> ToolContext:
@@ -18,21 +34,13 @@ def _context(tmp_path: Path) -> ToolContext:
 
 
 def test_gts_command_adds_files_and_json_format(tmp_path: Path) -> None:
-    files = [tmp_path / "src" / "index.ts"]
-    ctx = ToolContext(
-        cfg=Config(),
-        root=tmp_path,
-        files=files,
-        settings={},
-    )
-    action = ToolAction(
-        name="lint",
-        command=GtsCommand(base=("gts", "lint", "--", "--format", "json")),
-        append_files=True,
-    )
-    built = action.build_command(ctx)
-    assert tuple(built[:5]) == ("gts", "lint", "--", "--format", "json")
-    assert built[-1] == str(files[0])
+    ctx = _context(tmp_path)
+    builder = command_option_map(_gts_config("lint"))
+    action = ToolAction(name="lint", command=builder)
+
+    command = action.build_command(ctx)
+    assert tuple(command[:5]) == ("gts", "lint", "--", "--format", "json")
+    assert command[-1].endswith("index.ts")
 
 
 def test_gts_command_with_settings(tmp_path: Path) -> None:
@@ -44,10 +52,8 @@ def test_gts_command_with_settings(tmp_path: Path) -> None:
         files=[],
         settings={"config": config_path, "project": project_path, "args": ["--quiet"]},
     )
-    command = GtsCommand(base=("gts", "lint", "--", "--format", "json"))
-    built = command.build(ctx)
-    assert "--config" in built
-    assert str(config_path) in built
-    assert "--project" in built
-    assert str(project_path) in built
-    assert built[-1] == "--quiet"
+    builder = command_option_map(_gts_config("lint"))
+    command = builder.build(ctx)
+    assert "--config" in command and str(config_path.resolve()) in command
+    assert "--project" in command and str(project_path.resolve()) in command
+    assert command[-1] == "--quiet"

@@ -8,6 +8,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .filesystem.paths import normalise_path_key, normalize_path_key
+
 
 @dataclass(slots=True)
 class FileMetrics:
@@ -17,6 +19,8 @@ class FileMetrics:
     suppressions: dict[str, int] = field(default_factory=dict)
 
     def to_payload(self) -> dict[str, object]:
+        """Serialise the metrics into a JSON-compatible mapping."""
+
         return {
             "line_count": self.line_count,
             "suppressions": dict(self.suppressions),
@@ -24,6 +28,15 @@ class FileMetrics:
 
     @classmethod
     def from_payload(cls, payload: dict[str, object] | None) -> FileMetrics:
+        """Create :class:`FileMetrics` from a payload produced by :meth:`to_payload`.
+
+        Args:
+            payload: Mapping produced by :meth:`to_payload` or ``None``.
+
+        Returns:
+            FileMetrics: Metrics instance populated from the payload.
+        """
+
         if not isinstance(payload, dict):
             return cls()
         raw_line = payload.get("line_count", 0)
@@ -48,6 +61,8 @@ class FileMetrics:
         return cls(line_count=line_count, suppressions=suppressions)
 
     def ensure_labels(self) -> None:
+        """Ensure that every known suppression label is present in the map."""
+
         for label in SUPPRESSION_LABELS:
             self.suppressions.setdefault(label, 0)
 
@@ -80,18 +95,11 @@ def compute_file_metrics(path: Path) -> FileMetrics:
     return metrics
 
 
-def normalise_path_key(path: Path) -> str:
-    """Return a canonical string key for *path* suitable for metric caches."""
-    try:
-        return str(path.resolve())
-    except OSError:
-        return str(path)
-
-
 __all__ = [
     "SUPPRESSION_LABELS",
     "SUPPRESSION_PATTERNS",
     "FileMetrics",
     "compute_file_metrics",
     "normalise_path_key",
+    "normalize_path_key",
 ]

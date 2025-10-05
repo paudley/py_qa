@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "gofmt",
+  "description": "Go formatter.",
+  "languages": ["go"],
+  "phase": "lint",
+  "runtime": {
+    "type": "binary",
+    "versionCommand": ["go", "version"]
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to gofmt."
+    }
+  ],
+  "actions": [
+    {
+      "name": "format",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["gofmt", "-w"],
+          "appendFiles": false,
+          "options": [{ "setting": "args", "type": "args" }]
+        }
+      },
+      "isFix": true,
+      "description": "Format Go source files with gofmt."
+    },
+    {
+      "name": "check",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["gofmt", "-l"],
+          "appendFiles": false,
+          "options": [{ "setting": "args", "type": "args" }]
+        }
+      },
+      "description": "List Go files requiring gofmt.",
+      "parser": {
+        "strategy": "parser_text",
+        "config": {
+          "transform": "pyqa.tools.builtin_helpers._parse_gofmt_check"
+        }
+      }
+    }
+  ],
+  "fileExtensions": [".go"],
+  "documentation": {
+    "help": {
+      "path": "docs/gofmt_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/gofmt_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

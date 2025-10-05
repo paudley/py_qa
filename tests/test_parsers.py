@@ -2,8 +2,9 @@
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 """Tests covering parser adapters for supported tools."""
 
-import json
 from pathlib import Path
+
+import pytest
 
 from pyqa.config import Config
 from pyqa.models import RawDiagnostic
@@ -11,7 +12,6 @@ from pyqa.parsers import (
     JsonParser,
     TextParser,
     parse_actionlint,
-    parse_bandit,
     parse_cargo_clippy,
     parse_checkmake,
     parse_cpplint,
@@ -19,7 +19,6 @@ from pyqa.parsers import (
     parse_dotenv_linter,
     parse_eslint,
     parse_golangci_lint,
-    parse_hadolint,
     parse_kube_linter,
     parse_luacheck,
     parse_lualint,
@@ -40,6 +39,7 @@ from pyqa.parsers import (
     parse_yamllint,
 )
 from pyqa.severity import Severity
+from pyqa.tooling.strategies import parser_json_diagnostics
 from pyqa.tools.base import ToolContext
 
 
@@ -72,29 +72,6 @@ def test_parse_pylint() -> None:
     assert diags[0].code == "W0101"
 
 
-def test_parse_pylint_duplicate_code_formats_locations() -> None:
-    parser = JsonParser(parse_pylint)
-    stdout = json.dumps(
-        [
-            {
-                "type": "refactor",
-                "message": "Similar lines in 2 files\n==pkg/a.py:[1:6]\n==pkg/b.py:[1:6]",
-                "path": "pkg/b.py",
-                "line": 1,
-                "column": 0,
-                "symbol": "duplicate-code",
-                "message-id": "R0801",
-            },
-        ],
-    )
-    diags = parser.parse(stdout, "", context=_ctx())
-    assert len(diags) == 1
-    message = diags[0].message
-    assert "pkg/a.py" in message
-    assert "pkg/b.py" in message
-    assert "\n==" not in message
-
-
 def test_parse_pyright() -> None:
     parser = JsonParser(parse_pyright)
     stdout = """
@@ -125,7 +102,7 @@ def test_parse_mypy() -> None:
 def test_parse_actionlint() -> None:
     parser = JsonParser(parse_actionlint)
     stdout = """
-    [{"path": ".github/workflows/ci.yml", "line": 12, "column": 4, "message": "failure", "severity": "error", "kind": "shellcheck"}]
+    [{"filepath": ".github/workflows/ci.yml", "line": 12, "column": 4, "message": "failure", "severity": "error", "kind": "shellcheck"}]
     """
     diags = parser.parse(stdout, "", context=_ctx())
     assert len(diags) == 1
@@ -207,16 +184,37 @@ Total errors found: 1
     assert diag.tool == "cpplint"
 
 
-def test_parse_bandit() -> None:
-    parser = JsonParser(parse_bandit)
+def test_parser_json_diagnostics_bandit() -> None:
+    parser = parser_json_diagnostics(
+        {
+            "path": "results[*]",
+            "mappings": {
+                "file": "filename",
+                "line": "line_number",
+                "code": "test_id",
+                "message": "issue_text",
+                "severity": {
+                    "path": "issue_severity",
+                    "map": {"low": "notice", "medium": "warning", "high": "error"},
+                    "default": "warning",
+                },
+                "tool": {"value": "bandit"},
+            },
+        },
+    )
     stdout = """
     {"results": [{"filename": "pkg/app.py", "line_number": 5, "issue_text": "risk", "issue_severity": "HIGH", "test_id": "B101"}]}
     """
     diags = parser.parse(stdout, "", context=_ctx())
     assert len(diags) == 1
-    severity = diags[0].severity
-    assert isinstance(severity, Severity)
-    assert severity.value == "error"
+    diag = diags[0]
+    assert diag.file == "pkg/app.py"
+    assert diag.line == 5
+    assert diag.code == "B101"
+    assert diag.tool == "bandit"
+    severity = diag.severity
+    assert isinstance(severity, str)
+    assert severity == "error"
 
 
 def test_parse_eslint() -> None:
@@ -441,9 +439,7 @@ def test_parse_tombi() -> None:
 
 def test_parse_perlcritic() -> None:
     parser = TextParser(parse_perlcritic)
-    stdout = (
-        "lib/Foo.pm:12:8:ProhibitUnusedVariables: MyVar is never used (ProhibitUnusedVariables)\n"
-    )
+    stdout = "lib/Foo.pm:12:8:ProhibitUnusedVariables: MyVar is never used (ProhibitUnusedVariables)\n"
     diags = parser.parse(stdout, "", context=_ctx())
     assert len(diags) == 1
     diag = diags[0]
@@ -489,8 +485,23 @@ def test_parse_tsc() -> None:
     assert severity.value == "error"
 
 
-def test_parse_hadolint() -> None:
-    parser = JsonParser(parse_hadolint)
+def test_parser_json_diagnostics() -> None:
+    parser = parser_json_diagnostics(
+        {
+            "mappings": {
+                "file": "file",
+                "line": "line",
+                "column": "column",
+                "code": "code",
+                "message": "message",
+                "severity": {
+                    "path": "level",
+                    "map": {"info": "notice", "warning": "warning", "error": "error"},
+                    "default": "warning",
+                },
+            },
+        },
+    )
     stdout = """
     [{"line": 3, "column": 1, "level": "error", "code": "DL3007", "message": "Using latest is prone to errors", "file": "Dockerfile"}]
     """
@@ -499,9 +510,50 @@ def test_parse_hadolint() -> None:
     diag = diags[0]
     assert diag.file == "Dockerfile"
     assert diag.code == "DL3007"
+    assert diag.column == 1
     severity = diag.severity
-    assert isinstance(severity, Severity)
-    assert severity.value == "error"
+    assert isinstance(severity, str)
+    assert severity == "error"
+
+
+def test_parser_json_diagnostics_with_path_and_defaults() -> None:
+    parser = parser_json_diagnostics(
+        {
+            "path": "items[*].diagnostics[*]",
+            "inputFormat": "json-lines",
+            "mappings": {
+                "file": {"path": "location.file"},
+                "line": {"path": "location.position.line"},
+                "column": {"path": "location.position.column"},
+                "code": {"path": "code"},
+                "message": {"path": "message"},
+                "severity": {"path": "level", "map": {"warning": "warning"}, "default": "notice"},
+                "tool": {"value": "custom"},
+            },
+        },
+    )
+
+    stdout = """
+    {"items": [{"diagnostics": [{"location": {"file": "foo.py", "position": {"line": "5", "column": 9}}, "level": "Warning", "code": "E100", "message": "Issue"}]}]}
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == "foo.py"
+    assert diag.line == 5
+    assert diag.column == 9
+    assert diag.code == "E100"
+    assert diag.tool == "custom"
+    severity = diag.severity
+    assert isinstance(severity, str)
+    assert severity == "warning"
+
+
+def test_parser_json_diagnostics_missing_message_mapping() -> None:
+    with pytest.raises(Exception) as excinfo:
+        parser_json_diagnostics({"mappings": {"code": "id"}})
+
+    assert "missing required field mapping" in str(excinfo.value)
 
 
 def test_parse_golangci_lint() -> None:

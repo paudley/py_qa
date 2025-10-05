@@ -14,10 +14,10 @@ Every line of code generated must be built upon four pillars, which collectively
 
 1. **Strictness**: All code must be provably correct through static analysis. Ambiguity is considered an error. This principle is enforced through mandatory compliance with mypy --strict 1 and a zero-tolerance policy for
    pylint warnings.2 The goal is to eliminate an entire class of runtime errors before the code is ever executed.
-1. **Explicitness**: Code must be self-documenting. Dependencies, data contracts, and control flow must be immediately obvious from reading the code itself. This aligns with the "Zen of Python" principle, "Explicit is better than implicit" 3, and is the primary justification for forbidding ambiguous patterns like
+2. **Explicitness**: Code must be self-documenting. Dependencies, data contracts, and control flow must be immediately obvious from reading the code itself. This aligns with the "Zen of Python" principle, "Explicit is better than implicit" 3, and is the primary justification for forbidding ambiguous patterns like
    typing.Any.
-1. **Robustness**: Code must anticipate and gracefully handle failure, especially at system boundaries where it interacts with external data or services. This principle mandates the use of robust parsing libraries like tolerantjson 4 and data validation frameworks like Pydantic 5 to create a secure perimeter around the core application logic.
-1. **Testability**: All code must be designed for complete, automated verification. Testability is a primary design constraint, not an afterthought. This is enforced by the mandate for 100% test coverage, which in turn dictates specific architectural patterns.6
+3. **Robustness**: Code must anticipate and gracefully handle failure, especially at system boundaries where it interacts with external data or services. This principle mandates the use of robust parsing libraries like tolerantjson 4 and data validation frameworks like Pydantic 5 to create a secure perimeter around the core application logic.
+4. **Testability**: All code must be designed for complete, automated verification. Testability is a primary design constraint, not an afterthought. This is enforced by the mandate for 100% test coverage, which in turn dictates specific architectural patterns.6
 
 The interaction between these pillars is more important than any single rule. For instance, the requirement for 100% test coverage is nearly impossible to achieve for code that tightly couples its components, such as a function that directly instantiates a database connection within its own body.7 This strict testing requirement serves as a forcing function; it makes brittle patterns difficult or impossible to implement correctly, thereby compelling the adoption of superior, decoupled architectural patterns. To achieve full test coverage, components must be testable in isolation. This isolation is most effectively achieved through decoupling, and the designated pattern for this is Dependency Injection.6 Therefore, the 100% test coverage rule implicitly mandates Dependency Injection as a core architectural pattern. The system is designed so that the only path to compliance is through high-quality design.
 
@@ -31,12 +31,12 @@ All application source code MUST reside within a src directory. This standard pr
 
 An example project structure is as follows:
 
-project_name/
+project\_name/
 ├──.gitignore
 ├── pyproject.toml # Central tool configuration
 ├── README.md
 ├── src/
-│ └── my_package/
+│ └── my\_package/
 │ ├── \_\_init\_\_.py
 │ ├── api/
 │ │ ├── \_\_init\_\_.py
@@ -46,11 +46,11 @@ project_name/
 │ │ └── logic.py
 │ └── models/
 │ ├── \_\_init\_\_.py
-│ └── data_models.py
+│ └── data\_models.py
 ├── tests/
 │ ├── \_\_init\_\_.py
-│ ├── test_logic.py
-│ └── test_endpoints.py
+│ ├── test\_logic.py
+│ └── test\_endpoints.py
 └── scripts/
 └── task.py
 
@@ -64,20 +64,20 @@ tests/ directory mirrors the structure of the src/ directory, ensuring a logical
 
 Adherence to consistent naming conventions is required for readability and predictability.14
 
-- **Packages and Modules**: Use lower_case_with_underscores. Names must be short and descriptive. Dashes (-) are forbidden in module names.11
-- **Classes**: Use CapWords (also known as CamelCase).14
-- **Functions, Methods, and Variables**: Use lower_case_with_underscores.14
-- **Constants**: Use ALL_CAPS_WITH_UNDERSCORES.14
-- **Test Files and Functions**: Files must be prefixed with test\_ (e.g., test_logic.py). Test functions within those files must also be prefixed with test\_.2
+* **Packages and Modules**: Use lower\_case\_with\_underscores. Names must be short and descriptive. Dashes (-) are forbidden in module names.11
+* **Classes**: Use CapWords (also known as CamelCase).14
+* **Functions, Methods, and Variables**: Use lower\_case\_with\_underscores.14
+* **Constants**: Use ALL\_CAPS\_WITH\_UNDERSCORES.14
+* **Test Files and Functions**: Files must be prefixed with test\_ (e.g., test\_logic.py). Test functions within those files must also be prefixed with test\_.2
 
 ### **Modularity and File Size**
 
 To ensure maintainability, code must be modular.
 
-- **File Size**: Source files MUST NOT exceed 2000 lines of code. This is a hard limit.
-- **Function Size**: Functions must be small and adhere to the Single Responsibility Principle.15 If a function's logic becomes complex, it MUST be refactored into smaller, private helper functions (e.g.,
-  \_helper_function).
-- **Module Cohesion**: Modules must be highly cohesive, grouping related functionality. For instance, all Pydantic models related to a specific domain (e.g., "user") should be grouped in a dedicated module like src/my_package/models/user_models.py.11
+* **File Size**: Source files MUST NOT exceed 2000 lines of code. This is a hard limit.
+* **Function Size**: Functions must be small and adhere to the Single Responsibility Principle.15 If a function's logic becomes complex, it MUST be refactored into smaller, private helper functions (e.g.,
+  \_helper\_function).
+* **Module Cohesion**: Modules must be highly cohesive, grouping related functionality. For instance, all Pydantic models related to a specific domain (e.g., "user") should be grouped in a dedicated module like src/my\_package/models/user\_models.py.11
 
 ## **Static Analysis and Type System**
 
@@ -93,48 +93,48 @@ black code formatter.19
 
 All code MUST be statically type-checked with mypy --strict enabled.1 This is the cornerstone of the "Strictness" principle. The
 
-mypy.ini configuration file will enforce this flag along with others, such as warn_redundant_casts and warn_unused_ignores, to maintain a clean and precise typescape.20
+mypy.ini configuration file will enforce this flag along with others, such as warn\_redundant\_casts and warn\_unused\_ignores, to maintain a clean and precise typescape.20
 
 ### **The No-Any, No-Union Mandate**
 
 To ensure the integrity of the type system, certain ambiguous type hints are strictly forbidden.
 
-- **Prohibition of typing.Any**: The Any type is forbidden. It acts as an escape hatch that silently disables type checking, violating the principles of Strictness and Explicitness.20 Instead, one of the following explicit alternatives MUST be used.
-- **Prohibition of typing.Union / |**: The Union type is forbidden for defining collections of different complex object types. This pattern leads to brittle conditional logic (if isinstance(...)) scattered throughout the codebase, making it difficult to maintain and reason about. Specific, more robust alternatives are required.
+* **Prohibition of typing.Any**: The Any type is forbidden. It acts as an escape hatch that silently disables type checking, violating the principles of Strictness and Explicitness.20 Instead, one of the following explicit alternatives MUST be used.
+* **Prohibition of typing.Union / |**: The Union type is forbidden for defining collections of different complex object types. This pattern leads to brittle conditional logic (if isinstance(...)) scattered throughout the codebase, making it difficult to maintain and reason about. Specific, more robust alternatives are required.
 
-The type system should be used as a design tool to create explicit data contracts and state machines. For example, a function signature like def process(data: Union) creates a weak contract that forces the implementation to perform runtime checks. A superior approach is to model this as a Pydantic discriminated union, where a common field (e.g., animal_type: Literal['cat', 'dog']) is used to distinguish between models. Pydantic handles the validation, and the application logic can use pattern matching (match animal: case Cat():...) on a guaranteed, unambiguous type. This moves the state-checking logic to the data validation boundary, where it belongs.
+The type system should be used as a design tool to create explicit data contracts and state machines. For example, a function signature like def process(data: Union) creates a weak contract that forces the implementation to perform runtime checks. A superior approach is to model this as a Pydantic discriminated union, where a common field (e.g., animal\_type: Literal\['cat', 'dog']) is used to distinguish between models. Pydantic handles the validation, and the application logic can use pattern matching (match animal: case Cat():...) on a guaranteed, unambiguous type. This moves the state-checking logic to the data validation boundary, where it belongs.
 
 The following table provides a non-negotiable mapping of forbidden types to their mandatory alternatives.
 
 | Forbidden Type                     | Reason for Prohibition                                                        | Recommended Alternative(s)                                                                                                   | Example                                         |
 | :--------------------------------- | :---------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------- |
 | typing.Any                         | Defeats static analysis; creates type holes that hide bugs.                   | typing.TypeVar (for generics), typing.Protocol (for structural contracts), object (with mandatory isinstance checks).        | def process(item: T) -> T:                      |
-| typing.Union (for complex objects) | Creates ambiguous branching logic (if/else on type); promotes weak contracts. | Pydantic Discriminated Unions (using Literal), typing.Literal (for simple values), or separate functions for distinct types. | class Model(BaseModel): type: Literal['a', 'b'] |
+| typing.Union (for complex objects) | Creates ambiguous branching logic (if/else on type); promotes weak contracts. | Pydantic Discriminated Unions (using Literal), typing.Literal (for simple values), or separate functions for distinct types. | class Model(BaseModel): type: Literal\['a', 'b'] |
 
 ### **Mandatory Use of Final and Literal**
 
 To further enhance the principles of Strictness and Explicitness, the use of typing.Final and typing.Literal is mandatory wherever applicable.
 
-- **typing.Final for Constants**: Any variable that is not intended to be reassigned after its initial declaration MUST be marked as Final. This applies to all module-level and class-level constants. While Python's convention is to use ALL_CAPS for constants, typing.Final provides a contract that static type checkers like mypy will enforce, preventing accidental reassignment.21 This transforms a style convention into a verifiable rule.
+* **typing.Final for Constants**: Any variable that is not intended to be reassigned after its initial declaration MUST be marked as Final. This applies to all module-level and class-level constants. While Python's convention is to use ALL\_CAPS for constants, typing.Final provides a contract that static type checkers like mypy will enforce, preventing accidental reassignment.21 This transforms a style convention into a verifiable rule.
   Python
   \# MANDATORY PATTERN
   from typing import Final
 
-  API_ENDPOINT: Final[str] = "https://api.example.com/v1"
-  TIMEOUT_SECONDS: Final = 30 # Type is inferred as Literal[21]
+  API\_ENDPOINT: Final\[str] = "https://api.example.com/v1"
+  TIMEOUT\_SECONDS: Final = 30 # Type is inferred as Literal\[21]
 
   Note that Final only prevents the name from being re-bound; it does not make the assigned value immutable. For mutable collections, use immutable counterparts (e.g., tuple instead of list) where appropriate.21
 
-- **typing.Literal for Specific Choices**: When a function argument or variable is expected to be one of a fixed set of specific string or integer values, typing.Literal MUST be used instead of str or int. This provides a much more precise contract than a simple type hint and allows static analysis tools to catch errors if an invalid value is used.32 It is superior to using enums for simple value sets as it works directly with primitive types.
+* **typing.Literal for Specific Choices**: When a function argument or variable is expected to be one of a fixed set of specific string or integer values, typing.Literal MUST be used instead of str or int. This provides a much more precise contract than a simple type hint and allows static analysis tools to catch errors if an invalid value is used.32 It is superior to using enums for simple value sets as it works directly with primitive types.
   Python
   \# MANDATORY PATTERN
   from typing import Literal
 
-  def set_align(align: Literal["left", "center", "right"]) -> None:
+  def set\_align(align: Literal\["left", "center", "right"]) -> None:
   ...
 
-  set_align("center") # OK
-  set_align("top") # ERROR: mypy will flag this
+  set\_align("center") # OK
+  set\_align("top") # ERROR: mypy will flag this
 
   This practice eliminates ambiguity and makes function signatures self-documenting regarding the exact values they accept.
 
@@ -142,9 +142,9 @@ To further enhance the principles of Strictness and Explicitness, the use of typ
 
 All generated code must use modern Python 3.12 typing syntax to improve clarity and leverage new static analysis capabilities.21
 
-- **PEP 695 Type Parameter Syntax**: All generic functions and classes MUST use the new def func(...) and class MyClass: syntax. The older T = TypeVar('T') syntax is disallowed.21
-- **@override Decorator**: All methods that intentionally override a method from a parent class MUST be decorated with @typing.override. This allows mypy to catch subtle bugs that arise from refactoring or typos in method names.21
-- **Type Aliases**: The type keyword MUST be used for creating type aliases (e.g., type UserID = int). This syntax is clearer and more explicit than a simple variable assignment.21
+* **PEP 695 Type Parameter Syntax**: All generic functions and classes MUST use the new def func(...) and class MyClass: syntax. The older T = TypeVar('T') syntax is disallowed.21
+* **@override Decorator**: All methods that intentionally override a method from a parent class MUST be decorated with @typing.override. This allows mypy to catch subtle bugs that arise from refactoring or typos in method names.21
+* **Type Aliases**: The type keyword MUST be used for creating type aliases (e.g., type UserID = int). This syntax is clearer and more explicit than a simple variable assignment.21
 
 ## **Data Handling: The "Airlock" Pattern**
 
@@ -158,11 +158,11 @@ dict or list). A tolerantjson.ParseException must be handled at this boundary an
 
 ### **Stage 2: Strict Semantic Validation**
 
-The Python object produced by tolerantjson MUST be immediately passed to a Pydantic model for full validation using the YourModel.model_validate() method.24 All complex data structures that represent data transfer objects (DTOs), configuration, or any other defined data contract MUST be defined as Pydantic models inheriting from
+The Python object produced by tolerantjson MUST be immediately passed to a Pydantic model for full validation using the YourModel.model\_validate() method.24 All complex data structures that represent data transfer objects (DTOs), configuration, or any other defined data contract MUST be defined as Pydantic models inheriting from
 
 BaseModel.5 These models are the canonical definition of data within the application, responsible for type coercion, constraint validation (e.g.,
 
-min_length, pattern), and generating clear ValidationError messages for invalid data.25 Specialized Pydantic types like
+min\_length, pattern), and generating clear ValidationError messages for invalid data.25 Specialized Pydantic types like
 
 EmailStr should be used where applicable to leverage built-in validation logic.5
 
@@ -176,7 +176,7 @@ The design of core business logic must prioritize clarity, maintainability, and,
 
 Functions must adhere to the Single Responsibility Principle, meaning they should be small, focused, and have descriptive names that clearly state their purpose.18 Pure functions, which have no side effects, are preferred as they are inherently easier to test and reason about. Classes should be used to encapsulate state and the behavior that operates on that state. Functions not intended for use outside the module MUST be prefixed with a single underscore (
 
-\_) to mark them as internal or "private" (e.g., \_helper_function). This convention clearly communicates the function's intended scope and prevents accidental external use. 2
+\_) to mark them as internal or "private" (e.g., \_helper\_function). This convention clearly communicates the function's intended scope and prevents accidental external use. 2
 
 ### **Mandatory Dependency Injection**
 
@@ -187,7 +187,7 @@ To facilitate the 100% test coverage requirement, all dependencies—such as dat
 Python
 
 \# MANDATORY PATTERN
-from some_db_library import DatabaseClient
+from some\_db\_library import DatabaseClient
 from.models import User
 
 class UserService:
@@ -226,7 +226,7 @@ pytest fixtures must be used for setting up test preconditions and managing test
 
 Every line of application code within the src/ directory must be covered by automated tests. This will be enforced by CI/CD pipelines using pytest-cov and configured to fail the build if coverage drops below 100% (--cov-fail-under=100).17 Trivial code, such as simple
 
-\_\_repr\_\_ methods or code inside an if TYPE_CHECKING: block, may be excluded from coverage, but any such exclusion must be explicitly configured and justified.
+\_\_repr\_\_ methods or code inside an if TYPE\_CHECKING: block, may be excluded from coverage, but any such exclusion must be explicitly configured and justified.
 
 ### **Mocking and Isolation**
 
@@ -265,8 +265,8 @@ ValueError: If \`param1\` is an empty string.
 
 Inline comments (#) should be used sparingly. Their purpose is to explain the "why" behind a piece of code, not the "what." Use them to clarify complex algorithms, document business logic decisions that are not obvious from the code, or explain workarounds for external system quirks.14
 
-- **Bad**: # Loop through items
-- **Good**: # Process items in reverse to avoid index shifting on deletion
+* **Bad**: # Loop through items
+* **Good**: # Process items in reverse to avoid index shifting on deletion
 
 ## **Tooling Configuration**
 
@@ -278,16 +278,16 @@ The pyproject.toml file serves as the central configuration hub for project meta
 
 Ini, TOML
 
-[tool.pytest.ini_options]
+\[tool.pytest.ini\_options]
 \# Fail the build if test coverage is below 100%
 addopts = "--cov=src --cov-report=term-missing --cov-fail-under=100"
-testpaths = ["tests"]
+testpaths = \["tests"]
 
-[tool.mypy]
+\[tool.mypy]
 \# Point to the mypy configuration file
-config_file = "mypy.ini"
+config\_file = "mypy.ini"
 
-[tool.pylint]
+\[tool.pylint]
 \# Point to the pylint configuration file
 rcfile = ".pylintrc"
 
@@ -297,18 +297,18 @@ This file configures mypy to enforce the strict type system.
 
 Ini, TOML
 
-[mypy]
-python_version = 3.12
+\[mypy]
+python\_version = 3.12
 strict = True
-warn_unused_configs = True
-warn_redundant_casts = True
-warn_unused_ignores = True
+warn\_unused\_configs = True
+warn\_redundant\_casts = True
+warn\_unused\_ignores = True
 
 \# Exclude test files from certain strict checks if necessary,
 \# as test code often involves patterns that are intentionally
 \# dynamic for mocking purposes.
-[mypy-tests.\*]
-disallow_untyped_defs = False
+\[mypy-tests.\*]
+disallow\_untyped\_defs = False
 
 ### **.pylintrc**
 

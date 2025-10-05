@@ -5,43 +5,39 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import Annotated
 
 import typer
 
-from ..hooks import install_hooks
-from ..logging import fail
+from ._hooks_cli_models import Depends, HookCLIOptions, build_hook_options
+from ._hooks_cli_services import emit_hooks_summary, perform_installation
+from .shared import CLIError, build_cli_logger, register_callback
 from .typer_ext import create_typer
 
 hooks_app = create_typer(
     name="install-hooks",
     help="Install py-qa git hooks (pre-commit, pre-push, commit-msg).",
+    invoke_without_command=True,
 )
 
 
-@hooks_app.callback(invoke_without_command=True)
+@register_callback(hooks_app, invoke_without_command=True)
 def main(
-    ctx: typer.Context,
-    root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Repository root."),
-    hooks_dir: Path = typer.Option(
-        Path(".git/hooks"),
-        "--hooks-dir",
-        help="Overrides the hooks directory.",
-    ),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show actions without modifying files."),
+    options: Annotated[HookCLIOptions, Depends(build_hook_options)],
 ) -> None:
-    if ctx.invoked_subcommand:
-        return
+    """Install py-qa git hooks for the current repository.
 
+    Args:
+        options: Normalized CLI options containing installer directives.
+    """
+
+    logger = build_cli_logger(emoji=options.emoji)
     try:
-        install_hooks(
-            root,
-            hooks_dir=hooks_dir if hooks_dir != Path(".git/hooks") else None,
-            dry_run=dry_run,
-        )
-    except FileNotFoundError as exc:
-        fail(str(exc), use_emoji=True)
-        raise typer.Exit(code=1) from exc
+        result = perform_installation(options, logger=logger)
+    except CLIError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+
+    emit_hooks_summary(result, options, logger=logger)
     raise typer.Exit(code=0)
 
 

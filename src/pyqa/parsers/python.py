@@ -4,72 +4,86 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
-from pathlib import Path
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, Final
 
 from ..models import RawDiagnostic
-from ..path_utils import normalize_reported_path
 from ..severity import Severity, severity_from_code
 from ..tools.base import ToolContext
+from .base import (
+    DiagnosticDetails,
+    DiagnosticLocation,
+    append_diagnostic,
+    iter_dicts,
+)
 
 
 def parse_ruff(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse Ruff JSON output into raw diagnostics."""
-    items: Iterable[dict[str, Any]]
-    if isinstance(payload, dict):
-        items = payload.get("diagnostics", [])  # for future compatibility
-    elif isinstance(payload, list):
-        items = [item for item in payload if isinstance(item, dict)]
-    else:
-        items = []
+    """Parse Ruff JSON output into raw diagnostics.
 
+    Args:
+        payload: JSON payload returned by Ruff.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Normalised diagnostics representing Ruff findings.
+    """
+    del context
     results: list[RawDiagnostic] = []
-    for item in items:
-        filename = normalize_reported_path(
-            item.get("filename") or item.get("file"),
-            root=context.root,
-        )
+    source = payload.get("diagnostics") if isinstance(payload, Mapping) else payload
+    for item in iter_dicts(source):
+        filename = item.get("filename") or item.get("file")
         location = item.get("location") or {}
         code = item.get("code")
         severity = severity_from_code(code or "", Severity.WARNING)
         message = str(item.get("message", "")).strip()
-        results.append(
-            RawDiagnostic(
-                file=filename,
-                line=location.get("row"),
-                column=location.get("column"),
-                severity=severity,
-                message=message,
-                code=code,
-                tool="ruff",
-            ),
+        diag_location = DiagnosticLocation(
+            file=filename,
+            line=location.get("row"),
+            column=location.get("column"),
         )
+        details = _build_python_details(
+            "ruff",
+            severity=severity,
+            message=message,
+            code=code,
+        )
+        append_diagnostic(results, location=diag_location, details=details)
     return results
 
 
+def _normalise_pylint_code(symbol: object, item: Mapping[str, Any]) -> str | None:
+    """Return a Pylint diagnostic code in canonical hyphenated form."""
+
+    if isinstance(symbol, str) and symbol.strip():
+        return symbol.strip().replace("_", "-")
+    message_id = item.get("message-id")
+    if isinstance(message_id, str) and message_id.strip():
+        return message_id.strip()
+    if message_id is not None:
+        return str(message_id)
+    return None
+
+
 def parse_pylint(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse Pylint JSON output into raw diagnostics."""
-    items = payload if isinstance(payload, list) else []
+    """Parse Pylint JSON output into raw diagnostics.
+
+    Args:
+        payload: JSON payload emitted by Pylint.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics prepared for downstream processing.
+    """
+    del context
     results: list[RawDiagnostic] = []
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        path = normalize_reported_path(
-            item.get("path") or item.get("filename"),
-            root=context.root,
-        )
+    for item in iter_dicts(payload):
+        path = item.get("path") or item.get("filename")
         line = item.get("line")
         column = item.get("column")
         symbol = item.get("symbol")
-        if isinstance(symbol, str) and symbol:
-            code = symbol.strip().replace("_", "-")
-        else:
-            code = item.get("message-id")
-        message = _format_pylint_message(
-            str(item.get("message", "")).strip(),
-            code,
-        )
+        code = _normalise_pylint_code(symbol, item)
+        message = str(item.get("message", "")).strip()
         sev = str(item.get("type", "warning")).lower()
         severity = {
             "fatal": Severity.ERROR,
@@ -79,22 +93,28 @@ def parse_pylint(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
             "refactor": Severity.NOTICE,
             "info": Severity.NOTE,
         }.get(sev, Severity.WARNING)
-        results.append(
-            RawDiagnostic(
-                file=path,
-                line=line,
-                column=column,
-                severity=severity,
-                message=message,
-                code=code,
-                tool="pylint",
-            ),
+        diag_location = DiagnosticLocation(file=path, line=line, column=column)
+        details = _build_python_details(
+            "pylint",
+            severity=severity,
+            message=message,
+            code=code,
         )
+        append_diagnostic(results, location=diag_location, details=details)
     return results
 
 
 def parse_pyright(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse Pyright JSON diagnostics."""
+    """Parse Pyright JSON diagnostics.
+
+    Args:
+        payload: JSON payload emitted by Pyright.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics ready for downstream processing.
+    """
+    del context
     diagnostics = []
     if isinstance(payload, dict):
         diagnostics = payload.get("generalDiagnostics", []) or payload.get("diagnostics", [])
@@ -102,10 +122,7 @@ def parse_pyright(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]
     for item in diagnostics:
         if not isinstance(item, dict):
             continue
-        path = normalize_reported_path(
-            item.get("file") or item.get("path"),
-            root=context.root,
-        )
+        path = item.get("file") or item.get("path")
         rng = item.get("range") or {}
         start = rng.get("start") or {}
         severity = str(item.get("severity", "warning")).lower()
@@ -116,58 +133,93 @@ def parse_pyright(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]
             "hint": Severity.NOTE,
         }.get(severity, Severity.WARNING)
         rule = item.get("rule")
-        results.append(
-            RawDiagnostic(
-                file=path,
-                line=start.get("line"),
-                column=start.get("character"),
-                severity=sev_enum,
-                message=str(item.get("message", "")).strip(),
-                code=rule,
-                tool="pyright",
-            ),
+        diag_location = DiagnosticLocation(
+            file=path,
+            line=start.get("line"),
+            column=start.get("character"),
         )
+        details = _build_python_details(
+            "pyright",
+            severity=sev_enum,
+            message=str(item.get("message", "")).strip(),
+            code=rule,
+        )
+        append_diagnostic(results, location=diag_location, details=details)
     return results
 
 
+def _extract_mypy_function(entry: Mapping[str, Any]) -> str | None:
+    """Extract the function or symbol name referenced by a MyPy diagnostic."""
+
+    candidates = (
+        entry.get("function"),
+        entry.get("name"),
+        entry.get("target"),
+        entry.get("symbol"),
+    )
+    for value in candidates:
+        if isinstance(value, str) and value.strip():
+            return value.strip().rsplit(".", maxsplit=1)[-1]
+        if value is not None:
+            return str(value).rsplit(".", maxsplit=1)[-1]
+    return None
+
+
+def _build_python_details(
+    tool: str,
+    *,
+    severity: Severity,
+    message: str,
+    code: str | None = None,
+    function: str | None = None,
+) -> DiagnosticDetails:
+    """Construct :class:`DiagnosticDetails` for Python tooling."""
+
+    return DiagnosticDetails(
+        severity=severity,
+        message=message,
+        tool=tool,
+        code=code,
+        function=function,
+    )
+
+
 def parse_mypy(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse MyPy JSON diagnostics."""
-    items = payload if isinstance(payload, list) else []
+    """Parse MyPy JSON diagnostics.
+
+    Args:
+        payload: JSON payload produced by MyPy.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics prepared for downstream processing.
+    """
+    del context
     results: list[RawDiagnostic] = []
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        path = normalize_reported_path(
-            item.get("path") or item.get("file"),
-            root=context.root,
-        )
+    for item in iter_dicts(payload):
+        path = item.get("path") or item.get("file")
         message = str(item.get("message", "")).strip()
         severity = str(item.get("severity", "error")).lower()
         code = item.get("code") or item.get("error_code")
-        function = (
-            item.get("function") or item.get("name") or item.get("target") or item.get("symbol")
-        )
-        if isinstance(function, str) and function:
-            function = function.split(".")[-1]
-        else:
-            function = None
+        function = _extract_mypy_function(item)
         sev_enum = {
             "error": Severity.ERROR,
             "warning": Severity.WARNING,
             "note": Severity.NOTE,
         }.get(severity, Severity.WARNING)
-        results.append(
-            RawDiagnostic(
-                file=path,
-                line=item.get("line"),
-                column=item.get("column"),
-                severity=sev_enum,
-                message=message,
-                code=code,
-                tool="mypy",
-                function=function,
-            ),
+        diag_location = DiagnosticLocation(
+            file=path,
+            line=item.get("line"),
+            column=item.get("column"),
         )
+        details = _build_python_details(
+            "mypy",
+            severity=sev_enum,
+            message=message,
+            code=code,
+            function=function,
+        )
+        append_diagnostic(results, location=diag_location, details=details)
     return results
 
 
@@ -178,61 +230,74 @@ SELENE_SEVERITY_MAP: Final[dict[str, Severity]] = {
     "help": Severity.NOTE,
     "info": Severity.NOTICE,
 }
+SELENE_DIAGNOSTIC_TYPE: Final[str] = "diagnostic"
 
 
-def parse_selene(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse selene JSON output (display-style json2)."""
-    records = _selene_records(payload)
-    results: list[RawDiagnostic] = []
-    for entry in records:
-        diagnostic = _parse_selene_record(entry, context.root)
-        if diagnostic is not None:
-            results.append(diagnostic)
-    return results
-
-
-def _format_pylint_message(message: str, code: str | None) -> str:
-    if code != "duplicate-code":
-        return message
-    lines = [line.strip() for line in message.splitlines() if line.strip()]
-    if not lines:
-        return message
-    header = lines[0]
-    clones: list[str] = []
-    for line in lines[1:]:
-        if not line.startswith("=="):
-            break
-        clones.append(line[2:])
-    if not clones:
-        return header
-    return f"{header} ({'; '.join(clones)})"
-
-
-def _selene_records(payload: Any) -> Iterable[Mapping[str, Any]]:
+def _iter_selene_records(payload: Any) -> Iterator[dict[str, Any]]:
     if isinstance(payload, list):
-        return [item for item in payload if isinstance(item, Mapping)]
-    if isinstance(payload, Mapping):
-        return [payload]
-    return []
+        yield from (item for item in payload if isinstance(item, dict))
+    elif isinstance(payload, dict):
+        yield payload
 
 
-def _parse_selene_record(entry: Mapping[str, Any], root: Path) -> RawDiagnostic | None:
+def _is_selene_diagnostic(entry: Mapping[str, Any]) -> bool:
     entry_type = str(entry.get("type", "")).lower()
-    if entry_type != "diagnostic":
-        return None
+    return entry_type == SELENE_DIAGNOSTIC_TYPE
 
+
+def _extract_selene_location(entry: Mapping[str, Any]) -> tuple[str | None, int | None, int | None]:
+    primary = entry.get("primary_label")
+    if not isinstance(primary, Mapping):
+        return None, None, None
+    span = primary.get("span")
+    span_mapping = span if isinstance(span, Mapping) else {}
+    line = span_mapping.get("start_line")
+    column = span_mapping.get("start_column")
+    if isinstance(line, int):
+        line += 1
+    else:
+        line = None
+    if isinstance(column, int):
+        column += 1
+    else:
+        column = None
+    return primary.get("filename"), line, column
+
+
+def _collect_selene_notes(entry: Mapping[str, Any]) -> list[str]:
+    notes: list[str] = []
+    for note in entry.get("notes", []) or []:
+        text = str(note).strip()
+        if text:
+            notes.append(text)
+    for label in entry.get("secondary_labels", []) or []:
+        if isinstance(label, Mapping):
+            message = str(label.get("message", "")).strip()
+            if message:
+                notes.append(message)
+    return notes
+
+
+def _build_selene_message(entry: Mapping[str, Any]) -> str:
+    base_message = str(entry.get("message", "")).strip()
+    notes = _collect_selene_notes(entry)
+    if not notes:
+        return base_message
+    notes_content = "; ".join(notes)
+    if base_message:
+        return f"{base_message} ({notes_content})"
+    return notes_content
+
+
+def _parse_selene_entry(entry: Mapping[str, Any]) -> RawDiagnostic | None:
+    if not _is_selene_diagnostic(entry):
+        return None
     severity_label = str(entry.get("severity", "warning")).lower()
     severity = SELENE_SEVERITY_MAP.get(severity_label, Severity.WARNING)
-
-    primary = entry.get("primary_label")
-    primary_map = primary if isinstance(primary, Mapping) else {}
-    file_path, line, column = _selene_primary_span(primary_map)
-    file_path = normalize_reported_path(file_path, root=root)
-
-    message = _selene_message(entry, primary_map)
-
+    file_name, line, column = _extract_selene_location(entry)
+    message = _build_selene_message(entry)
     return RawDiagnostic(
-        file=file_path,
+        file=file_name,
         line=line,
         column=column,
         severity=severity,
@@ -242,51 +307,15 @@ def _parse_selene_record(entry: Mapping[str, Any], root: Path) -> RawDiagnostic 
     )
 
 
-def _selene_primary_span(primary: Mapping[str, Any]) -> tuple[str | None, int | None, int | None]:
-    span = primary.get("span")
-    span_map = span if isinstance(span, Mapping) else {}
-
-    line = span_map.get("start_line")
-    column = span_map.get("start_column")
-    if isinstance(line, int):
-        line += 1
-    else:
-        line = None
-    if isinstance(column, int):
-        column += 1
-    else:
-        column = None
-
-    filename = primary.get("filename")
-    if not isinstance(filename, str):
-        filename = None
-
-    return filename, line, column
-
-
-def _selene_message(
-    entry: Mapping[str, Any],
-    primary: Mapping[str, Any],
-) -> str:
-    base_message = str(entry.get("message", "")).strip()
-    fragments: list[str] = []
-    for note in entry.get("notes", []) or []:
-        text = str(note).strip()
-        if text:
-            fragments.append(text)
-    for label in entry.get("secondary_labels", []) or []:
-        if not isinstance(label, Mapping):
+def parse_selene(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse selene JSON output (display-style json2)."""
+    results: list[RawDiagnostic] = []
+    for entry in _iter_selene_records(payload):
+        diagnostic = _parse_selene_entry(entry)
+        if diagnostic is None:
             continue
-        message = str(label.get("message", "")).strip()
-        if message:
-            fragments.append(message)
-
-    if not fragments:
-        return base_message
-    joined = "; ".join(fragments)
-    if not base_message:
-        return joined
-    return f"{base_message} ({joined})"
+        results.append(diagnostic)
+    return results
 
 
 __all__ = [

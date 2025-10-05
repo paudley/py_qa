@@ -1,0 +1,620 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pyqa.dev/schema/tool_definition.schema.json",
+  "title": "PyQA Tool Definition",
+  "description": "Schema describing catalog-backed tool definitions consumed by the PyQA registry.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "name", "description", "languages", "phase", "actions"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "description": "Semantic version for the schema this document complies with.",
+      "pattern": "^1\\.0\\.0$"
+    },
+    "name": {
+      "$ref": "#/definitions/Identifier",
+      "description": "Unique identifier for the tool."
+    },
+    "aliases": {
+      "description": "Deprecated or legacy names for the tool to preserve compatibility.",
+      "$ref": "#/definitions/IdentifierArray"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human readable summary of the tool."
+    },
+    "languages": {
+      "description": "Languages targeted by the tool.",
+      "$ref": "#/definitions/IdentifierArray"
+    },
+    "tags": {
+      "description": "Arbitrary catalog tags for grouping in the CLI.",
+      "$ref": "#/definitions/IdentifierArray"
+    },
+    "defaultEnabled": {
+      "type": "boolean",
+      "description": "Whether the tool is enabled by default when the language matches.",
+      "default": true
+    },
+    "autoInstall": {
+      "type": "boolean",
+      "description": "Whether PyQA may attempt to install the runtime automatically.",
+      "default": false
+    },
+    "phase": {
+      "type": "string",
+      "description": "Execution phase used to order this tool among others.",
+      "enum": ["lint", "format", "analysis", "security", "test", "coverage", "utility"]
+    },
+    "before": {
+      "description": "Names of tools that must run after this tool within the same phase.",
+      "$ref": "#/definitions/IdentifierArray"
+    },
+    "after": {
+      "description": "Names of tools that must run before this tool within the same phase.",
+      "$ref": "#/definitions/IdentifierArray"
+    },
+    "extends": {
+      "description": "Catalog fragment identifiers merged prior to applying this definition.",
+      "$ref": "#/definitions/IdentifierArray"
+    },
+    "fileExtensions": {
+      "description": "File extensions associated with the tool.",
+      "$ref": "#/definitions/StringArray"
+    },
+    "configFiles": {
+      "description": "Configuration files inspected when building tool settings.",
+      "$ref": "#/definitions/StringArray"
+    },
+    "runtime": {
+      "type": "object",
+      "description": "Runtime metadata used to prepare execution environments.",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["python", "npm", "binary", "go", "lua", "perl", "rust"]
+        },
+        "package": {
+          "type": "string",
+          "description": "Primary package identifier for dependency managers."
+        },
+        "minVersion": {
+          "type": "string",
+          "description": "Minimum supported version string."
+        },
+        "maxVersion": {
+          "type": "string",
+          "description": "Maximum supported version string when applicable."
+        },
+        "versionCommand": {
+          "$ref": "#/definitions/StringArray",
+          "description": "Command used to interrogate runtime version."
+        },
+        "binaries": {
+          "description": "Explicit binary locations or download URLs keyed by platform.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "install": {
+          "type": "object",
+          "description": "Optional installation instructions for bespoke runtimes.",
+          "required": ["strategy"],
+          "additionalProperties": false,
+          "properties": {
+            "strategy": {
+              "$ref": "#/definitions/Identifier",
+              "description": "Strategy identifier for performing installation."
+            },
+            "config": {
+              "type": "object",
+              "description": "Arbitrary configuration passed to the installation strategy.",
+              "additionalProperties": true
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "strategy": {
+                    "const": "installer_download_artifact"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "config": {
+                    "$ref": "#/definitions/InstallerDownloadArtifactConfig"
+                  }
+                },
+                "required": ["config"]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "description": "Post-processing configuration for diagnostics emitted by the tool.",
+      "additionalProperties": false,
+      "properties": {
+        "dedupe": {
+          "type": "object",
+          "description": "Hints used to deduplicate diagnostics across runs or tools.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "severityMapping": {
+          "type": "object",
+          "description": "Maps tool-specific severity strings to canonical PyQA severities.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "suppressions": {
+      "type": "object",
+      "description": "Default suppression and duplicate handling configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "tests": {
+          "type": "array",
+          "description": "Glob patterns for test files that should suppress diagnostics.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "general": {
+          "type": "array",
+          "description": "Glob patterns for general-purpose suppression.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "duplicates": {
+          "type": "array",
+          "description": "List of other tools that emit duplicate diagnostics.",
+          "items": {
+            "$ref": "#/definitions/Identifier"
+          }
+        }
+      },
+      "documentation": {
+        "$ref": "#/definitions/DocumentationBundle",
+        "description": "Human-facing documentation metadata for CLI help surfaces."
+      }
+    },
+    "options": {
+      "type": "array",
+      "description": "Configuration options exposed to the CLI and config files.",
+      "items": {
+        "$ref": "#/definitions/OptionDefinition"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "description": "Executable actions provided by the tool (lint, fix, etc).",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/ActionDefinition"
+      }
+    },
+    "documentation": {
+      "$ref": "#/definitions/DocumentationBundle",
+      "description": "Human-facing documentation metadata for CLI help surfaces."
+    }
+  },
+  "definitions": {
+    "Identifier": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9][-_a-zA-Z0-9]*$"
+    },
+    "IdentifierArray": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Identifier"
+      },
+      "uniqueItems": true
+    },
+    "StringArray": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ActionDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "command"],
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/Identifier",
+          "description": "Identifier for the action (lint, fix, etc)."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human readable action summary."
+        },
+        "appendFiles": {
+          "type": "boolean",
+          "description": "Whether discovered files are appended to the command invocation.",
+          "default": true
+        },
+        "isFix": {
+          "type": "boolean",
+          "description": "Whether the action mutates source files.",
+          "default": false
+        },
+        "ignoreExit": {
+          "type": "boolean",
+          "description": "Allow non-zero exit codes without marking the run as failed.",
+          "default": false
+        },
+        "command": {
+          "$ref": "#/definitions/CommandDefinition",
+          "description": "Command execution strategy metadata."
+        },
+        "parser": {
+          "$ref": "#/definitions/ParserReference",
+          "description": "Parser strategy used to convert output to diagnostics."
+        },
+        "timeoutSeconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Action specific timeout override in seconds."
+        },
+        "env": {
+          "type": "object",
+          "description": "Environment variables applied when invoking the command.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "filters": {
+          "type": "array",
+          "description": "Patterns used to filter stdout/stderr noise.",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "CommandDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy"],
+      "properties": {
+        "strategy": {
+          "$ref": "#/definitions/Identifier",
+          "description": "Identifier to resolve a command strategy implementation."
+        },
+        "config": {
+          "type": "object",
+          "description": "Configuration passed to the command strategy.",
+          "additionalProperties": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "strategy": {
+                "const": "command_download_binary"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "config": {
+                "$ref": "#/definitions/CommandDownloadBinaryConfig"
+              }
+            },
+            "required": ["config"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "strategy": {
+                "const": "command_project_scanner"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "config": {
+                "$ref": "#/definitions/CommandProjectScannerConfig"
+              }
+            },
+            "required": ["config"]
+          }
+        }
+      ]
+    },
+    "ParserReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy"],
+      "properties": {
+        "strategy": {
+          "$ref": "#/definitions/Identifier",
+          "description": "Identifier for the parser strategy to apply."
+        },
+        "config": {
+          "type": "object",
+          "description": "Parser-specific configuration options.",
+          "additionalProperties": true
+        }
+      }
+    },
+    "OptionDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/Identifier",
+          "description": "Option name as exposed in configuration."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "string",
+            "str",
+            "boolean",
+            "bool",
+            "integer",
+            "int",
+            "number",
+            "float",
+            "array",
+            "object",
+            "path",
+            "list[str]"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "description": "Human readable explanation for the option."
+        },
+        "default": {
+          "description": "Default value for the option; type must align with the declared option type."
+        },
+        "cli": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "flag": {
+              "type": "string",
+              "description": "Primary CLI flag used to set the option."
+            },
+            "shortFlag": {
+              "type": "string",
+              "description": "Optional short CLI flag (single dash)."
+            },
+            "multiple": {
+              "type": "boolean",
+              "description": "Indicates whether the CLI flag can be repeated for multiple values."
+            }
+          }
+        },
+        "choices": {
+          "type": "array",
+          "description": "Permitted string values when the option is constrained to an enumeration.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "aliases": {
+          "$ref": "#/definitions/IdentifierArray",
+          "description": "Alternative names for backwards compatibility."
+        }
+      }
+    },
+    "DocumentationEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string",
+          "description": "Content format identifier (e.g. text, markdown).",
+          "default": "text"
+        },
+        "text": {
+          "type": "string",
+          "description": "Inline documentation content."
+        },
+        "path": {
+          "type": "string",
+          "description": "Relative path to an external documentation file."
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["text"]
+        },
+        {
+          "required": ["path"]
+        }
+      ]
+    },
+    "DocumentationBundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "help": {
+          "$ref": "#/definitions/DocumentationEntry",
+          "description": "Primary tool overview documentation."
+        },
+        "commandHelp": {
+          "$ref": "#/definitions/DocumentationEntry",
+          "description": "Command-line flag documentation for the tool."
+        },
+        "shared": {
+          "$ref": "#/definitions/DocumentationEntry",
+          "description": "Shared knobs or supplemental guidance referenced by multiple tools."
+        }
+      }
+    },
+    "CommandOptionMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["setting", "type"],
+      "properties": {
+        "setting": {
+          "oneOf": [
+            { "type": "string" },
+            {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1
+            }
+          ]
+        },
+        "type": {
+          "type": "string",
+          "enum": ["value", "path", "args", "flag", "repeatFlag"]
+        },
+        "flag": { "type": "string" },
+        "negateFlag": { "type": "string" },
+        "joinWith": { "type": "string" },
+        "literalValues": {
+          "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+        },
+        "default": {
+          "type": ["string", "boolean", "number", "array", "object", "null"]
+        },
+        "defaultFrom": { "type": "string" }
+      }
+    },
+    "CommandDownloadBinaryConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["download"],
+      "properties": {
+        "version": { "type": "string" },
+        "download": { "$ref": "#/definitions/DownloadSpec" },
+        "base": { "$ref": "#/definitions/StringArray" },
+        "binaryPlaceholder": { "type": "string", "minLength": 1 },
+        "options": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/CommandOptionMapping" }
+        },
+        "targets": { "$ref": "#/definitions/CommandBinaryTargetSelector" }
+      }
+    },
+    "CommandBinaryTargetSelector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["filePattern"] },
+        "suffixes": { "type": "array", "items": { "type": "string" } },
+        "contains": { "type": "array", "items": { "type": "string" } },
+        "pathMustInclude": {
+          "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+        },
+        "fallbackDirectory": { "type": "string" },
+        "defaultToRoot": { "type": "boolean", "default": false }
+      }
+    },
+    "CommandProjectScannerConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base"],
+      "properties": {
+        "base": { "$ref": "#/definitions/StringArray" },
+        "options": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/CommandOptionMapping" }
+        },
+        "exclude": { "$ref": "#/definitions/CommandProjectExcludeConfig" },
+        "targets": { "$ref": "#/definitions/CommandProjectTargetPlan" }
+      }
+    },
+    "CommandProjectExcludeConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "settings": {
+          "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+        },
+        "includeDiscovery": { "type": "boolean", "default": false },
+        "flag": { "type": "string" },
+        "separator": { "type": "string", "default": "," }
+      }
+    },
+    "CommandProjectTargetPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "settings": {
+          "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+        },
+        "includeDiscoveryRoots": { "type": "boolean", "default": false },
+        "includeDiscoveryExplicit": { "type": "boolean", "default": false },
+        "fallback": {
+          "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+        },
+        "defaultToRoot": { "type": "boolean", "default": false },
+        "filterExcluded": { "type": "boolean", "default": true },
+        "prefix": { "type": "string" }
+      }
+    },
+    "DownloadSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targets"],
+      "properties": {
+        "name": { "type": "string" },
+        "cacheSubdir": { "type": "string" },
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/DownloadTarget" }
+        }
+      }
+    },
+    "DownloadTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url"],
+      "properties": {
+        "os": { "type": "array", "items": { "type": "string" } },
+        "arch": { "type": "array", "items": { "type": "string" } },
+        "url": { "type": "string", "minLength": 1 },
+        "archive": { "$ref": "#/definitions/DownloadArchive" },
+        "filename": { "type": "string" },
+        "chmod": { "type": "boolean", "default": false }
+      }
+    },
+    "DownloadArchive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "member"],
+      "properties": {
+        "format": { "type": "string", "enum": ["tar.gz", "zip"] },
+        "member": { "type": "string" }
+      }
+    },
+    "InstallerDownloadArtifactConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["download"],
+      "properties": {
+        "version": { "type": "string" },
+        "download": { "$ref": "#/definitions/DownloadSpec" },
+        "contextLabel": { "type": "string" }
+      }
+    }
+  }
+}

@@ -10,12 +10,54 @@ import shutil
 # external tool execution, normalising arguments and disabling ``shell=True``.
 import subprocess  # nosec B404
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     # Bandit: type-only import of subprocess metadata is part of the safe wrapper.
     from subprocess import CompletedProcess as _CompletedProcess  # nosec B404
+
+
+@dataclass(slots=True)
+class CommandOptions:
+    """Immutable command execution options."""
+
+    cwd: Path | None = None
+    env: Mapping[str, str] | None = None
+    check: bool = True
+    capture_output: bool = False
+    text: bool = True
+    timeout: float | None = None
+    discard_stdin: bool = False
+
+    def with_overrides(self, overrides: Mapping[str, Any]) -> CommandOptions:
+        """Return a new options instance with ``overrides`` applied.
+
+        Args:
+            overrides: Mapping of option names to replacement values.
+
+        Returns:
+            CommandOptions: Updated options instance with overrides applied.
+
+        Raises:
+            TypeError: If ``overrides`` includes an unknown option name.
+        """
+
+        valid_keys = {
+            "cwd",
+            "env",
+            "check",
+            "capture_output",
+            "text",
+            "timeout",
+            "discard_stdin",
+        }
+        unknown = [key for key in overrides if key not in valid_keys]
+        if unknown:
+            message = ", ".join(sorted(unknown))
+            raise TypeError(f"Unknown command option(s): {message}")
+        return replace(self, **overrides)
 
 
 class SubprocessExecutionError(RuntimeError):
@@ -57,16 +99,28 @@ def _normalize_args(args: Sequence[str]) -> list[str]:
 def run_command(
     args: Sequence[str],
     *,
-    cwd: Path | None = None,
-    env: Mapping[str, str] | None = None,
-    check: bool = True,
-    capture_output: bool = False,
-    text: bool = True,
-    timeout: float | None = None,
-    discard_stdin: bool = False,
+    options: CommandOptions | None = None,
+    **overrides: Any,
 ) -> _CompletedProcess[str]:
-    """Execute *args* after normalising the executable path."""
+    """Execute ``args`` after normalising the executable path.
+
+    Args:
+        args: Command and argument sequence to execute.
+        options: Base options configuring execution semantics.
+        **overrides: Keyword overrides applied to a cloned ``options`` instance.
+
+    Returns:
+        CompletedProcess: Subprocess execution metadata.
+
+    Raises:
+        FileNotFoundError: If the executable cannot be resolved on ``PATH``.
+        SubprocessExecutionError: When ``check`` is true and the process exits
+            with a non-zero status.
+        TypeError: If an unknown override key is supplied.
+    """
+
     normalized = _normalize_args(args)
+    resolved_options = (options or CommandOptions()).with_overrides(overrides)
 
     def _ensure_text(value: str | bytes | None) -> str | None:
         if value is None or isinstance(value, str):
@@ -78,21 +132,20 @@ def run_command(
         # argument lists directly without shell expansion.
         completed: _CompletedProcess[str] = subprocess.run(  # nosec B603
             normalized,
-            cwd=str(cwd) if cwd is not None else None,
-            env=dict(env) if env is not None else None,
+            cwd=str(resolved_options.cwd) if resolved_options.cwd is not None else None,
+            env=dict(resolved_options.env) if resolved_options.env is not None else None,
             check=False,
-            capture_output=capture_output,
-            text=text,
-            timeout=timeout,
-            stdin=subprocess.DEVNULL if discard_stdin else None,
+            capture_output=resolved_options.capture_output,
+            text=resolved_options.text,
+            timeout=resolved_options.timeout,
+            stdin=subprocess.DEVNULL if resolved_options.discard_stdin else None,
         )
     except subprocess.TimeoutExpired as exc:
         stdout = _ensure_text(exc.stdout) or ""
         stderr = _ensure_text(exc.stderr)
+        timeout_value = resolved_options.timeout
         timeout_msg = (
-            f"Command timed out after {timeout:.1f}s"
-            if timeout is not None
-            else "Command timed out"
+            f"Command timed out after {timeout_value:.1f}s" if timeout_value is not None else "Command timed out"
         )
         combined_stderr = f"{stderr}\n{timeout_msg}" if stderr else timeout_msg
         completed = subprocess.CompletedProcess(
@@ -102,7 +155,7 @@ def run_command(
             stderr=combined_stderr,
         )
 
-    if check and completed.returncode != 0:
+    if resolved_options.check and completed.returncode != 0:
         raise SubprocessExecutionError(
             normalized,
             completed.returncode,

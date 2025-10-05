@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "pyupgrade",
+  "description": "Automated Python syntax upgrades via pyupgrade.",
+  "languages": ["python"],
+  "phase": "lint",
+  "runtime": {
+    "type": "python",
+    "package": "pyupgrade",
+    "minVersion": "3.19.1",
+    "versionCommand": ["python", "-c", "import importlib.metadata as im; print(im.version('pyupgrade'))"]
+  },
+  "options": [
+    {
+      "name": "pyplus",
+      "type": "str",
+      "description": "Minimum Python version used when selecting pyupgrade transforms."
+    },
+    {
+      "name": "keep-mock",
+      "type": "bool",
+      "description": "Preserve mock rather than rewriting imports."
+    },
+    {
+      "name": "keep-runtime-typing",
+      "type": "bool",
+      "description": "Retain runtime typing constructs."
+    },
+    {
+      "name": "keep-percent-format",
+      "type": "bool",
+      "description": "Keep percent-style string formatting."
+    },
+    {
+      "name": "keep-annotations",
+      "type": "bool",
+      "description": "Preserve annotations when rewriting."
+    },
+    {
+      "name": "keep-logging-format",
+      "type": "bool",
+      "description": "Do not rewrite logging format strings."
+    },
+    {
+      "name": "exit-zero-even-if-changed",
+      "type": "bool",
+      "description": "Force exit code zero even when files change."
+    },
+    {
+      "name": "no-verify",
+      "type": "bool",
+      "description": "Skip verification step after rewrites."
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to pyupgrade."
+    }
+  ],
+  "actions": [
+    {
+      "name": "fix",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["pyupgrade", "--exit-zero-even-if-changed"],
+          "appendFiles": false,
+          "options": [
+            {
+              "setting": ["pyplus", "py_plus", "py_version"],
+              "type": "value",
+              "transform": "pyupgrade_flag",
+              "defaultFrom": "python.target_version"
+            },
+            { "setting": "keep-mock", "type": "flag", "flag": "--keep-mock" },
+            { "setting": "keep-runtime-typing", "type": "flag", "flag": "--keep-runtime-typing" },
+            { "setting": "keep-percent-format", "type": "flag", "flag": "--keep-percent-format" },
+            { "setting": "keep-annotations", "type": "flag", "flag": "--keep-annotations" },
+            { "setting": "keep-logging-format", "type": "flag", "flag": "--keep-logging-format" },
+            { "setting": "no-verify", "type": "flag", "flag": "--no-verify" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "isFix": true,
+      "description": "Modernize Python syntax using pyupgrade."
+    }
+  ],
+  "extends": ["python_defaults"],
+  "fileExtensions": [".py", ".pyi"],
+  "documentation": {
+    "help": {
+      "path": "docs/pyupgrade_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/pyupgrade_cmd_help.txt",
+      "format": "text"
+    },
+    "shared": {
+      "path": "docs/SHARED_KNOBS.md",
+      "format": "markdown"
+    }
+  }
+}

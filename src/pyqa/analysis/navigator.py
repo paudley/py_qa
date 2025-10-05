@@ -4,154 +4,185 @@
 
 from __future__ import annotations
 
-import re
-from collections import defaultdict
-from collections.abc import Mapping
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
+from typing import Final, TypedDict
 
 from ..annotations import AnnotationEngine
 from ..models import Diagnostic, RunResult
+from ..reporting.advice import _estimate_function_scale as _reporting_estimate_function_scale
+
+MAX_NAVIGATOR_ENTRIES: Final[int] = 10
+COMPLEXITY_CODES: Final[set[str]] = {"C901", "R0915", "PLR0915", "R1260"}
+COMPLEXITY_SIGNATURES: Final[set[str]] = {"complex", "complexity", "statement"}
+TYPING_CODES_PREFIX: Final[str] = "ANN"
+TYPING_SIGNATURES: Final[set[str]] = {"annotation", "typed"}
+DOCUMENTATION_CODES_PREFIX: Final[str] = "D1"
+DOCUMENTATION_SIGNATURES: Final[set[str]] = {"docstring"}
+MAGIC_CODES: Final[set[str]] = {"PLR2004", "R2004"}
+MAGIC_SIGNATURES: Final[set[str]] = {"magic"}
+
+
+class IssueTag(str, Enum):
+    """Enumerate recognised navigator issue tags."""
+
+    COMPLEXITY = "complexity"
+    TYPING = "typing"
+    DOCUMENTATION = "documentation"
+    MAGIC_NUMBER = "magic-number"
+
+
+class NavigatorDiagnosticPayload(TypedDict):
+    """Typed representation of diagnostic details within the navigator."""
+
+    tool: str
+    code: str
+    message: str
+    line: int | None
+    severity: str
+
+
+class NavigatorPayload(TypedDict):
+    """Typed representation of a refactor navigator entry."""
+
+    file: str
+    function: str
+    issue_tags: dict[str, int]
+    size: int | None
+    complexity: int | None
+    diagnostics: list[NavigatorDiagnosticPayload]
+
+
+@dataclass(slots=True)
+class NavigatorDiagnosticEntry:
+    """Describe a diagnostic included in the refactor navigator payload."""
+
+    tool: str
+    code: str
+    message: str
+    line: int | None
+    severity: str
+
+    def to_payload(self) -> NavigatorDiagnosticPayload:
+        """Return a serialisable mapping for the diagnostic entry."""
+
+        return NavigatorDiagnosticPayload(
+            tool=self.tool,
+            code=self.code,
+            message=self.message,
+            line=self.line,
+            severity=self.severity,
+        )
+
+
+@dataclass(slots=True)
+class NavigatorBucket:
+    """Collect diagnostics and metadata for a refactoring hotspot."""
+
+    file: str = ""
+    function: str = ""
+    issue_tags: Counter[IssueTag] = field(default_factory=Counter)
+    size: int | None = None
+    complexity: int | None = None
+    diagnostics: list[NavigatorDiagnosticEntry] = field(default_factory=list)
+
+    def add_diagnostic(self, diag: Diagnostic, tag: IssueTag | None) -> None:
+        """Record ``diag`` in the bucket and increment the associated tag."""
+
+        self.file = diag.file or self.file
+        self.function = diag.function or self.function
+        if tag is not None:
+            self.issue_tags[tag] += 1
+        self.diagnostics.append(
+            NavigatorDiagnosticEntry(
+                tool=diag.tool,
+                code=diag.code or "",
+                message=diag.message,
+                line=diag.line,
+                severity=diag.severity.value,
+            ),
+        )
+
+    @property
+    def total_issue_count(self) -> int:
+        """Return the total number of issues aggregated under this bucket."""
+
+        return sum(self.issue_tags.values())
+
+    def to_payload(self) -> NavigatorPayload:
+        """Return a serialisable payload representing this bucket."""
+
+        return NavigatorPayload(
+            file=self.file,
+            function=self.function,
+            issue_tags={tag.value: count for tag, count in self.issue_tags.items()},
+            size=self.size,
+            complexity=self.complexity,
+            diagnostics=[entry.to_payload() for entry in self.diagnostics],
+        )
 
 
 def build_refactor_navigator(result: RunResult, engine: AnnotationEngine) -> None:
-    """Populate ``result.analysis['refactor_navigator']`` with hotspot data."""
-    hotspots: dict[tuple[str, str], dict[str, object]] = defaultdict(  # type: ignore[var-annotated]
-        lambda: {
-            "file": "",
-            "function": "",
-            "issue_tags": defaultdict(int),
-            "size": None,
-            "complexity": None,
-            "diagnostics": [],
-        },
-    )
+    """Populate ``result.analysis['refactor_navigator']`` with hotspot data.
+
+    Args:
+        result: Run outcome containing diagnostics and analysis metadata.
+        engine: Annotation engine used to derive diagnostic message signatures.
+    """
+
+    hotspots: defaultdict[tuple[str, str], NavigatorBucket] = defaultdict(NavigatorBucket)
 
     for outcome in result.outcomes:
         for diag in outcome.diagnostics:
             tag = _issue_tag(diag, engine)
-            if tag:
-                diag.tags = tuple(sorted({*diag.tags, tag}))
-            key = ((diag.file or ""), diag.function or "")
-            bucket = hotspots[key]
-            bucket["file"] = diag.file or ""
-            bucket["function"] = diag.function or ""
-            if tag:
-                bucket["issue_tags"][tag] += 1  # type: ignore[index]
-            bucket["diagnostics"].append(
-                {
-                    "tool": diag.tool,
-                    "code": diag.code or "",
-                    "message": diag.message,
-                    "line": diag.line,
-                    "severity": diag.severity.value,
-                },
-            )
+            if tag is not None:
+                diag.tags = tuple(sorted({*diag.tags, tag.value}))
+            bucket = hotspots[(diag.file or "", diag.function or "")]
+            bucket.add_diagnostic(diag, tag)
 
-    duplicate_clusters = result.analysis.get("duplicate_clusters", [])
-    for cluster in duplicate_clusters or ():
-        occurrences = cluster.get("occurrences") if isinstance(cluster, dict) else None
-        if not isinstance(occurrences, list):
+    summary: list[NavigatorBucket] = []
+    root_path = Path(result.root)
+    for (file_path, function), bucket in hotspots.items():
+        if not bucket.issue_tags:
             continue
-        for occurrence in occurrences:
-            if not isinstance(occurrence, Mapping):
-                continue
-            file_path = str(occurrence.get("file") or "")
-            function = str(occurrence.get("function") or "")
-            key = (file_path, function)
-            bucket = hotspots.get(key)
-            if bucket is None:
-                bucket = hotspots.get((file_path, ""))
-            if bucket is None:
-                bucket = {
-                    "file": file_path,
-                    "function": function,
-                    "issue_tags": defaultdict(int),
-                    "size": None,
-                    "complexity": None,
-                    "diagnostics": [],
-                }
-                hotspots[key] = bucket
-            if bucket is None:
-                continue
-            issues = bucket["issue_tags"]  # type: ignore[assignment]
-            issues["duplicate"] += 1  # type: ignore[index]
-
-    summary: list[dict[str, object]] = []
-    for (file_path, function), data in hotspots.items():
-        issues = data["issue_tags"]  # type: ignore[assignment]
-        if not issues:
-            continue
-        size, complexity = _estimate_function_scale(Path(result.root) / file_path, function)
-        data["size"] = size
-        data["complexity"] = complexity
-        data["issue_tags"] = dict(issues)
-        summary.append(data)
+        size, complexity = _estimate_function_scale(root_path / file_path, function)
+        bucket.size = size
+        bucket.complexity = complexity
+        summary.append(bucket)
 
     summary.sort(
-        key=lambda item: (
-            -sum(item["issue_tags"].values()),
-            (item["size"] or 0) * -1,
-            f"{item['file']}::{item['function']}",
+        key=lambda bucket: (
+            -bucket.total_issue_count,
+            -(bucket.size or 0),
+            f"{bucket.file}::{bucket.function}",
         ),
     )
-    result.analysis["refactor_navigator"] = summary[:10]
+    result.analysis["refactor_navigator"] = [bucket.to_payload() for bucket in summary[:MAX_NAVIGATOR_ENTRIES]]
 
 
-def _issue_tag(diag: Diagnostic, engine: AnnotationEngine) -> str | None:
+def _issue_tag(diag: Diagnostic, engine: AnnotationEngine) -> IssueTag | None:
+    """Return the navigator issue tag for ``diag`` when recognised."""
+
     code = (diag.code or "").upper()
     signature = set(engine.message_signature(diag.message))
 
-    if (
-        code in {"C901", "R0915", "PLR0915", "R1260"}
-        or {
-            "complex",
-            "complexity",
-            "statement",
-        }
-        & signature
-    ):
-        return "complexity"
-    if code.startswith("ANN") or "annotation" in signature or "typed" in signature:
-        return "typing"
-    if "docstring" in signature or code.startswith("D1"):
-        return "documentation"
-    if code in {"PLR2004", "R2004"} or "magic" in signature:
-        return "magic-number"
+    if code in COMPLEXITY_CODES or COMPLEXITY_SIGNATURES & signature:
+        return IssueTag.COMPLEXITY
+    if code.startswith(TYPING_CODES_PREFIX) or TYPING_SIGNATURES & signature:
+        return IssueTag.TYPING
+    if DOCUMENTATION_SIGNATURES & signature or code.startswith(DOCUMENTATION_CODES_PREFIX):
+        return IssueTag.DOCUMENTATION
+    if code in MAGIC_CODES or MAGIC_SIGNATURES & signature:
+        return IssueTag.MAGIC_NUMBER
     return None
 
 
 def _estimate_function_scale(path: Path, function: str) -> tuple[int | None, int | None]:
-    if not function or not path.is_file():
-        return (None, None)
-    try:
-        text = path.read_text(encoding="utf-8", errors="ignore")
-    except OSError:
-        return (None, None)
-    lines = text.splitlines()
-    signature_pattern = re.compile(rf"^\s*(?:async\s+)?def\s+{re.escape(function)}\b")
-    start_index: int | None = None
-    indent_level: int | None = None
-    for idx, line in enumerate(lines):
-        if signature_pattern.match(line):
-            start_index = idx
-            indent_level = len(line) - len(line.lstrip(" \t"))
-            break
-    if start_index is None or indent_level is None:
-        return (None, None)
+    """Return the function length and complexity scores for ``function``."""
 
-    count = 1
-    complexity = 0
-    keywords = re.compile(r"\b(if|for|while|elif|case|except|and|or|try|with)\b")
-    for line in lines[start_index + 1 :]:
-        stripped = line.strip()
-        if not stripped:
-            continue
-        current_indent = len(line) - len(line.lstrip(" \t"))
-        if current_indent <= indent_level:
-            break
-        count += 1
-        complexity += len(keywords.findall(stripped))
-    return (count if count else None, complexity if complexity else None)
+    return _reporting_estimate_function_scale(path, function)
 
 
 __all__ = ["build_refactor_navigator"]

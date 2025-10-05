@@ -1,0 +1,196 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "prettier",
+  "description": "Code formatter Prettier.",
+  "extends": ["npm_runtime"],
+  "languages": ["javascript", "typescript", "json", "css"],
+  "phase": "format",
+  "fileExtensions": [".js", ".jsx", ".ts", ".tsx", ".json", ".css"],
+  "configFiles": [".prettierrc", ".prettierrc.json", ".prettierrc.js", "prettier.config.js"],
+  "runtime": {
+    "type": "npm",
+    "package": "prettier",
+    "versionCommand": ["prettier", "--version"]
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments passed to prettier."
+    },
+    {
+      "name": "config",
+      "type": "path",
+      "description": "Prettier configuration file to load."
+    },
+    {
+      "name": "config-precedence",
+      "type": "str",
+      "description": "How multiple configs are merged (cli-override/file-override)."
+    },
+    {
+      "name": "end-of-line",
+      "type": "str",
+      "description": "End-of-line style (lf, crlf, auto).",
+      "choices": ["lf", "crlf", "cr", "auto"]
+    },
+    {
+      "name": "ignore-path",
+      "type": "path",
+      "description": "Ignore file used during formatting."
+    },
+    {
+      "name": "loglevel",
+      "type": "str",
+      "description": "Prettier log level (debug/info/warn/error)."
+    },
+    {
+      "name": "parser",
+      "type": "str",
+      "description": "Explicit parser (e.g. typescript, babel)."
+    },
+    {
+      "name": "plugin",
+      "type": "list[str]",
+      "description": "Additional prettier plugins to load."
+    },
+    {
+      "name": "plugin-search-dir",
+      "type": "list[str]",
+      "description": "Directories used to resolve prettier plugins."
+    },
+    {
+      "name": "print-width",
+      "type": "int",
+      "description": "Preferred line length before wrapping."
+    },
+    {
+      "name": "semi",
+      "type": "bool",
+      "description": "Whether to add semicolons at statement ends."
+    },
+    {
+      "name": "single-quote",
+      "type": "bool",
+      "description": "Prefer single quotes when formatting."
+    },
+    {
+      "name": "tab-width",
+      "type": "int",
+      "description": "Number of spaces per indentation level."
+    },
+    {
+      "name": "trailing-comma",
+      "type": "str",
+      "description": "Specify trailing comma behaviour (all, es5, none).",
+      "choices": ["all", "es5", "none"]
+    },
+    {
+      "name": "use-tabs",
+      "type": "bool",
+      "description": "Indent with tabs instead of spaces."
+    }
+  ],
+  "actions": [
+    {
+      "name": "format",
+      "isFix": true,
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["prettier", "--write"],
+          "appendFiles": false,
+          "options": [
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "parser", "type": "value", "flag": "--parser" },
+            { "setting": "ignore-path", "type": "path", "flag": "--ignore-path" },
+            { "setting": "plugin-search-dir", "type": "path", "flag": "--plugin-search-dir" },
+            { "setting": "plugin", "type": "args", "flag": "--plugin" },
+            { "setting": "loglevel", "type": "value", "flag": "--log-level" },
+            { "setting": "config-precedence", "type": "value", "flag": "--config-precedence" },
+            {
+              "setting": "single-quote",
+              "type": "flag",
+              "flag": "--single-quote",
+              "negateFlag": "--no-single-quote"
+            },
+            { "setting": "tab-width", "type": "value", "flag": "--tab-width" },
+            {
+              "setting": "use-tabs",
+              "type": "flag",
+              "flag": "--use-tabs",
+              "negateFlag": "--no-use-tabs"
+            },
+            {
+              "setting": "print-width",
+              "type": "value",
+              "flag": "--print-width",
+              "defaultFrom": "execution.line_length"
+            },
+            { "setting": "semi", "type": "flag", "flag": "--semi", "negateFlag": "--no-semi" },
+            { "setting": "trailing-comma", "type": "value", "flag": "--trailing-comma" },
+            { "setting": "end-of-line", "type": "value", "flag": "--end-of-line" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "check",
+      "ignoreExit": true,
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["prettier", "--check"],
+          "appendFiles": false,
+          "options": [
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "parser", "type": "value", "flag": "--parser" },
+            { "setting": "ignore-path", "type": "path", "flag": "--ignore-path" },
+            { "setting": "plugin-search-dir", "type": "path", "flag": "--plugin-search-dir" },
+            { "setting": "plugin", "type": "args", "flag": "--plugin" },
+            { "setting": "loglevel", "type": "value", "flag": "--log-level" },
+            { "setting": "config-precedence", "type": "value", "flag": "--config-precedence" },
+            {
+              "setting": "single-quote",
+              "type": "flag",
+              "flag": "--single-quote",
+              "negateFlag": "--no-single-quote"
+            },
+            { "setting": "tab-width", "type": "value", "flag": "--tab-width" },
+            {
+              "setting": "use-tabs",
+              "type": "flag",
+              "flag": "--use-tabs",
+              "negateFlag": "--no-use-tabs"
+            },
+            {
+              "setting": "print-width",
+              "type": "value",
+              "flag": "--print-width",
+              "defaultFrom": "execution.line_length"
+            },
+            { "setting": "semi", "type": "flag", "flag": "--semi", "negateFlag": "--no-semi" },
+            { "setting": "trailing-comma", "type": "value", "flag": "--trailing-comma" },
+            { "setting": "end-of-line", "type": "value", "flag": "--end-of-line" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/prettier_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/prettier_cmd_help.txt",
+      "format": "text"
+    },
+    "shared": {
+      "path": "docs/SHARED_KNOBS.md",
+      "format": "markdown"
+    }
+  }
+}

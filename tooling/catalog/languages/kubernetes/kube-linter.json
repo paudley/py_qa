@@ -1,0 +1,123 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "kube-linter",
+  "description": "Kubernetes deployment misconfiguration detector.",
+  "extends": ["go_runtime"],
+  "languages": ["kubernetes"],
+  "phase": "analysis",
+  "fileExtensions": [".yml", ".yaml"],
+  "runtime": {
+    "type": "go",
+    "package": "golang.stackrox.io/kube-linter/cmd/kube-linter@v0.7.6",
+    "minVersion": "0.7.6",
+    "versionCommand": ["kube-linter", "version"]
+  },
+  "options": [
+    {
+      "name": "config",
+      "type": "path",
+      "description": "Configuration file supplied to kube-linter."
+    },
+    {
+      "name": "fail-if-no-objects-found",
+      "type": "bool",
+      "description": "Error when manifests do not contain any Kubernetes objects."
+    },
+    {
+      "name": "fail-on-invalid-resource",
+      "type": "bool",
+      "description": "Fail when invalid Kubernetes resources are encountered."
+    },
+    {
+      "name": "verbose",
+      "type": "bool",
+      "description": "Enable verbose logging output."
+    },
+    {
+      "name": "add-all-built-in",
+      "type": "bool",
+      "description": "Add all built-in checks regardless of config defaults."
+    },
+    {
+      "name": "do-not-auto-add-defaults",
+      "type": "bool",
+      "description": "Disable automatic default checks."
+    },
+    {
+      "name": "include",
+      "type": "list[str]",
+      "description": "Explicit checks to include."
+    },
+    {
+      "name": "exclude",
+      "type": "list[str]",
+      "description": "Checks to exclude from the run."
+    },
+    {
+      "name": "ignore-paths",
+      "type": "path",
+      "description": "Filesystem paths ignored during manifest discovery."
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to kube-linter."
+    }
+  ],
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["kube-linter", "lint", "--format", "json"],
+          "appendFiles": false,
+          "options": [
+            { "setting": "config", "type": "path", "flag": "--config" },
+            {
+              "setting": "fail-if-no-objects-found",
+              "type": "flag",
+              "flag": "--fail-if-no-objects-found"
+            },
+            {
+              "setting": "fail-on-invalid-resource",
+              "type": "flag",
+              "flag": "--fail-on-invalid-resource"
+            },
+            { "setting": "verbose", "type": "flag", "flag": "--verbose" },
+            { "setting": "add-all-built-in", "type": "flag", "flag": "--add-all-built-in" },
+            {
+              "setting": "do-not-auto-add-defaults",
+              "type": "flag",
+              "flag": "--do-not-auto-add-defaults"
+            },
+            { "setting": "include", "type": "args", "flag": "--include" },
+            { "setting": "exclude", "type": "args", "flag": "--exclude" },
+            {
+              "setting": ["ignore-paths", "ignore_paths"],
+              "type": "path",
+              "flag": "--ignore-paths"
+            },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.ops.parse_kube_linter"
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/kube-linter_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/kube-linter_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

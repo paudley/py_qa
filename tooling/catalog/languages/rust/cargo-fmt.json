@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "cargo-fmt",
+  "description": "Rust formatter via cargo fmt.",
+  "languages": ["rust"],
+  "phase": "lint",
+  "runtime": {
+    "type": "binary",
+    "versionCommand": ["rustfmt", "--version"]
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to cargo fmt."
+    }
+  ],
+  "actions": [
+    {
+      "name": "format",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["cargo", "fmt"],
+          "appendFiles": false,
+          "options": [{ "setting": "args", "type": "args" }]
+        }
+      },
+      "isFix": true,
+      "appendFiles": false,
+      "description": "Format Rust code using rustfmt."
+    },
+    {
+      "name": "check",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["cargo", "fmt", "--check"],
+          "appendFiles": false,
+          "options": [{ "setting": "args", "type": "args" }]
+        }
+      },
+      "appendFiles": false,
+      "description": "Verify Rust formatting without changes."
+    }
+  ],
+  "fileExtensions": [".rs"],
+  "documentation": {
+    "help": {
+      "path": "docs/cargo-fmt_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/cargo-fmt_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

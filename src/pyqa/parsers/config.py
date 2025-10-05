@@ -11,6 +11,15 @@ from typing import Any, Final
 from ..models import RawDiagnostic
 from ..severity import Severity
 from ..tools.base import ToolContext
+from .base import (
+    DiagnosticDetails,
+    DiagnosticLocation,
+    append_diagnostic,
+    create_spec,
+    iter_dicts,
+    iter_pattern_matches,
+    map_severity,
+)
 
 DOTENV_PATTERN = re.compile(
     r"^(?P<file>[^:]+):(?P<line>\d+)\s+(?P<code>[A-Za-z0-9_-]+):\s+(?P<message>.+)$",
@@ -19,15 +28,31 @@ YAMLLINT_PATTERN = re.compile(
     r"^(?P<file>.*?):(?P<line>\d+):(?P<column>\d+):\s+\[(?P<level>[^\]]+)\]\s+"
     r"(?P<message>.*?)(?:\s+\((?P<rule>[^)]+)\))?$",
 )
+YAMLLINT_SEVERITY_MAP: Final[dict[str, Severity]] = {
+    "error": Severity.ERROR,
+    "warning": Severity.WARNING,
+}
+REMARK_SEVERITY_MAP: Final[dict[str, Severity]] = {
+    "error": Severity.ERROR,
+    "warning": Severity.WARNING,
+    "info": Severity.NOTICE,
+    "hint": Severity.NOTE,
+}
 
 
-def parse_sqlfluff(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse sqlfluff JSON diagnostics."""
-    items = payload if isinstance(payload, list) else []
+def parse_sqlfluff(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse sqlfluff JSON diagnostics into raw diagnostic objects.
+
+    Args:
+        payload: JSON payload produced by sqlfluff.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Normalised diagnostics ready for aggregation.
+    """
+    del context
     results: list[RawDiagnostic] = []
-    for item in items:
-        if not isinstance(item, dict):
-            continue
+    for item in iter_dicts(payload):
         violations = item.get("violations")
         path = item.get("filepath")
         if not isinstance(violations, list):
@@ -39,68 +64,62 @@ def parse_sqlfluff(payload: Any, _context: ToolContext) -> Sequence[RawDiagnosti
             code = violation.get("code")
             line = violation.get("line_no")
             column = violation.get("line_pos")
-            severity = str(violation.get("severity", "error")).lower()
-            sev_enum = {
-                "error": Severity.ERROR,
-                "critical": Severity.ERROR,
-                "warn": Severity.WARNING,
-                "warning": Severity.WARNING,
-                "info": Severity.NOTICE,
-            }.get(severity, Severity.WARNING)
-            results.append(
-                RawDiagnostic(
-                    file=path,
-                    line=line,
-                    column=column,
-                    severity=sev_enum,
-                    message=message,
-                    code=str(code) if code else None,
-                    tool="sqlfluff",
-                ),
+            severity = violation.get("severity", "error")
+            sev_enum = map_severity(severity, SQLFLUFF_SEVERITY_MAP, Severity.WARNING)
+            location = DiagnosticLocation(file=path, line=line, column=column)
+            details = DiagnosticDetails(
+                severity=sev_enum,
+                message=message,
+                tool="sqlfluff",
+                code=str(code) if code else None,
             )
+            results.append(create_spec(location=location, details=details).build())
     return results
 
 
-def parse_yamllint(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse yamllint parsable text output."""
+def parse_yamllint(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse yamllint plain output into diagnostics.
+
+    Args:
+        stdout: Sequence of yamllint output lines.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics derived from yamllint findings.
+    """
+
+    del context
     results: list[RawDiagnostic] = []
-    for raw_line in stdout.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        match = YAMLLINT_PATTERN.match(line)
-        if not match:
-            continue
+    for match in iter_pattern_matches(stdout, YAMLLINT_PATTERN):
         file_path = match.group("file") or None
-        line_no = int(match.group("line")) if match.group("line") else None
-        column_no = int(match.group("column")) if match.group("column") else None
-        message = match.group("message") or ""
-        level = (match.group("level") or "warning").lower()
+        line_text = match.group("line")
+        column_text = match.group("column")
+        message = (match.group("message") or "").strip()
+        level = match.group("level") or "warning"
         rule = match.group("rule")
 
-        severity = {
-            "error": Severity.ERROR,
-            "warning": Severity.WARNING,
-        }.get(level, Severity.WARNING)
+        severity = map_severity(level, YAMLLINT_SEVERITY_MAP, Severity.WARNING)
 
-        results.append(
-            RawDiagnostic(
-                file=file_path,
-                line=line_no,
-                column=column_no,
-                severity=severity,
-                message=message.strip(),
-                code=rule,
-                tool="yamllint",
-            ),
+        location = DiagnosticLocation(
+            file=file_path,
+            line=int(line_text) if line_text else None,
+            column=int(column_text) if column_text else None,
         )
+        details = DiagnosticDetails(
+            severity=severity,
+            message=message,
+            tool="yamllint",
+            code=rule,
+        )
+        append_diagnostic(results, location=location, details=details)
     return results
 
 
-def parse_dotenv_linter(stdout: str, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_dotenv_linter(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse dotenv-linter text output."""
+    del context
     results: list[RawDiagnostic] = []
-    for raw_line in stdout.splitlines():
+    for raw_line in stdout:
         line = raw_line.strip()
         if (
             not line
@@ -130,59 +149,25 @@ def parse_dotenv_linter(stdout: str, _context: ToolContext) -> Sequence[RawDiagn
     return results
 
 
-def parse_remark(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse remark/remark-lint JSON output."""
-    files: list[dict[str, Any]]
-    if isinstance(payload, list):
-        files = [item for item in payload if isinstance(item, dict)]
-    elif isinstance(payload, dict):
-        intermediate = payload.get("files") or payload.get("results") or []
-        files = [item for item in intermediate if isinstance(item, dict)]
-    else:
-        files = []
+def parse_remark(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse remark/remark-lint JSON output into raw diagnostics.
 
+    Args:
+        payload: JSON payload generated by remark or remark-lint.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics describing remark findings.
+    """
+
+    del context
     results: list[RawDiagnostic] = []
-    for entry in files:
-        file_path = entry.get("name") or entry.get("path") or entry.get("file")
-        messages = entry.get("messages")
-        if not isinstance(messages, list):
-            continue
-        for message in messages:
-            if not isinstance(message, dict):
-                continue
-            reason = str(message.get("reason", "")).strip()
-            if not reason:
-                continue
-            fatal = message.get("fatal")
-            severity_label = message.get("severity")
-            if isinstance(severity_label, str):
-                severity = {
-                    "error": Severity.ERROR,
-                    "warning": Severity.WARNING,
-                    "info": Severity.NOTICE,
-                }.get(severity_label.lower(), Severity.WARNING)
-            else:
-                severity = Severity.ERROR if fatal in (True, 1) else Severity.WARNING
-
-            line = message.get("line")
-            column = message.get("column")
-            location = message.get("location") if isinstance(message.get("location"), dict) else {}
-            start = location.get("start") if isinstance(location, dict) else {}
-            if line is None and isinstance(start, dict):
-                line = start.get("line")
-                column = start.get("column")
-
-            results.append(
-                RawDiagnostic(
-                    file=file_path,
-                    line=line,
-                    column=column,
-                    severity=severity,
-                    message=reason,
-                    code=message.get("ruleId") or message.get("rule"),
-                    tool="remark-lint",
-                ),
-            )
+    for file_entry in _remark_file_entries(payload):
+        file_path = _remark_file_path(file_entry)
+        for message in _remark_messages(file_entry):
+            diagnostic = _build_remark_diagnostic(file_path, message)
+            if diagnostic is not None:
+                results.append(diagnostic)
     return results
 
 
@@ -194,8 +179,9 @@ SPECCY_SEVERITY_MAP: Final[dict[str, Severity]] = {
 }
 
 
-def parse_speccy(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_speccy(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse Speccy JSON output."""
+    del context
     results: list[RawDiagnostic] = []
     for file_entry in _iter_speccy_files(payload):
         file_path = _speccy_file_path(file_entry)
@@ -257,9 +243,8 @@ def _speccy_message(issue: Mapping[str, Any]) -> str:
 
 
 def _speccy_severity(issue: Mapping[str, Any], default_label: str) -> Severity:
-    label = (
-        (issue.get("type") or issue.get("severity") or default_label or "warning").strip().lower()
-    )
+    raw_label = issue.get("type") or issue.get("severity") or default_label or "warning"
+    label = str(raw_label).strip().lower()
     return SPECCY_SEVERITY_MAP.get(label, Severity.WARNING)
 
 
@@ -272,6 +257,126 @@ def _speccy_location(issue: Mapping[str, Any]) -> str | None:
     return None
 
 
+def _remark_file_entries(payload: Any) -> tuple[Mapping[str, Any], ...]:
+    """Return remark file entries extracted from ``payload``.
+
+    Args:
+        payload: Raw remark JSON payload.
+
+    Returns:
+        tuple[Mapping[str, Any], ...]: Iterable of mapping entries describing files.
+    """
+
+    if isinstance(payload, list):
+        return tuple(entry for entry in payload if isinstance(entry, Mapping))
+    if isinstance(payload, Mapping):
+        intermediate = payload.get("files") or payload.get("results") or []
+        return tuple(entry for entry in intermediate if isinstance(entry, Mapping))
+    return ()
+
+
+def _remark_messages(entry: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+    """Return message mappings contained within a remark file entry.
+
+    Args:
+        entry: Mapping describing a remark-processed file.
+
+    Returns:
+        tuple[Mapping[str, Any], ...]: Message mappings extracted from ``entry``.
+    """
+
+    messages = entry.get("messages")
+    if isinstance(messages, list):
+        return tuple(message for message in messages if isinstance(message, Mapping))
+    return ()
+
+
+def _remark_file_path(entry: Mapping[str, Any]) -> str | None:
+    """Return the file path associated with a remark entry when available.
+
+    Args:
+        entry: Mapping describing a remark-processed file.
+
+    Returns:
+        str | None: Resolved file path or ``None`` when absent.
+    """
+
+    value = entry.get("name") or entry.get("path") or entry.get("file")
+    return str(value) if value else None
+
+
+def _remark_severity(message: Mapping[str, Any]) -> Severity:
+    """Compute severity for a remark message mapping.
+
+    Args:
+        message: Mapping describing a single remark diagnostic entry.
+
+    Returns:
+        Severity: Severity inferred from the message content.
+    """
+
+    label = message.get("severity")
+    if isinstance(label, str):
+        return REMARK_SEVERITY_MAP.get(label.lower(), Severity.WARNING)
+    fatal = message.get("fatal")
+    return Severity.ERROR if bool(fatal) else Severity.WARNING
+
+
+def _remark_location(message: Mapping[str, Any]) -> tuple[int | None, int | None]:
+    """Return best-effort location information for a remark message.
+
+    Args:
+        message: Mapping describing a single remark diagnostic entry.
+
+    Returns:
+        tuple[int | None, int | None]: Line and column numbers when available.
+    """
+
+    line = message.get("line")
+    column = message.get("column")
+    if line is not None or column is not None:
+        return line, column
+    location = message.get("location")
+    if isinstance(location, Mapping):
+        start = location.get("start")
+        if isinstance(start, Mapping):
+            start_line = start.get("line")
+            start_column = start.get("column")
+            return start_line, start_column
+    return None, None
+
+
+def _build_remark_diagnostic(
+    file_path: str | None,
+    message: Mapping[str, Any],
+) -> RawDiagnostic | None:
+    """Return a raw diagnostic derived from a remark message mapping.
+
+    Args:
+        file_path: Path to the file associated with the remark message.
+        message: Mapping describing a single remark diagnostic entry.
+
+    Returns:
+        RawDiagnostic | None: Normalised diagnostic or ``None`` when the message lacks content.
+    """
+
+    reason = str(message.get("reason", "")).strip()
+    if not reason:
+        return None
+    severity = _remark_severity(message)
+    line, column = _remark_location(message)
+    rule = message.get("ruleId") or message.get("rule")
+    return create_spec(
+        location=DiagnosticLocation(file=file_path, line=line, column=column),
+        details=DiagnosticDetails(
+            severity=severity,
+            message=reason,
+            tool="remark-lint",
+            code=str(rule) if rule else None,
+        ),
+    ).build()
+
+
 __all__ = [
     "parse_dotenv_linter",
     "parse_remark",
@@ -279,3 +384,10 @@ __all__ = [
     "parse_sqlfluff",
     "parse_yamllint",
 ]
+SQLFLUFF_SEVERITY_MAP: Final[dict[str, Severity]] = {
+    "error": Severity.ERROR,
+    "critical": Severity.ERROR,
+    "warn": Severity.WARNING,
+    "warning": Severity.WARNING,
+    "info": Severity.NOTICE,
+}

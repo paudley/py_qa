@@ -4,60 +4,27 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from pathlib import Path
-
-from ...tools.base import Tool
 from ..models import PreparedCommand
-from .base import RuntimeHandler
+from .base import RuntimeContext, RuntimeHandler
 
 
 class BinaryRuntime(RuntimeHandler):
     """Fallback runtime for tools executed directly as system binaries."""
 
-    def _try_system(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand | None:
-        del tool, root, cache_dir, target_version
-        return PreparedCommand.from_parts(cmd=base_cmd, env=None, version=None, source="system")
+    def _try_system(self, context: RuntimeContext) -> PreparedCommand | None:
+        """Binary runtime delegates system execution without modification."""
 
-    def _try_project(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand | None:
-        del cache_dir, target_version
-        binary_name = Path(base_cmd[0]).name
-        candidate = root / "bin" / binary_name
-        if not candidate.exists():
-            return None
-        cmd = list(base_cmd)
-        cmd[0] = str(candidate)
-        return PreparedCommand.from_parts(
-            cmd=cmd,
-            env=None,
-            version=None,
-            source="project",
-        )
+        return PreparedCommand.from_parts(cmd=context.command, env=None, version=None, source="system")
 
-    def _prepare_local(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand:
-        del tool, root, cache_dir, target_version
-        return PreparedCommand.from_parts(cmd=base_cmd, env=None, version=None, source="system")
+    def _try_project(self, context: RuntimeContext) -> PreparedCommand | None:
+        """Use ``bin`` directory inside the project when present."""
+
+        return self._project_binary(context)
+
+    def _prepare_local(self, context: RuntimeContext) -> PreparedCommand:
+        """Local fallback simply reuses the base command."""
+
+        return PreparedCommand.from_parts(cmd=context.command, env=None, version=None, source="system")
 
 
 __all__ = ["BinaryRuntime"]

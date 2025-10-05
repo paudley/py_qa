@@ -5,144 +5,134 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import stat
-from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from ...process_utils import run_command
 from ...tools.base import Tool
-from .. import constants as tool_constants
+from ..constants import RuntimeCachePaths
 from ..models import PreparedCommand
-from ..utils import slugify, split_package_spec
-from .base import RuntimeHandler
+from ..utils import _slugify, _split_package_spec
+from .base import RuntimeContext, RuntimeHandler
+
+
+@dataclass(frozen=True, slots=True)
+class LuaInstallPaths:
+    """Resolved filesystem paths used during Lua tool installation."""
+
+    prefix: Path
+    meta_file: Path
+    binary: Path
+    work_dir: Path
+
+
+def _lua_install_paths(paths: RuntimeCachePaths, slug: str, binary_name: str) -> LuaInstallPaths:
+    """Return installation paths for the given slug and binary name.
+
+    Args:
+        paths: Runtime cache paths associated with Lua tooling.
+        slug: Cache slug derived from the package requirement.
+        binary_name: Target binary name produced by luarocks.
+
+    Returns:
+        LuaInstallPaths: Structured collection of installation directories.
+
+    Raises:
+        RuntimeError: If the cached runtime lacks a work directory.
+
+    """
+
+    if paths.work_dir is None:
+        raise RuntimeError("Lua runtime cache layout is missing a work directory")
+    return LuaInstallPaths(
+        prefix=paths.cache_dir / slug,
+        meta_file=paths.meta_dir / f"{slug}.json",
+        binary=paths.bin_dir / binary_name,
+        work_dir=paths.work_dir,
+    )
 
 
 class LuaRuntime(RuntimeHandler):
     """Provision Lua tooling using luarocks."""
 
-    def _try_system(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand | None:
-        executable = shutil.which(base_cmd[0])
-        if not executable:
-            return None
-        version = None
-        if tool.version_command:
-            version = self._versions.capture(tool.version_command)
-        if not self._versions.is_compatible(version, target_version):
-            return None
-        return PreparedCommand.from_parts(cmd=base_cmd, env=None, version=version, source="system")
+    def _try_project(self, context: RuntimeContext) -> PreparedCommand | None:
+        """Select project-local Lua binary when present."""
 
-    def _try_project(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand | None:
-        del cache_dir, target_version
-        binary_name = Path(base_cmd[0]).name
-        candidate = root / "bin" / binary_name
-        if not candidate.exists():
-            return None
-        cmd = list(base_cmd)
-        cmd[0] = str(candidate)
-        return PreparedCommand.from_parts(
-            cmd=cmd,
-            env=None,
-            version=None,
-            source="project",
+        return self._project_binary(context)
+
+    def _prepare_local(self, context: RuntimeContext) -> PreparedCommand:
+        """Install Lua tooling via luarocks into the shared cache."""
+        return self._prepare_cached_command(
+            context,
+            self._ensure_local_tool,
+            self._lua_env,
         )
 
-    def _prepare_local(
-        self,
-        tool: Tool,
-        base_cmd: Sequence[str],
-        root: Path,
-        cache_dir: Path,
-        target_version: str | None,
-    ) -> PreparedCommand:
-        binary_name = Path(base_cmd[0]).name
-        binary_path = self._ensure_local_tool(tool, binary_name)
-        cmd = list(base_cmd)
-        cmd[0] = str(binary_path)
-        env = self._lua_env(root)
-        version = None
-        if tool.version_command:
-            version = self._versions.capture(tool.version_command, env=self._merge_env(env))
-        return PreparedCommand.from_parts(cmd=cmd, env=env, version=version, source="local")
+    def _ensure_local_tool(self, context: RuntimeContext, binary_name: str) -> Path:
+        """Ensure ``binary_name`` is installed for ``tool`` using luarocks."""
 
-    def _ensure_local_tool(self, tool: Tool, binary_name: str) -> Path:
+        tool = context.tool
         package, version = self._package_spec(tool)
         if not shutil.which("luarocks"):
             raise RuntimeError("luarocks is required to install Lua-based linters")
 
-        slug = slugify(f"{package}@{version or 'latest'}")
-        prefix = tool_constants.LUA_CACHE_DIR / slug
-        meta_file = tool_constants.LUA_META_DIR / f"{slug}.json"
-        binary = tool_constants.LUA_BIN_DIR / binary_name
+        slug = _slugify(f"{package}@{version or 'latest'}")
+        lua_paths = _lua_install_paths(context.cache_layout.lua, slug, binary_name)
 
-        if binary.exists() and meta_file.exists():
-            try:
-                meta = json.loads(meta_file.read_text(encoding="utf-8"))
-                if meta.get("package") == package and meta.get("version") == version:
-                    return binary
-            except json.JSONDecodeError:
-                pass
+        if lua_paths.binary.exists() and lua_paths.meta_file.exists():
+            metadata = self._load_json(lua_paths.meta_file)
+            if metadata is not None:
+                package_match = metadata.get("package") == package
+                version_match = metadata.get("version") == version
+                if package_match and version_match:
+                    return lua_paths.binary
 
-        prefix.mkdir(parents=True, exist_ok=True)
-        tool_constants.LUA_META_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.LUA_BIN_DIR.mkdir(parents=True, exist_ok=True)
-        tool_constants.LUA_WORK_DIR.mkdir(parents=True, exist_ok=True)
+        lua_paths.prefix.mkdir(parents=True, exist_ok=True)
+        lua_paths.meta_file.parent.mkdir(parents=True, exist_ok=True)
+        lua_paths.binary.parent.mkdir(parents=True, exist_ok=True)
+        lua_paths.work_dir.mkdir(parents=True, exist_ok=True)
 
         args = [
             "luarocks",
             "--tree",
-            str(prefix),
+            str(lua_paths.prefix),
             "install",
             package,
         ]
         if version:
             args.append(version)
         run_command(args, capture_output=True)
-        target = prefix / "bin" / binary_name
+        target = lua_paths.prefix / "bin" / binary_name
         if not target.exists():
             msg = f"Failed to install lua tool '{tool.name}'"
             raise RuntimeError(msg)
 
-        shutil.copy2(target, binary)
-        binary.chmod(binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-        meta_file.write_text(
+        shutil.copy2(target, lua_paths.binary)
+        current_mode = lua_paths.binary.stat().st_mode
+        lua_paths.binary.chmod(current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        lua_paths.meta_file.write_text(
             json.dumps({"package": package, "version": version}),
             encoding="utf-8",
         )
-        return binary
+        return lua_paths.binary
 
     @staticmethod
     def _package_spec(tool: Tool) -> tuple[str, str | None]:
+        """Return LuaRocks package and version tuple derived from ``tool``."""
         if tool.package:
-            package, version = split_package_spec(tool.package)
+            package, version = _split_package_spec(tool.package)
             return package, version
         return tool.name, tool.min_version
 
     @staticmethod
-    def _lua_env(root: Path) -> dict[str, str]:
-        path_value = os.environ.get("PATH", "")
-        entries = [str(tool_constants.LUA_BIN_DIR)]
-        if path_value:
-            entries.append(path_value)
-        return {
-            "PATH": os.pathsep.join(entries),
-            "PWD": str(root),
-        }
+    def _lua_env(context: RuntimeContext) -> dict[str, str]:
+        """Return environment variables required to execute Lua tools."""
+        return RuntimeHandler._prepend_path_environment(
+            bin_dir=context.cache_layout.lua.bin_dir,
+            root=context.root,
+        )
 
 
 __all__ = ["LuaRuntime"]

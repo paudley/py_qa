@@ -7,32 +7,72 @@ from __future__ import annotations
 import shutil
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
+from typing import Final
 
 from ..constants import PY_QA_DIR_NAME
+from ..filesystem.paths import display_relative_path, ensure_absolute_path
 from ..process_utils import run_command
 from ..tool_env import VersionResolver
 from ..tools.base import Tool
 from ..workspace import is_py_qa_workspace
 
 
-@dataclass(slots=True)
-class ToolStatus:
-    """Status information for a tool as discovered by doctor/tool-info commands."""
+class ToolAvailability(str, Enum):
+    """Enumerate high-level availability states for CLI tooling."""
 
-    name: str
-    status: str
-    version: str | None
-    min_version: str | None
+    UNKNOWN = "unknown"
+    VENDORED = "vendored"
+    UNINSTALLED = "uninstalled"
+    NOT_OK = "not ok"
+    OK = "ok"
+    OUTDATED = "outdated"
+
+
+@dataclass(slots=True)
+class ToolVersionStatus:
+    """Captured version metadata for a CLI tool."""
+
+    detected: str | None
+    minimum: str | None
+
+
+@dataclass(slots=True)
+class ToolExecutionDetails:
+    """Captured executable details and exit metadata for a CLI tool."""
+
     executable: str | None
     path: str | None
-    notes: str
     returncode: int | None
+
+
+BINARY_RUNTIME: Final[str] = "binary"
+
+
+@dataclass(slots=True)
+class ToolStatus:
+    """Aggregated status information for doctor-style tooling checks."""
+
+    name: str
+    availability: ToolAvailability
+    notes: str
+    version: ToolVersionStatus
+    execution: ToolExecutionDetails
     raw_output: str | None
 
 
 def check_tool_status(tool: Tool) -> ToolStatus:
-    """Return ``ToolStatus`` describing availability and version information for *tool*."""
+    """Return ``ToolStatus`` describing availability and version information for a tool.
+
+    Args:
+        tool: Tool instance describing the command to probe.
+
+    Returns:
+        ToolStatus: Collected status, version, and execution metadata.
+
+    """
+
     version_cmd: Sequence[str] | None = tool.version_command
     executable = version_cmd[0] if version_cmd else None
     path = shutil.which(executable) if executable else None
@@ -40,19 +80,16 @@ def check_tool_status(tool: Tool) -> ToolStatus:
 
     if not version_cmd:
         notes = "Tool does not define a version command; status derived from runtime availability."
-        status = "unknown"
-        if tool.runtime != "binary":
-            status = "vendored"
+        availability = ToolAvailability.UNKNOWN
+        if tool.runtime != BINARY_RUNTIME:
+            availability = ToolAvailability.VENDORED
             notes = f"Provisioned via runtime '{tool.runtime}' when needed."
         return ToolStatus(
             name=tool.name,
-            status=status,
-            version=None,
-            min_version=tool.min_version,
-            executable=None,
-            path=None,
+            availability=availability,
             notes=notes,
-            returncode=None,
+            version=ToolVersionStatus(detected=None, minimum=tool.min_version),
+            execution=ToolExecutionDetails(executable=None, path=None, returncode=None),
             raw_output=None,
         )
 
@@ -63,73 +100,69 @@ def check_tool_status(tool: Tool) -> ToolStatus:
             check=False,
         )
     except FileNotFoundError:
-        status = "vendored" if tool.runtime != "binary" else "uninstalled"
+        availability = ToolAvailability.VENDORED if tool.runtime != BINARY_RUNTIME else ToolAvailability.UNINSTALLED
         runtime_note = (
-            f"Runtime '{tool.runtime}' can vend this tool on demand."
-            if tool.runtime != "binary"
-            else ""
+            f"Runtime '{tool.runtime}' can vend this tool on demand." if tool.runtime != BINARY_RUNTIME else ""
         )
-        notes = f"Executable '{version_cmd[0]}' not found on PATH. {runtime_note}".strip()
+        notes = (f"Executable '{version_cmd[0]}' not found on PATH. {runtime_note}").strip()
         return ToolStatus(
             name=tool.name,
-            status=status,
-            version=None,
-            min_version=tool.min_version,
-            executable=version_cmd[0],
-            path=None,
+            availability=availability,
             notes=notes,
-            returncode=None,
+            version=ToolVersionStatus(detected=None, minimum=tool.min_version),
+            execution=ToolExecutionDetails(
+                executable=version_cmd[0],
+                path=None,
+                returncode=None,
+            ),
             raw_output=None,
         )
 
-    output = (completed.stdout or "") + ("\n" + completed.stderr if completed.stderr else "")
-    output = output.strip()
+    output_parts = [completed.stdout or ""]
+    if completed.stderr:
+        output_parts.append(f"\n{completed.stderr}")
+    output = "".join(output_parts).strip()
     version = resolver.normalize(output.splitlines()[0] if output else None)
 
+    availability_status: ToolAvailability = ToolAvailability.OK
+    notes = output.splitlines()[0] if output else ""
     if completed.returncode != 0:
-        status = "not ok"
+        availability_status = ToolAvailability.NOT_OK
         notes = output or f"Exited with status {completed.returncode}."
-    else:
-        status = "ok"
-        notes = output.splitlines()[0] if output else ""
-        if tool.min_version and version and not resolver.is_compatible(version, tool.min_version):
-            status = "outdated"
-            notes = f"Detected {version}; requires ≥ {tool.min_version}."
+    elif tool.min_version and version and not resolver.is_compatible(version, tool.min_version):
+        availability_status = ToolAvailability.OUTDATED
+        notes = f"Detected {version}; requires ≥ {tool.min_version}."
 
     return ToolStatus(
         name=tool.name,
-        status=status,
-        version=version,
-        min_version=tool.min_version,
-        executable=version_cmd[0],
-        path=path,
+        availability=availability_status,
         notes=notes,
-        returncode=completed.returncode,
+        version=ToolVersionStatus(detected=version, minimum=tool.min_version),
+        execution=ToolExecutionDetails(
+            executable=version_cmd[0],
+            path=path,
+            returncode=completed.returncode,
+        ),
         raw_output=output or None,
     )
-
-
-def display_relative_path(path: Path, root: Path) -> str:
-    """Return a stable display string for ``path`` relative to ``root`` when possible."""
-    try:
-        return path.resolve().relative_to(root.resolve()).as_posix()
-    except (ValueError, OSError):
-        try:
-            return str(path.resolve())
-        except OSError:
-            return str(path)
 
 
 def filter_py_qa_paths(paths: Iterable[Path], root: Path) -> tuple[list[Path], list[str]]:
     """Drop py_qa paths when operating outside the py_qa workspace.
 
-    Returns a tuple of ``(kept_paths, ignored_display_strings)``. Paths are
-    resolved relative to ``root`` when necessary so callers can forward them to
-    downstream logic without additional normalization.
+    Args:
+        paths: Iterable of filesystem paths provided by the caller.
+        root: Root directory against which relative paths are resolved.
+
+    Returns:
+        tuple[list[Path], list[str]]: Pair of kept paths and ignored display
+        strings for reporting.
+
     """
     root_resolved = root.resolve()
     if is_py_qa_workspace(root_resolved):
-        return [(_maybe_resolve(path)) for path in paths], []
+        resolved_paths = [resolved for resolved in (_maybe_resolve(path) for path in paths) if resolved]
+        return resolved_paths, []
 
     kept: list[Path] = []
     ignored_display: list[str] = []
@@ -145,11 +178,12 @@ def filter_py_qa_paths(paths: Iterable[Path], root: Path) -> tuple[list[Path], l
 
 
 def _maybe_resolve(path: Path, root: Path | None = None) -> Path | None:
+    """Safely resolve ``path`` relative to ``root`` while handling errors."""
+
     try:
-        if path.is_absolute():
-            return path.resolve()
-        base = root if root is not None else Path.cwd()
-        return (base / path).resolve()
-    except OSError:
-        base = root if root is not None else Path.cwd()
-        return path if path.is_absolute() else base / path
+        return ensure_absolute_path(path, base_dir=root)
+    except (TypeError, ValueError, OSError):
+        try:
+            return Path(path).resolve()
+        except OSError:
+            return None

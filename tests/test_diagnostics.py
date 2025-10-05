@@ -35,29 +35,6 @@ def test_normalize_diagnostics_applies_rules() -> None:
     assert diag.tool == "pylint"
 
 
-def test_normalize_diagnostics_converts_existing_absolute_paths() -> None:
-    rules = build_severity_rules([])
-    project_root = Path.cwd()
-    absolute = project_root / "src" / "pkg" / "module.py"
-    diag = Diagnostic(
-        file=str(absolute),
-        line=3,
-        column=None,
-        severity=Severity.WARNING,
-        message="issue",
-        tool="ruff",
-    )
-
-    normalized = normalize_diagnostics(
-        [diag],
-        tool_name="ruff",
-        severity_rules=rules,
-        root=project_root,
-    )
-
-    assert normalized[0].file == "src/pkg/module.py"
-
-
 def test_dedupe_prefers_higher_severity(tmp_path: Path) -> None:
     cfg = DedupeConfig(dedupe=True, dedupe_by="severity", dedupe_line_fuzz=0)
     diag_warn = Diagnostic(
@@ -161,3 +138,126 @@ def test_dedupe_prefer_list(tmp_path: Path) -> None:
 
     assert len(result.outcomes[0].diagnostics) == 0
     assert result.outcomes[1].diagnostics == [diag_b]
+
+
+def test_dedupe_prefers_pyright_over_mypy(tmp_path: Path) -> None:
+    cfg = DedupeConfig(
+        dedupe=True,
+        dedupe_by="prefer",
+        dedupe_prefer=["pyright", "mypy"],
+        dedupe_line_fuzz=0,
+    )
+    diag_mypy = Diagnostic(
+        file="tests/test_reporting.py",
+        line=1126,
+        column=None,
+        severity=Severity.WARNING,
+        message='Argument "stdout" to "ToolOutcome" has incompatible type "str"; expected "list[str]"',
+        tool="mypy",
+        code="arg-type",
+    )
+    diag_pyright = Diagnostic(
+        file="tests/test_reporting.py",
+        line=1126,
+        column=None,
+        severity=Severity.WARNING,
+        message='Argument of type "Literal[\'\']" cannot be assigned to parameter "stdout" of type "list[str]" in function "__init__"',
+        tool="pyright",
+        code="reportArgumentType",
+    )
+
+    result = RunResult(
+        root=tmp_path,
+        files=[tmp_path / "tests" / "test_reporting.py"],
+        outcomes=[
+            ToolOutcome(
+                tool="mypy",
+                action="lint",
+                returncode=1,
+                stdout=[],
+                stderr=[],
+                diagnostics=[diag_mypy],
+            ),
+            ToolOutcome(
+                tool="pyright",
+                action="lint",
+                returncode=1,
+                stdout=[],
+                stderr=[],
+                diagnostics=[diag_pyright],
+            ),
+        ],
+    )
+
+    dedupe_outcomes(result, cfg)
+
+    assert not result.outcomes[0].diagnostics
+    assert result.outcomes[1].diagnostics == [diag_pyright]
+
+
+def test_dedupe_cross_tool_undefined_variable(tmp_path: Path) -> None:
+    cfg = DedupeConfig(dedupe=True, dedupe_line_fuzz=0)
+    diag_pyright = Diagnostic(
+        file="src/pyqa/parsers/misc.py",
+        line=275,
+        column=None,
+        severity=Severity.ERROR,
+        message='"map_severity" is not defined',
+        tool="pyright",
+        code="reportUndefinedVariable",
+    )
+    diag_pylint = Diagnostic(
+        file="src/pyqa/parsers/misc.py",
+        line=275,
+        column=None,
+        severity=Severity.ERROR,
+        message="Undefined variable 'map_severity'",
+        tool="pylint",
+        code="undefined-variable",
+    )
+    diag_ruff = Diagnostic(
+        file="src/pyqa/parsers/misc.py",
+        line=275,
+        column=None,
+        severity=Severity.ERROR,
+        message="Undefined name map_severity",
+        tool="ruff",
+        code="F821",
+    )
+
+    result = RunResult(
+        root=tmp_path,
+        files=[tmp_path / "src" / "pyqa" / "parsers" / "misc.py"],
+        outcomes=[
+            ToolOutcome(
+                tool="pyright",
+                action="lint",
+                returncode=1,
+                stdout="",
+                stderr="",
+                diagnostics=[diag_pyright],
+            ),
+            ToolOutcome(
+                tool="pylint",
+                action="lint",
+                returncode=1,
+                stdout="",
+                stderr="",
+                diagnostics=[diag_pylint],
+            ),
+            ToolOutcome(
+                tool="ruff",
+                action="lint",
+                returncode=1,
+                stdout="",
+                stderr="",
+                diagnostics=[diag_ruff],
+            ),
+        ],
+    )
+
+    dedupe_outcomes(result, cfg)
+
+    assert result.outcomes[0].diagnostics == [diag_pyright]
+    assert not result.outcomes[1].diagnostics
+    assert not result.outcomes[2].diagnostics

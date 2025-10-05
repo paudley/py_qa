@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "phplint",
+  "description": "PHP syntax linter via phplint.",
+  "extends": ["npm_runtime"],
+  "languages": ["php"],
+  "phase": "lint",
+  "fileExtensions": [".php", ".phtml"],
+  "runtime": {
+    "type": "npm",
+    "package": "phplint",
+    "versionCommand": ["phplint", "--version"]
+  },
+  "options": [
+    {
+      "name": "config",
+      "type": "path",
+      "description": "Configuration file passed to phplint (--configuration).",
+      "aliases": ["configuration"]
+    },
+    {
+      "name": "exclude",
+      "type": "path",
+      "description": "Paths excluded from linting."
+    },
+    {
+      "name": "include",
+      "type": "path",
+      "description": "Paths explicitly included for linting."
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to phplint."
+    }
+  ],
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["phplint", "--no-ansi", "--no-progress"],
+          "appendFiles": false,
+          "options": [
+            { "setting": ["configuration", "config"], "type": "path", "flag": "--configuration" },
+            { "setting": "exclude", "type": "path", "flag": "--exclude" },
+            { "setting": "include", "type": "path", "flag": "--include" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.misc.parse_phplint"
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/phplint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/phplint_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

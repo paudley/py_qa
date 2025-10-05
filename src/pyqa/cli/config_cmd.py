@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Configuration inspection commands."""
 
 from __future__ import annotations
@@ -12,26 +13,39 @@ from typing import Any
 import typer
 from pydantic import BaseModel, ConfigDict
 
-from ..config import ConfigError
-from ..config_loader import (
-    ConfigLoader,
-    ConfigLoadResult,
-    FieldUpdate,
-    generate_config_schema,
+from ..config_loader import ConfigLoadResult, FieldUpdate
+from ._config_cmd_services import (
+    JSON_FORMAT,
+    SchemaFormatLiteral,
+    UnknownConfigLayerError,
+    build_config_diff,
+    build_tool_schema_payload,
+    diff_snapshots,
+    load_config_with_trace,
+    render_config_mapping,
+    render_schema,
+    schema_to_markdown,
+    summarise_updates,
+    summarise_value,
+    validate_config,
+    write_output,
 )
-from ..serialization import jsonify
-from ..tools.settings import TOOL_SETTING_SCHEMA, SettingField, tool_setting_schema_as_dict
+from .shared import CLIError, build_cli_logger, register_command
 from .typer_ext import create_typer
 
 config_app = create_typer(help="Inspect, validate, and document configuration layers.")
 
 
-@config_app.command("show")
+@register_command(
+    config_app,
+    name="show",
+    help_text="Print the effective configuration for the project.",
+)
 def config_show(
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
     trace: bool = typer.Option(True, help="Show which source last set each field."),
-    output_format: str = typer.Option(
-        "json",
+    output_format: SchemaFormatLiteral = typer.Option(
+        JSON_FORMAT,
         "--format",
         "-f",
         case_sensitive=False,
@@ -44,46 +58,54 @@ def config_show(
     ),
 ) -> None:
     """Print the effective configuration for the project."""
-    loader = ConfigLoader.for_root(root)
-    try:
-        result = loader.load_with_trace(strict=strict)
-    except ConfigError as exc:
-        typer.echo(str(exc))
-        raise typer.Exit(code=1) from exc
 
-    if output_format.lower() != "json":
+    logger = build_cli_logger(emoji=True)
+    try:
+        result = load_config_with_trace(root, strict=strict, logger=logger)
+    except CLIError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+
+    if output_format.lower() != JSON_FORMAT:
         raise typer.BadParameter("Only JSON output is supported at the moment")
 
-    typer.echo(json.dumps(_config_to_mapping(result), indent=2, sort_keys=True))
+    payload = json.dumps(render_config_mapping(result), indent=2, sort_keys=True)
+    logger.echo(payload)
+
     if trace and result.updates:
-        typer.echo("\n# Overrides")
-        for update in _summarise_updates(result.updates):
-            typer.echo(update)
+        logger.echo("\n# Overrides")
+        for update in summarise_updates(result.updates):
+            logger.echo(update)
     if result.warnings:
-        typer.echo("\n# Warnings")
+        logger.echo("\n# Warnings")
         for warning in result.warnings:
-            typer.echo(f"- {warning}")
+            logger.warn(f"- {warning}")
 
 
-@config_app.command("validate")
+@register_command(
+    config_app,
+    name="validate",
+    help_text="Ensure the configuration loads successfully.",
+)
 def config_validate(
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
     strict: bool = typer.Option(False, "--strict", help="Treat configuration warnings as errors."),
 ) -> None:
     """Ensure the configuration loads successfully."""
-    loader = ConfigLoader.for_root(root)
+    logger = build_cli_logger(emoji=True)
     try:
-        loader.load(strict=strict)
-    except ConfigError as exc:
-        typer.echo(f"Configuration invalid: {exc}")
-        raise typer.Exit(code=1) from exc
-    typer.echo("Configuration is valid.")
+        validate_config(root, strict=strict, logger=logger)
+    except CLIError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
 
 
-@config_app.command("schema")
+@register_command(
+    config_app,
+    name="schema",
+    help_text="Emit a machine-readable description of configuration fields.",
+)
 def config_schema(
-    output_format: str = typer.Option(
-        "json",
+    output_format: SchemaFormatLiteral = typer.Option(
+        JSON_FORMAT,
         "--format",
         "-f",
         case_sensitive=False,
@@ -96,211 +118,130 @@ def config_schema(
     ),
 ) -> None:
     """Emit a machine-readable description of configuration fields."""
-    schema = generate_config_schema()
-    fmt = output_format.lower()
-    if fmt == "json":
-        content = json.dumps(schema, indent=2, sort_keys=True)
-    elif fmt == "json-tools":
-        content = json.dumps(tool_setting_schema_as_dict(), indent=2, sort_keys=True)
-    elif fmt in {"md", "markdown"}:
-        content = _schema_to_markdown(schema)
-    else:
-        raise typer.BadParameter("Unknown schema format. Use 'json', 'json-tools', or 'markdown'.")
 
-    if out:
-        out_path = out.resolve()
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        text = content if content.endswith("\n") else content + "\n"
-        out_path.write_text(text, encoding="utf-8")
-        typer.echo(str(out_path))
-    else:
-        typer.echo(content)
+    logger = build_cli_logger(emoji=True)
+    content = render_schema(output_format)
+    write_output(content, out=out, logger=logger)
 
 
-@config_app.command("diff")
+@register_command(
+    config_app,
+    name="diff",
+    help_text="Show the difference between two configuration layers.",
+)
 def config_diff(
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
     from_layer: str = typer.Option("defaults", "--from", help="Baseline layer."),
     to_layer: str = typer.Option("final", "--to", help="Comparison layer."),
-    out: Path | None = typer.Option(None, "--out", help="Write diff output to the provided path."),
+    out: Path | None = typer.Option(
+        None,
+        "--out",
+        help="Write diff output to the provided path.",
+    ),
 ) -> None:
     """Show the difference between two configuration layers."""
-    loader = ConfigLoader.for_root(root)
-    result = loader.load_with_trace()
-    snapshots: dict[str, Mapping[str, Any]] = dict(result.snapshots)
-    from_key = from_layer.lower()
-    to_key = to_layer.lower()
-    available = {key.lower(): key for key in snapshots}
-    available["final"] = "final"
-    if from_key not in available:
-        raise typer.BadParameter(
-            f"Unknown layer '{from_layer}'. Available: {', '.join(sorted(available))}",
+    logger = build_cli_logger(emoji=True)
+    try:
+        result = load_config_with_trace(root, strict=False, logger=logger)
+    except CLIError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    try:
+        diff_result = build_config_diff(
+            result,
+            from_layer=from_layer,
+            to_layer=to_layer,
         )
-    if to_key not in available:
+    except UnknownConfigLayerError as exc:
+        available = ", ".join(exc.available)
         raise typer.BadParameter(
-            f"Unknown layer '{to_layer}'. Available: {', '.join(sorted(available))}",
-        )
-    if from_key == "final":
-        from_snapshot: Mapping[str, Any] | None = _config_to_mapping(result)
-    else:
-        from_snapshot = snapshots.get(available[from_key])
-    if to_key == "final":
-        to_snapshot: Mapping[str, Any] | None = _config_to_mapping(result)
-    else:
-        to_snapshot = snapshots.get(available[to_key])
-    if from_snapshot is None or to_snapshot is None:
-        raise typer.BadParameter("Selected layers are not available in this project")
-    diff = _diff_snapshots(from_snapshot, to_snapshot)
-    content = json.dumps(diff, indent=2, sort_keys=True)
-    if out:
-        out_path = out.resolve()
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(content + "\n", encoding="utf-8")
-        typer.echo(str(out_path))
-    else:
-        typer.echo(content)
+            f"Unknown layer '{exc.layer}'. Available: {available}",
+        ) from exc
+
+    write_output(
+        json.dumps(diff_result.diff, indent=2, sort_keys=True),
+        out=out,
+        logger=logger,
+    )
 
 
-@config_app.command("export-tools")
+@register_command(
+    config_app,
+    name="export-tools",
+    help_text="Write the tool settings schema to disk.",
+)
 def config_export_tools(
     out: Path = typer.Argument(
         Path("tool-schema.json"),
         metavar="PATH",
         help="Destination file for the tool schema JSON.",
     ),
+    check: bool = typer.Option(
+        False,
+        "--check",
+        help="Exit with status 1 if the target file is missing or out of date.",
+    ),
 ) -> None:
     """Write the tool settings schema to disk."""
+
+    logger = build_cli_logger(emoji=True)
     out_path = out.resolve()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    payload: dict[str, Any] = {
-        "_license": "SPDX-License-Identifier: MIT",
-        "_copyright": "Copyright (c) 2025 Blackcat Informatics® Inc.",
-    }
-    payload.update(tool_setting_schema_as_dict())
+    payload = build_tool_schema_payload()
     text = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if check:
+        if not out_path.exists():
+            logger.fail(f"{out_path} is missing")
+            raise typer.Exit(code=1)
+        existing = out_path.read_text(encoding="utf-8")
+        if existing != text:
+            logger.fail(f"{out_path} is out of date")
+            raise typer.Exit(code=1)
+        logger.echo(str(out_path))
+        return
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(text, encoding="utf-8")
-    typer.echo(str(out_path))
+    logger.echo(str(out_path))
 
 
 def _config_to_mapping(result: ConfigLoadResult) -> Mapping[str, Any]:
-    config = result.config
-    return {
-        "file_discovery": jsonify(config.file_discovery),
-        "output": jsonify(config.output),
-        "execution": jsonify(config.execution),
-        "dedupe": jsonify(config.dedupe),
-        "severity_rules": list(config.severity_rules),
-        "tool_settings": jsonify(config.tool_settings),
-    }
+    """Backwards compatible wrapper used by older callers."""
+
+    return render_config_mapping(result)
 
 
 def _summarise_updates(updates: list[FieldUpdate]) -> list[str]:
-    rendered: list[str] = []
-    for update in updates:
-        field_path = (
-            update.field if update.section == "root" else f"{update.section}.{update.field}"
-        )
-        info = _summarise_value(field_path, update.value)
-        rendered.append(f"- {field_path} <- {update.source} -> {info}")
-    return rendered
+    """Backwards compatible wrapper around :func:`summarise_updates`."""
+
+    return summarise_updates(updates)
 
 
 def _summarise_value(field_path: str, value: Any) -> str:
-    if field_path.startswith("tool_settings.") and isinstance(value, Mapping):
-        parts = field_path.split(".", 2)
-        tool = parts[1]
-        schema = TOOL_SETTING_SCHEMA.get(tool, {})
-        sections = []
-        for key, entry in value.items():
-            field = schema.get(key)
-            description = field.description if isinstance(field, SettingField) else None
-            rendered = json.dumps(jsonify(entry), sort_keys=True)
-            if description:
-                sections.append(f"{key}={rendered} ({description})")
-            else:
-                sections.append(f"{key}={rendered}")
-        return "; ".join(sections) if sections else json.dumps({}, sort_keys=True)
-    return json.dumps(jsonify(value), sort_keys=True)
+    """Backwards compatible wrapper around :func:`summarise_value`."""
+
+    return summarise_value(field_path, value)
+
+
+def _diff_snapshots(
+    left: Mapping[str, Any],
+    right: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Backwards compatible wrapper for older imports."""
+
+    return diff_snapshots(left, right)
 
 
 def _schema_to_markdown(schema: Mapping[str, Any]) -> str:
-    lines: list[str] = []
-    for section, fields in schema.items():
-        lines.append(f"## {section}")
-        if isinstance(fields, Mapping) and "type" in fields:
-            lines.append("| Field | Type | Default |")
-            lines.append("| --- | --- | --- |")
-            lines.append(f"| {section} | {fields['type']} | {json.dumps(fields['default'])} |")
-            if section == "tool_settings":
-                tools_section = fields.get("tools")
-                if isinstance(tools_section, Mapping):
-                    _append_tool_schema(lines, tools_section)
-            lines.append("")
-            continue
-        lines.append("| Field | Type | Default |")
-        lines.append("| --- | --- | --- |")
-        if isinstance(fields, Mapping):
-            for name, spec in fields.items():
-                if not isinstance(spec, Mapping):
-                    continue
-                default = json.dumps(spec.get("default"))
-                lines.append(f"| {name} | {spec.get('type')} | {default} |")
-        if section == "tool_settings" and isinstance(fields, Mapping):
-            tools_section = fields.get("tools")
-            if isinstance(tools_section, Mapping):
-                _append_tool_schema(lines, tools_section)
-        lines.append("")
-    return "\n".join(lines)
+    """Backwards compatible wrapper mirroring previous behaviour."""
+
+    return schema_to_markdown(schema)
 
 
-def _append_tool_schema(lines: list[str], tools: Mapping[str, Any]) -> None:
-    if not tools:
-        return
-    for tool, entries in sorted(tools.items()):
-        if not isinstance(entries, Mapping):
-            continue
-        lines.append(f"### {tool}")
-        lines.append("| Setting | Type | Description |")
-        lines.append("| --- | --- | --- |")
-        for key, spec in sorted(entries.items()):
-            if not isinstance(spec, Mapping):
-                continue
-            type_desc = spec.get("type", "")
-            description = spec.get("description", "")
-            lines.append(f"| {key} | {type_desc} | {description} |")
-        lines.append("")
+class ToolSettingsDoc(BaseModel):
+    """Documentation model for tool settings schema output."""
 
+    model_config = ConfigDict(extra="allow")
 
-class SnapshotDiff(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    added: dict[str, Any]
-    removed: dict[str, Any]
-    changed: dict[str, dict[str, Any]]
-
-
-def _diff_snapshots(base: Mapping[str, Any], updated: Mapping[str, Any]) -> Mapping[str, Any]:
-    base_flat = _flatten_snapshot(base)
-    updated_flat = _flatten_snapshot(updated)
-
-    added = {key: updated_flat[key] for key in updated_flat.keys() - base_flat.keys()}
-    removed = {key: base_flat[key] for key in base_flat.keys() - updated_flat.keys()}
-    changed = {
-        key: {"from": base_flat[key], "to": updated_flat[key]}
-        for key in base_flat.keys() & updated_flat.keys()
-        if base_flat[key] != updated_flat[key]
-    }
-    return SnapshotDiff(added=added, removed=removed, changed=changed).model_dump()
-
-
-def _flatten_snapshot(data: Any, prefix: tuple[str, ...] = ()) -> dict[str, Any]:
-    if isinstance(data, Mapping):
-        flattened: dict[str, Any] = {}
-        for key, value in data.items():
-            flattened.update(_flatten_snapshot(value, prefix + (str(key),)))
-        return flattened
-    path = ".".join(prefix) if prefix else "root"
-    return {path: jsonify(data)}
+    tools: dict[str, dict[str, Any]]
 
 
 __all__ = ["config_app"]

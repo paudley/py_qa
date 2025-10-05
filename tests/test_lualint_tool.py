@@ -9,8 +9,21 @@ from pathlib import Path
 from unittest.mock import patch
 
 from pyqa.config import Config
+from pyqa.tooling import ToolCatalogLoader
+from pyqa.tooling.strategies import command_download_binary
 from pyqa.tools.base import ToolAction, ToolContext
-from pyqa.tools.builtins import LualintCommand
+
+_PYQA_ROOT = Path(__file__).resolve().parents[1]
+_CATALOG_ROOT = _PYQA_ROOT / "tooling" / "catalog"
+
+
+def _lualint_config() -> dict[str, object]:
+    loader = ToolCatalogLoader(catalog_root=_CATALOG_ROOT)
+    snapshot = loader.load_snapshot()
+    for definition in snapshot.tools:
+        if definition.name == "lualint":
+            return dict(definition.actions[0].command.reference.config)
+    raise AssertionError("lualint command configuration missing from catalog")
 
 
 def test_lualint_command_build(tmp_path: Path) -> None:
@@ -23,16 +36,14 @@ def test_lualint_command_build(tmp_path: Path) -> None:
     )
 
     with patch(
-        "pyqa.tools.builtins.ensure_lualint",
-        return_value=tmp_path / "cache" / "lualint",
+        "pyqa.tooling.strategies._download_artifact_for_tool",
+        return_value=tmp_path / "cache" / "lualint.lua",
     ):
-        action = ToolAction(
-            name="lint",
-            command=LualintCommand(base=("lua",)),
-            append_files=True,
-        )
+        builder = command_download_binary(_lualint_config())
+        action = ToolAction(name="lint", command=builder)
         command = action.build_command(ctx)
 
     assert command[0] == "lua"
+    assert any(part.endswith("lualint.lua") for part in command)
     assert "-r" in command
     assert command[-1].endswith("module.lua")

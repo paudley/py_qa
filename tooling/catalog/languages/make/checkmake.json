@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "checkmake",
+  "description": "Makefile linter powered by checkmake.",
+  "extends": ["go_runtime"],
+  "languages": ["make"],
+  "phase": "lint",
+  "fileExtensions": ["Makefile", "makefile", ".mk"],
+  "runtime": {
+    "type": "go",
+    "package": "github.com/checkmake/checkmake/cmd/checkmake",
+    "versionCommand": ["checkmake", "--version"]
+  },
+  "options": [
+    {
+      "name": "config",
+      "type": "path",
+      "description": "Custom checkmake configuration file."
+    },
+    {
+      "name": "ignore",
+      "type": "list[str]",
+      "description": "Rule identifiers to suppress during linting."
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to checkmake."
+    }
+  ],
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["checkmake", "lint", "--format", "json"],
+          "appendFiles": false,
+          "options": [
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "ignore", "type": "args", "flag": "--ignore" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.misc.parse_checkmake"
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/checkmake_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/checkmake_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

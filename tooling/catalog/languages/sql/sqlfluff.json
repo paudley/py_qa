@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "sqlfluff",
+  "description": "SQL linter and formatter using sqlfluff.",
+  "languages": ["sql"],
+  "phase": "lint",
+  "runtime": {
+    "type": "python",
+    "package": "sqlfluff",
+    "minVersion": "3.1.0",
+    "versionCommand": ["sqlfluff", "--version"]
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["sqlfluff", "lint", "--format", "json"],
+          "appendFiles": false,
+          "options": [
+            { "setting": ["config", "config_path"], "type": "path", "flag": "--config" },
+            {
+              "setting": "dialect",
+              "type": "value",
+              "flag": "--dialect",
+              "defaultFrom": "execution.sql_dialect"
+            },
+            { "setting": "templater", "type": "value", "flag": "--templater" },
+            { "setting": "rules", "type": "args", "flag": "--rules" },
+            { "setting": "processes", "type": "value", "flag": "--processes" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "description": "Lint SQL files using sqlfluff.",
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.config.parse_sqlfluff"
+        }
+      }
+    },
+    {
+      "name": "fix",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["sqlfluff", "fix", "--force"],
+          "appendFiles": false,
+          "options": [
+            { "setting": ["config", "config_path"], "type": "path", "flag": "--config" },
+            {
+              "setting": "dialect",
+              "type": "value",
+              "flag": "--dialect",
+              "defaultFrom": "execution.sql_dialect"
+            },
+            { "setting": "templater", "type": "value", "flag": "--templater" },
+            { "setting": "rules", "type": "args", "flag": "--rules" },
+            { "setting": "processes", "type": "value", "flag": "--processes" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "isFix": true,
+      "description": "Autofix SQL files via sqlfluff fix."
+    }
+  ],
+  "extends": ["python_defaults"],
+  "fileExtensions": [".sql"],
+  "documentation": {
+    "help": {
+      "path": "docs/sqlfluff_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/sqlfluff_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

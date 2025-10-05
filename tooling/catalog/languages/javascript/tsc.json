@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "tsc",
+  "description": "TypeScript compiler in check-only mode.",
+  "languages": ["javascript"],
+  "phase": "lint",
+  "runtime": {
+    "type": "npm",
+    "package": "typescript@5.6.3",
+    "minVersion": "5.6.3",
+    "versionCommand": ["tsc", "--version"]
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional compiler arguments appended to tsc."
+    },
+    {
+      "name": "incremental",
+      "type": "bool",
+      "description": "Enable incremental build information."
+    },
+    {
+      "name": "pretty",
+      "type": "bool",
+      "description": "Control pretty diagnostic output."
+    },
+    {
+      "name": "project",
+      "type": "path",
+      "description": "tsconfig project to use for the run."
+    },
+    {
+      "name": "skip-lib-check",
+      "type": "bool",
+      "description": "Skip type checking of declaration files."
+    },
+    {
+      "name": "strict",
+      "type": "bool",
+      "description": "Enable all strict type-checking options."
+    },
+    {
+      "name": "watch",
+      "type": "bool",
+      "description": "Run tsc in watch mode."
+    }
+  ],
+  "actions": [
+    {
+      "name": "type-check",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["tsc", "--noEmit"],
+          "appendFiles": false,
+          "options": [
+            { "setting": "project", "type": "path", "flag": "--project" },
+            {
+              "setting": "pretty",
+              "type": "value",
+              "flag": "--pretty",
+              "default": false,
+              "transform": "bool_to_str"
+            },
+            { "setting": "incremental", "type": "flag", "flag": "--incremental" },
+            { "setting": "watch", "type": "flag", "flag": "--watch" },
+            { "setting": "skip-lib-check", "type": "flag", "flag": "--skipLibCheck" },
+            {
+              "setting": "strict",
+              "type": "flag",
+              "flag": "--strict",
+              "defaultFrom": "strictness.type_checking",
+              "transform": "strictness_is_strict"
+            },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "description": "Type-check TypeScript projects via tsc.",
+      "parser": {
+        "strategy": "parser_text",
+        "config": {
+          "transform": "pyqa.parsers.javascript.parse_tsc"
+        }
+      }
+    }
+  ],
+  "extends": ["npm_runtime"],
+  "fileExtensions": [".ts", ".tsx"],
+  "documentation": {
+    "help": {
+      "path": "docs/tsc_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/tsc_cmd_help.txt",
+      "format": "text"
+    },
+    "shared": {
+      "path": "docs/SHARED_KNOBS.md",
+      "format": "markdown"
+    }
+  }
+}

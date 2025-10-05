@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "dockerfilelint",
+  "description": "Lint Dockerfiles using dockerfilelint.",
+  "extends": ["npm_runtime"],
+  "languages": ["docker"],
+  "phase": "lint",
+  "fileExtensions": ["Dockerfile"],
+  "runtime": {
+    "type": "npm",
+    "package": "dockerfilelint",
+    "versionCommand": ["dockerfilelint", "--version"]
+  },
+  "options": [
+    {
+      "name": "config",
+      "type": "path",
+      "description": "Configuration file supplied to dockerfilelint."
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to dockerfilelint."
+    }
+  ],
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["dockerfilelint", "--output", "json"],
+          "appendFiles": false,
+          "options": [
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.ops.parse_dockerfilelint"
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/dockerfilelint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/dockerfilelint_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

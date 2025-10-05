@@ -98,6 +98,130 @@
       "type": "int"
     }
   },
+  "cargo-clippy": {
+    "args": {
+      "description": "Additional arguments appended to the cargo clippy invocation.",
+      "type": "list[str]"
+    }
+  },
+  "cargo-fmt": {
+    "args": {
+      "description": "Additional arguments appended to cargo fmt.",
+      "type": "list[str]"
+    }
+  },
+  "checkmake": {
+    "args": {
+      "description": "Additional arguments appended to checkmake.",
+      "type": "list[str]"
+    },
+    "config": {
+      "description": "Custom checkmake configuration file.",
+      "type": "path"
+    },
+    "ignore": {
+      "description": "Rule identifiers to suppress during linting.",
+      "type": "list[str]"
+    }
+  },
+  "cpplint": {
+    "args": {
+      "description": "Additional arguments appended to cpplint.",
+      "type": "list[str]"
+    },
+    "counting": {
+      "description": "Whether to count errors as extensions or real errors (quiet, total).",
+      "type": "str"
+    },
+    "exclude": {
+      "description": "Paths excluded from linting.",
+      "type": "path"
+    },
+    "extensions": {
+      "description": "Additional file extensions treated as C/C++ sources.",
+      "type": "list[str]"
+    },
+    "filter": {
+      "description": "Category filters applied to cpplint diagnostics.",
+      "type": "list[str]"
+    },
+    "headers": {
+      "description": "Header extensions treated as C/C++ headers.",
+      "type": "list[str]"
+    },
+    "includeorder": {
+      "description": "Override include ordering category.",
+      "type": "str"
+    },
+    "incremental": {
+      "description": "Incremental mode that only reports new errors.",
+      "type": "bool"
+    },
+    "line-length": {
+      "description": "Maximum allowed line length.",
+      "type": "int"
+    },
+    "pretty": {
+      "description": "Enable pretty printing (ANSI colors).",
+      "type": "bool"
+    },
+    "recursive": {
+      "description": "Recursively lint directories.",
+      "type": "bool"
+    },
+    "repository": {
+      "description": "Repository root used to normalize include paths.",
+      "type": "path"
+    },
+    "root": {
+      "description": "Project root for header detection.",
+      "type": "path"
+    },
+    "skip-lib-check": {
+      "description": "Skip checking system libraries.",
+      "type": "bool"
+    },
+    "strict": {
+      "description": "Enable strict mode.",
+      "type": "bool"
+    },
+    "watch": {
+      "description": "Watch files and rerun automatically.",
+      "type": "bool"
+    }
+  },
+  "dockerfilelint": {
+    "args": {
+      "description": "Additional arguments appended to dockerfilelint.",
+      "type": "list[str]"
+    },
+    "config": {
+      "description": "Configuration file supplied to dockerfilelint.",
+      "type": "path"
+    }
+  },
+  "dotenv-linter": {
+    "args": {
+      "description": "Additional arguments appended to dotenv-linter.",
+      "type": "list[str]"
+    },
+    "exclude": {
+      "description": "Directories or files to exclude from linting.",
+      "type": "path"
+    },
+    "recursive": {
+      "description": "Recurse into directories when linting.",
+      "type": "bool"
+    },
+    "schema": {
+      "description": "JSON schema used to validate dotenv files.",
+      "type": "path"
+    },
+    "skip": {
+      "description": "Rules to skip during linting (e.g. LeadingCharacter).",
+      "type": "list[str]"
+    }
+  },
   "eslint": {
     "args": {
       "description": "Additional arguments appended to ESLint.",
@@ -149,6 +273,12 @@
     },
     "rulesdir": {
       "description": "Directories containing custom ESLint rules.",
+      "type": "list[str]"
+    }
+  },
+  "gofmt": {
+    "args": {
+      "description": "Additional arguments appended to gofmt.",
       "type": "list[str]"
     }
   },
@@ -274,6 +404,48 @@
       "type": "path"
     }
   },
+  "kube-linter": {
+    "add-all-built-in": {
+      "description": "Add all built-in checks regardless of config defaults.",
+      "type": "bool"
+    },
+    "args": {
+      "description": "Additional arguments appended to kube-linter.",
+      "type": "list[str]"
+    },
+    "config": {
+      "description": "Configuration file supplied to kube-linter.",
+      "type": "path"
+    },
+    "do-not-auto-add-defaults": {
+      "description": "Disable automatic default checks.",
+      "type": "bool"
+    },
+    "exclude": {
+      "description": "Checks to exclude from the run.",
+      "type": "list[str]"
+    },
+    "fail-if-no-objects-found": {
+      "description": "Error when manifests do not contain any Kubernetes objects.",
+      "type": "bool"
+    },
+    "fail-on-invalid-resource": {
+      "description": "Fail when invalid Kubernetes resources are encountered.",
+      "type": "bool"
+    },
+    "ignore-paths": {
+      "description": "Filesystem paths ignored during manifest discovery.",
+      "type": "path"
+    },
+    "include": {
+      "description": "Explicit checks to include.",
+      "type": "list[str]"
+    },
+    "verbose": {
+      "description": "Enable verbose logging output.",
+      "type": "bool"
+    }
+  },
   "luacheck": {
     "args": {
       "description": "Additional arguments appended to luacheck.",
@@ -326,6 +498,26 @@
     "std": {
       "description": "Standard globals set to load (e.g. luajit, love, ngx).",
       "type": "str"
+    }
+  },
+  "lualint": {
+    "args": {
+      "description": "Additional arguments appended to lualint.",
+      "type": "list[str]"
+    },
+    "relaxed": {
+      "description": "Enable relaxed linting mode (-r).",
+      "type": "bool"
+    },
+    "strict": {
+      "description": "Enable strict linting mode (-s).",
+      "type": "bool"
+    }
+  },
+  "mdformat": {
+    "args": {
+      "description": "Additional arguments appended to mdformat.",
+      "type": "list[str]"
     }
   },
   "mypy": {
@@ -416,6 +608,60 @@
     "warn-unused-ignores": {
       "description": "Warn about unused # type: ignore directives.",
       "type": "bool"
+    }
+  },
+  "perlcritic": {
+    "args": {
+      "description": "Additional arguments appended to perlcritic.",
+      "type": "list[str]"
+    },
+    "exclude": {
+      "description": "Policy names to exclude.",
+      "type": "list[str]"
+    },
+    "include": {
+      "description": "Policy names to include.",
+      "type": "list[str]"
+    },
+    "profile": {
+      "description": "Perlcritic profile file to load.",
+      "type": "path"
+    },
+    "severity": {
+      "description": "Minimum severity level reported by perlcritic (1-5).",
+      "type": "str"
+    },
+    "theme": {
+      "description": "Perlcritic policy theme to enable (e.g. core, maintenance).",
+      "type": "str"
+    }
+  },
+  "perltidy": {
+    "args": {
+      "description": "Additional arguments appended to perltidy.",
+      "type": "list[str]"
+    },
+    "profile": {
+      "description": "Perltidy profile file controlling formatting.",
+      "type": "path"
+    }
+  },
+  "phplint": {
+    "args": {
+      "description": "Additional arguments appended to phplint.",
+      "type": "list[str]"
+    },
+    "config": {
+      "description": "Configuration file passed to phplint (--configuration).",
+      "type": "path"
+    },
+    "exclude": {
+      "description": "Paths excluded from linting.",
+      "type": "path"
+    },
+    "include": {
+      "description": "Paths explicitly included for linting.",
+      "type": "path"
     }
   },
   "prettier": {
@@ -512,9 +758,17 @@
       "description": "Lower score boundary to fail the run.",
       "type": "float"
     },
+    "init-import": {
+      "description": "Control the init-import option (y/n).",
+      "type": "bool"
+    },
     "jobs": {
       "description": "Number of parallel workers.",
       "type": "int"
+    },
+    "load-plugins": {
+      "description": "Pylint plugins to load via --load-plugins.",
+      "type": "list[str]"
     },
     "max-args": {
       "description": "Maximum number of arguments permitted on functions/methods.",
@@ -531,6 +785,10 @@
     "max-positional-arguments": {
       "description": "Maximum positional arguments allowed before flagging.",
       "type": "int"
+    },
+    "py-version": {
+      "description": "Python version string passed to pylint.",
+      "type": "str"
     },
     "rcfile": {
       "description": "Path to pylintrc or equivalent configuration.",
@@ -598,6 +856,44 @@
     },
     "verifytypes": {
       "description": "Module or pattern to verify using --verifytypes.",
+      "type": "str"
+    }
+  },
+  "pyupgrade": {
+    "args": {
+      "description": "Additional arguments appended to pyupgrade.",
+      "type": "list[str]"
+    },
+    "exit-zero-even-if-changed": {
+      "description": "Force exit code zero even when files change.",
+      "type": "bool"
+    },
+    "keep-annotations": {
+      "description": "Preserve annotations when rewriting.",
+      "type": "bool"
+    },
+    "keep-logging-format": {
+      "description": "Do not rewrite logging format strings.",
+      "type": "bool"
+    },
+    "keep-mock": {
+      "description": "Preserve mock rather than rewriting imports.",
+      "type": "bool"
+    },
+    "keep-percent-format": {
+      "description": "Keep percent-style string formatting.",
+      "type": "bool"
+    },
+    "keep-runtime-typing": {
+      "description": "Retain runtime typing constructs.",
+      "type": "bool"
+    },
+    "no-verify": {
+      "description": "Skip verification step after rewrites.",
+      "type": "bool"
+    },
+    "pyplus": {
+      "description": "Minimum Python version used when selecting pyupgrade transforms.",
       "type": "str"
     }
   },
@@ -719,7 +1015,67 @@
       "type": "str"
     }
   },
+  "selene": {
+    "allow-warnings": {
+      "description": "Allow warnings without failing the run.",
+      "type": "bool"
+    },
+    "args": {
+      "description": "Additional arguments appended to selene.",
+      "type": "list[str]"
+    },
+    "color": {
+      "description": "Color output preference (Never, Auto, Always).",
+      "type": "str"
+    },
+    "config": {
+      "description": "Selene configuration file.",
+      "type": "path"
+    },
+    "display-style": {
+      "description": "Output display style (Json2, Compact, Pretty).",
+      "type": "str"
+    },
+    "no-exclude": {
+      "description": "Disable built-in exclude patterns.",
+      "type": "bool"
+    },
+    "no-summary": {
+      "description": "Disable summary output.",
+      "type": "bool"
+    },
+    "num-threads": {
+      "description": "Number of worker threads.",
+      "type": "int"
+    },
+    "pattern": {
+      "description": "Glob patterns to lint instead of the default file set.",
+      "type": "list[str]"
+    },
+    "quiet": {
+      "description": "Suppress non-error output.",
+      "type": "bool"
+    }
+  },
+  "speccy": {
+    "args": {
+      "description": "Additional arguments appended to speccy.",
+      "type": "list[str]"
+    },
+    "ruleset": {
+      "description": "Speccy ruleset file.",
+      "type": "path"
+    },
+    "skip": {
+      "description": "Checks to skip during linting.",
+      "type": "list[str]"
+    }
+  },
   "stylelint": {
+    "allow-empty-input": {
+      "description": "Allow empty input without treating it as an error.",
+      "type": "bool"
+    },
     "args": {
       "description": "Additional arguments appended to the stylelint command.",
       "type": "list[str]"
@@ -728,6 +1084,14 @@
       "description": "Custom stylelint configuration file path.",
       "type": "path"
     },
+    "custom-syntax": {
+      "description": "Custom syntax module passed to --custom-syntax.",
+      "type": "str"
+    },
+    "disable-default-ignores": {
+      "description": "Disable the built-in ignore patterns.",
+      "type": "bool"
+    },
     "ignore-path": {
       "description": "Path to stylelint ignore file.",
       "type": "path"
@@ -735,6 +1099,10 @@
     "max-warnings": {
       "description": "Maximum warnings allowed before stylelint exits non-zero.",
       "type": "int"
+    },
+    "quiet": {
+      "description": "Suppress non-error output.",
+      "type": "bool"
     }
   },
   "tsc": {
@@ -764,6 +1132,24 @@
     },
     "watch": {
       "description": "Run tsc in watch mode.",
+      "type": "bool"
+    }
+  },
+  "yamllint": {
+    "args": {
+      "description": "Additional arguments appended to yamllint.",
+      "type": "list[str]"
+    },
+    "config-data": {
+      "description": "Inline YAML configuration data.",
+      "type": "str"
+    },
+    "config-file": {
+      "description": "Configuration file passed to yamllint.",
+      "type": "path"
+    },
+    "strict": {
+      "description": "Fail when warnings are emitted.",
       "type": "bool"
     }
   }

@@ -5,22 +5,13 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal
 
 import pytest
 
-from pyqa.tool_env import (
-    GO_BIN_DIR,
-    RUST_BIN_DIR,
-    CommandPreparer,
-    PreparedCommand,
-)
-from pyqa.tool_env import constants as tool_constants
-from pyqa.tool_env import (
-    desired_version,
-)
+from pyqa.tool_env import CommandPreparer, PreparedCommand, cache_layout, desired_version
 from pyqa.tool_env.runtimes import go as go_runtime
 from pyqa.tool_env.runtimes import lua as lua_runtime
 from pyqa.tool_env.runtimes import npm as npm_runtime
@@ -92,11 +83,7 @@ def test_npm_runtime_falls_back_to_local_when_system_version_too_low(
 
     preparer = CommandPreparer()
 
-    def fake_capture(
-        command: Sequence[str],
-        *,
-        env: Mapping[str, str] | None = None,
-    ) -> str | None:
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:
         return "9.12.0"
 
     monkeypatch.setattr(preparer._versions, "capture", fake_capture)
@@ -108,7 +95,7 @@ def test_npm_runtime_falls_back_to_local_when_system_version_too_low(
     executable.write_text("#!/bin/sh\nexit 0\n")
     executable.chmod(0o755)
 
-    def fake_install(self: npm_runtime.NpmRuntime, tool_obj: Tool) -> tuple[Path, str]:
+    def fake_install(self, context):
         return prefix, "9.13.0"
 
     monkeypatch.setattr(npm_runtime.NpmRuntime, "_ensure_local_package", fake_install)
@@ -145,18 +132,13 @@ def test_npm_runtime_prefers_system_when_version_sufficient(
 
     preparer = CommandPreparer()
 
-    def fake_capture(
-        command: Sequence[str],
-        *,
-        env: Mapping[str, str] | None = None,
-    ) -> str | None:
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:
         return "9.13.1"
 
     monkeypatch.setattr(preparer._versions, "capture", fake_capture)
 
-    def fail_install(self: npm_runtime.NpmRuntime, tool_obj: Tool) -> None:
-        message = "Local install should not be attempted"
-        raise AssertionError(message)
+    def fail_install(self, context):
+        raise AssertionError("Local install should not be attempted")
 
     monkeypatch.setattr(npm_runtime.NpmRuntime, "_ensure_local_package", fail_install)
 
@@ -186,19 +168,22 @@ def test_npm_runtime_install_failure_propagates(
     )
 
     preparer = CommandPreparer()
-    runtime = cast("NpmRuntime", preparer._handlers["npm"])
 
-    monkeypatch.setattr(tool_constants, "NODE_CACHE_DIR", tmp_path / "node-cache")
-    monkeypatch.setattr(tool_constants, "NPM_CACHE_DIR", tmp_path / "npm-cache")
-
-    def fail_install(command: Sequence[str], **kwargs: object) -> None:
-        error = subprocess.CalledProcessError(1, list(command), "out", "err")
-        raise error
+    def fail_install(*args, **kwargs):
+        raise subprocess.CalledProcessError(1, args[0], "out", "err")
 
     monkeypatch.setattr(npm_runtime, "run_command", fail_install)
+    monkeypatch.setattr(npm_runtime.shutil, "which", lambda _: None)
 
     with pytest.raises(subprocess.CalledProcessError):
-        runtime._ensure_local_package(tool)
+        preparer.prepare(
+            tool=tool,
+            base_cmd=("remark", "--version"),
+            root=tmp_path,
+            cache_dir=tmp_path,
+            system_preferred=False,
+            use_local_override=True,
+        )
 
 
 def test_go_runtime_installs_when_system_too_old(
@@ -224,11 +209,7 @@ def test_go_runtime_installs_when_system_too_old(
 
     preparer = CommandPreparer()
 
-    def fake_capture(
-        command: Sequence[str],
-        *,
-        env: Mapping[str, str] | None = None,
-    ) -> str | None:
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:
         if command[0] == "kube-linter":
             return "0.7.5"
         return None
@@ -240,7 +221,7 @@ def test_go_runtime_installs_when_system_too_old(
     fake_binary.write_text("#!/bin/sh\nexit 0\n")
     fake_binary.chmod(0o755)
 
-    def fake_install(self: go_runtime.GoRuntime, tool_obj: Tool, binary_name: str) -> Path:
+    def fake_install(self, context, binary_name: str) -> Path:
         return fake_binary
 
     monkeypatch.setattr(go_runtime.GoRuntime, "_ensure_local_tool", fake_install)
@@ -256,7 +237,8 @@ def test_go_runtime_installs_when_system_too_old(
 
     assert result.source == "local"
     assert result.cmd[0] == str(fake_binary)
-    assert str(GO_BIN_DIR) in result.env.get("PATH", "")
+    layout = cache_layout(tmp_path)
+    assert str(layout.go.bin_dir) in result.env.get("PATH", "")
 
 
 def test_go_runtime_prefers_system_when_version_ok(
@@ -280,20 +262,15 @@ def test_go_runtime_prefers_system_when_version_ok(
 
     preparer = CommandPreparer()
 
-    def fake_capture(
-        command: Sequence[str],
-        *,
-        env: Mapping[str, str] | None = None,
-    ) -> str | None:
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:
         if command[0] == "kube-linter":
             return "0.7.6"
         return None
 
     monkeypatch.setattr(preparer._versions, "capture", fake_capture)
 
-    def fail_install(self: go_runtime.GoRuntime, tool_obj: Tool, binary_name: str) -> Path:
-        message = "Local go install should not occur"
-        raise AssertionError(message)
+    def fail_install(self, context, binary_name: str) -> Path:
+        raise AssertionError("Local go install should not occur")
 
     monkeypatch.setattr(go_runtime.GoRuntime, "_ensure_local_tool", fail_install)
 
@@ -333,7 +310,7 @@ def test_go_runtime_installs_when_no_version_spec(
 
     preparer = CommandPreparer()
 
-    def fake_install(self: go_runtime.GoRuntime, tool_obj: Tool, binary_name: str) -> Path:
+    def fake_install(self, context, binary_name: str):
         prefix = tmp_path / "go-latest"
         binary = prefix / "bin" / binary_name
         binary.parent.mkdir(parents=True, exist_ok=True)
@@ -367,20 +344,22 @@ def test_go_runtime_install_failure_propagates(
     )
 
     preparer = CommandPreparer()
-    runtime = cast("GoRuntime", preparer._handlers["go"])
 
-    monkeypatch.setattr(tool_constants, "GO_BIN_DIR", tmp_path / "go-bin")
-    monkeypatch.setattr(tool_constants, "GO_META_DIR", tmp_path / "go-meta")
-    monkeypatch.setattr(tool_constants, "GO_WORK_DIR", tmp_path / "go-work")
-
-    def fail_install(command: Sequence[str], **kwargs: object) -> None:
-        error = subprocess.CalledProcessError(1, list(command), "out", "err")
-        raise error
+    def fail_install(*args, **kwargs):
+        raise subprocess.CalledProcessError(1, args[0], "out", "err")
 
     monkeypatch.setattr(go_runtime, "run_command", fail_install)
+    monkeypatch.setattr(go_runtime.shutil, "which", lambda name: "/usr/bin/go" if name == "go" else None)
 
     with pytest.raises(subprocess.CalledProcessError):
-        runtime._ensure_local_tool(tool, "kube-linter")
+        preparer.prepare(
+            tool=tool,
+            base_cmd=("kube-linter", "lint"),
+            root=tmp_path,
+            cache_dir=tmp_path,
+            system_preferred=False,
+            use_local_override=True,
+        )
 
 
 def test_lua_runtime_install_failure_propagates(
@@ -390,20 +369,23 @@ def test_lua_runtime_install_failure_propagates(
     tool = _make_tool(name="luacheck", runtime="lua", package="luacheck")
 
     preparer = CommandPreparer()
-    runtime = cast("LuaRuntime", preparer._handlers["lua"])
 
-    monkeypatch.setattr(tool_constants, "LUA_CACHE_DIR", tmp_path / "lua-cache")
-    monkeypatch.setattr(tool_constants, "LUA_META_DIR", tmp_path / "lua-meta")
-    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/luarocks")
+    monkeypatch.setattr(lua_runtime.shutil, "which", lambda name: "/usr/bin/luarocks")
 
-    def fail_install(command: Sequence[str], **kwargs: object) -> None:
-        error = subprocess.CalledProcessError(1, list(command), "out", "err")
-        raise error
+    def fail_install(*args, **kwargs):
+        raise subprocess.CalledProcessError(1, args[0], "out", "err")
 
     monkeypatch.setattr(lua_runtime, "run_command", fail_install)
 
     with pytest.raises(subprocess.CalledProcessError):
-        runtime._ensure_local_tool(tool, "luacheck")
+        preparer.prepare(
+            tool=tool,
+            base_cmd=("luacheck", "--version"),
+            root=tmp_path,
+            cache_dir=tmp_path,
+            system_preferred=False,
+            use_local_override=True,
+        )
 
 
 def test_perl_runtime_install_failure_propagates(
@@ -413,19 +395,21 @@ def test_perl_runtime_install_failure_propagates(
     tool = _make_tool(name="perlcritic", runtime="perl", package="Perl::Critic")
 
     preparer = CommandPreparer()
-    runtime = cast("PerlRuntime", preparer._handlers["perl"])
 
-    monkeypatch.setattr(tool_constants, "PERL_CACHE_DIR", tmp_path / "perl-cache")
-    monkeypatch.setattr(tool_constants, "PERL_META_DIR", tmp_path / "perl-meta")
-
-    def fail_install(command: Sequence[str], **kwargs: object) -> None:
-        error = subprocess.CalledProcessError(1, list(command), "out", "err")
-        raise error
+    def fail_install(*args, **kwargs):
+        raise subprocess.CalledProcessError(1, args[0], "out", "err")
 
     monkeypatch.setattr(perl_runtime, "run_command", fail_install)
 
     with pytest.raises(subprocess.CalledProcessError):
-        runtime._ensure_local_tool(tool, "perlcritic")
+        preparer.prepare(
+            tool=tool,
+            base_cmd=("perlcritic", "--version"),
+            root=tmp_path,
+            cache_dir=tmp_path,
+            system_preferred=False,
+            use_local_override=True,
+        )
 
 
 def test_rust_runtime_installs_when_system_too_old(
@@ -440,12 +424,6 @@ def test_rust_runtime_installs_when_system_too_old(
         version_command=("dotenv-linter", "--version"),
     )
 
-    rust_cache = tmp_path / "rust-cache"
-    monkeypatch.setattr(tool_constants, "RUST_CACHE_DIR", rust_cache)
-    monkeypatch.setattr(tool_constants, "RUST_BIN_DIR", rust_cache / "bin")
-    monkeypatch.setattr(tool_constants, "RUST_META_DIR", rust_cache / "meta")
-    monkeypatch.setattr(tool_constants, "RUST_WORK_DIR", rust_cache / "work")
-
     def fake_which(cmd: str) -> str | None:
         if cmd == "dotenv-linter":
             return "/usr/bin/dotenv-linter"
@@ -457,11 +435,7 @@ def test_rust_runtime_installs_when_system_too_old(
 
     preparer = CommandPreparer()
 
-    def fake_capture(
-        command: Sequence[str],
-        *,
-        env: Mapping[str, str] | None = None,
-    ) -> str | None:
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:
         if command[0] == "dotenv-linter":
             return "2.9.0"
         return None
@@ -473,7 +447,7 @@ def test_rust_runtime_installs_when_system_too_old(
     fake_binary.write_text("#!/bin/sh\nexit 0\n")
     fake_binary.chmod(0o755)
 
-    def fake_install(self: rust_runtime.RustRuntime, tool_obj: Tool, binary_name: str) -> Path:
+    def fake_install(self, context, binary_name: str) -> Path:
         return fake_binary
 
     monkeypatch.setattr(rust_runtime.RustRuntime, "_ensure_local_tool", fake_install)
@@ -489,7 +463,8 @@ def test_rust_runtime_installs_when_system_too_old(
 
     assert result.source == "local"
     assert result.cmd[0] == str(fake_binary)
-    assert str(RUST_BIN_DIR) not in result.env.get("PATH", "")
+    layout = cache_layout(tmp_path)
+    assert str(layout.rust.bin_dir) not in result.env.get("PATH", "")
 
 
 def test_rust_runtime_prefers_system_when_version_ok(
@@ -504,12 +479,6 @@ def test_rust_runtime_prefers_system_when_version_ok(
         version_command=("dotenv-linter", "--version"),
     )
 
-    rust_cache = tmp_path / "rust-cache"
-    monkeypatch.setattr(tool_constants, "RUST_CACHE_DIR", rust_cache)
-    monkeypatch.setattr(tool_constants, "RUST_BIN_DIR", rust_cache / "bin")
-    monkeypatch.setattr(tool_constants, "RUST_META_DIR", rust_cache / "meta")
-    monkeypatch.setattr(tool_constants, "RUST_WORK_DIR", rust_cache / "work")
-
     def fake_which(cmd: str) -> str | None:
         if cmd in {"dotenv-linter", "cargo"}:
             return f"/usr/bin/{cmd}"
@@ -519,20 +488,15 @@ def test_rust_runtime_prefers_system_when_version_ok(
 
     preparer = CommandPreparer()
 
-    def fake_capture(
-        command: Sequence[str],
-        *,
-        env: Mapping[str, str] | None = None,
-    ) -> str | None:
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:
         if command[0] == "dotenv-linter":
             return "3.3.1"
         return None
 
     monkeypatch.setattr(preparer._versions, "capture", fake_capture)
 
-    def fail_install(self: rust_runtime.RustRuntime, tool_obj: Tool, binary_name: str) -> Path:
-        message = "Local rust install should not occur"
-        raise AssertionError(message)
+    def fail_install(self, context, binary_name: str) -> Path:
+        raise AssertionError("Local rust install should not occur")
 
     monkeypatch.setattr(rust_runtime.RustRuntime, "_ensure_local_tool", fail_install)
 
@@ -556,19 +520,22 @@ def test_rust_runtime_install_failure_propagates(
     tool = _make_tool(name="dotenv-linter", runtime="rust", package="dotenv-linter")
 
     preparer = CommandPreparer()
-    runtime = cast("RustRuntime", preparer._handlers["rust"])
 
-    monkeypatch.setattr(tool_constants, "RUST_CACHE_DIR", tmp_path / "rust-cache")
-    monkeypatch.setattr(tool_constants, "RUST_META_DIR", tmp_path / "rust-meta")
-
-    def fail_install(command: Sequence[str], **kwargs: object) -> None:
-        error = subprocess.CalledProcessError(1, list(command), "out", "err")
-        raise error
+    def fail_install(*args, **kwargs):
+        raise subprocess.CalledProcessError(1, args[0], "out", "err")
 
     monkeypatch.setattr(rust_runtime, "run_command", fail_install)
+    monkeypatch.setattr(rust_runtime.shutil, "which", lambda name: "/usr/bin/cargo" if name == "cargo" else None)
 
     with pytest.raises(subprocess.CalledProcessError):
-        runtime._ensure_local_tool(tool, "dotenv-linter")
+        preparer.prepare(
+            tool=tool,
+            base_cmd=("dotenv-linter",),
+            root=tmp_path,
+            cache_dir=tmp_path,
+            system_preferred=False,
+            use_local_override=True,
+        )
 
 
 def test_rust_runtime_install_rustup_component(
@@ -583,12 +550,6 @@ def test_rust_runtime_install_rustup_component(
         version_command=("cargo", "--version"),
     )
 
-    rust_cache = tmp_path / "rust-cache"
-    monkeypatch.setattr(tool_constants, "RUST_CACHE_DIR", rust_cache)
-    monkeypatch.setattr(tool_constants, "RUST_BIN_DIR", rust_cache / "bin")
-    monkeypatch.setattr(tool_constants, "RUST_META_DIR", rust_cache / "meta")
-    monkeypatch.setattr(tool_constants, "RUST_WORK_DIR", rust_cache / "work")
-
     def fake_which(cmd: str) -> str | None:
         if cmd == "cargo":
             return "/usr/bin/cargo"
@@ -600,19 +561,15 @@ def test_rust_runtime_install_rustup_component(
 
     calls: list[list[str]] = []
 
-    def fake_run(cmd: Sequence[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    def fake_run(cmd, **kwargs):
         calls.append(list(cmd))
-        return subprocess.CompletedProcess(list(cmd), 0, "", "")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
 
     monkeypatch.setattr(rust_runtime, "run_command", fake_run)
 
     preparer = CommandPreparer()
 
-    def fake_capture(
-        command: Sequence[str],
-        *,
-        env: Mapping[str, str] | None = None,
-    ) -> str | None:
+    def fake_capture(command: Sequence[str], *, env=None) -> str | None:
         if command[0] == "cargo":
             return "cargo 1.81.0"
         return None
@@ -629,5 +586,4 @@ def test_rust_runtime_install_rustup_component(
     )
 
     assert result.cmd[0] == "/usr/bin/cargo"
-    assert any(Path(cmd[0]).name == "rustup" for cmd in calls)
-    assert any(cmd[1:3] == ["component", "add"] for cmd in calls)
+    assert any(Path(cmd[0]).name == "rustup" and cmd[1:3] == ["component", "add"] for cmd in calls)

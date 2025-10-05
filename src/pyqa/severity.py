@@ -56,12 +56,14 @@ def add_custom_rule(
 ) -> str | None:
     """Add a custom severity override defined as ``tool:regex=level``."""
     target: SeverityRuleMap = rules if rules is not None else DEFAULT_SEVERITY_RULES
+    if _RULE_TOOL_SEPARATOR not in spec or _RULE_LEVEL_SEPARATOR not in spec:
+        return f"invalid rule '{spec}': missing ':' or '=' separators"
+    tool, rest = spec.split(_RULE_TOOL_SEPARATOR, 1)
+    regex, level_str = rest.rsplit(_RULE_LEVEL_SEPARATOR, 1)
     try:
-        tool, rest = spec.split(":", 1)
-        regex, level_str = rest.rsplit("=", 1)
         level = Severity(level_str.strip().lower())
-    except ValueError as exc:  # covers ValueError from split or enum conversion
-        return f"invalid rule '{spec}': {exc}"
+    except ValueError as exc:
+        return f"invalid severity level '{level_str}': {exc}"
 
     target.setdefault(tool, []).append((re.compile(regex), level))
     return None
@@ -72,9 +74,9 @@ def severity_from_code(code: str | None, default: Severity = Severity.ERROR) -> 
     if not code:
         return default
     head = code[0].upper()
-    if head in {"E", "F"}:
+    if head in _ERROR_PREFIXES:
         return Severity.ERROR
-    if head == "W":
+    if head == _WARNING_PREFIX:
         return Severity.WARNING
     return default
 
@@ -90,3 +92,9 @@ _SEVERITY_TO_SARIF_LEVEL: Final[dict[Severity, str]] = {
 def severity_to_sarif(severity: Severity) -> str:
     """Map :class:`Severity` to a SARIF reporting level."""
     return _SEVERITY_TO_SARIF_LEVEL.get(severity, "warning")
+
+
+_ERROR_PREFIXES: Final[set[str]] = {"E", "F"}
+_WARNING_PREFIX: Final[str] = "W"
+_RULE_TOOL_SEPARATOR: Final[str] = ":"
+_RULE_LEVEL_SEPARATOR: Final[str] = "="

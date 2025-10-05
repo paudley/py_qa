@@ -1,0 +1,128 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "pyright",
+  "description": "Type checking using Microsoft's Pyright.",
+  "extends": ["python_defaults"],
+  "languages": ["python"],
+  "phase": "analysis",
+  "fileExtensions": [".py", ".pyi"],
+  "runtime": {
+    "type": "python",
+    "package": "pyright",
+    "minVersion": "1.1.389",
+    "versionCommand": ["pyright", "--version"]
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to pyright."
+    },
+    {
+      "name": "ignoreexternal",
+      "type": "bool",
+      "description": "Ignore external type stubs."
+    },
+    {
+      "name": "lib",
+      "type": "bool",
+      "description": "Include library type information in the run."
+    },
+    {
+      "name": "project",
+      "type": "path",
+      "description": "Path to pyrightconfig/tsconfig project file."
+    },
+    {
+      "name": "python-platform",
+      "type": "str",
+      "description": "Target execution platform (e.g. Linux, Darwin).",
+      "choices": ["Linux", "Darwin", "Windows"]
+    },
+    {
+      "name": "python-version",
+      "type": "str",
+      "description": "Python version string to target.",
+      "choices": ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+    },
+    {
+      "name": "pythonpath",
+      "type": "path",
+      "description": "Additional search path for module resolution."
+    },
+    {
+      "name": "typeshed-path",
+      "type": "path",
+      "description": "Custom typeshed location."
+    },
+    {
+      "name": "venv-path",
+      "type": "path",
+      "description": "Root directory containing virtual environments."
+    },
+    {
+      "name": "verifytypes",
+      "type": "str",
+      "description": "Module or pattern to verify using --verifytypes."
+    }
+  ],
+  "actions": [
+    {
+      "name": "type-check",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["pyright", "--outputjson"],
+          "options": [
+            { "setting": ["project", "config"], "type": "path", "flag": "--project" },
+            { "setting": ["venv-path", "venv_path"], "type": "path", "flag": "--venv-path" },
+            { "setting": "pythonpath", "type": "path", "flag": "--pythonpath" },
+            {
+              "setting": ["typeshed-path", "typeshed_path"],
+              "type": "path",
+              "flag": "--typeshed-path"
+            },
+            { "setting": "python-platform", "type": "value", "flag": "--pythonplatform" },
+            {
+              "setting": ["python-version", "python_version"],
+              "type": "value",
+              "flag": "--pythonversion",
+              "defaultFrom": "python.target_version"
+            },
+            { "setting": "lib", "type": "flag", "flag": "--lib" },
+            { "setting": "verifytypes", "type": "value", "flag": "--verifytypes" },
+            {
+              "setting": ["ignoreexternal", "ignore-external"],
+              "type": "flag",
+              "flag": "--ignoreexternal"
+            },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.python.parse_pyright"
+        }
+      }
+    }
+  ],
+  "suppressions": {
+    "duplicates": ["mypy"]
+  },
+  "documentation": {
+    "help": {
+      "path": "docs/pyright_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/pyright_cmd_help.txt",
+      "format": "text"
+    },
+    "shared": {
+      "path": "docs/SHARED_KNOBS.md",
+      "format": "markdown"
+    }
+  }
+}

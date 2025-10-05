@@ -6,39 +6,26 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
 from ..constants import PY_QA_DIR_NAME
 from ..logging import emoji, warn
 from ..security import SecurityScanner, SecurityScanResult, get_staged_files
+from ._security_cli_models import SecurityCLIOptions, build_security_options
+from .shared import Depends
 from .utils import filter_py_qa_paths
 
 
 def security_scan_command(
-    files: list[Path] | None = typer.Argument(
-        None,
-        metavar="[FILES...]",
-        help="Specific files to scan.",
-    ),
-    root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
-    staged: bool = typer.Option(
-        True,
-        "--staged/--no-staged",
-        help="Include staged files when no explicit files are provided.",
-    ),
-    no_bandit: bool = typer.Option(
-        False,
-        "--no-bandit",
-        help="Skip running bandit static analysis.",
-    ),
-    no_emoji: bool = typer.Option(False, "--no-emoji", help="Disable emoji in output."),
+    options: Annotated[SecurityCLIOptions, Depends(build_security_options)],
 ) -> None:
     """Run security scans across the project."""
-    root_path = root.resolve()
-    target_candidates = list(_resolve_security_targets(files, root_path, staged))
+    root_path = options.root
+    target_candidates = list(_resolve_security_targets(options.files, root_path, options.staged))
     target_files, ignored_py_qa = filter_py_qa_paths(target_candidates, root_path)
-    use_emoji = not no_emoji
+    use_emoji = options.use_emoji
     if ignored_py_qa:
         unique = ", ".join(dict.fromkeys(ignored_py_qa))
         warn(
@@ -52,7 +39,11 @@ def security_scan_command(
         typer.echo("No files to scan.")
         raise typer.Exit(code=0)
 
-    scanner = SecurityScanner(root=root_path, use_emoji=use_emoji, use_bandit=not no_bandit)
+    scanner = SecurityScanner(
+        root=root_path,
+        use_emoji=use_emoji,
+        use_bandit=options.use_bandit,
+    )
     result = scanner.run(list(target_files))
     exit_code = _report_security_findings(result, use_emoji=use_emoji)
     raise typer.Exit(code=exit_code)
@@ -76,11 +67,11 @@ def _report_security_findings(result: SecurityScanResult, *, use_emoji: bool) ->
     if result.findings:
         if emitted_header or emitted_bandit:
             typer.echo("")
-        typer.echo(
-            f"{emoji('❌ ', use_emoji)}Security scan found {result.findings} potential issue(s)".strip(),
-        )
+        failure_message = (f"{emoji('❌ ', use_emoji)}Security scan found {result.findings} potential issue(s)").strip()
+        typer.echo(failure_message)
         return 1
-    typer.echo(f"{emoji('✅ ', use_emoji)}No security issues detected".strip())
+    success_message = f"{emoji('✅ ', use_emoji)}No security issues detected".strip()
+    typer.echo(success_message)
     return 0
 
 

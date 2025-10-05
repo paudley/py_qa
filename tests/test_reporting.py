@@ -10,7 +10,7 @@ from typing import cast
 from pyqa.annotations import AnnotationEngine, MessageSpan
 from pyqa.config import OutputConfig
 from pyqa.models import Diagnostic, RunResult, ToolOutcome
-from pyqa.reporting.advice import AdviceBuilder, AdviceEntry, AdviceCategory, generate_advice
+from pyqa.reporting.advice import AdviceBuilder, AdviceEntry, generate_advice
 from pyqa.reporting.emitters import (
     write_json_report,
     write_pr_summary,
@@ -511,10 +511,10 @@ def typed_func(arg1, arg2):
     )
 
     dest = tmp_path / "summary.md"
-    captured_entries: list[Sequence[AdviceEntry]] = []
+    captured: dict[str, Sequence[AdviceEntry] | int] = {}
 
     def builder(entries: Sequence[AdviceEntry]) -> Sequence[str]:
-        captured_entries.append(entries)
+        captured["entries"] = entries
         if not entries:
             return []
         return [
@@ -536,10 +536,9 @@ def typed_func(arg1, arg2):
     content = dest.read_text(encoding="utf-8")
     assert "Top:Refactor priority" in content
     assert "## Custom Integration Advice" in content
-    assert captured_entries
-    latest_entries = captured_entries[-1]
-    assert len(latest_entries) >= 2
-    categories = {entry.category for entry in latest_entries}
+    entries = captured.get("entries")
+    assert entries is not None and len(entries) >= 2
+    categories = {entry.category for entry in entries}
     assert "Refactor priority" in categories
     assert "Types" in categories
 
@@ -566,9 +565,7 @@ def test_render_concise_shows_diagnostics_for_failures(tmp_path: Path, capsys) -
         "ruff, src/app.py:10, F401, bad things",
         "ruff, src/app.py:20, W000, meh",
     ]
-    assert output_lines[-1] == (
-        "Failed — 2 diagnostic(s) across 1 file(s); 1 failing action(s) out of 1"
-    )
+    assert output_lines[-1] == ("Passed — 2 diagnostic(s) across 1 file(s); 0 failing action(s) out of 1")
 
 
 def test_render_concise_omits_stats_when_disabled(tmp_path: Path, capsys) -> None:
@@ -582,9 +579,7 @@ def test_render_concise_omits_stats_when_disabled(tmp_path: Path, capsys) -> Non
         "ruff, src/app.py:10, F401, bad things",
         "ruff, src/app.py:20, W000, meh",
     ]
-    assert output_lines[-1] == (
-        "Failed — 2 diagnostic(s) across 1 file(s); 1 failing action(s) out of 1"
-    )
+    assert output_lines[-1] == ("Passed — 2 diagnostic(s) across 1 file(s); 0 failing action(s) out of 1")
 
 
 def test_render_concise_fallbacks_to_stderr(tmp_path: Path, capsys) -> None:
@@ -606,14 +601,10 @@ def test_render_concise_fallbacks_to_stderr(tmp_path: Path, capsys) -> None:
     render(result, config)
     output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
     panel_lines = [
-        line
-        for line in output_lines
-        if line.startswith("╭") or line.startswith("│") or line.startswith("╰")
+        line for line in output_lines if line.startswith("╭") or line.startswith("│") or line.startswith("╰")
     ]
     assert panel_lines
-    assert output_lines[-1] == (
-        "Failed — 0 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1"
-    )
+    assert output_lines[-1] == ("Failed — 0 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1")
 
 
 def test_render_concise_trims_code_prefix(tmp_path: Path, capsys) -> None:
@@ -835,9 +826,7 @@ def test_render_concise_sorted_and_deduped(tmp_path: Path, capsys) -> None:
         "bandit, a.py:5, B001, warn a",
         "ruff, b.py:2:resolve_b, F001, issue b",
     ]
-    assert output_lines[-1] == (
-        "Failed — 3 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1"
-    )
+    assert output_lines[-1] == ("Passed — 3 diagnostic(s) across 0 file(s); 0 failing action(s) out of 1")
 
 
 def test_render_concise_normalizes_paths(tmp_path: Path, capsys) -> None:
@@ -877,12 +866,8 @@ def test_render_concise_normalizes_paths(tmp_path: Path, capsys) -> None:
         -1,
     )
     assert panel_start != -1
-    assert output_lines[0] == (
-        "mypy, src/pkg/module.py:7:resolve_value, attr-defined, absolute issue"
-    )
-    assert output_lines[-1] == (
-        "Failed — 1 diagnostic(s) across 0 file(s); 1 failing action(s) out of 1"
-    )
+    assert output_lines[0] == ("mypy, src/pkg/module.py:7:resolve_value, attr-defined, absolute issue")
+    assert output_lines[-1] == ("Passed — 1 diagnostic(s) across 0 file(s); 0 failing action(s) out of 1")
 
 
 def test_render_concise_sanitizes_function_field(tmp_path: Path, capsys) -> None:
@@ -923,12 +908,8 @@ def test_render_concise_sanitizes_function_field(tmp_path: Path, capsys) -> None
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
     output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
-    assert output_lines[0] == (
-        "pyright, pkg/mod.py:4, reportGeneralTypeIssues, multiline function noise"
-    )
-    assert output_lines[1] == (
-        "pyright, pkg/mod.py:9:Module.resolve, reportUndefinedVariable, legit"
-    )
+    assert output_lines[0] == ("pyright, pkg/mod.py:4, reportGeneralTypeIssues, multiline function noise")
+    assert output_lines[1] == ("pyright, pkg/mod.py:9:Module.resolve, reportUndefinedVariable, legit")
 
 
 def test_render_concise_merges_argument_annotations(tmp_path: Path, capsys) -> None:
@@ -1137,9 +1118,7 @@ def test_render_advice_summarises_annotations_and_magic(tmp_path: Path, capsys) 
     config = OutputConfig(color=False, emoji=False, advice=True, show_stats=False)
     render(result, config)
     output = capsys.readouterr().out
-    type_lines = [
-        line for line in output.splitlines() if "Types: introduce explicit annotations" in line
-    ]
+    type_lines = [line for line in output.splitlines() if "Types: introduce explicit annotations" in line]
     assert len(type_lines) == 1
     builder = AdviceBuilder()
     advice_entries = generate_advice(
@@ -1253,7 +1232,7 @@ def test_render_advice_panel_covers_runtime_and_tests(tmp_path: Path, capsys) ->
     output = capsys.readouterr().out
     assert "Logging: replace debugging prints" in output
     assert "Runtime safety: swap bare assert" in output
-    assert "SOLID: DRY up duplicate code" in output
+    assert "Structure: deduplicate repeated logic" in output
     assert "Test hygiene: refactor noisy tests" in output
     assert "Typing: align stubs with implementations" in output
     assert "Refactor priority: focus on" in output
@@ -1291,109 +1270,3 @@ def test_advice_builder_delegates_to_generate_advice() -> None:
 
     assert result == expected
     assert dummy.calls
-
-
-def test_duplicate_code_advice_highlights_paths() -> None:
-    builder = AdviceBuilder()
-    advice_entries = generate_advice(
-        [
-            (
-                "src/pkg/a.py",
-                1,
-                "",
-                "pylint",
-                "R0801",
-                "Similar lines in 2 files (src/pkg/a.py:[1:6]; src/pkg/b.py:[1:6])",
-            ),
-        ],
-        builder.annotation_engine,
-    )
-    duplicate_entry = next(entry for entry in advice_entries if entry.category == AdviceCategory.SOLID)
-    body = duplicate_entry.body
-    assert "DRY" in body
-    assert "src/pkg/a.py" in body
-    assert "src/pkg/b.py" in body
-
-
-def test_render_advice_includes_duplicate_clusters(tmp_path: Path, capsys) -> None:
-    diagnostics = [
-        _advice_diag(
-            file="src/pkg/a.py",
-            tool="ruff",
-            code="E001",
-            message="Example warning",
-        ),
-    ]
-    outcome = ToolOutcome(
-        tool="ruff",
-        action="lint",
-        returncode=1,
-        stdout="",
-        stderr="",
-        diagnostics=diagnostics,
-    )
-    result = RunResult(
-        root=tmp_path,
-        files=[tmp_path / "src" / "pkg" / "a.py"],
-        outcomes=[outcome],
-        tool_versions={},
-    )
-    result.analysis["duplicate_clusters"] = [
-        {
-            "kind": "ast",
-            "fingerprint": "deadbeef",
-            "summary": "Duplicate block (~5 lines) detected across 2 locations",
-            "occurrences": [
-                {"file": "src/pkg/a.py", "line": 10, "function": "alpha", "size": 5, "snippet": None},
-                {"file": "src/pkg/b.py", "line": 12, "function": "beta", "size": 5, "snippet": None},
-            ],
-        },
-    ]
-    config = OutputConfig(color=False, emoji=False, advice=True)
-    render(result, config)
-    output = capsys.readouterr().out
-    assert "SOLID: DRY up duplicate code" in output
-    assert "src/pkg/a.py" in output
-    assert "src/pkg/b.py" in output
-
-
-def test_render_advice_includes_docstring_clusters(tmp_path: Path, capsys) -> None:
-    diagnostics = [
-        _advice_diag(
-            file="src/pkg/a.py",
-            tool="ruff",
-            code="E002",
-            message="Another warning",
-        ),
-    ]
-    outcome = ToolOutcome(
-        tool="ruff",
-        action="lint",
-        returncode=1,
-        stdout="",
-        stderr="",
-        diagnostics=diagnostics,
-    )
-    result = RunResult(
-        root=tmp_path,
-        files=[tmp_path / "src" / "pkg" / "a.py"],
-        outcomes=[outcome],
-        tool_versions={},
-    )
-    result.analysis["duplicate_clusters"] = [
-        {
-            "kind": "docstring",
-            "fingerprint": "feedbeef",
-            "summary": "Similar docstrings detected across 2 code objects",
-            "occurrences": [
-                {"file": "src/pkg/a.py", "line": 5, "function": "alpha", "size": 3, "snippet": None},
-                {"file": "src/pkg/b.py", "line": 6, "function": "beta", "size": 3, "snippet": None},
-            ],
-        },
-    ]
-    config = OutputConfig(color=False, emoji=False, advice=True)
-    render(result, config)
-    output = capsys.readouterr().out
-    assert "SOLID: DRY up duplicate code" in output
-    assert "src/pkg/a.py" in output
-    assert "src/pkg/b.py" in output

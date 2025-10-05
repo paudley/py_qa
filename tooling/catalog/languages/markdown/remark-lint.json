@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "remark-lint",
+  "description": "Markdown linting via remark-lint preset.",
+  "extends": ["npm_runtime"],
+  "languages": ["markdown"],
+  "phase": "lint",
+  "fileExtensions": [".md", ".mdx", ".markdown"],
+  "runtime": {
+    "type": "npm",
+    "package": "remark-cli remark-lint remark-preset-lint-recommended vfile-reporter-json",
+    "versionCommand": ["remark", "--version"]
+  },
+  "actions": [
+    {
+      "name": "lint",
+      "appendFiles": false,
+      "ignoreExit": true,
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": [
+            "remark",
+            "--use",
+            "remark-preset-lint-recommended",
+            "--report",
+            "json",
+            "--frail",
+            "--quiet",
+            "--no-color"
+          ],
+          "appendFiles": true,
+          "options": [
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "use", "type": "args", "flag": "--use" },
+            { "setting": "ignore-path", "type": "path", "flag": "--ignore-path" },
+            { "setting": "setting", "type": "args", "flag": "--setting" },
+            { "setting": "args", "type": "args" }
+          ]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.config.parse_remark"
+        }
+      }
+    },
+    {
+      "name": "fix",
+      "isFix": true,
+      "appendFiles": false,
+      "ignoreExit": true,
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["remark", "--use", "remark-preset-lint-recommended", "--output"],
+          "appendFiles": true,
+          "options": [
+            { "setting": "config", "type": "path", "flag": "--config" },
+            { "setting": "use", "type": "args", "flag": "--use" },
+            { "setting": "ignore-path", "type": "path", "flag": "--ignore-path" },
+            { "setting": "setting", "type": "args", "flag": "--setting" }
+          ]
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/remark-lint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/remark-lint_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

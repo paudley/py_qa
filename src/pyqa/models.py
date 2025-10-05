@@ -9,8 +9,9 @@ from pathlib import Path
 from re import Pattern
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
+from .filesystem.paths import normalize_path
 from .metrics import FileMetrics
 from .severity import Severity
 
@@ -34,9 +35,7 @@ class OutputFilter(BaseModel):
         if not text or not self._compiled:
             return text
         return "\n".join(
-            line
-            for line in text.splitlines()
-            if not any(pattern.search(line) for pattern in self._compiled)
+            line for line in text.splitlines() if not any(pattern.search(line) for pattern in self._compiled)
         )
 
 
@@ -74,6 +73,42 @@ class RawDiagnostic(BaseModel):
     group: str | None = None
     function: str | None = None
 
+    @field_validator("file", mode="before")
+    @classmethod
+    def _normalize_file(cls, value: object) -> object:
+        """Ensure diagnostic file paths are stored relative to the invocation root."""
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return value
+        raw = Path(str(value)) if not isinstance(value, Path) else value
+        try:
+            normalised = normalize_path(raw)
+        except (OSError, RuntimeError, ValueError):
+            return str(value)
+        return normalised.as_posix()
+
+
+def coerce_output_sequence(value: object) -> list[str]:
+    """Normalise stdout/stderr payloads into a list of strings.
+
+    Args:
+        value: Output payload supplied by a tool or serialized artifact.
+
+    Returns:
+        list[str]: Sequence of output lines represented as strings.
+    """
+
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if isinstance(value, tuple):
+        return [str(item) for item in value]
+    if isinstance(value, str):
+        return value.splitlines()
+    return [str(value)]
+
 
 class ToolOutcome(BaseModel):
     """Result bundle produced by each executed tool action."""
@@ -83,9 +118,15 @@ class ToolOutcome(BaseModel):
     tool: str
     action: str
     returncode: int
-    stdout: str
-    stderr: str
+    stdout: list[str] = Field(default_factory=list)
+    stderr: list[str] = Field(default_factory=list)
     diagnostics: list[Diagnostic] = Field(default_factory=list)
+    cached: bool = False
+
+    @field_validator("stdout", "stderr", mode="before")
+    @classmethod
+    def _coerce_output(cls, value: object) -> list[str]:
+        return coerce_output_sequence(value)
 
     def is_ok(self) -> bool:
         """Return ``True`` when the tool exited successfully."""
@@ -95,6 +136,11 @@ class ToolOutcome(BaseModel):
     def ok(self) -> bool:
         """Expose :meth:`is_ok` as an attribute-style accessor."""
         return self.is_ok()
+
+    def indicates_failure(self) -> bool:
+        """Return ``True`` when the outcome represents a tool execution failure."""
+
+        return not self.ok and not self.diagnostics
 
 
 class RunResult(BaseModel):
@@ -111,7 +157,7 @@ class RunResult(BaseModel):
 
     def has_failures(self) -> bool:
         """Return ``True`` when any outcome failed."""
-        return any(not outcome.ok for outcome in self.outcomes)
+        return any(outcome.indicates_failure() for outcome in self.outcomes)
 
     @property
     def failed(self) -> bool:

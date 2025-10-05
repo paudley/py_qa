@@ -1,0 +1,250 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "pylint",
+  "description": "Python linter providing detailed diagnostics.",
+  "extends": ["python_defaults"],
+  "languages": ["python"],
+  "phase": "lint",
+  "fileExtensions": [".py"],
+  "runtime": {
+    "type": "python",
+    "package": "pylint",
+    "minVersion": "3.3.8",
+    "versionCommand": ["pylint", "--version"]
+  },
+  "diagnostics": {
+    "dedupe": {
+      "duplicateHints": "R0801"
+    }
+  },
+  "options": [
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to pylint."
+    },
+    {
+      "name": "disable",
+      "type": "list[str]",
+      "description": "Message symbols or groups to disable."
+    },
+    {
+      "name": "enable",
+      "type": "list[str]",
+      "description": "Message symbols to enable in addition to defaults."
+    },
+    {
+      "name": "exit-zero",
+      "type": "bool",
+      "description": "Force exit code zero regardless of findings."
+    },
+    {
+      "name": "fail-under",
+      "type": "float",
+      "description": "Lower score boundary to fail the run."
+    },
+    {
+      "name": "jobs",
+      "type": "int",
+      "description": "Number of parallel workers."
+    },
+    {
+      "name": "max-args",
+      "type": "int",
+      "description": "Maximum number of arguments permitted on functions/methods."
+    },
+    {
+      "name": "max-complexity",
+      "type": "int",
+      "description": "Upper bound for cyclomatic complexity."
+    },
+    {
+      "name": "max-line-length",
+      "type": "int",
+      "description": "Maximum allowed source line length."
+    },
+    {
+      "name": "max-positional-arguments",
+      "type": "int",
+      "description": "Maximum positional arguments allowed before flagging."
+    },
+    {
+      "name": "rcfile",
+      "type": "path",
+      "description": "Path to pylintrc or equivalent configuration."
+    },
+    {
+      "name": "load-plugins",
+      "type": "list[str]",
+      "description": "Pylint plugins to load via --load-plugins."
+    },
+    {
+      "name": "reports",
+      "type": "bool",
+      "description": "Enable/disable additional reports."
+    },
+    {
+      "name": "score",
+      "type": "bool",
+      "description": "Enable/disable pylint score output."
+    },
+    {
+      "name": "py-version",
+      "type": "str",
+      "description": "Python version string passed to pylint."
+    },
+    {
+      "name": "init-import",
+      "type": "bool",
+      "description": "Control the init-import option (y/n)."
+    }
+  ],
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["pylint", "--output-format=json"],
+          "appendFiles": false,
+          "options": [
+            {
+              "setting": ["rcfile", "config"],
+              "type": "path",
+              "flag": "--rcfile"
+            },
+            {
+              "setting": ["load-plugins", "plugins"],
+              "type": "args",
+              "flag": "--load-plugins",
+              "joinWith": ",",
+              "defaultFrom": "python.discover_pylint_plugins"
+            },
+            {
+              "setting": "disable",
+              "type": "args",
+              "flag": "--disable",
+              "joinWith": ","
+            },
+            {
+              "setting": "enable",
+              "type": "args",
+              "flag": "--enable",
+              "joinWith": ","
+            },
+            {
+              "setting": "jobs",
+              "type": "value",
+              "flag": "-j"
+            },
+            {
+              "setting": "fail-under",
+              "type": "value",
+              "flag": "--fail-under",
+              "defaultFrom": "severity.pylint_fail_under"
+            },
+            {
+              "setting": "exit-zero",
+              "type": "flag",
+              "flag": "--exit-zero"
+            },
+            {
+              "setting": "score",
+              "type": "value",
+              "flag": "--score=",
+              "transform": "bool_to_yn"
+            },
+            {
+              "setting": "reports",
+              "type": "value",
+              "flag": "--reports=",
+              "transform": "bool_to_yn"
+            },
+            {
+              "setting": "max-line-length",
+              "type": "value",
+              "flag": "--max-line-length",
+              "defaultFrom": "execution.line_length"
+            },
+            {
+              "setting": "max-complexity",
+              "type": "value",
+              "flag": "--max-complexity",
+              "defaultFrom": "complexity.max_complexity"
+            },
+            {
+              "setting": "max-args",
+              "type": "value",
+              "flag": "--max-args",
+              "defaultFrom": "complexity.max_arguments"
+            },
+            {
+              "setting": "max-positional-arguments",
+              "type": "value",
+              "flag": "--max-positional-arguments",
+              "defaultFrom": "complexity.max_arguments"
+            },
+            {
+              "setting": "init-import",
+              "type": "value",
+              "flag": "--init-import=",
+              "transform": "bool_to_yn"
+            },
+            {
+              "setting": ["py-version", "py_version"],
+              "type": "value",
+              "flag": "--py-version",
+              "defaultFrom": "python.target_version"
+            },
+            {
+              "setting": "args",
+              "type": "args"
+            }
+          ]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.python.parse_pylint"
+        }
+      }
+    }
+  ],
+  "suppressions": {
+    "general": [
+      "^pylint, .*:.*consider-using-assignment-expr.*$",
+      "(?i)^pylint, .*:.*consider-using-assignment-expr.*$"
+    ],
+    "tests": [
+      "^pylint, (?:.+/)?tests?/.*:.*W0212.*Access to a protected member .*$",
+      "^pylint, (?:.+/)?tests?/.*:.*W0613.*Unused argument .*$",
+      "^pylint, (?:.+/)?tests?/.*:.*R2004.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*magic-value-comparison.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*protected-access.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*unused-argument.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*missing-function-docstring.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*too-few-public-methods.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*missing-class-docstring.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*consider-using-assignment-expr.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*too-complex.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*too-many-arguments.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*too-many-locals.*$",
+      "^pylint, (?:.+/)?tests?/.*:.*line-too-long.*$"
+    ]
+  },
+  "documentation": {
+    "help": {
+      "path": "docs/pylint_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/pylint_cmd_help.txt",
+      "format": "text"
+    },
+    "shared": {
+      "path": "docs/SHARED_KNOBS.md",
+      "format": "markdown"
+    }
+  }
+}

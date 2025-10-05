@@ -20,13 +20,10 @@ def test_tool_iterable_and_indexable(tmp_path: Path) -> None:
     tool = _make_tool()
 
     assert len(tool) == 2
-    entries = list(tool)
-    assert [(name, action.name) for name, action in entries] == [
-        ("lint", "lint"),
-        ("fix", "fix"),
-    ]
+    actions = list(tool.iter_actions())
+    assert [action.name for action in actions] == ["lint", "fix"]
     assert "lint" in tool
-    assert entries[0][1] in tool
+    assert actions[0] in tool
 
     assert tool[0].name == "lint"
     assert tool["fix"].is_fix is True
@@ -36,9 +33,7 @@ def test_tool_iterable_and_indexable(tmp_path: Path) -> None:
         ("lint", "lint"),
         ("fix", "fix"),
     ]
-    lint_action = tool.get("lint")
-    assert lint_action is not None
-    assert lint_action.name == "lint"
+    assert tool.get("lint").name == "lint"
     assert tool.get("missing") is None
 
 
