@@ -10,8 +10,8 @@ from typing import Annotated
 
 import typer
 
+from ....compliance.quality import check_commit_message, ensure_branch_protection
 from ....config import QualityConfigSection
-from ....quality import check_commit_message, ensure_branch_protection
 from ...core.shared import CLIError, Depends, build_cli_logger, register_callback
 from ...core.typer_ext import create_typer
 from .models import (

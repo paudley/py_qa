@@ -9,9 +9,9 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 
-from ..config import OutputConfig
-from ..console import console_manager
-from ..models import RunResult
+from ...config import OutputConfig
+from ...console import console_manager
+from ...models import RunResult
 
 
 def render_refactor_navigator(result: RunResult, cfg: OutputConfig) -> None:

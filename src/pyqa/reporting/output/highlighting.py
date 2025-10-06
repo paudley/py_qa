@@ -11,8 +11,8 @@ from typing import Final
 
 from rich.text import Text
 
-from ..annotations import AnnotationEngine, MessageSpan
-from ..logging import colorize
+from ...annotations import AnnotationEngine, MessageSpan
+from ...logging import colorize
 
 ANNOTATION_ENGINE = AnnotationEngine()
 CODE_TINT: Final[str] = "ansi256:105"

@@ -8,7 +8,7 @@ from typing import Annotated
 
 import typer
 
-from ....banned import BannedWordChecker
+from ....compliance.banned import BannedWordChecker
 from ...core.shared import Depends
 from ...core.typer_ext import create_typer
 from .models import BannedCLIOptions, build_banned_options

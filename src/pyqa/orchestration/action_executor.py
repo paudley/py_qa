@@ -19,15 +19,20 @@ from ..cache.context import CacheContext
 from ..cache.result_store import CacheRequest
 from ..config import Config
 from ..context import CONTEXT_RESOLVER
-from ..diagnostics import normalize_diagnostics
-from ..execution.diagnostic_filter import filter_diagnostics
+from ..diagnostics.pipeline import DiagnosticPipeline as DiagnosticPipelineImpl
 from ..filesystem.paths import normalize_path_key
+from ..interfaces.diagnostics import DiagnosticPipeline as DiagnosticPipelineProtocol
+from ..interfaces.diagnostics import (
+    DiagnosticPipelineRequest,
+)
 from ..logging import warn
 from ..metrics import FileMetrics, compute_file_metrics
 from ..models import Diagnostic, RawDiagnostic, ToolExitCategory, ToolOutcome
 from ..process_utils import CommandOptions
 from ..severity import SeverityRuleView
 from ..tools import ToolAction, ToolContext
+
+_DIAGNOSTIC_PIPELINE: Final[DiagnosticPipelineProtocol] = DiagnosticPipelineImpl()
 
 
 @runtime_checkable
@@ -276,13 +281,15 @@ class ActionExecutor:
         outcome = record.outcome
         outcome.cached = record.from_cache
         if record.from_cache:
-            filters = invocation.context.cfg.output.tool_filters.get(invocation.tool_name, [])
-            outcome.diagnostics = filter_diagnostics(
-                outcome.diagnostics,
-                invocation.tool_name,
-                filters,
-                environment.root,
+            filters = tuple(invocation.context.cfg.output.tool_filters.get(invocation.tool_name, []))
+            pipeline_request = DiagnosticPipelineRequest(
+                tool_name=invocation.tool_name,
+                candidates=tuple(outcome.diagnostics),
+                severity_rules=environment.severity_rules,
+                suppression_patterns=filters,
+                project_root=environment.root,
             )
+            outcome.diagnostics = _DIAGNOSTIC_PIPELINE.run(pipeline_request)
             evaluation = self._evaluate_exit_status(
                 invocation,
                 outcome.returncode,
@@ -344,15 +351,17 @@ class ActionExecutor:
                 check=False,
             ),
         )
-        filters = invocation.context.cfg.output.tool_filters.get(invocation.tool_name, [])
+        filters = tuple(invocation.context.cfg.output.tool_filters.get(invocation.tool_name, []))
         stdout_lines, stderr_lines = self._filter_outputs(invocation, completed, filters)
         parsed = self._parse_diagnostics(invocation, stdout_lines, stderr_lines)
-        diagnostics = normalize_diagnostics(
-            parsed,
+        pipeline_request = DiagnosticPipelineRequest(
             tool_name=invocation.tool_name,
+            candidates=tuple(parsed),
             severity_rules=environment.severity_rules,
+            suppression_patterns=filters,
+            project_root=environment.root,
         )
-        diagnostics = filter_diagnostics(diagnostics, invocation.tool_name, filters, environment.root)
+        diagnostics = _DIAGNOSTIC_PIPELINE.run(pipeline_request)
         evaluation = self._evaluate_exit_status(
             invocation,
             completed.returncode,

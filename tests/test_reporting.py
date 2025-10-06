@@ -10,13 +10,15 @@ from typing import cast
 from pyqa.annotations import AnnotationEngine, MessageSpan
 from pyqa.config import OutputConfig
 from pyqa.models import Diagnostic, RunResult, ToolOutcome
-from pyqa.reporting.advice import AdviceBuilder, AdviceEntry, generate_advice
-from pyqa.reporting.emitters import (
+from pyqa.reporting import (
+    AdviceBuilder,
+    AdviceEntry,
+    generate_advice,
+    render,
     write_json_report,
     write_pr_summary,
     write_sarif_report,
 )
-from pyqa.reporting.formatters import render
 from pyqa.severity import Severity
 
 

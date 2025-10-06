@@ -12,11 +12,11 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from ..config import OutputConfig
-from ..console import console_manager
-from ..filesystem.paths import normalize_path_key
-from ..metrics import SUPPRESSION_LABELS, FileMetrics, compute_file_metrics
-from ..models import RunResult
+from ...config import OutputConfig
+from ...console import console_manager
+from ...filesystem.paths import normalize_path_key
+from ...metrics import SUPPRESSION_LABELS, FileMetrics, compute_file_metrics
+from ...models import RunResult
 
 
 @dataclass(slots=True)

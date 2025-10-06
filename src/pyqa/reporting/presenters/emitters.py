@@ -10,12 +10,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, cast
 
-from ..annotations import HighlightKind
-from ..models import Diagnostic, RunResult
-from ..serialization import serialize_outcome
-from ..severity import Severity, severity_to_sarif
-from ..utils.bool_utils import interpret_optional_bool
-from .advice import AdviceBuilder, AdviceEntry
+from ...annotations import HighlightKind
+from ...models import Diagnostic, RunResult
+from ...serialization import serialize_outcome
+from ...severity import Severity, severity_to_sarif
+from ...utils.bool_utils import interpret_optional_bool
+from ..advice.builder import AdviceBuilder, AdviceEntry
 
 SARIF_VERSION = "2.1.0"
 SARIF_SCHEMA = "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json"

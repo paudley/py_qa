@@ -11,16 +11,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from ..config import OutputConfig
-from ..filesystem.paths import normalize_path
-from ..logging import colorize, emoji
-from ..models import Diagnostic, RunResult
-from .advice_panel import render_advice_panel
-from .diagnostic_output import (
+from ...config import OutputConfig
+from ...filesystem.paths import normalize_path
+from ...logging import colorize, emoji
+from ...models import Diagnostic, RunResult
+from ..advice.panels import render_advice_panel
+from ..advice.refactor import render_refactor_navigator
+from ..output.diagnostics import (
     MISSING_CODE_PLACEHOLDER,
     clean_message,
 )
-from .highlighting import (
+from ..output.highlighting import (
     ANNOTATION_ENGINE,
     ANNOTATION_SPAN_STYLE,
     LOCATION_SEPARATOR,
@@ -29,13 +30,12 @@ from .highlighting import (
     highlight_for_output,
     location_function_spans,
 )
-from .output_modes import (
+from ..output.modes import (
     render_pretty_mode,
     render_quiet_mode,
     render_raw_mode,
 )
-from .refactor_panel import render_refactor_navigator
-from .stats_panel import emit_stats_panel
+from .stats import emit_stats_panel
 
 CONCISE_MISSING_LINE: Final[int] = -1
 CONCISE_MISSING_CODE: Final[str] = MISSING_CODE_PLACEHOLDER

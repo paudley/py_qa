@@ -19,9 +19,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Final
 
-from ..annotations import AnnotationEngine
-from ..catalog.metadata import catalog_duplicate_hint_codes
-from ..filesystem.paths import normalize_path
+from ...annotations import AnnotationEngine
+from ...catalog.metadata import catalog_duplicate_hint_codes
+from ...filesystem.paths import normalize_path
 
 
 class AdviceCategory(str, Enum):

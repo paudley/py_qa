@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal, cast
 
+from ..diagnostics.json_import import JsonDiagnosticExtractor, JsonDiagnosticsConfigError
 from ..discovery.planners import build_project_scanner
 from ..discovery.rules import is_under_any, normalize_path_requirement, path_matches_requirements
 from ..parsers.base import JsonParser, JsonTransform, TextParser, TextTransform
@@ -22,7 +23,6 @@ from .command_options import (
     compile_option_mappings,
     require_str,
 )
-from .json_diagnostics import JsonDiagnosticExtractor
 from .loader import CatalogIntegrityError
 from .types import JSONValue
 
@@ -217,11 +217,14 @@ def parser_json_diagnostics(config: Mapping[str, Any]) -> JsonParser:
     if not isinstance(mappings, Mapping):
         raise CatalogIntegrityError("parser_json_diagnostics: 'mappings' must be an object")
 
-    extractor = JsonDiagnosticExtractor(
-        item_path=path_value,
-        mapping_config=_as_plain_json(mappings),
-        input_format=normalized_input_format,
-    )
+    try:
+        extractor = JsonDiagnosticExtractor(
+            item_path=path_value,
+            mapping_config=_as_plain_json(mappings),
+            input_format=normalized_input_format,
+        )
+    except JsonDiagnosticsConfigError as exc:
+        raise CatalogIntegrityError(str(exc)) from exc
     return JsonParser(extractor.transform)
 
 

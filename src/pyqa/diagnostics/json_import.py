@@ -9,13 +9,16 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import lru_cache
-from typing import Any, Final
+from typing import Final, TypeAlias
 
 from ..models import RawDiagnostic
 from ..tools.base import ToolContext
-from .loader import CatalogIntegrityError
 
-__all__ = ["JsonDiagnosticExtractor"]
+__all__ = ["JsonDiagnosticExtractor", "JsonDiagnosticsConfigError"]
+
+
+class JsonDiagnosticsConfigError(RuntimeError):
+    """Raised when JSON diagnostic configuration is invalid."""
 
 
 _PATH_SEPARATOR: Final[str] = "."
@@ -26,6 +29,10 @@ _ROOT_TOKENS: Final[tuple[str, ...]] = ("", "$")
 _QUOTE_CHAR: Final[str] = '"'
 _MIN_QUOTED_LENGTH: Final[int] = 2
 _DEFAULT_INDEX: Final[int] = 0
+
+JSONScalar: TypeAlias = str | int | float | bool | None
+JSONValue: TypeAlias = JSONScalar | Sequence["JSONValue"] | Mapping[str, "JSONValue"]
+FieldMapping: TypeAlias = Mapping[str, JSONValue]
 
 
 class PathTokenKind(StrEnum):
@@ -59,14 +66,21 @@ class FieldSpec:
 
     name: str
     path: tuple[PathComponent, ...] | None
-    value: Any | None
+    value: JSONValue | None
     has_value: bool
-    default: Any | None
+    default: JSONValue | None
     has_default: bool
-    remap: Mapping[str, Any]
+    remap: Mapping[str, JSONValue]
 
-    def resolve(self, entry: Mapping[str, Any]) -> Any | None:
-        """Return the resolved field value for *entry* applying defaults/maps."""
+    def resolve(self, entry: FieldMapping) -> JSONValue | None:
+        """Return the resolved field value applying defaults and remapping.
+
+        Args:
+            entry: JSON mapping representing the candidate diagnostic entry.
+
+        Returns:
+            JSONValue | None: Field value produced from the mapping or defaults.
+        """
 
         if self.has_value:
             return self.value
@@ -82,8 +96,15 @@ class FieldSpec:
             return self.default
         return value
 
-    def _apply_remap(self, value: Any) -> Any | None:
-        """Return remapped value when a mapping entry matches ``value``."""
+    def _apply_remap(self, value: JSONValue) -> JSONValue | None:
+        """Return a remapped value when the configuration matches ``value``.
+
+        Args:
+            value: Candidate value extracted from the JSON entry.
+
+        Returns:
+            JSONValue | None: Replacement value or ``None`` when no match exists.
+        """
 
         if isinstance(value, str):
             key = value.casefold()
@@ -97,7 +118,7 @@ class JsonDiagnosticExtractor:
     """Transform JSON payloads into ``RawDiagnostic`` sequences."""
 
     item_path: str | None
-    mapping_config: Mapping[str, Any]
+    mapping_config: FieldMapping
     input_format: str
     _field_specs: Mapping[str, FieldSpec] = field(init=False, repr=False)
 
@@ -109,12 +130,20 @@ class JsonDiagnosticExtractor:
         missing = mandatory_fields - self._field_specs.keys()
         if missing:
             names = ", ".join(sorted(missing))
-            raise CatalogIntegrityError(
+            raise JsonDiagnosticsConfigError(
                 f"parser_json_diagnostics: missing required field mapping(s): {names}",
             )
 
-    def transform(self, payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
-        """Convert JSON payload into ``RawDiagnostic`` entries."""
+    def transform(self, payload: JSONValue, context: ToolContext) -> Sequence[RawDiagnostic]:
+        """Convert JSON payload into ``RawDiagnostic`` entries.
+
+        Args:
+            payload: JSON document emitted by a tool.
+            context: Tool execution context (unused but kept for compatibility).
+
+        Returns:
+            Sequence[RawDiagnostic]: Diagnostics extracted from the JSON payload.
+        """
 
         del context
         items = list(self._iterate_items(payload))
@@ -127,8 +156,15 @@ class JsonDiagnosticExtractor:
                 diagnostics.append(diagnostic)
         return diagnostics
 
-    def _iterate_items(self, payload: Any) -> Iterator[Any]:
-        """Yield items addressed by ``item_path`` from *payload*."""
+    def _iterate_items(self, payload: JSONValue) -> Iterator[JSONValue]:
+        """Yield items addressed by :attr:`item_path` from ``payload``.
+
+        Args:
+            payload: JSON document to walk when extracting diagnostics.
+
+        Returns:
+            Iterator[JSONValue]: Items referenced by the configured path.
+        """
 
         if self.item_path is None or not self.item_path.strip():
             if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)):
@@ -138,17 +174,25 @@ class JsonDiagnosticExtractor:
             return
 
         tokens = _tokenize_path(self.item_path, allow_wildcards=True)
-        nodes: list[Any] = [payload]
+        nodes: list[JSONValue] = [payload]
         for token in tokens:
             nodes = list(_descend(nodes, token))
             if not nodes:
                 return
         yield from nodes
 
-    def _build_diagnostic(self, entry: Mapping[str, Any]) -> RawDiagnostic | None:
-        """Return a ``RawDiagnostic`` constructed from *entry*."""
+    def _build_diagnostic(self, entry: FieldMapping) -> RawDiagnostic | None:
+        """Return a ``RawDiagnostic`` constructed from ``entry``.
 
-        values: dict[str, Any] = {}
+        Args:
+            entry: JSON mapping describing a single diagnostic candidate.
+
+        Returns:
+            RawDiagnostic | None: Diagnostic populated from the entry or ``None``
+            when mandatory fields are missing.
+        """
+
+        values: dict[str, JSONValue] = {}
         for name, spec in self._field_specs.items():
             values[name] = spec.resolve(entry)
 
@@ -169,8 +213,15 @@ class JsonDiagnosticExtractor:
         )
         return diagnostic
 
-    def _build_field_specs(self, config: Mapping[str, Any]) -> Mapping[str, FieldSpec]:
-        """Normalize mapping configuration into ``FieldSpec`` instances."""
+    def _build_field_specs(self, config: FieldMapping) -> Mapping[str, FieldSpec]:
+        """Normalise mapping configuration into ``FieldSpec`` instances.
+
+        Args:
+            config: Mapping provided by the catalog configuration.
+
+        Returns:
+            Mapping[str, FieldSpec]: Resolved field specifications keyed by name.
+        """
 
         allowed_fields = {
             "file",
@@ -186,14 +237,22 @@ class JsonDiagnosticExtractor:
         specs: dict[str, FieldSpec] = {}
         for field_name, raw_spec in config.items():
             if field_name not in allowed_fields:
-                raise CatalogIntegrityError(
+                raise JsonDiagnosticsConfigError(
                     f"parser_json_diagnostics: unsupported field '{field_name}' in mappings",
                 )
             specs[field_name] = self._build_field_spec(field_name, raw_spec)
         return specs
 
-    def _build_field_spec(self, name: str, raw_spec: Any) -> FieldSpec:
-        """Create a field specification for a single diagnostic attribute."""
+    def _build_field_spec(self, name: str, raw_spec: JSONValue) -> FieldSpec:
+        """Create a field specification for a single diagnostic attribute.
+
+        Args:
+            name: Diagnostic field name being configured.
+            raw_spec: JSON configuration describing how to obtain the value.
+
+        Returns:
+            FieldSpec: Normalised specification used during extraction.
+        """
 
         if isinstance(raw_spec, str):
             tokens = _tokenize_path(raw_spec, allow_wildcards=False)
@@ -208,7 +267,7 @@ class JsonDiagnosticExtractor:
             )
 
         if not isinstance(raw_spec, Mapping):
-            raise CatalogIntegrityError(
+            raise JsonDiagnosticsConfigError(
                 f"parser_json_diagnostics: mapping for field '{name}' must be a string or object",
             )
 
@@ -219,7 +278,7 @@ class JsonDiagnosticExtractor:
         elif isinstance(path_value, str):
             path_tokens = _tokenize_path(path_value, allow_wildcards=False)
         else:
-            raise CatalogIntegrityError(
+            raise JsonDiagnosticsConfigError(
                 f"parser_json_diagnostics: field '{name}' has non-string 'path' configuration",
             )
 
@@ -230,15 +289,15 @@ class JsonDiagnosticExtractor:
         has_default = FieldConfigKey.DEFAULT in raw_spec
 
         map_value = raw_spec.get(FieldConfigKey.MAP)
-        remap: dict[str, Any] = {}
+        remap: dict[str, JSONValue] = {}
         if map_value is not None:
             if not isinstance(map_value, Mapping):
-                raise CatalogIntegrityError(
+                raise JsonDiagnosticsConfigError(
                     f"parser_json_diagnostics: field '{name}' has non-object 'map' configuration",
                 )
             for key, mapped_value in map_value.items():
                 if not isinstance(key, str):
-                    raise CatalogIntegrityError(
+                    raise JsonDiagnosticsConfigError(
                         f"parser_json_diagnostics: field '{name}' mapping keys must be strings",
                     )
                 remap[key.casefold()] = mapped_value
@@ -255,8 +314,16 @@ class JsonDiagnosticExtractor:
         )
 
 
-def _descend(nodes: Iterable[Any], token: PathComponent) -> Iterator[Any]:
-    """Yield nodes after applying a path ``token`` to *nodes*."""
+def _descend(nodes: Iterable[JSONValue], token: PathComponent) -> Iterator[JSONValue]:
+    """Yield nodes after applying a path ``token`` to ``nodes``.
+
+    Args:
+        nodes: Candidate JSON nodes to traverse.
+        token: Path component describing the next traversal step.
+
+    Returns:
+        Iterator[JSONValue]: Nodes reached after applying the token.
+    """
 
     if token.kind is PathTokenKind.KEY:
         yield from _descend_by_key(nodes, token)
@@ -268,8 +335,16 @@ def _descend(nodes: Iterable[Any], token: PathComponent) -> Iterator[Any]:
         yield from _descend_by_wildcard(nodes)
 
 
-def _descend_by_key(nodes: Iterable[Any], token: PathComponent) -> Iterator[Any]:
-    """Yield values by resolving *token* as a dictionary key."""
+def _descend_by_key(nodes: Iterable[JSONValue], token: PathComponent) -> Iterator[JSONValue]:
+    """Yield values by resolving ``token`` as a dictionary key.
+
+    Args:
+        nodes: Candidate JSON nodes to traverse.
+        token: Path component containing the mapping key.
+
+    Returns:
+        Iterator[JSONValue]: Child nodes extracted via the key lookup.
+    """
 
     key = token.value
     if not isinstance(key, str):
@@ -279,8 +354,16 @@ def _descend_by_key(nodes: Iterable[Any], token: PathComponent) -> Iterator[Any]
             yield node[key]
 
 
-def _descend_by_index(nodes: Iterable[Any], token: PathComponent) -> Iterator[Any]:
-    """Yield values by resolving *token* as a positional index."""
+def _descend_by_index(nodes: Iterable[JSONValue], token: PathComponent) -> Iterator[JSONValue]:
+    """Yield values by resolving ``token`` as a positional index.
+
+    Args:
+        nodes: Candidate JSON nodes to traverse.
+        token: Path component containing the positional index.
+
+    Returns:
+        Iterator[JSONValue]: Child nodes located at the requested index.
+    """
 
     index = int(token.value) if token.value is not None else _DEFAULT_INDEX
     for node in nodes:
@@ -289,47 +372,75 @@ def _descend_by_index(nodes: Iterable[Any], token: PathComponent) -> Iterator[An
                 yield node[index]
 
 
-def _descend_by_wildcard(nodes: Iterable[Any]) -> Iterator[Any]:
-    """Yield flattened sequence members for wildcard traversal."""
+def _descend_by_wildcard(nodes: Iterable[JSONValue]) -> Iterator[JSONValue]:
+    """Yield flattened sequence members for wildcard traversal.
+
+    Args:
+        nodes: Candidate JSON nodes to traverse.
+
+    Returns:
+        Iterator[JSONValue]: Items yielded from sequence nodes encountered.
+    """
 
     for node in nodes:
         if isinstance(node, Sequence) and not isinstance(node, (str, bytes, bytearray)):
             yield from node
 
 
-def _extract_path(entry: Mapping[str, Any], path: tuple[PathComponent, ...] | None) -> Any | None:
-    """Resolve *path* against *entry* returning the final value."""
+def _extract_path(entry: FieldMapping, path: tuple[PathComponent, ...] | None) -> JSONValue | None:
+    """Resolve ``path`` against ``entry`` returning the final value.
+
+    Args:
+        entry: JSON mapping representing the current traversal root.
+        path: Sequence of components describing the desired value location.
+
+    Returns:
+        JSONValue | None: Value discovered along the path or ``None`` when missing.
+    """
 
     if not path:
         return entry
 
-    current: Any = entry
+    cursor: JSONValue = entry
     for token in path:
         if token.kind is PathTokenKind.KEY:
-            if not isinstance(current, Mapping):
-                break
             key = token.value
-            if not isinstance(key, str) or key not in current:
-                break
-            current = current[key]
-            continue
+            if isinstance(cursor, Mapping) and isinstance(key, str):
+                if key not in cursor:
+                    break
+                next_cursor: JSONValue = cursor[key]
+                cursor = next_cursor
+                continue
+            break
         if token.kind is PathTokenKind.INDEX:
-            if not isinstance(current, Sequence) or isinstance(current, (str, bytes, bytearray)):
-                break
-            index = int(token.value) if token.value is not None else _DEFAULT_INDEX
-            if index >= len(current) or index < -len(current):
-                break
-            current = current[index]
-            continue
+            if isinstance(cursor, Sequence) and not isinstance(cursor, (str, bytes, bytearray, Mapping)):
+                index = int(token.value) if token.value is not None else _DEFAULT_INDEX
+                if index >= len(cursor) or index < -len(cursor):
+                    break
+                next_cursor = cursor[index]
+                cursor = next_cursor
+                continue
+            break
         break
     else:
-        return current
+        return cursor
     return None
 
 
 @lru_cache(maxsize=1024)
 def _tokenize_path(path: str, *, allow_wildcards: bool) -> tuple[PathComponent, ...]:
-    """Tokenise dotted/array path expressions into components."""
+    """Tokenise dotted/array path expressions into components.
+
+    Args:
+        path: Raw path string taken from the configuration.
+        allow_wildcards: Flag indicating whether wildcard segments are valid.
+
+    Returns:
+        tuple[PathComponent, ...]: Tokenised representation of the path.
+
+    Raises:
+        JsonDiagnosticsConfigError: If the path contains invalid segments.
+    """
 
     trimmed = path.strip()
     if not trimmed:
@@ -348,7 +459,7 @@ def _tokenize_path(path: str, *, allow_wildcards: bool) -> tuple[PathComponent, 
             _flush_buffer_as_key(buffer, tokens)
             closing = trimmed.find(_BRACKET_CLOSE, index)
             if closing == -1:
-                raise CatalogIntegrityError(
+                raise JsonDiagnosticsConfigError(
                     f"parser_json_diagnostics: unmatched '[' in path '{path}'",
                 )
             segment = trimmed[index + 1 : closing].strip()
@@ -388,7 +499,7 @@ def _append_bracket_segment(
 
     if segment in {"", _WILDCARD_SYMBOL}:
         if not allow_wildcards:
-            raise CatalogIntegrityError(
+            raise JsonDiagnosticsConfigError(
                 f"parser_json_diagnostics: wildcards are not permitted in field paths ('{path}')",
             )
         tokens.append(PathComponent(PathTokenKind.WILDCARD, None))
@@ -403,8 +514,15 @@ def _append_bracket_segment(
     tokens.append(PathComponent(PathTokenKind.KEY, cleaned))
 
 
-def _coerce_int(value: Any | None) -> int | None:
-    """Return an ``int`` when *value* can be losslessly coerced."""
+def _coerce_int(value: JSONValue | None) -> int | None:
+    """Return an integer when ``value`` can be losslessly coerced.
+
+    Args:
+        value: Candidate JSON value representing a line or column number.
+
+    Returns:
+        int | None: Integer value or ``None`` when coercion is not possible.
+    """
 
     if value is None:
         return None
@@ -418,8 +536,15 @@ def _coerce_int(value: Any | None) -> int | None:
         return None
 
 
-def _coerce_str(value: Any | None) -> str | None:
-    """Return a ``str`` representation of *value* when not ``None``."""
+def _coerce_str(value: JSONValue | None) -> str | None:
+    """Return a string representation of ``value`` when available.
+
+    Args:
+        value: Candidate JSON value representing a string field.
+
+    Returns:
+        str | None: String version of the value or ``None`` when absent.
+    """
 
     if value is None:
         return None
@@ -428,8 +553,15 @@ def _coerce_str(value: Any | None) -> str | None:
     return str(value)
 
 
-def _coerce_severity(value: Any | None) -> str | None:
-    """Return severity coerced to a ``str`` where applicable."""
+def _coerce_severity(value: JSONValue | None) -> str | None:
+    """Return a severity token coerced to a string where applicable.
+
+    Args:
+        value: Candidate JSON value representing a severity entry.
+
+    Returns:
+        str | None: String severity value or ``None`` when unavailable.
+    """
 
     if value is None:
         return None

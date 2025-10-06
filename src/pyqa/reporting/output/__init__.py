@@ -1,11 +1,9 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Blackcat Informatics® Inc.
-"""Reporting helpers: SOLID advice, presenters, and output adapters."""
 
-from .advice.builder import AdviceBuilder, AdviceEntry, generate_advice
-from .advice.panels import render_advice_panel
-from .advice.refactor import render_refactor_navigator
-from .output.diagnostics import (
+"""Reporting output helpers for diagnostics and highlighting."""
+
+from .diagnostics import (
     MISSING_CODE_PLACEHOLDER,
     clean_message,
     dump_diagnostics,
@@ -14,10 +12,11 @@ from .output.diagnostics import (
     raw_location,
     severity_color,
 )
-from .output.highlighting import (
+from .highlighting import (
     ANNOTATION_ENGINE,
     ANNOTATION_SPAN_STYLE,
     CODE_TINT,
+    LITERAL_TINT,
     LOCATION_SEPARATOR,
     apply_highlighting_text,
     collect_highlight_spans,
@@ -26,17 +25,9 @@ from .output.highlighting import (
     location_function_spans,
     strip_literal_quotes,
 )
-from .output.modes import render_pretty_mode, render_quiet_mode, render_raw_mode
-from .presenters.emitters import write_json_report, write_pr_summary, write_sarif_report
-from .presenters.formatters import render
-from .presenters.stats import emit_stats_panel
+from .modes import render_pretty_mode, render_quiet_mode, render_raw_mode
 
-__all__ = [
-    "AdviceBuilder",
-    "AdviceEntry",
-    "generate_advice",
-    "render_advice_panel",
-    "render_refactor_navigator",
+__all__ = (
     "MISSING_CODE_PLACEHOLDER",
     "clean_message",
     "dump_diagnostics",
@@ -47,6 +38,7 @@ __all__ = [
     "ANNOTATION_ENGINE",
     "ANNOTATION_SPAN_STYLE",
     "CODE_TINT",
+    "LITERAL_TINT",
     "LOCATION_SEPARATOR",
     "apply_highlighting_text",
     "collect_highlight_spans",
@@ -57,9 +49,4 @@ __all__ = [
     "render_pretty_mode",
     "render_quiet_mode",
     "render_raw_mode",
-    "write_json_report",
-    "write_pr_summary",
-    "write_sarif_report",
-    "render",
-    "emit_stats_panel",
-]
+)

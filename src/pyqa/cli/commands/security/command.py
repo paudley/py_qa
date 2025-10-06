@@ -10,9 +10,9 @@ from typing import Annotated
 
 import typer
 
+from ....compliance.security import SecurityScanner, SecurityScanResult, get_staged_files
 from ....constants import PY_QA_DIR_NAME
 from ....logging import emoji, warn
-from ....security import SecurityScanner, SecurityScanResult, get_staged_files
 from ...core.shared import Depends
 from ...core.utils import filter_py_qa_paths
 from .models import SecurityCLIOptions, build_security_options

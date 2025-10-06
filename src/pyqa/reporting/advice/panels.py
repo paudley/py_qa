@@ -10,10 +10,10 @@ from collections.abc import Callable, Iterable
 from rich.panel import Panel
 from rich.text import Text
 
-from ..annotations import AnnotationEngine
-from ..config import OutputConfig
-from ..console import console_manager
-from .advice import AdviceEntry, generate_advice
+from ...annotations import AnnotationEngine
+from ...config import OutputConfig
+from ...console import console_manager
+from .builder import AdviceEntry, generate_advice
 
 
 def _sentence_case(text: str) -> str:

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from pyqa.banned import BannedWordChecker
+from pyqa.compliance.banned import BannedWordChecker
 from pyqa.cli.app import app
 
 

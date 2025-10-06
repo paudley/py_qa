@@ -15,8 +15,8 @@ from pathlib import Path
 from subprocess import CompletedProcess
 from typing import Final
 
-from .logging import fail, info, ok, warn
-from .process_utils import run_command
+from ..logging import fail, info, ok, warn
+from ..process_utils import run_command
 
 # Patterns for secret detection (compiled lazily)
 _SECRET_PATTERNS: list[re.Pattern[str]] = [

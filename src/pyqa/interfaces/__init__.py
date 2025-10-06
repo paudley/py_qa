@@ -11,6 +11,7 @@ from .cli import CliCommand, CliCommandFactory
 from .compliance import ComplianceCheck, PolicyEvaluator, RemediationService
 from .config import ConfigMutator, ConfigResolver, ConfigSource
 from .core import ConsoleFactory, LoggerFactory, Serializer
+from .diagnostics import DiagnosticPipeline
 from .discovery import DiscoveryStrategy, ExcludePolicy, TargetPlanner
 from .environment import EnvironmentPreparer, RuntimeResolver, WorkspaceLocator
 from .orchestration import ActionExecutor, ExecutionPipeline, RunHooks
@@ -43,5 +44,6 @@ __all__ = [
     "ExecutionPipeline",
     "RunHooks",
     "AdviceProvider",
+    "DiagnosticPipeline",
     "DiagnosticPresenter",
 ]

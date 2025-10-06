@@ -7,12 +7,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ....compliance.quality import (
+    QualityChecker,
+    QualityCheckerOptions,
+    QualityIssue,
+    QualityIssueLevel,
+)
 from ....config import Config, SensitivityLevel
 from ....filesystem.paths import normalize_path_key
 from ....models import Diagnostic, RunResult, ToolOutcome
-from ....quality import QualityChecker, QualityCheckerOptions, QualityIssue, QualityIssueLevel
-from ....reporting.emitters import write_json_report, write_pr_summary, write_sarif_report
-from ....reporting.formatters import render
+from ....reporting import render, write_json_report, write_pr_summary, write_sarif_report
 from ....severity import Severity
 from ...core.shared import CLILogger
 from .params import LintOutputArtifacts

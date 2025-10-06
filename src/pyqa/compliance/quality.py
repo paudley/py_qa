@@ -15,6 +15,13 @@ from typing import Final, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..config import FileDiscoveryConfig, LicenseConfig, QualityConfigSection
+from ..constants import ALWAYS_EXCLUDE_DIRS
+from ..discovery.filesystem import FilesystemDiscovery
+from ..discovery.git import GitDiscovery, list_tracked_files
+from ..filesystem.paths import normalize_path
+from ..process_utils import run_command
+from ..tools.settings import tool_setting_schema_as_dict
 from .banned import BannedWordChecker
 from .checks.license_fixer import LicenseFixError, LicenseHeaderFixer
 from .checks.licenses import (
@@ -23,13 +30,6 @@ from .checks.licenses import (
     normalise_notice,
     verify_file_license,
 )
-from .config import FileDiscoveryConfig, LicenseConfig, QualityConfigSection
-from .constants import ALWAYS_EXCLUDE_DIRS
-from .discovery.filesystem import FilesystemDiscovery
-from .discovery.git import GitDiscovery, list_tracked_files
-from .filesystem.paths import normalize_path
-from .process_utils import run_command
-from .tools.settings import tool_setting_schema_as_dict
 
 # Thresholds for commit message validation.
 MAX_COMMIT_SUBJECT_LENGTH: Final[int] = 72

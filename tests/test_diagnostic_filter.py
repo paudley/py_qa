@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pyqa.execution.diagnostic_filter import DuplicateCodeDeduper, filter_diagnostics
+from pyqa.diagnostics.filtering import DuplicateCodeDeduper, filter_diagnostics
 from pyqa.models import Diagnostic
 from pyqa.severity import Severity
 

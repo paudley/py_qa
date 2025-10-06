@@ -7,10 +7,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..config import OutputConfig
-from ..logging import colorize
-from ..models import RunResult
-from .diagnostic_output import dump_diagnostics, join_output
+from ...config import OutputConfig
+from ...logging import colorize
+from ...models import RunResult
+from .diagnostics import dump_diagnostics, join_output
 
 
 def render_quiet_mode(result: RunResult, cfg: OutputConfig) -> None:

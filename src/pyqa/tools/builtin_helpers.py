@@ -370,7 +370,7 @@ def _extract_member_into_directory(
     """Extract the requested archive member and return the extracted path."""
 
     selected_member = _select_tar_member(archive, member_name=member_name, context=context)
-    archive.extract(selected_member, path=scratch_dir)
+    archive.extract(selected_member, path=scratch_dir, filter="data")
     return scratch_dir / selected_member.name
 
 

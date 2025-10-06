@@ -9,8 +9,8 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Final
 
+from ....compliance.quality import QualityChecker, QualityCheckerOptions
 from ....constants import PY_QA_DIR_NAME
-from ....quality import QualityChecker, QualityCheckerOptions
 from ....workspace import is_py_qa_workspace
 from ...core._config_loading import load_config_result
 from ...core.shared import CLILogger

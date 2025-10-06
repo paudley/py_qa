@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ....compliance.quality import QualityCheckResult, QualityIssueLevel
 from ....constants import PY_QA_DIR_NAME
-from ....quality import QualityCheckResult, QualityIssueLevel
 from ...core.shared import CLILogger
 
 
