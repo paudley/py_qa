@@ -59,7 +59,7 @@
 
 1. **Launcher Module**
 
-   * Implement a `pyqa/cli/_cli_launcher.py` module that:
+   * Implement a `pyqa/cli/launcher/__init__.py` module that:
      * Normalises `PYTHONPATH` to preferring the repo’s `src` directory.
      * Probes the active interpreter (`sys.executable` or `PYQA_PYTHON`) for compatibility (version ≥3.12, imports `pyqa.cli.app` from the repo).
      * When the probe succeeds, execute `python -m pyqa.cli.app <command>` directly.

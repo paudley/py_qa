@@ -28,7 +28,7 @@ class ToolDefinition(Protocol):
 class StrategyFactory(Protocol):
     """Factory callable responsible for building strategy instances."""
 
-    def __call__(self, **config: Any) -> Any:
+    def __call__(self, config: Mapping[str, Any] | None = None, /, **overrides: Any) -> Any:
         """Return a strategy object using catalogue-provided configuration."""
         raise NotImplementedError
 

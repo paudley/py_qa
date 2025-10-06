@@ -10,6 +10,7 @@ from .loader import ToolCatalogLoader
 from .metadata import (
     CatalogOption,
     catalog_duplicate_hint_codes,
+    catalog_duplicate_preference,
     catalog_duplicate_tools,
     catalog_general_suppressions,
     catalog_test_suppressions,
@@ -19,7 +20,7 @@ from .metadata import (
 from .model_catalog import CatalogFragment, CatalogSnapshot
 from .model_tool import ToolDefinition
 
-__all__ = [
+__all__ = (
     "CatalogFragment",
     "CatalogIntegrityError",
     "CatalogOption",
@@ -28,9 +29,10 @@ __all__ = [
     "ToolCatalogLoader",
     "ToolDefinition",
     "catalog_duplicate_hint_codes",
+    "catalog_duplicate_preference",
     "catalog_duplicate_tools",
     "catalog_general_suppressions",
     "catalog_test_suppressions",
     "catalog_tool_options",
     "clear_catalog_metadata_cache",
-]
+)

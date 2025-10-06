@@ -24,7 +24,7 @@ _stub_spacy.load = _stub_load  # type: ignore[attr-defined]
 sys.modules.setdefault("spacy", _stub_spacy)
 
 from pyqa.config import Config
-from pyqa.execution.action_executor import (
+from pyqa.orchestration.action_executor import (
     ActionExecutor,
     ActionInvocation,
     ExecutionEnvironment,

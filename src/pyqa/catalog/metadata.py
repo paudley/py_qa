@@ -264,7 +264,7 @@ def _dedupe_preserving_order(values: Iterable[str]) -> list[str]:
     return result
 
 
-__all__ = [
+__all__ = (
     "CatalogOption",
     "catalog_duplicate_hint_codes",
     "catalog_duplicate_preference",
@@ -273,4 +273,4 @@ __all__ = [
     "catalog_test_suppressions",
     "catalog_tool_options",
     "clear_catalog_metadata_cache",
-]
+)

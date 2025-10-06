@@ -1,143 +1,96 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 
-"""Public export surface for catalog model primitives.
-
-This package aggregates the most commonly consumed catalog constructs into a
-single namespace so downstream tooling can depend on a concise, curated API.
-"""
+"""Public export surface for catalog model primitives."""
 
 from __future__ import annotations
 
 from typing import Final
 
-from ..model_actions import ActionDefinition, ActionExecution
-from ..model_catalog import CatalogFragment, CatalogSnapshot
-from ..model_diagnostics import (
-    DiagnosticsBundle,
-    DiagnosticsDefinition,
-    SuppressionsDefinition,
-)
-from ..model_documentation import DocumentationBundle, DocumentationEntry
-from ..model_options import (
-    OptionDefinition,
-    OptionDocumentationBundle,
-    OptionGroupDefinition,
-    OptionType,
-)
-from ..model_references import CommandDefinition, ParserDefinition, StrategyReference
-from ..model_runtime import RuntimeDefinition, RuntimeInstallDefinition, RuntimeType
-from ..model_strategy import (
-    StrategyConfigField,
-    StrategyDefinition,
-    StrategyImplementation,
-    StrategyMetadata,
-    StrategyType,
-)
-from ..model_tool import (
-    TOOL_MODEL_EXPORTS,
-    TOOL_MODEL_OBJECTS,
-    ToolBehaviour,
-    ToolDefinition,
-    ToolFiles,
-    ToolIdentity,
-    ToolMetadata,
-    ToolOrdering,
-    parse_documentation_bundle,
-    parse_runtime_definition,
-    parse_tool_metadata,
-)
+from tooling_spec.catalog import model_actions as _model_actions
+from tooling_spec.catalog import model_catalog as _model_catalog
+from tooling_spec.catalog import model_diagnostics as _model_diagnostics
+from tooling_spec.catalog import model_documentation as _model_documentation
+from tooling_spec.catalog import model_options as _model_options
+from tooling_spec.catalog import model_references as _model_references
+from tooling_spec.catalog import model_runtime as _model_runtime
+from tooling_spec.catalog import model_strategy as _model_strategy
+from tooling_spec.catalog import model_tool as _model_tool
 
-_CATALOG_BASE_EXPORTS: Final[tuple[tuple[str, object], ...]] = (
-    ("ActionDefinition", ActionDefinition),
-    ("ActionExecution", ActionExecution),
-    ("CatalogFragment", CatalogFragment),
-    ("CatalogSnapshot", CatalogSnapshot),
-    ("CommandDefinition", CommandDefinition),
-    ("DiagnosticsBundle", DiagnosticsBundle),
-    ("DiagnosticsDefinition", DiagnosticsDefinition),
-    ("DocumentationBundle", DocumentationBundle),
-    ("DocumentationEntry", DocumentationEntry),
-    ("OptionDefinition", OptionDefinition),
-    ("OptionDocumentationBundle", OptionDocumentationBundle),
-    ("OptionGroupDefinition", OptionGroupDefinition),
-    ("OptionType", OptionType),
-    ("ParserDefinition", ParserDefinition),
-    ("RuntimeDefinition", RuntimeDefinition),
-    ("RuntimeInstallDefinition", RuntimeInstallDefinition),
-    ("RuntimeType", RuntimeType),
-    ("StrategyConfigField", StrategyConfigField),
-    ("StrategyDefinition", StrategyDefinition),
-    ("StrategyImplementation", StrategyImplementation),
-    ("StrategyMetadata", StrategyMetadata),
-    ("StrategyReference", StrategyReference),
-    ("StrategyType", StrategyType),
-    ("SuppressionsDefinition", SuppressionsDefinition),
-)
+ActionDefinition = _model_actions.ActionDefinition
+ActionExecution = _model_actions.ActionExecution
+CatalogFragment = _model_catalog.CatalogFragment
+CatalogSnapshot = _model_catalog.CatalogSnapshot
+CommandDefinition = _model_references.CommandDefinition
+DiagnosticsBundle = _model_diagnostics.DiagnosticsBundle
+DiagnosticsDefinition = _model_diagnostics.DiagnosticsDefinition
+DocumentationBundle = _model_documentation.DocumentationBundle
+DocumentationEntry = _model_documentation.DocumentationEntry
+OptionDefinition = _model_options.OptionDefinition
+OptionDocumentationBundle = _model_options.OptionDocumentationBundle
+OptionGroupDefinition = _model_options.OptionGroupDefinition
+OptionType = _model_options.OptionType
+ParserDefinition = _model_references.ParserDefinition
+RuntimeDefinition = _model_runtime.RuntimeDefinition
+RuntimeInstallDefinition = _model_runtime.RuntimeInstallDefinition
+RuntimeType = _model_runtime.RuntimeType
+StrategyConfigField = _model_strategy.StrategyConfigField
+StrategyDefinition = _model_strategy.StrategyDefinition
+StrategyImplementation = _model_strategy.StrategyImplementation
+StrategyMetadata = _model_strategy.StrategyMetadata
+StrategyReference = _model_references.StrategyReference
+StrategyType = _model_strategy.StrategyType
+SuppressionsDefinition = _model_diagnostics.SuppressionsDefinition
+ToolBehaviour = _model_tool.ToolBehaviour
+ToolComponents = _model_tool.ToolComponents
+ToolDefinition = _model_tool.ToolDefinition
+ToolFiles = _model_tool.ToolFiles
+ToolIdentity = _model_tool.ToolIdentity
+ToolMetadata = _model_tool.ToolMetadata
+ToolOrdering = _model_tool.ToolOrdering
+TOOL_MODEL_EXPORTS = _model_tool.TOOL_MODEL_EXPORTS
+TOOL_MODEL_OBJECTS = _model_tool.TOOL_MODEL_OBJECTS
+parse_documentation_bundle = _model_tool.parse_documentation_bundle
+parse_runtime_definition = _model_tool.parse_runtime_definition
+parse_tool_metadata = _model_tool.parse_tool_metadata
 
-
-def _register_exports(exports: tuple[tuple[str, object], ...]) -> None:
-    """Populate the module namespace with the provided *exports*."""
-
-    module_globals = globals()
-    for export_name, export_value in exports:
-        module_globals[export_name] = export_value
-
-
-_register_exports(_CATALOG_BASE_EXPORTS)
-
-_TOOL_MODEL_OBJECT_LOOKUP: Final[dict[str, object]] = {
-    "ToolBehaviour": ToolBehaviour,
-    "ToolDefinition": ToolDefinition,
-    "ToolFiles": ToolFiles,
-    "ToolIdentity": ToolIdentity,
-    "ToolMetadata": ToolMetadata,
-    "ToolOrdering": ToolOrdering,
-    "parse_documentation_bundle": parse_documentation_bundle,
-    "parse_runtime_definition": parse_runtime_definition,
-    "parse_tool_metadata": parse_tool_metadata,
-}
-
-
-def _build_tool_model_exports() -> tuple[tuple[str, object], ...]:
-    """Return pairs of tool export names and their bound objects.
-
-    Raises:
-        RuntimeError: When ``model_tool`` provides inconsistent metadata.
-
-    """
-
-    exports: list[tuple[str, object]] = []
-    try:
-        iterator = zip(TOOL_MODEL_EXPORTS, TOOL_MODEL_OBJECTS, strict=True)
-    except TypeError as error:  # pragma: no cover - defensive assertion
-        raise RuntimeError("model_tool.TOOL_MODEL_EXPORTS and TOOL_MODEL_OBJECTS must be iterable.") from error
-    for name, obj in iterator:
-        expected = _TOOL_MODEL_OBJECT_LOOKUP.get(name)
-        if expected is None:
-            raise RuntimeError(f"model_tool.TOOL_MODEL_EXPORTS contains an unknown symbol: {name!r}")
-        if expected is not obj:
-            raise RuntimeError(f"model_tool.TOOL_MODEL_OBJECTS entry for {name!r} does not match the imported symbol.")
-        exports.append((name, obj))
-    missing_symbols = set(_TOOL_MODEL_OBJECT_LOOKUP).difference(TOOL_MODEL_EXPORTS)
-    if missing_symbols:
-        formatted = ", ".join(sorted(missing_symbols))
-        raise RuntimeError(f"model_tool.TOOL_MODEL_EXPORTS is missing expected entries: {formatted}")
-    return tuple(exports)
-
-
-_TOOL_MODEL_EXPORTS: Final[tuple[tuple[str, object], ...]] = _build_tool_model_exports()
-
-_register_exports(_TOOL_MODEL_EXPORTS)
-
-_CATALOG_BASE_NAMES: Final[tuple[str, ...]] = tuple(name for name, _ in _CATALOG_BASE_EXPORTS)
-
-CATALOG_MODEL_EXPORTS: Final[tuple[str, ...]] = (
-    *_CATALOG_BASE_NAMES,
-    *TOOL_MODEL_EXPORTS,
+__all__ = (
+    "ActionDefinition",
+    "ActionExecution",
+    "CatalogFragment",
+    "CatalogSnapshot",
+    "CommandDefinition",
+    "DiagnosticsBundle",
+    "DiagnosticsDefinition",
+    "DocumentationBundle",
+    "DocumentationEntry",
+    "OptionDefinition",
+    "OptionDocumentationBundle",
+    "OptionGroupDefinition",
+    "OptionType",
+    "ParserDefinition",
+    "RuntimeDefinition",
+    "RuntimeInstallDefinition",
+    "RuntimeType",
+    "StrategyConfigField",
+    "StrategyDefinition",
+    "StrategyImplementation",
+    "StrategyMetadata",
+    "StrategyReference",
+    "StrategyType",
+    "SuppressionsDefinition",
+    "ToolBehaviour",
+    "ToolComponents",
+    "ToolDefinition",
+    "ToolFiles",
+    "ToolIdentity",
+    "ToolMetadata",
+    "ToolOrdering",
+    "parse_documentation_bundle",
+    "parse_runtime_definition",
+    "parse_tool_metadata",
     "TOOL_MODEL_EXPORTS",
     "TOOL_MODEL_OBJECTS",
 )
-# Tuple of symbols that define the public catalog model API.
 
-__all__: Final[list[str]] = list(CATALOG_MODEL_EXPORTS)  # pyright: ignore[reportUnsupportedDunderAll]
+CATALOG_MODEL_EXPORTS: Final[tuple[str, ...]] = __all__

@@ -1,0 +1,94 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
+"""Adapters bridging orchestration implementations to CLI interfaces."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from pyqa.config import Config
+from pyqa.core.runtime.di import ServiceContainer
+from pyqa.discovery.base import SupportsDiscovery
+from pyqa.interfaces.orchestration import ExecutionPipeline
+from pyqa.models import RunResult
+from pyqa.orchestration.orchestrator import (
+    FetchCallback,
+    Orchestrator,
+    OrchestratorHooks,
+    OrchestratorOverrides,
+)
+from pyqa.tool_env.models import PreparedCommand
+from pyqa.tools.registry import ToolRegistry
+
+
+class OrchestratorExecutionPipeline(ExecutionPipeline):
+    """Adapter exposing :class:`Orchestrator` through the pipeline protocol."""
+
+    def __init__(self, orchestrator: Orchestrator) -> None:
+        self._orchestrator = orchestrator
+
+    def run(self, config: Config, *, root: Path) -> RunResult:
+        """Execute the orchestrator for ``config`` rooted at ``root``.
+
+        Args:
+            config: Normalised configuration describing the desired execution.
+            root: Filesystem root supplied to discovery and tool execution.
+
+        Returns:
+            RunResult: Aggregated outcomes produced by the orchestrator.
+        """
+
+        return self._orchestrator.run(config, root=root)
+
+    def fetch_all_tools(
+        self,
+        config: Config,
+        *,
+        root: Path,
+        callback: FetchCallback | None = None,
+    ) -> list[tuple[str, str, PreparedCommand | None, str | None]]:
+        """Prepare tool actions without executing them.
+
+        Args:
+            config: Configuration controlling preparation behaviour.
+            root: Filesystem root supplied to preparation logic.
+            callback: Optional progress callback invoked per prepared action.
+
+        Returns:
+            list[tuple[str, str, PreparedCommand | None, str | None]]: Sequence of
+            preparation results for each tool action.
+        """
+
+        return self._orchestrator.fetch_all_tools(config, root=root, callback=callback)
+
+
+def build_orchestrator_pipeline(
+    registry: ToolRegistry,
+    discovery: SupportsDiscovery,
+    hooks: OrchestratorHooks,
+    *,
+    services: ServiceContainer | None = None,
+) -> ExecutionPipeline:
+    """Return an execution pipeline backed by :class:`Orchestrator`.
+
+    Args:
+        registry: Tool registry resolving available tooling implementations.
+        discovery: Discovery strategy used to gather candidate files.
+        hooks: Hook container receiving progress callbacks.
+        services: Optional service container supplying shared factories.
+
+    Returns:
+        ExecutionPipeline: Adapter exposing the underlying orchestrator through
+        the interface consumed by CLI modules.
+    """
+
+    overrides = OrchestratorOverrides(hooks=hooks, services=services)
+    orchestrator = Orchestrator(registry=registry, discovery=discovery, overrides=overrides)
+    return OrchestratorExecutionPipeline(orchestrator)
+
+
+__all__ = [
+    "OrchestratorExecutionPipeline",
+    "build_orchestrator_pipeline",
+]

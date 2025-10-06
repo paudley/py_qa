@@ -44,8 +44,13 @@ class _Tool(ToolDefinition):
 
 
 class _Strategy(StrategyFactory):
-    def __call__(self, **config):
-        return config
+    def __call__(self, config=None, **overrides):
+        payload: dict[str, object] = {}
+        if config is not None:
+            payload.update({str(key): value for key, value in config.items()})
+        if overrides:
+            payload.update(overrides)
+        return payload
 
 
 class _Snapshot(CatalogSnapshot):
@@ -211,8 +216,13 @@ class _Hooks(RunHooks):
 
 
 class _Pipeline(ExecutionPipeline):
-    def run(self, hooks: RunHooks | None = None) -> None:
-        return None
+    def run(self, config, *, root):
+        return {"config": config, "root": root}
+
+    def fetch_all_tools(self, config, *, root, callback=None):
+        if callback is not None:
+            callback("start")
+        return []
 
 
 def test_orchestration_protocols() -> None:
@@ -234,4 +244,3 @@ class _Advisor(AdviceProvider):
 def test_reporting_protocols() -> None:
     assert isinstance(_Presenter(), DiagnosticPresenter)
     assert isinstance(_Advisor(), AdviceProvider)
-

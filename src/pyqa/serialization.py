@@ -12,7 +12,7 @@ from typing import Any, TypeAlias
 
 from pydantic import BaseModel
 
-from .models import Diagnostic, ToolOutcome, coerce_output_sequence
+from .models import Diagnostic, ToolExitCategory, ToolOutcome, coerce_output_sequence
 from .severity import Severity
 
 JsonPrimitive: TypeAlias = str | int | float | bool | None
@@ -43,6 +43,7 @@ def serialize_outcome(outcome: ToolOutcome) -> dict[str, object]:
         "stderr": list(outcome.stderr),
         "diagnostics": [serialize_diagnostic(diag) for diag in outcome.diagnostics],
         "cached": outcome.cached,
+        "exit_category": outcome.exit_category.value,
     }
 
 
@@ -69,6 +70,11 @@ def deserialize_outcome(data: Mapping[str, Any]) -> ToolOutcome:
     stdout_list = coerce_output_sequence(stdout_value)
     stderr_list = coerce_output_sequence(stderr_value)
 
+    exit_category_raw = data.get("exit_category")
+    exit_category = (
+        _parse_exit_category(exit_category_raw) if isinstance(exit_category_raw, str) else ToolExitCategory.UNKNOWN
+    )
+
     return ToolOutcome(
         tool=str(data.get("tool", "")),
         action=str(data.get("action", "")),
@@ -77,7 +83,17 @@ def deserialize_outcome(data: Mapping[str, Any]) -> ToolOutcome:
         stderr=stderr_list,
         diagnostics=diagnostics,
         cached=bool(data.get("cached", False)),
+        exit_category=exit_category,
     )
+
+
+def _parse_exit_category(value: str) -> ToolExitCategory:
+    """Return a :class:`ToolExitCategory` derived from ``value`` with fallback."""
+
+    try:
+        return ToolExitCategory(value)
+    except ValueError:
+        return ToolExitCategory.UNKNOWN
 
 
 def _coerce_severity(value: object) -> Severity:

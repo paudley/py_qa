@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
 
 from ..config import FileDiscoveryConfig
-from ..execution.worker import run_command
+from ..orchestration.worker import run_command
 from .base import DiscoveryStrategy, is_within_limits, resolve_limit_paths
 
 GitRunner = Callable[[Sequence[str], Path], list[str]]

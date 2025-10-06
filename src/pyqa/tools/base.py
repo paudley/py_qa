@@ -99,6 +99,37 @@ else:
 InstallerCallable = Callable[["ToolContext"], None]
 
 
+class ActionExitCodes(BaseModel):
+    """Categorise exit codes reported by a tool action.
+
+    The orchestrator converts these collections into
+    :class:`pyqa.models.ToolExitCategory` values so callers can distinguish
+    between operational failures and diagnostics raised by the tool itself.
+    """
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    success: tuple[int, ...] = (0,)
+    diagnostic: tuple[int, ...] = ()
+    tool_failure: tuple[int, ...] = ()
+
+    @field_validator("success", "diagnostic", "tool_failure", mode="before")
+    @classmethod
+    def _coerce_codes(cls, value: object) -> tuple[int, ...]:
+        if value is None:
+            return ()
+        if isinstance(value, (list, tuple, set)):
+            return tuple(int(item) for item in value)
+        if isinstance(value, int):
+            return (value,)
+        raise TypeError("exit code collections must contain integers")
+
+    def as_sets(self) -> tuple[set[int], set[int], set[int]]:
+        """Return success, diagnostic, and tool-failure codes as sets."""
+
+        return set(self.success), set(self.diagnostic), set(self.tool_failure)
+
+
 class DeferredCommand(BaseModel):
     """Simple command builder that returns a fixed command list."""
 
@@ -144,6 +175,7 @@ class ToolAction(BaseModel):
     timeout_s: float | None = None
     env: Mapping[str, str] = Field(default_factory=dict)
     parser: ParserField = None
+    exit_codes: ActionExitCodes = Field(default_factory=ActionExitCodes)
 
     @field_validator("filter_patterns", mode="before")
     @classmethod

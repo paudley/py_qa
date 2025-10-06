@@ -10,7 +10,7 @@ from pathlib import Path
 
 PYQA_ROOT = Path(__file__).resolve().parent
 SRC_DIR = PYQA_ROOT / "src"
-CLI_LAUNCHER_PATH = SRC_DIR / "pyqa" / "cli" / "_cli_launcher.py"
+CLI_LAUNCHER_PATH = SRC_DIR / "pyqa" / "cli" / "launcher" / "__init__.py"
 VERBOSE_ENV = "PYQA_WRAPPER_VERBOSE"
 
 

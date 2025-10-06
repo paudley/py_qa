@@ -9,28 +9,16 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from ..config import FileDiscoveryConfig
+from ..interfaces.discovery import DiscoveryStrategy as DiscoveryStrategyProtocol
 
 
 @runtime_checkable
-class DiscoveryStrategy(Protocol):
+class DiscoveryStrategy(DiscoveryStrategyProtocol, Protocol):
     """Protocol implemented by discovery strategies.
 
     Concrete implementations should provide a lightweight :meth:`discover`
     method that yields resolved file paths without mutating global state.
     """
-
-    def discover(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
-        """Yield resolved paths for ``root`` using ``config``.
-
-        Args:
-            config: Discovery configuration supplied by the caller.
-            root: Repository root used to resolve relative entries.
-
-        Returns:
-            Iterable[Path]: Iterator over resolved filesystem paths.
-        """
-
-        raise NotImplementedError
 
     def __call__(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
         """Delegate to :meth:`discover` enabling callable semantics."""

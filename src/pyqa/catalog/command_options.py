@@ -24,13 +24,13 @@ from ..tools.builtin_helpers import _as_bool, _resolve_path, _setting, _settings
 from .loader import CatalogIntegrityError
 from .types import JSONValue
 
-__all__ = [
+__all__ = (
     "command_option_map",
     "compile_option_mappings",
     "OptionMapping",
     "require_str",
     "require_string_sequence",
-]
+)
 
 
 _STRICT_PROFILE_LABEL: Final[str] = "strict"

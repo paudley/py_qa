@@ -4,11 +4,34 @@
 
 # pyqa Tooling Specification
 
-This package provides a distributable view of the pyqa tooling catalog – the
-schemas, model definitions, and loader utilities that describe how tools are
-configured. It is intended for future publication so external systems can
-consume the catalog without depending on the full pyqa runtime.
+`pyqa-tooling-spec` packages the catalog models, loader, and JSON schemas used
+by `pyqa` so that external tooling can consume the specification without
+depending on the rest of the runtime. The distribution includes:
 
-The package currently delegates to the in-repository catalog implementation.
-Subsequent milestones will inline the necessary modules and author dedicated
-packaging metadata, changelog automation, and release workflows.
+* immutable model definitions for tools, strategies, documentation, options,
+  and fragments (`tooling_spec.catalog.model_*`),
+* a schema-aware loader capable of materialising catalog snapshots from disk,
+  complete with entry-point based plugin support, and
+* the canonical strategy/tool schema documents under `schema/catalog_schema/`.
+
+## Quick start
+
+```python
+from pathlib import Path
+
+from tooling_spec.catalog import ToolCatalogLoader
+
+catalog_root = Path("tooling/catalog")
+schema_root = Path("tooling/schema")
+snapshot = ToolCatalogLoader(catalog_root, schema_root=schema_root).load_snapshot()
+
+for tool in snapshot.tools:
+    print(tool.name, tool.to_dict()["actions"])
+```
+
+Plugins can extend the catalog by exposing callables via the
+`pyqa.catalog.plugins` entry-point group. Each factory receives a
+`CatalogPluginContext` instance and returns a `CatalogContribution` enumerating
+additional tools, strategies, or fragments.
+
+Refer to `CHANGELOG.md` for release notes and migration guidance.

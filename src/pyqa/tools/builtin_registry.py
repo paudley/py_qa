@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import importlib
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -287,18 +286,7 @@ def _to_tool_doc_entry(entry: Any) -> ToolDocumentationEntry | None:
 
 
 def _resolve_strategy_callable(definition: StrategyDefinition) -> Callable[..., Any]:
-    if definition.entry is not None:
-        module = importlib.import_module(definition.implementation)
-        attribute = getattr(module, definition.entry)
-    else:
-        module_path, _, attribute_name = definition.implementation.rpartition(".")
-        module = importlib.import_module(module_path)
-        attribute = getattr(module, attribute_name)
-    if not callable(attribute):
-        raise CatalogIntegrityError(
-            f"Strategy implementation '{definition.implementation}' is not callable",
-        )
-    return cast(Callable[..., Any], attribute)
+    return definition.resolve_callable()
 
 
 def _call_strategy_factory(factory: Callable[..., Any], config: Mapping[str, Any]) -> Any:

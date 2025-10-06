@@ -5,41 +5,35 @@ from __future__ import annotations
 
 from typing import Final
 
-from ..model_actions import ActionDefinition as ActionDefinition, ActionExecution as ActionExecution
-from ..model_catalog import CatalogFragment as CatalogFragment, CatalogSnapshot as CatalogSnapshot
-from ..model_diagnostics import (
+from tooling_spec.catalog.models import (
+    ActionDefinition as ActionDefinition,
+    ActionExecution as ActionExecution,
+    CatalogFragment as CatalogFragment,
+    CatalogSnapshot as CatalogSnapshot,
+    CommandDefinition as CommandDefinition,
     DiagnosticsBundle as DiagnosticsBundle,
     DiagnosticsDefinition as DiagnosticsDefinition,
-    SuppressionsDefinition as SuppressionsDefinition,
-)
-from ..model_documentation import DocumentationBundle as DocumentationBundle, DocumentationEntry as DocumentationEntry
-from ..model_options import (
+    DocumentationBundle as DocumentationBundle,
+    DocumentationEntry as DocumentationEntry,
     OptionDefinition as OptionDefinition,
     OptionDocumentationBundle as OptionDocumentationBundle,
     OptionGroupDefinition as OptionGroupDefinition,
     OptionType as OptionType,
-)
-from ..model_references import (
-    CommandDefinition as CommandDefinition,
     ParserDefinition as ParserDefinition,
-    StrategyReference as StrategyReference,
-)
-from ..model_runtime import (
     RuntimeDefinition as RuntimeDefinition,
     RuntimeInstallDefinition as RuntimeInstallDefinition,
     RuntimeType as RuntimeType,
-)
-from ..model_strategy import (
     StrategyConfigField as StrategyConfigField,
     StrategyDefinition as StrategyDefinition,
     StrategyImplementation as StrategyImplementation,
     StrategyMetadata as StrategyMetadata,
+    StrategyReference as StrategyReference,
     StrategyType as StrategyType,
-)
-from ..model_tool import (
+    SuppressionsDefinition as SuppressionsDefinition,
     TOOL_MODEL_EXPORTS as TOOL_MODEL_EXPORTS,
     TOOL_MODEL_OBJECTS as TOOL_MODEL_OBJECTS,
     ToolBehaviour as ToolBehaviour,
+    ToolComponents as ToolComponents,
     ToolDefinition as ToolDefinition,
     ToolFiles as ToolFiles,
     ToolIdentity as ToolIdentity,
@@ -52,4 +46,4 @@ from ..model_tool import (
 
 CATALOG_MODEL_EXPORTS: Final[tuple[str, ...]]
 
-__all__: list[str]
+__all__: Final[tuple[str, ...]]

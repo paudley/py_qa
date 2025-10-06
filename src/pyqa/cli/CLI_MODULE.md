@@ -69,7 +69,8 @@ refactoring the command-line entrypoints.
   (e.g. `LintCLIInputs`, `QualityCLIOptions`) to keep type hints clear and limit the number of Typer parameters per function.
 * **Laziness**: The package-level `app` export in `pyqa.cli` is resolved lazily to avoid `runpy` warnings. External users should continue importing `pyqa.cli.app` normally.
 * **Backwards Compatibility**: `_build_config` now requires a pre-constructed `LintOptions` instance, avoiding the fragile keyword-based constructor that previously triggered lint errors.
-* **Wrappers**: Root-level launchers (e.g. `./lint`, `./tool-info`) all delegate through `pyqa.cli._cli_launcher.launch`, which handles interpreter selection, `PYTHONPATH`, and optional `uv` fallback.
+* **Wrappers**: Root-level launchers (e.g. `./lint`, `./tool-info`) all delegate through `pyqa.cli.launcher.launch`, which handles interpreter selection, `PYTHONPATH`, and optional `uv` fallback.
+* **Plugin Loading**: `register_commands` automatically invokes entry points declared under `pyqa.cli.plugins`, allowing third-party packages to append commands without modifying the core registry.
 * **Wrapper troubleshooting**: When wrappers misbehave, enable `PYQA_WRAPPER_VERBOSE=1` to see interpreter detection, check `PYQA_PYTHON`/`PYQA_UV` overrides, and confirm `.lint-cache/uv` is writable for automatic downloads.
 * **Wrapper failure modes**: A successful probe requires Python ≥3.12 and imports resolving under `src/`; otherwise the launcher falls back to `uv --project … run python -m pyqa.cli.app`. Propagated exit codes make it safe to rely on wrappers within CI.
 
@@ -93,5 +94,5 @@ refactoring the command-line entrypoints.
 
 * [SOLID CLI Recovery Plan](../SOLID_CLI.md)
 * [Shebang Detection Plan](../SHEBANG.md)
-* `src/pyqa/cli/shared.py`, `src/pyqa/cli/typer_ext.py`
+* `src/pyqa/cli/core/shared.py`, `src/pyqa/cli/core/typer_ext.py`
 * `tooling/catalog/languages/`

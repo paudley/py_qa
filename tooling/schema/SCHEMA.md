@@ -34,7 +34,10 @@ captures the following high level areas:
   strategy (such as `installer_download_artifact`).
 * **Actions** – every executable entry point a tool exposes (e.g. `lint`, `fix`,
   `check`). Each action references a command strategy, an optional parser, and
-  metadata such as appended files, exit-code handling, and timeouts.
+  metadata such as appended files, exit-code handling, and timeouts. The new
+  `exitCodes` block lets authors categorise exit statuses into success,
+  diagnostic, and tool-failure buckets so the orchestrator can distinguish
+  between operational failures and tools that merely reported issues.
 * **Diagnostics** – severity mapping and dedupe hints used by the orchestrator
   to normalise diagnostics from the tool.
 * **Suppressions** – default suppressions for tests/general usage along with

@@ -11,7 +11,7 @@
 * Consolidate caching and diagnostic flows to simplify import graphs and make dependencies explicit.
 * Introduce a dedicated interfaces layer that defines stable protocols and abstractions consumed by higher-level modules.
 * Embed SOLID acceptance criteria so each package advertises its seam (inputs/outputs, owning services, permitted dependencies) before code moves.
-* Shape the tooling catalog as a self-contained specification that can be published independently for the wider lint tooling ecosystem.
+* Shape the tooling catalog as a self-contained specification that can be published independently for the wider lint tooling ecosystem; runtime code lives under `src/pyqa`, while the distributable spec module resides in the adjacent `src/tooling_spec` package.
 
 ## Proposed Package Layout
 
@@ -70,7 +70,7 @@
 * **Candidate moves:**
   * Group `_lint_*` modules under `cli/commands/lint/` (e.g., `models.py`, `services.py`, `runtime.py`, `progress.py`).
   * Move `cli/quality.py`, `cli/config_cmd.py`, `cli/clean.py`, `cli/security.py`, and `cli/tool_info.py` into sibling packages with shared base classes in `cli/core/`.
-  * Extract wrapper launch logic (`cli/_cli_launcher.py`, shell entry shims) into `cli/launcher/` per `src/pyqa/cli/WRAPPER.md`, exposing a small `CliLauncher` interface that commands depend upon.
+  * Extract wrapper launch logic (`cli/launcher/__init__.py`, shell entry shims) into `cli/launcher/` per `src/pyqa/cli/WRAPPER.md`, exposing a small `CliLauncher` interface that commands depend upon.
 * **Interfaces:** Define `CliCommand`/`CliService` protocols in `interfaces/cli.py` so orchestration code targets abstractions rather than module-level functions.
 * **Docs impact:** Update CLI docs to reference the new package layout and ensure Typer app registration uses the shared decorators consistently.
 * **SOLID guardrails:** Each command package must own a single orchestration entry and depend only on command-specific services; enforce DIP by injecting services via constructors and add smoke tests with stub services to guarantee substitution.
@@ -205,5 +205,6 @@
 * **Backwards compatibility:** No stub modules or transitional aliases will be provided; new package paths take effect immediately.
 * **Plugin loading:** Entry point-based plugin hooks will be implemented as part of the interfaces effort.
 * **External consumers:** No third-party packages depend on current internals, so no migration messaging or semantic-version grace period is required.
+* **Runtime dependencies:** All third-party modules, including spaCy and tree-sitter, are required at runtime; absence must be treated as a fatal error.
 * **Ownership:** Packages remain community-maintained with no team-level ownership assignments.
 * **Tooling spec:** The catalog/tooling\_spec packages will be released as an independent project with semver guarantees and first-class documentation for the broader lint tooling ecosystem.

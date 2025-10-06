@@ -34,6 +34,9 @@ The schema for both collections resides in `tooling/schema/`.
   automatically when the host system lacks the required tooling.
 * `options` enumerates tool-specific configuration knobs. The loader exposes
   these as `OptionDefinition` objects for future config builders.
+* `actions[].exitCodes` categorises exit statuses into success, diagnostic, and
+  tool\_failure sets. This allows runtime code to surface tool crashes while
+  treating ordinary diagnostics as expected failures.
 
 ## Runtime Integration
 

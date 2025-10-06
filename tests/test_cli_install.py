@@ -27,7 +27,7 @@ def test_install_cli_passes_flags(monkeypatch, tmp_path: Path) -> None:
         calls.append((root, include_optional, generate_stubs))
         return InstallSummary((), (), root / ".lint-cache" / "marker.json")
 
-    monkeypatch.setattr("pyqa.cli.install.install_dev_environment", fake_install)
+    monkeypatch.setattr("pyqa.cli.commands.install.command.install_dev_environment", fake_install)
 
     result = runner.invoke(
         app,
@@ -64,7 +64,7 @@ def test_install_cli_emits_progress(monkeypatch, tmp_path: Path) -> None:
             on_stub_generation("pyarrow")
         return InstallSummary(("types-requests",), ("pyarrow",), root / "marker")
 
-    monkeypatch.setattr("pyqa.cli.install.install_dev_environment", fake_install)
+    monkeypatch.setattr("pyqa.cli.commands.install.command.install_dev_environment", fake_install)
 
     result = runner.invoke(app, ["install", "--root", str(tmp_path), "--no-emoji"])
 

@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
+from __future__ import annotations
+
+from .literals import (
+    BanditLevelLiteral,
+    OutputModeLiteral,
+    PRSummarySeverityLiteral,
+    SensitivityLiteral,
+    StrictnessLiteral,
+)
+from .params import (
+    LintAdvancedGroup,
+    LintCLIInputs,
+    LintExecutionGroup,
+    LintOutputGroup,
+    LintTargetGroup,
+)
+
+ADVICE_HELP: str
+BANDIT_CONFIDENCE_HELP: str
+BANDIT_LEVEL_CHOICES: tuple[BanditLevelLiteral, ...]
+BANDIT_SEVERITY_HELP: str
+CACHE_DIR_HELP: str
+FETCH_ALL_TOOLS_HELP: str
+FILTER_HELP: str
+JOBS_HELP: str
+LINE_LENGTH_HELP: str
+NORMAL_PRESET_HELP: str
+OUTPUT_MODE_CHOICES: tuple[OutputModeLiteral, ...]
+OUTPUT_MODE_CONCISE: OutputModeLiteral
+OUTPUT_MODE_HELP: str
+PR_SUMMARY_MIN_SEVERITY_HELP: str
+PR_SUMMARY_OUT_HELP: str
+PR_SUMMARY_SEVERITIES: tuple[PRSummarySeverityLiteral, ...]
+PR_SUMMARY_TEMPLATE_HELP: str
+PYLINT_FAIL_UNDER_HELP: str
+REPORT_JSON_HELP: str
+SENSITIVITY_CHOICES: tuple[SensitivityLiteral, ...]
+SENSITIVITY_HELP: str
+STRICTNESS_CHOICES: tuple[StrictnessLiteral, ...]
+STRICT_CONFIG_HELP: str
+TOOL_INFO_HELP: str
+TYPE_CHECKING_HELP: str
+USE_LOCAL_LINTERS_HELP: str
+VALIDATE_SCHEMA_HELP: str
+
+class LintDisplayOptions:
+    no_emoji: bool
+    quiet: bool
+    verbose: bool
+
+    def __init__(self, *, no_emoji: bool, quiet: bool, verbose: bool) -> None: ...
+
+def _build_lint_cli_inputs(
+    targets: LintTargetGroup,
+    execution: LintExecutionGroup,
+    output: LintOutputGroup,
+    advanced: LintAdvancedGroup,
+) -> LintCLIInputs: ...

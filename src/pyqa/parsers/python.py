@@ -196,7 +196,16 @@ def parse_mypy(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
     """
     del context
     results: list[RawDiagnostic] = []
-    for item in iter_dicts(payload):
+    if isinstance(payload, Mapping):
+        error_entries = payload.get("errors")
+        if isinstance(error_entries, Sequence):
+            sources = [entry for entry in error_entries if isinstance(entry, Mapping)]
+        else:
+            sources = [payload]
+    else:
+        sources = list(iter_dicts(payload))
+
+    for item in sources:
         path = item.get("path") or item.get("file")
         message = str(item.get("message", "")).strip()
         severity = str(item.get("severity", "error")).lower()

@@ -13,11 +13,11 @@ import click
 from typer.main import get_group
 from typer.testing import CliRunner
 
-import pyqa.cli.lint as lint_module
-from pyqa.cli import _lint_runtime as lint_runtime
+from pyqa.cli.commands.lint import command as lint_module
+from pyqa.cli.commands.lint import runtime as lint_runtime
 from pyqa.cli.app import app
-from pyqa.cli.options import LintOptions
-from pyqa.cli.typer_ext import _primary_option_name
+from pyqa.cli.core.options import LintOptions
+from pyqa.cli.core.typer_ext import _primary_option_name
 from pyqa.config import Config
 from pyqa.config_loader import ConfigLoader
 from pyqa.models import RunResult, ToolOutcome
@@ -37,7 +37,7 @@ def test_lint_warns_when_py_qa_path_outside_workspace(tmp_path: Path, monkeypatc
         assert tool_name == "ruff"
         return 0
 
-    monkeypatch.setattr("pyqa.cli._lint_meta.run_tool_info", fake_run_tool_info)
+    monkeypatch.setattr("pyqa.cli.commands.lint.meta.run_tool_info", fake_run_tool_info)
 
     result = runner.invoke(
         app,
@@ -84,7 +84,7 @@ def test_lint_fetch_all_tools_flag(monkeypatch, tmp_path: Path) -> None:
             orchestrator_factory=lambda registry, discovery, hooks: FakeOrchestrator(hooks),
         ),
     )
-    monkeypatch.setattr("pyqa.cli.lint.is_tty", lambda: False)
+    monkeypatch.setattr("pyqa.cli.commands.lint.command.is_tty", lambda: False)
 
     result = runner.invoke(
         app,

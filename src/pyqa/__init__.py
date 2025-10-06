@@ -26,8 +26,8 @@ _EXPORT_NAME_TO_TARGET: Final[dict[str, ExportTarget]] = {
     "DedupeConfig": ExportTarget("pyqa.config", "DedupeConfig"),
     "ExecutionConfig": ExportTarget("pyqa.config", "ExecutionConfig"),
     "FileDiscoveryConfig": ExportTarget("pyqa.config", "FileDiscoveryConfig"),
-    "Orchestrator": ExportTarget("pyqa.execution.orchestrator", "Orchestrator"),
-    "OrchestratorHooks": ExportTarget("pyqa.execution.orchestrator", "OrchestratorHooks"),
+    "Orchestrator": ExportTarget("pyqa.orchestration.orchestrator", "Orchestrator"),
+    "OrchestratorHooks": ExportTarget("pyqa.orchestration.orchestrator", "OrchestratorHooks"),
     "OutputConfig": ExportTarget("pyqa.config", "OutputConfig"),
     "SecurityScanner": ExportTarget("pyqa.security", "SecurityScanner"),
     "build_default_discovery": ExportTarget("pyqa.discovery", "build_default_discovery"),
@@ -64,7 +64,7 @@ if TYPE_CHECKING:  # pragma: no cover - import hints for static analysis only
     )
     from pyqa.config_loader import ConfigLoader, generate_config_schema, load_config
     from pyqa.discovery import build_default_discovery
-    from pyqa.execution.orchestrator import Orchestrator, OrchestratorHooks
+    from pyqa.orchestration.orchestrator import Orchestrator, OrchestratorHooks
     from pyqa.security import SecurityScanner
 
     ExportedCallable = Callable[..., object]

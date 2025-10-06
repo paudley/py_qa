@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from pyqa.cli.config_builder import DEFAULT_TOOL_FILTERS, build_config
-from pyqa.cli.options import (
+from pyqa.cli.core.config_builder import DEFAULT_TOOL_FILTERS, build_config
+from pyqa.cli.core.options import (
     ExecutionFormattingOptions,
     ExecutionRuntimeOptions,
     LintComplexityOptions,

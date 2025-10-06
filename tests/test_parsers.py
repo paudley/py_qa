@@ -99,6 +99,20 @@ def test_parse_mypy() -> None:
     assert diags[0].tool == "mypy"
 
 
+def test_parse_mypy_single_object() -> None:
+    parser = JsonParser(parse_mypy)
+    stdout = """
+    {"path": "pkg/app.py", "line": 5, "column": 2, "message": "bad", "severity": "error", "code": "assignment"}
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == "pkg/app.py"
+    assert diag.line == 5
+    assert diag.code == "assignment"
+    assert diag.severity.value == "error"
+
+
 def test_parse_actionlint() -> None:
     parser = JsonParser(parse_actionlint)
     stdout = """

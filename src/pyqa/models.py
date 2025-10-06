@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import re
+from enum import Enum
 from pathlib import Path
 from re import Pattern
 from typing import Any
@@ -110,8 +111,23 @@ def coerce_output_sequence(value: object) -> list[str]:
     return [str(value)]
 
 
+class ToolExitCategory(str, Enum):
+    """Enumerate high level categories for tool exit behaviour."""
+
+    SUCCESS = "success"
+    DIAGNOSTIC = "diagnostic"
+    TOOL_FAILURE = "tool_failure"
+    UNKNOWN = "unknown"
+
+
 class ToolOutcome(BaseModel):
-    """Result bundle produced by each executed tool action."""
+    """Result bundle produced by each executed tool action.
+
+    The :attr:`exit_category` field records the orchestrator's interpretation of
+    the tool's exit status (success, diagnostic/code failure, or tool failure).
+    Downstream code must rely on this category instead of the raw return code to
+    differentiate operational failures from diagnostics surfaced by the tool.
+    """
 
     model_config = ConfigDict(validate_assignment=True)
 
@@ -122,6 +138,7 @@ class ToolOutcome(BaseModel):
     stderr: list[str] = Field(default_factory=list)
     diagnostics: list[Diagnostic] = Field(default_factory=list)
     cached: bool = False
+    exit_category: ToolExitCategory = ToolExitCategory.UNKNOWN
 
     @field_validator("stdout", "stderr", mode="before")
     @classmethod
@@ -138,9 +155,22 @@ class ToolOutcome(BaseModel):
         return self.is_ok()
 
     def indicates_failure(self) -> bool:
-        """Return ``True`` when the outcome represents a tool execution failure."""
+        """Return ``True`` when the tool failed to execute successfully.
 
-        return not self.ok and not self.diagnostics
+        Tools often emit diagnostics and exit with ``1`` to signal that issues
+        were detected. Those runs are still considered *successful* from an
+        operational standpoint because the tool completed its work. We only treat
+        an action as failed when it exits in a way categorised as
+        :class:`ToolExitCategory.TOOL_FAILURE` or when no diagnostics were
+        produced and no explicit classification was provided, which typically
+        indicates a crash, misconfiguration, or other runtime failure.
+        """
+
+        if self.exit_category == ToolExitCategory.TOOL_FAILURE:
+            return True
+        if self.exit_category in (ToolExitCategory.SUCCESS, ToolExitCategory.DIAGNOSTIC):
+            return False
+        return self.returncode != 0 and not self.diagnostics
 
 
 class RunResult(BaseModel):
@@ -158,6 +188,11 @@ class RunResult(BaseModel):
     def has_failures(self) -> bool:
         """Return ``True`` when any outcome failed."""
         return any(outcome.indicates_failure() for outcome in self.outcomes)
+
+    def has_diagnostics(self) -> bool:
+        """Return ``True`` when any tool emitted diagnostics."""
+
+        return any(outcome.diagnostics for outcome in self.outcomes)
 
     @property
     def failed(self) -> bool:

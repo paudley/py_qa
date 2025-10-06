@@ -18,6 +18,10 @@ specification as a standalone project.
 * Strict typing and SOLID guardrails from `REORG_MODULES.md` apply to every new
   module: clear inputs/outputs, interface-first wiring, contract tests.
 * Tooling catalog code must remain pyqa-agnostic so it can ship independently.
+* Runtime implementations live under `src/pyqa`, while the shared specification is
+  published from the sibling `src/tooling_spec` module to keep code and spec
+  assets side-by-side inside this repository.
+* All third-party dependencies (e.g., spaCy, tree-sitter) are mandatory; missing modules must raise fatal errors rather than degrade gracefully.
 
 ## Coding RULES
 
@@ -102,7 +106,7 @@ specification as a standalone project.
      helpers.
    * Document each public class and function with Google-style docstrings.
 3. **Standalone `tooling_spec` package**
-   * Create `tooling_spec/` (or `pyqa_tooling_spec/`) exposing schemas,
+   * Create `tooling_spec/` (or `tooling_spec/`) exposing schemas,
      metadata models, loader APIs, and examples.
    * Set up packaging metadata, versioning strategy (SemVer + schema version),
      changelog automation, and release scripts.

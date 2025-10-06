@@ -6,4 +6,6 @@
 
 ## 0.1.0 (unreleased)
 
-* Initial scaffolding for the standalone tooling specification package.
+* Inline catalog models, loader, and JSON schemas.
+* Add plugin support and snapshot checksum extensions.
+* Document usage and provide pytest coverage for the standalone loader.
