@@ -1320,7 +1320,7 @@ wheels = [
 
 [[package]]
 name = "pylint"
-version = "3.3.8"
+version = "3.3.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "astroid" },
@@ -1331,9 +1331,9 @@ dependencies = [
     { name = "platformdirs" },
     { name = "tomlkit" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9d/58/1f614a84d3295c542e9f6e2c764533eea3f318f4592dc1ea06c797114767/pylint-3.3.8.tar.gz", hash = "sha256:26698de19941363037e2937d3db9ed94fb3303fdadf7d98847875345a8bb6b05", size = 1523947, upload-time = "2025-08-09T09:12:57.234Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/04/9d/81c84a312d1fa8133b0db0c76148542a98349298a01747ab122f9314b04e/pylint-3.3.9.tar.gz", hash = "sha256:d312737d7b25ccf6b01cc4ac629b5dcd14a0fcf3ec392735ac70f137a9d5f83a", size = 1525946, upload-time = "2025-10-05T18:41:43.786Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2d/1a/711e93a7ab6c392e349428ea56e794a3902bb4e0284c1997cff2d7efdbc1/pylint-3.3.8-py3-none-any.whl", hash = "sha256:7ef94aa692a600e82fabdd17102b73fc226758218c97473c7ad67bd4cb905d83", size = 523153, upload-time = "2025-08-09T09:12:54.836Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/a7/69460c4a6af7575449e615144aa2205b89408dc2969b87bc3df2f262ad0b/pylint-3.3.9-py3-none-any.whl", hash = "sha256:01f9b0462c7730f94786c283f3e52a1fbdf0494bbe0971a78d7277ef46a751e7", size = 523465, upload-time = "2025-10-05T18:41:41.766Z" },
 ]
 
 [[package]]
@@ -1414,7 +1414,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "autopep8" },
-    { name = "bandit" },
+    { name = "bandit", extra = ["baseline", "sarif"] },
     { name = "black" },
     { name = "botocore-stubs" },
     { name = "bs4" },
@@ -1469,46 +1469,13 @@ dependencies = [
     { name = "twine" },
     { name = "typer" },
     { name = "types-aiofiles" },
-    { name = "types-click" },
-    { name = "types-decorator" },
-    { name = "types-jinja2" },
-    { name = "types-markdown" },
-    { name = "types-pexpect" },
-    { name = "types-regex" },
-    { name = "types-setuptools" },
-    { name = "typing-extensions" },
-    { name = "typing-inspection" },
-    { name = "uv" },
-    { name = "vulture" },
-    { name = "yamllint" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "autopep8" },
-    { name = "bandit", extra = ["baseline", "sarif"] },
-    { name = "black" },
-    { name = "bs4" },
-    { name = "isort" },
-    { name = "markdown" },
-    { name = "mypy" },
-    { name = "mypy-extensions" },
-    { name = "pycodestyle" },
-    { name = "pyflakes" },
-    { name = "pylint" },
-    { name = "pylint-htmf" },
-    { name = "pylint-plugin-utils" },
-    { name = "pylint-pydantic" },
-    { name = "pyright" },
-    { name = "pyupgrade" },
-    { name = "ruff" },
-    { name = "twine" },
-    { name = "types-aiofiles" },
     { name = "types-cffi" },
+    { name = "types-click" },
     { name = "types-colorama" },
     { name = "types-decorator" },
     { name = "types-docutils" },
     { name = "types-html5lib" },
+    { name = "types-jinja2" },
     { name = "types-jsonschema" },
     { name = "types-markdown" },
     { name = "types-pexpect" },
@@ -1522,13 +1489,14 @@ dev = [
     { name = "typing-inspection" },
     { name = "uv" },
     { name = "vulture" },
+    { name = "yamllint" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "autopep8", specifier = ">=2.3.2" },
-    { name = "bandit", specifier = ">=1.8.6" },
-    { name = "black", specifier = ">=25.1.0" },
+    { name = "bandit", extras = ["baseline", "sarif", "toml"], specifier = ">=1.8.6" },
+    { name = "black", specifier = ">=25.9.0" },
     { name = "botocore-stubs", specifier = ">=1.40.32" },
     { name = "bs4", specifier = ">=0.0.2" },
     { name = "cython", specifier = ">=3.1.4" },
@@ -1542,7 +1510,7 @@ requires-dist = [
     { name = "mdformat-gfm", specifier = ">=0.4.1" },
     { name = "mdformat-gfm-alerts", specifier = ">=2.0.0" },
     { name = "mdformat-myst", specifier = ">=0.2.2" },
-    { name = "mypy", specifier = ">=1.18.1" },
+    { name = "mypy", specifier = ">=1.18.2" },
     { name = "mypy-extensions", specifier = ">=1.1.0" },
     { name = "packaging", specifier = ">=24.1" },
     { name = "pycodestyle", specifier = ">=2.14.0" },
@@ -1559,7 +1527,7 @@ requires-dist = [
     { name = "pytest", specifier = ">=8.2.0" },
     { name = "pytest-bdd", specifier = ">=8.1.0" },
     { name = "pyupgrade", specifier = ">=3.20.0" },
-    { name = "ruff", specifier = ">=0.13.0" },
+    { name = "ruff", specifier = ">=0.13.2" },
     { name = "spacy", specifier = ">=3.8.7" },
     { name = "sqlalchemy-stubs", specifier = ">=0.4" },
     { name = "sqlfluff", specifier = ">=3.4.2" },
@@ -1582,52 +1550,19 @@ requires-dist = [
     { name = "twine", specifier = ">=6.2.0" },
     { name = "typer", specifier = ">=0.12" },
     { name = "types-aiofiles", specifier = ">=24.1.0.20250822" },
-    { name = "types-click", specifier = ">=7.1.8" },
-    { name = "types-decorator", specifier = ">=5.2.0.20250324" },
-    { name = "types-jinja2", specifier = ">=2.11.9" },
-    { name = "types-markdown", specifier = ">=3.9.0.20250906" },
-    { name = "types-pexpect", specifier = ">=4.9.0.20250916" },
-    { name = "types-regex", specifier = ">=2025.9.1.20250903" },
-    { name = "types-setuptools", specifier = ">=80.9.0.20250822" },
-    { name = "typing-extensions", specifier = ">=4.15.0" },
-    { name = "typing-inspection", specifier = ">=0.4.1" },
-    { name = "uv", specifier = ">=0.8.17" },
-    { name = "vulture", specifier = ">=2.14" },
-    { name = "yamllint", specifier = ">=1.37.1" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "autopep8", specifier = ">=2.3.2" },
-    { name = "bandit", extras = ["baseline", "sarif", "toml"], specifier = ">=1.8.6" },
-    { name = "black", specifier = ">=25.9.0" },
-    { name = "bs4", specifier = ">=0.0.2" },
-    { name = "isort", specifier = ">=6.0.1" },
-    { name = "markdown", specifier = ">=3.9" },
-    { name = "mypy", specifier = ">=1.18.2" },
-    { name = "mypy-extensions", specifier = ">=1.1.0" },
-    { name = "pycodestyle", specifier = ">=2.14.0" },
-    { name = "pyflakes", specifier = ">=3.4.0" },
-    { name = "pylint", specifier = ">=3.3.8" },
-    { name = "pylint-htmf", specifier = ">=0.1.1" },
-    { name = "pylint-plugin-utils", specifier = ">=0.9.0" },
-    { name = "pylint-pydantic", specifier = ">=0.3.5" },
-    { name = "pyright", specifier = ">=1.1.405" },
-    { name = "pyupgrade", specifier = ">=3.20.0" },
-    { name = "ruff", specifier = ">=0.13.2" },
-    { name = "twine", specifier = ">=6.2.0" },
-    { name = "types-aiofiles", specifier = ">=24.1.0.20250822" },
     { name = "types-cffi", specifier = ">=1.17.0.20250915" },
+    { name = "types-click", specifier = ">=7.1.8" },
     { name = "types-colorama", specifier = ">=0.4.15.20250801" },
     { name = "types-decorator", specifier = ">=5.2.0.20250324" },
     { name = "types-docutils", specifier = ">=0.22.2.20250924" },
     { name = "types-html5lib", specifier = ">=1.1.11.20250917" },
+    { name = "types-jinja2", specifier = ">=2.11.9" },
     { name = "types-jsonschema", specifier = ">=4.25.1.20250822" },
     { name = "types-markdown", specifier = ">=3.9.0.20250906" },
     { name = "types-pexpect", specifier = ">=4.9.0.20250916" },
     { name = "types-pygments", specifier = ">=2.19.0.20250809" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
-    { name = "types-regex", specifier = ">=2025.9.18.20250921" },
+    { name = "types-regex", specifier = ">=2025.9.1.20250903" },
     { name = "types-requests", specifier = ">=2.32.4.20250913" },
     { name = "types-setuptools", specifier = ">=80.9.0.20250822" },
     { name = "types-tqdm", specifier = ">=4.67.0.20250809" },
@@ -1635,6 +1570,7 @@ dev = [
     { name = "typing-inspection", specifier = ">=0.4.1" },
     { name = "uv", specifier = ">=0.8.22" },
     { name = "vulture", specifier = ">=2.14" },
+    { name = "yamllint", specifier = ">=1.37.1" },
 ]
 
 [[package]]
@@ -2701,11 +2637,11 @@ wheels = [
 
 [[package]]
 name = "types-docutils"
-version = "0.22.2.20250924"
+version = "0.22.2.20251006"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/5e/6d/60326ba08f44629f778937d5021a342da996682d932261d48b4043c437f7/types_docutils-0.22.2.20250924.tar.gz", hash = "sha256:a13fb412676c164edec7c2f26fe52ab7b0b7c868168dacc4298f6a8069298f3d", size = 56679, upload-time = "2025-09-24T02:53:26.251Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/30/79/3b5419ad9af32d99c1a953f2c96faa396280fddba22201d3788ff5b41b8a/types_docutils-0.22.2.20251006.tar.gz", hash = "sha256:c36c0459106eda39e908e9147bcff9dbd88535975cde399433c428a517b9e3b2", size = 56658, upload-time = "2025-10-06T02:55:19.477Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8d/2b/844f3a6e972515ef0890fd8bf631890b6d74c8eacb1acbf31a72820c3b45/types_docutils-0.22.2.20250924-py3-none-any.whl", hash = "sha256:a6d52e21fa70998d34d13db6891ea35920bbb20f91459ca528a3845fd0b9ec03", size = 91873, upload-time = "2025-09-24T02:53:24.824Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/47/c1eed8aef21d010e8d726855c1a6346f526c40ce1f76ceabf5cd6775f6a1/types_docutils-0.22.2.20251006-py3-none-any.whl", hash = "sha256:1e61afdeb4fab4ae802034deea3e853ced5c9b5e1d156179000cb68c85daf384", size = 91880, upload-time = "2025-10-06T02:55:18.119Z" },
 ]
 
 [[package]]
