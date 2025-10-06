@@ -4,8 +4,12 @@
 
 # Tool Catalog Authoring Guide
 
-The PyQA tool registry is now sourced from JSON metadata under `tooling/catalog`.
-This guide summarises the shape of that catalog and how the runtime consumes it.
+The PyQA tool registry is now sourced from JSON metadata under `tooling/catalog`
+and shipped as part of the standalone `tooling_spec` Python package (see
+`src/tooling_spec/`). The runtime consumes those models via thin wrappers in
+`pyqa.catalog` so external tooling can parse the same data without depending on
+the CLI implementation. This guide summarises the shape of the catalog and how
+the runtime consumes it.
 
 ## Structure
 
@@ -28,7 +32,8 @@ The schema for both collections resides in `tooling/schema/`.
   `catalog_duplicate_preference()` which in turn seeds `Config.dedupe.dedupe_prefer`.
 * `diagnostics.dedupe.duplicateHints` provides a comma-separated list of rule
   codes that should trigger duplicate-advice messaging. They are exposed through
-  `catalog_duplicate_hint_codes()` and consumed by `reporting.advice`.
+  `catalog_duplicate_hint_codes()` and consumed by
+  `pyqa.reporting.advice.builder`.
 * `tags` can annotate environment requirements such as `requires-cargo` or
   `requires-luarocks`; the runtime registry downgrades `defaultEnabled` to `false`
   automatically when the host system lacks the required tooling.

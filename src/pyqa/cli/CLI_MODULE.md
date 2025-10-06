@@ -14,8 +14,8 @@ refactoring the command-line entrypoints.
   structured input models (dataclasses or Typer dependencies), services that
   transform or enrich that data, and a thin orchestration function (Typer
   command) that wires everything together.
-* **Shared Infrastructure**: Common behaviours live in `cli/shared.py`
-  (logging adapter, CLIError, registration helpers) and `cli/typer_ext.py`
+* **Shared Infrastructure**: Common behaviours live in `cli/core/shared.py`
+  (logging adapter, CLIError, registration helpers) and `cli/core/typer_ext.py`
   (sorted Typer wrappers). Prefer using these helpers instead of duplicating
   behaviours.
 * **Catalog-Driven Configuration**: Tool metadata, language-specific settings,
@@ -25,14 +25,14 @@ refactoring the command-line entrypoints.
 
 ## Key Modules
 
-* `lint.py`: Orchestrates lint execution by building structured inputs (`_lint_cli_models.py`), preparing state (`_lint_preparation.py`), and delegating to
-  runtime services (`_lint_runtime.py`, `_lint_progress.py`, `_lint_reporting.py`, `_lint_meta.py`).
-* `config_cmd.py`: Provides inspection utilities using `_config_cmd_services.py`
-  for reusable functionality (snapshot rendering, diffs, markdown output).
-* `quality.py`: Main command uses `build_quality_options` for CLI inputs and
-  service helpers for discovery, checks, and rendering.
-* `tool_info.py`: Renders catalog-driven tool metadata using services in
-  `_tool_info_services.py`.
+* `commands/lint/`: Owns lint execution (input models, preparation, runtime,
+  progress, reporting, metadata export).
+* `commands/config/`: Provides configuration inspection utilities, including
+  snapshot rendering, diffs, markdown output, and export helpers.
+* `commands/quality/`: Implements repository quality enforcement and rendering
+  services.
+* `commands/tool_info/`: Renders catalog-driven tool metadata through presenters
+  and advice helpers.
 
 ## Patterns & Best Practices
 

@@ -6,7 +6,7 @@
 
 ## Phase 1: Shared Infrastructure
 
-* \[x] Introduce `cli/shared.py` with:
+* \[x] Introduce `cli/core/shared.py` with:
   * \[x] Common CLI error class (`CLIError`) encapsulating exit codes/messages.
   * \[x] Logging adapters honoring emoji/no-color preferences.
   * \[x] Helper for registering Typer commands with consistent metadata.

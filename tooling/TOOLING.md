@@ -4,26 +4,30 @@
 
 # Catalog Tooling Overview
 
-PyQA resolves every tool definition through a data-first catalog. The Python
-code under `src/pyqa/tooling/` and `src/pyqa/tools/` provides the plumbing that
-turns catalog JSON into executable actions used by the orchestrator. This file
-summarises the moving pieces and is intended for contributors extending the
-catalog or strategy layer.
+PyQA resolves every tool definition through a data-first catalog. The JSON under
+`tooling/catalog/` now ships alongside a dedicated specification package
+(`src/tooling_spec/`) which exposes typed loaders and models that can be
+reused by third-party tooling. The runtime layer under `src/pyqa/catalog/`
+imports those spec modules via thin façades that add plugin wiring and service
+providers. This file summarises the moving pieces and is intended for
+contributors extending the catalog or strategy layer.
 
 ## Key Modules
 
-| Path                                 | Purpose                                                                                                                                                                                                                    |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/pyqa/tooling/loader.py`         | Loads strategy definitions, shared fragments, and tool definitions while validating them against the schemas in `tooling/schema/`. Produces `CatalogSnapshot` instances keyed by a checksum of the catalog contents.       |
-| `src/pyqa/tooling/strategies.py`     | Houses all strategy factories referenced by the catalog (command builders, parser adapters, installers, etc.). Strategies are intentionally generic so that new behaviour can be expressed in JSON without editing Python. |
-| `src/pyqa/tools/builtin_registry.py` | Materialises catalog definitions into runtime `Tool` objects, caching snapshots for reuse and wiring strategies into tool actions.                                                                                         |
-| `src/pyqa/tools/catalog_metadata.py` | Convenience layer that exposes catalog information (options, suppressions, docs) to the rest of the CLI and config surfaces.                                                                                               |
+| Path                                         | Purpose                                                                                                                                                                                                              |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/tooling_spec/catalog/loader.py`         | Loads strategy definitions, shared fragments, and tool definitions while validating them against the schemas in `tooling/schema/`. Produces `CatalogSnapshot` instances keyed by a checksum of the catalog contents. |
+| `src/tooling_spec/catalog/model_strategy.py` | Defines strategy dataclasses and helper utilities shared by the runtime and by external consumers of the tooling specification.                                                                                      |
+| `src/pyqa/catalog/loader.py`                 | Runtime façade that delegates to the spec loader and stitches in plugin contributions before materialising catalog snapshots.                                                                                        |
+| `src/pyqa/catalog/plugins.py`                | Discovers entry-point contributions and merges them into the base catalog prior to snapshot materialisation.                                                                                                         |
+| `src/pyqa/tools/builtin_registry.py`         | Materialises catalog definitions into runtime `Tool` objects, caching snapshots for reuse and wiring strategies into tool actions.                                                                                   |
+| `src/pyqa/catalog/metadata.py`               | Convenience layer that exposes catalog information (options, suppressions, docs) to the rest of the CLI and config surfaces.                                                                                         |
 
 ## Catalog Lifecycle
 
 1. **Validation & Snapshotting** – `ToolCatalogLoader` walks the catalog directories, validates JSON against the schemas, merges `_shared` fragments, and computes a checksum stored in `tooling/catalog/cache.json`.
 2. **Materialisation** – `register_catalog_tools` converts validated definitions into `Tool` instances by instantiating referenced strategies (commands, parsers, installers).
-3. **Execution** – The orchestrator (`src/pyqa/execution/orchestrator.py`) uses the registry to fetch tools for a run, executes actions in phase order, and feeds stdout/stderr into the configured parsers.
+3. **Execution** – The orchestrator (`src/pyqa/orchestration/orchestrator.py`) uses the registry to fetch tools for a run, executes actions in phase order, and feeds stdout/stderr into the configured parsers.
 
 ## Strategies
 

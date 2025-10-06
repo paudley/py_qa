@@ -18,8 +18,34 @@ This repository provides a comprehensive suite of quality assurance, linting, te
 * **🛡️ Git Hooks**: Includes `pre-commit`, `pre-push`, and `commit-msg` hooks to automate quality checks.
 * **📄 Reporting Outputs**: Export machine-readable JSON, SARIF 2.1.0, and Markdown summaries for CI/CD and PR annotations.
 * **🧠 SOLID Advice & Highlighting**: Tree-sitter and spaCy powered annotations feed a reusable advice engine (`pyqa.reporting.advice`) and rich colour hints in the CLI so duplicate warnings collapse cleanly and contributors see actionable guidance.
-* **🧰 Turnkey Install**: `pyqa install` mirrors the legacy shell workflow, installing dev dependencies, optional type stubs, and generated typing shims.
+* **🧰 Turnkey Install**: `pyqa install` mirrors the legacy shell workflow, installing dev dependencies, pinned type stubs, and generated typing shims.
 * **🛡️ Security Scan**: `pyqa security-scan` finds high-risk secrets/PII in your files (or staged changes) and runs Bandit for Python vulnerability checks.
+
+## 📦 Package Layout & Dependencies
+
+PyQA now ships as two publishable Python distributions so the runtime remains
+lean while the catalog can evolve independently:
+
+* **`pyqa`** – Lives under `src/pyqa/` and bundles the CLI, orchestrator,
+  diagnostics pipeline, reporting stack, and compliance services.
+* **`tooling_spec`** – Lives under `src/tooling_spec/` and exports the catalog
+  loader, schema helpers, and metadata models. The runtime consumes this module
+  via typed façade wrappers, and external tooling can depend on it directly to
+  parse the same catalog.
+
+All third-party dependencies listed in `pyproject.toml` are required. The
+runtime expects spaCy (including the `en_core_web_sm` model) and the complete set
+of tree-sitter grammars at start-up; attempts to run without them are treated as
+fatal configuration errors. Install the bundled model via:
+
+```bash
+uv run python -m spacy download en_core_web_sm
+```
+
+Tree-sitter packages install automatically with the project dependencies, but CI
+hosts must provide build prerequisites for native extensions. The orchestrator
+will refuse to start when either spaCy or tree-sitter is unavailable so issues
+surface immediately instead of falling back to degraded behaviour.
 
 ## Scripts Overview
 
@@ -91,9 +117,9 @@ PyQA’s CLI can render a SOLID-flavoured advice panel (`./lint --advice`) and
 apply subtle colouring to tool names, files, functions, and symbols. Both
 features are powered by a new annotation layer that combines Tree-sitter context
 with spaCy message parsing. The shared implementation lives in
-`pyqa.annotations` and `pyqa.reporting.advice`, so other integrations (for
-example PR summaries) can reuse the same data via
-`pyqa.reporting.advice.AdviceBuilder`.
+`pyqa.annotations` and `pyqa.reporting.advice.builder`, so other integrations
+(for example PR summaries) can reuse the same data via
+`pyqa.reporting.advice.builder.AdviceBuilder`.
 
 Markdown exporters can opt in as well: pass `include_advice=True` to
 `pyqa.reporting.emitters.write_pr_summary` to embed the SOLID panel in pull
@@ -110,8 +136,8 @@ so CI dashboards can surface call-to-action pipelines without parsing console
 output. Locally, enabling `--advice` also prints a "Refactor Navigator"
 panel summarising the top structural hotspots.
 
-The spaCy model is optional—if `en_core_web_sm` is unavailable the advice still
-works, falling back to heuristics. To install the recommended model:
+The advice pipeline requires spaCy's `en_core_web_sm` model. Install it before
+running the CLI:
 
 ```bash
 uv run python -m spacy download en_core_web_sm
@@ -140,7 +166,7 @@ uv run pyqa check-quality commit-msg .git/COMMIT_EDITMSG
 uv run pyqa update --dry-run
 ```
 
-Run `./py-qa/lint install` to install the preferred development dependencies, optional type stubs, and generated `stubgen` packages used by the workflow.
+Run `./py-qa/lint install` to install the preferred development dependencies, pinned type stubs, and generated `stubgen` packages used by the workflow.
 
 Additional quality-of-life flags mirror the original shell workflow:
 
