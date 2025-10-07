@@ -28,6 +28,12 @@ class GitDiscovery(DiscoveryStrategy):
 
         self._runner = runner or self._default_runner
 
+    @property
+    def identifier(self) -> str:
+        """Return the identifier for the git discovery strategy."""
+
+        return "git"
+
     def discover(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
         """Return files discovered via git status/diff output.
 

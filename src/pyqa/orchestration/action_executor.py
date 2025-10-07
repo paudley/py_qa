@@ -206,6 +206,12 @@ class ActionExecutor:
     runner: RunnerCallable
     after_tool_hook: Callable[[ToolOutcome], None] | None
 
+    @property
+    def executor_name(self) -> str:
+        """Return the human-readable name for this executor."""
+
+        return "action-executor"
+
     def execute_scheduled(self, environment: ExecutionEnvironment, state: ExecutionState) -> None:
         """Run all queued actions honouring concurrency constraints.
 
@@ -259,6 +265,66 @@ class ActionExecutor:
             collected[key] = metric
         return collected
 
+    def _refresh_cached_outcome(
+        self,
+        outcome: ToolOutcome,
+        record: OutcomeRecord,
+        environment: ExecutionEnvironment,
+    ) -> None:
+        """Re-evaluate diagnostics and exit data for a cached outcome.
+
+        Args:
+            outcome: Outcome object hydrated from the cache.
+            record: Outcome record describing the cached invocation.
+            environment: Execution environment containing severity rules.
+        """
+
+        filters = tuple(record.invocation.context.cfg.output.tool_filters.get(record.invocation.tool_name, []))
+        pipeline_request = DiagnosticPipelineRequest(
+            tool_name=record.invocation.tool_name,
+            candidates=tuple(outcome.diagnostics),
+            severity_rules=environment.severity_rules,
+            suppression_patterns=filters,
+            project_root=environment.root,
+        )
+        outcome.diagnostics = _DIAGNOSTIC_PIPELINE.run(pipeline_request)
+        evaluation = self._evaluate_exit_status(
+            record.invocation,
+            outcome.returncode,
+            outcome.diagnostics,
+        )
+        outcome.returncode = evaluation.returncode
+        outcome.exit_category = evaluation.category
+
+    def _store_outcome_in_cache(
+        self,
+        *,
+        record: OutcomeRecord,
+        environment: ExecutionEnvironment,
+        metrics_map: Mapping[str, FileMetrics],
+    ) -> None:
+        """Persist ``record`` outcome in the cache when eligible.
+
+        Args:
+            record: Outcome metadata describing the invocation.
+            environment: Execution environment featuring cache context.
+            metrics_map: File metrics associated with the invocation output.
+        """
+
+        cache_ctx = environment.cache
+        cache = cache_ctx.cache
+        token = cache_ctx.token
+        if cache is None or token is None or record.from_cache or record.invocation.internal_runner is not None:
+            return
+        request = CacheRequest(
+            tool=record.invocation.tool_name,
+            action=record.invocation.action.name,
+            command=record.invocation.command,
+            files=tuple(Path(path) for path in record.invocation.context.files),
+            token=token,
+        )
+        cache.store(request, outcome=record.outcome, file_metrics=metrics_map)
+
     def record_outcome(
         self,
         state: ExecutionState,
@@ -283,22 +349,7 @@ class ActionExecutor:
         outcome = record.outcome
         outcome.cached = record.from_cache
         if record.from_cache:
-            filters = tuple(invocation.context.cfg.output.tool_filters.get(invocation.tool_name, []))
-            pipeline_request = DiagnosticPipelineRequest(
-                tool_name=invocation.tool_name,
-                candidates=tuple(outcome.diagnostics),
-                severity_rules=environment.severity_rules,
-                suppression_patterns=filters,
-                project_root=environment.root,
-            )
-            outcome.diagnostics = _DIAGNOSTIC_PIPELINE.run(pipeline_request)
-            evaluation = self._evaluate_exit_status(
-                invocation,
-                outcome.returncode,
-                outcome.diagnostics,
-            )
-            outcome.returncode = evaluation.returncode
-            outcome.exit_category = evaluation.category
+            self._refresh_cached_outcome(outcome, record, environment)
         state.outcomes[record.order] = outcome
         should_log_failure = outcome.exit_category == ToolExitCategory.TOOL_FAILURE or (
             outcome.returncode != 0 and not record.invocation.action.ignore_exit and not outcome.diagnostics
@@ -317,22 +368,7 @@ class ActionExecutor:
                 root=environment.root,
                 from_cache=True,
             )
-        cache_ctx = environment.cache
-        cache_enabled = (
-            cache_ctx.cache is not None
-            and cache_ctx.token is not None
-            and not record.from_cache
-            and record.invocation.internal_runner is None
-        )
-        if cache_enabled:
-            request = CacheRequest(
-                tool=invocation.tool_name,
-                action=invocation.action.name,
-                command=invocation.command,
-                files=tuple(Path(path) for path in invocation.context.files),
-                token=cache_ctx.token,
-            )
-            cache_ctx.cache.store(request, outcome=outcome, file_metrics=metrics_map)
+        self._store_outcome_in_cache(record=record, environment=environment, metrics_map=metrics_map)
         if self.after_tool_hook:
             self.after_tool_hook(outcome)
 

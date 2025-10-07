@@ -20,6 +20,12 @@ _KEYWORD_PATTERN: Final[re.Pattern[str]] = re.compile(
 class FunctionScaleEstimatorService(FunctionScaleEstimator):
     """Compute approximate function size and cyclomatic complexity."""
 
+    @property
+    def supported_languages(self) -> tuple[str, ...]:
+        """Return the languages supported by the estimator."""
+
+        return ("python",)
+
     def estimate(self, path: Path, function: str) -> tuple[int | None, int | None]:
         """Return approximate line count and complexity for ``function``.
 

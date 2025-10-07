@@ -7,25 +7,81 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from typing import Final
+from typing import Any, Final
 
 from rich.text import Text
 
-from ...analysis import MessageSpan
+from ...analysis import MessageSpan as AnalysisMessageSpan
 from ...analysis.services import resolve_annotation_provider
 from ...core.logging import colorize
 from ...interfaces.analysis import AnnotationProvider
+from ...interfaces.analysis import MessageSpan as MessageSpanProtocol
 
-_DEFAULT_ANNOTATION_PROVIDER: AnnotationProvider = resolve_annotation_provider()
-ANNOTATION_ENGINE = _DEFAULT_ANNOTATION_PROVIDER
+
+class _AnnotationRouter(AnnotationProvider):
+    """Route annotation calls to the currently active provider."""
+
+    def __init__(self, provider: AnnotationProvider) -> None:
+        self._provider = provider
+
+    def replace(self, provider: AnnotationProvider) -> None:
+        """Update the underlying provider used for annotation calls.
+
+        Args:
+            provider: New provider that should service annotation requests.
+        """
+
+        self._provider = provider
+
+    def annotate_run(self, result: Any) -> dict[int, Any]:
+        """Delegate run annotation to the active provider.
+
+        Args:
+            result: Run result whose diagnostics require annotation.
+
+        Returns:
+            Mapping of diagnostic ids to annotation metadata.
+        """
+
+        return self._provider.annotate_run(result)
+
+    def message_spans(self, message: str) -> Sequence[MessageSpanProtocol]:
+        """Return spans detected in ``message`` using the active provider.
+
+        Args:
+            message: Diagnostic message text to analyse.
+
+        Returns:
+            Sequence of message spans emitted by the provider.
+        """
+
+        return self._provider.message_spans(message)
+
+    def message_signature(self, message: str) -> Sequence[str]:
+        """Return signature tokens extracted from ``message``.
+
+        Args:
+            message: Diagnostic message text to analyse.
+
+        Returns:
+            Sequence of signature tokens describing key entities.
+        """
+
+        return self._provider.message_signature(message)
+
+
+_ANNOTATION_ROUTER = _AnnotationRouter(resolve_annotation_provider())
+ANNOTATION_ENGINE: AnnotationProvider = _ANNOTATION_ROUTER
 
 
 def set_annotation_provider(provider: AnnotationProvider) -> None:
-    """Override the module-level annotation provider used for highlighting."""
+    """Override the module-level annotation provider used for highlighting.
 
-    global _DEFAULT_ANNOTATION_PROVIDER, ANNOTATION_ENGINE
-    _DEFAULT_ANNOTATION_PROVIDER = provider
-    ANNOTATION_ENGINE = provider
+    Args:
+        provider: Provider that should power highlighting operations.
+    """
+
+    _ANNOTATION_ROUTER.replace(provider)
 
 
 CODE_TINT: Final[str] = "ansi256:105"
@@ -40,14 +96,14 @@ def collect_highlight_spans(
     text: str,
     *,
     engine: AnnotationProvider | None = None,
-) -> list[MessageSpan]:
+) -> list[AnalysisMessageSpan]:
     """Return annotation spans present in *text* using the provided engine."""
 
-    target_engine = engine or _DEFAULT_ANNOTATION_PROVIDER
-    spans: list[MessageSpan] = []
+    target_engine = engine or _ANNOTATION_ROUTER
+    spans: list[AnalysisMessageSpan] = []
     for span in target_engine.message_spans(text):
         spans.append(
-            MessageSpan(
+            AnalysisMessageSpan(
                 start=span.start,
                 end=span.end,
                 style=getattr(span, "style", ""),
@@ -57,11 +113,11 @@ def collect_highlight_spans(
     return spans
 
 
-def strip_literal_quotes(text: str) -> tuple[str, list[MessageSpan]]:
+def strip_literal_quotes(text: str) -> tuple[str, list[AnalysisMessageSpan]]:
     """Return text with ``''literal''`` markers removed while tracking spans."""
 
     segments: list[str] = []
-    spans: list[MessageSpan] = []
+    spans: list[AnalysisMessageSpan] = []
     cursor = 0
     output_length = 0
 
@@ -74,7 +130,7 @@ def strip_literal_quotes(text: str) -> tuple[str, list[MessageSpan]]:
         literal_length = len(literal)
         if literal_length:
             spans.append(
-                MessageSpan(
+                AnalysisMessageSpan(
                     start=output_length,
                     end=output_length + literal_length,
                     style=LITERAL_TINT,
@@ -112,7 +168,7 @@ def location_function_spans(
     location: str,
     *,
     separator: str = LOCATION_SEPARATOR,
-) -> list[MessageSpan]:
+) -> list[AnalysisMessageSpan]:
     """Return highlight spans for function suffixes in location strings."""
 
     if separator not in location:
@@ -123,14 +179,14 @@ def location_function_spans(
     start = location.rfind(candidate)
     if start == -1:
         return []
-    return [MessageSpan(start=start, end=start + len(candidate), style="ansi256:208")]
+    return [AnalysisMessageSpan(start=start, end=start + len(candidate), style="ansi256:208")]
 
 
 def highlight_for_output(
     message: str,
     *,
     color: bool,
-    extra_spans: Sequence[MessageSpan] | None = None,
+    extra_spans: Sequence[AnalysisMessageSpan] | None = None,
     engine: AnnotationProvider | None = None,
 ) -> str:
     """Return a string with inline highlighting suitable for terminal output."""
@@ -147,7 +203,7 @@ def highlight_for_output(
     if not spans:
         return clean
     spans.sort(key=lambda span: (span.start, span.end - span.start))
-    merged: list[MessageSpan] = []
+    merged: list[AnalysisMessageSpan] = []
     for span in spans:
         if merged and span.start < merged[-1].end:
             continue

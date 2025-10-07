@@ -3,8 +3,6 @@
 
 """Interfaces for file discovery and target planning."""
 
-# pylint: disable=too-few-public-methods -- Protocol definitions intentionally expose minimal method surfaces.
-
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
@@ -19,6 +17,11 @@ if TYPE_CHECKING:  # pragma: no cover - imported for type checking clarity
 class ExcludePolicy(Protocol):
     """Return paths that should be excluded during discovery."""
 
+    @property
+    def policy_name(self) -> str:
+        """Return the unique name of the exclusion policy."""
+        raise NotImplementedError("ExcludePolicy.policy_name must be implemented")
+
     def exclusions(self) -> Sequence[str]:
         """Return exclusion patterns or paths."""
         raise NotImplementedError
@@ -28,6 +31,11 @@ class ExcludePolicy(Protocol):
 class TargetPlanner(Protocol):
     """Plan targets to feed into tool strategies."""
 
+    @property
+    def planner_name(self) -> str:
+        """Return the name of the planner implementation."""
+        raise NotImplementedError("TargetPlanner.planner_name must be implemented")
+
     def plan(self) -> Iterable[str]:
         """Return the ordered list of targets."""
         raise NotImplementedError
@@ -36,6 +44,11 @@ class TargetPlanner(Protocol):
 @runtime_checkable
 class DiscoveryStrategy(Protocol):
     """Perform discovery and yield filesystem paths for tooling."""
+
+    @property
+    def identifier(self) -> str:
+        """Return the discovery strategy identifier."""
+        raise NotImplementedError("DiscoveryStrategy.identifier must be implemented")
 
     def discover(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
         """Yield resolved filesystem paths to process.

@@ -132,20 +132,107 @@ class LintSeverityParams(LintSeverityOptions):
 
 
 @dataclass(slots=True)
-class LintMetaParams:
-    """Meta toggles that alter command execution flow."""
+class MetaActionParams:
+    """Capture command-level meta toggles that alter lint execution."""
 
     doctor: bool
     tool_info: str | None
     fetch_all_tools: bool
     validate_schema: bool
     normal: bool
+
+
+@dataclass(slots=True)
+class MetaAnalysisChecks:
+    """Describe analysis-oriented meta check toggles."""
+
     check_docstrings: bool
     check_suppressions: bool
     check_types_strict: bool
+
+
+@dataclass(slots=True)
+class MetaRuntimeChecks:
+    """Capture runtime/tooling oriented meta check toggles."""
+
     check_closures: bool
     check_signatures: bool
     check_cache_usage: bool
+
+
+@dataclass(slots=True)
+class LintMetaParams:
+    """Aggregate meta toggles for lint command execution."""
+
+    actions: MetaActionParams
+    analysis: MetaAnalysisChecks
+    runtime: MetaRuntimeChecks
+
+    @property
+    def doctor(self) -> bool:
+        """Return whether the doctor meta action was requested."""
+
+        return self.actions.doctor
+
+    @property
+    def tool_info(self) -> str | None:
+        """Return the tool requested for ``--tool-info`` if provided."""
+
+        return self.actions.tool_info
+
+    @property
+    def fetch_all_tools(self) -> bool:
+        """Return whether tool prefetching was requested."""
+
+        return self.actions.fetch_all_tools
+
+    @property
+    def validate_schema(self) -> bool:
+        """Return whether catalog schema validation was requested."""
+
+        return self.actions.validate_schema
+
+    @property
+    def normal(self) -> bool:
+        """Return whether the normal preset flag was supplied."""
+
+        return self.actions.normal
+
+    @property
+    def check_docstrings(self) -> bool:
+        """Return whether the internal docstring checker should run."""
+
+        return self.analysis.check_docstrings
+
+    @property
+    def check_suppressions(self) -> bool:
+        """Return whether lint suppression analysis should run."""
+
+        return self.analysis.check_suppressions
+
+    @property
+    def check_types_strict(self) -> bool:
+        """Return whether the strict typing checker should execute."""
+
+        return self.analysis.check_types_strict
+
+    @property
+    def check_closures(self) -> bool:
+        """Return whether closure usage analysis should run."""
+
+        return self.runtime.check_closures
+
+    @property
+    def check_signatures(self) -> bool:
+        """Return whether function signature analysis should execute."""
+
+        return self.runtime.check_signatures
+
+    @property
+    def check_cache_usage(self) -> bool:
+        """Return whether cache usage analysis should execute."""
+
+        return self.runtime.check_cache_usage
 
 
 @dataclass(slots=True)
@@ -244,6 +331,9 @@ class OverrideStrictnessParams:
 
 __all__ = (
     "BanditLevelLiteral",
+    "MetaActionParams",
+    "MetaAnalysisChecks",
+    "MetaRuntimeChecks",
     "LintAdvancedGroup",
     "LintCLIInputs",
     "LintExecutionGroup",

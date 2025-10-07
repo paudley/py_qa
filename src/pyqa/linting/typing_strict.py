@@ -1,147 +1,154 @@
 # SPDX-License-Identifier: MIT
-"""Linter that discourages ``Any``/``object`` annotations."""
+"""Discourage ``Any``/``object`` annotations."""
 
 from __future__ import annotations
 
 import ast
 from pathlib import Path
+from typing import Final, cast
 
 from pyqa.cli.commands.lint.preparation import PreparedLintState
-from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome
-from pyqa.core.severity import Severity
-from pyqa.filesystem.paths import normalize_path_key
 
+from ._ast_visitors import BaseAstLintVisitor, VisitorMetadata, run_ast_linter
 from .base import InternalLintReport
-from .utils import collect_python_files
 
-_BANNED_NAMES = {"Any", "object"}
-_BANNED_QUALIFIED = {"typing.Any", "builtins.object"}
+_BANNED_NAMES: Final[set[str]] = {"Any", "object"}
+_BANNED_QUALIFIED: Final[set[str]] = {"typing.Any", "builtins.object"}
 
 
 def run_typing_linter(state: PreparedLintState, *, emit_to_logger: bool = True) -> InternalLintReport:
-    """Detect banned annotations across the targeted files."""
+    """Detect banned annotations across the targeted files.
+
+    Args:
+        state: Prepared lint execution context describing the workspace.
+        emit_to_logger: Compatibility flag retained for legacy callers; output
+            is routed through the orchestrator so this flag is ignored.
+
+    Returns:
+        ``InternalLintReport`` collecting diagnostics for disallowed types.
+    """
 
     _ = emit_to_logger
-    files = collect_python_files(state)
-    diagnostics: list[Diagnostic] = []
-    stdout_lines: list[str] = []
+    metadata = VisitorMetadata(tool="internal-types", code="internal:typing")
 
-    for file_path in files:
-        source = file_path.read_text(encoding="utf-8")
-        try:
-            tree = ast.parse(source)
-        except SyntaxError as exc:
-            message = f"Syntax error while analysing annotations: {exc.msg}"
-            stdout_lines.append(message)
-            continue
-        visitor = _AnnotationVisitor(file_path, state)
-        visitor.visit(tree)
-        diagnostics.extend(visitor.diagnostics)
-        stdout_lines.extend(visitor.stdout)
+    def _on_parse_error(path: Path, exc: SyntaxError) -> str:
+        """Return the warning message emitted when ``path`` fails to parse.
 
-    return InternalLintReport(
-        outcome=ToolOutcome(
-            tool="internal-types",
-            action="check",
-            returncode=1 if diagnostics else 0,
-            stdout=stdout_lines,
-            stderr=[],
-            diagnostics=diagnostics,
-            exit_category=ToolExitCategory.DIAGNOSTIC if diagnostics else ToolExitCategory.SUCCESS,
-        ),
-        files=tuple(files),
+        Args:
+            path: File whose contents produced a syntax error.
+            exc: Syntax error raised during parsing.
+
+        Returns:
+            String describing the failure for stdout emission.
+        """
+
+        return f"Syntax error while analysing annotations in {path}: {exc.msg}"
+
+    return run_ast_linter(
+        state,
+        metadata=metadata,
+        visitor_factory=_AnnotationVisitor,
+        parse_error_handler=_on_parse_error,
     )
 
 
-class _AnnotationVisitor(ast.NodeVisitor):
+class _AnnotationVisitor(BaseAstLintVisitor):
     """AST visitor that records banned annotations."""
-
-    def __init__(self, path: Path, state: PreparedLintState) -> None:
-        self._path = path
-        self._state = state
-        self.diagnostics: list[Diagnostic] = []
-        self.stdout: list[str] = []
-
-    def _record(self, node: ast.AST, message: str) -> None:
-        line = getattr(node, "lineno", 1)
-        normalized = normalize_path_key(self._path, base_dir=self._state.root)
-        diagnostic = Diagnostic(
-            file=normalized,
-            line=line,
-            column=getattr(node, "col_offset", None),
-            severity=Severity.WARNING,
-            message=message,
-            tool="internal-types",
-            code="internal:typing",
-        )
-        self.diagnostics.append(diagnostic)
-        formatted = f"{normalized}:{line}: {message}"
-        self.stdout.append(formatted)
 
     # Function/method definitions -------------------------------------------------
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:  # noqa: D401 - standard visitor signature
+    def visit_function_def(self, node: ast.FunctionDef) -> None:
+        """Inspect synchronous function definitions for banned annotations.
+
+        Args:
+            node: Function definition node to analyse.
+        """
+
         self._check_arguments(node.args)
         if node.returns is not None and _contains_banned_annotation(node.returns):
-            self._record(node.returns, "Return annotation uses banned Any/object type")
+            self.record_issue(node.returns, "Return annotation uses banned Any/object type")
         self.generic_visit(node)
 
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:  # noqa: D401 - standard visitor signature
-        self.visit_FunctionDef(node)
+    def visit_async_function_def(self, node: ast.AsyncFunctionDef) -> None:
+        """Inspect asynchronous function definitions for banned annotations.
+
+        Args:
+            node: Async function definition node to analyse.
+        """
+
+        self.visit_function_def(cast(ast.FunctionDef, node))
 
     # Assignments ----------------------------------------------------------------
 
-    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:  # noqa: D401 - standard visitor signature
-        if node.annotation is not None and _contains_banned_annotation(node.annotation):
-            self._record(node.annotation, "Variable annotation uses banned Any/object type")
-        self.generic_visit(node)
+    def visit_ann_assign(self, node: ast.AnnAssign) -> None:
+        """Inspect annotated assignments for banned annotations.
 
-    def visit_arg(self, node: ast.arg) -> None:  # noqa: D401 - standard visitor signature
-        # ``visit_FunctionDef`` handles argument annotations via args helper.
-        return
+        Args:
+            node: Annotated assignment node to analyse.
+        """
+
+        if node.annotation is not None and _contains_banned_annotation(node.annotation):
+            self.record_issue(node.annotation, "Variable annotation uses banned Any/object type")
+        self.generic_visit(node)
 
     # Helpers --------------------------------------------------------------------
 
     def _check_arguments(self, args: ast.arguments) -> None:
+        """Inspect ``args`` for banned annotations.
+
+        Args:
+            args: Function arguments node containing annotations.
+        """
+
         for argument in list(getattr(args, "posonlyargs", ())) + list(args.args) + list(args.kwonlyargs):
             if argument.annotation is not None and _contains_banned_annotation(argument.annotation):
-                self._record(argument, "Parameter annotation uses banned Any/object type")
+                self.record_issue(argument, "Parameter annotation uses banned Any/object type")
         if args.vararg and args.vararg.annotation and _contains_banned_annotation(args.vararg.annotation):
-            self._record(args.vararg, "*args annotation uses banned Any/object type")
+            self.record_issue(args.vararg, "*args annotation uses banned Any/object type")
         if args.kwarg and args.kwarg.annotation and _contains_banned_annotation(args.kwarg.annotation):
-            self._record(args.kwarg, "**kwargs annotation uses banned Any/object type")
+            self.record_issue(args.kwarg, "**kwargs annotation uses banned Any/object type")
 
 
 def _contains_banned_annotation(node: ast.AST) -> bool:
-    """Return ``True`` when *node* references a banned annotation."""
+    """Return ``True`` when ``node`` references a banned annotation.
+
+    Args:
+        node: AST node representing an annotation.
+
+    Returns:
+        ``True`` if the annotation uses ``Any`` or ``object`` in any form.
+    """
 
     if isinstance(node, ast.Name):
         return node.id in _BANNED_NAMES
     if isinstance(node, ast.Attribute):
-        dotted = _attribute_to_name(node)
-        return dotted in _BANNED_QUALIFIED
+        return _attribute_to_name(node) in _BANNED_QUALIFIED
     if isinstance(node, ast.Subscript):
-        return _contains_banned_annotation(node.value) or _contains_banned_annotation(node.slice)
+        return any(_contains_banned_annotation(target) for target in (node.value, node.slice))
     if isinstance(node, ast.Tuple):
         return any(_contains_banned_annotation(elt) for elt in node.elts)
-    if hasattr(ast, "Constant") and isinstance(node, ast.Constant):
+    if isinstance(node, ast.Constant):
         return False
-    for child in ast.iter_child_nodes(node):
-        if _contains_banned_annotation(child):
-            return True
-    return False
+    return any(_contains_banned_annotation(child) for child in ast.iter_child_nodes(node))
 
 
 def _attribute_to_name(node: ast.Attribute) -> str:
-    parts: list[str] = []
-    current: ast.AST = node
-    while isinstance(current, ast.Attribute):
-        parts.append(current.attr)
-        current = current.value
-    if isinstance(current, ast.Name):
-        parts.append(current.id)
-    parts.reverse()
-    return ".".join(parts)
+    """Return dotted name reconstructed from ``node``.
+
+    Args:
+        node: Attribute node forming part of an annotation.
+
+    Returns:
+        Fully qualified dotted name extracted from the attribute chain.
+    """
+
+    if isinstance(node.value, ast.Attribute):
+        prefix = _attribute_to_name(node.value)
+    elif isinstance(node.value, ast.Name):
+        prefix = node.value.id
+    else:
+        prefix = ""
+    return f"{prefix}.{node.attr}" if prefix else node.attr
 
 
 __all__ = ["run_typing_linter"]

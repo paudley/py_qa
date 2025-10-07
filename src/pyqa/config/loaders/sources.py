@@ -28,12 +28,25 @@ _TOML_CACHE: dict[tuple[Path, int], Mapping[str, Any]] = {}
 class DefaultConfigSource(ConfigSource):
     """Return the built-in defaults as a configuration fragment."""
 
-    name = "defaults"
+    def __init__(self) -> None:
+        self.name = "defaults"
 
     def load(self) -> Mapping[str, Any]:
+        """Return the built-in configuration payload.
+
+        Returns:
+            Mapping containing default configuration values shipped with pyqa.
+        """
+
         return default_config_payload()
 
     def describe(self) -> str:
+        """Return a human-readable description of this source.
+
+        Returns:
+            Description string identifying the defaults source.
+        """
+
         return "Built-in defaults"
 
 
@@ -54,9 +67,25 @@ class TomlConfigSource(ConfigSource):
         self._env = env or os.environ
 
     def load(self) -> Mapping[str, Any]:
+        """Return configuration data resolved from the root TOML document.
+
+        Returns:
+            Mapping representing the merged configuration result.
+        """
+
         return self._load(self._root_path, ())
 
     def _load(self, path: Path, stack: tuple[Path, ...]) -> Mapping[str, Any]:
+        """Return merged configuration for ``path`` while tracking recursion.
+
+        Args:
+            path: File system path to the TOML document being processed.
+            stack: Tuple of paths already traversed to detect cycles.
+
+        Returns:
+            Mapping of configuration values for the resolved document.
+        """
+
         if not path.exists():
             return {}
         if path in stack:
@@ -83,6 +112,16 @@ class TomlConfigSource(ConfigSource):
         return _expand_env(merged, self._env)
 
     def _coerce_includes(self, raw: Any, base_dir: Path) -> Iterable[Path]:
+        """Return include paths derived from ``raw`` relative to ``base_dir``.
+
+        Args:
+            raw: Include declaration in the TOML document.
+            base_dir: Directory used to resolve relative include paths.
+
+        Returns:
+            Iterable of resolved include paths.
+        """
+
         if raw is None:
             return []
         if isinstance(raw, (str, Path)):
@@ -95,9 +134,25 @@ class TomlConfigSource(ConfigSource):
 
     @staticmethod
     def _resolve_path(path: Path, base_dir: Path) -> Path:
+        """Return an absolute path for ``path`` relative to ``base_dir``.
+
+        Args:
+            path: Include path originating from a TOML document.
+            base_dir: Directory anchoring relative include paths.
+
+        Returns:
+            Absolute path pointing to the include target.
+        """
+
         return path if path.is_absolute() else (base_dir / path)
 
     def describe(self) -> str:
+        """Return a description string for the TOML source.
+
+        Returns:
+            Description string referencing the underlying file path.
+        """
+
         return f"TOML configuration at {self.name}"
 
 
@@ -108,6 +163,12 @@ class PyProjectConfigSource(TomlConfigSource):
         super().__init__(path, name=str(path))
 
     def load(self) -> Mapping[str, Any]:
+        """Return configuration extracted from ``[tool.pyqa]`` sections.
+
+        Returns:
+            Mapping representing the normalised pyqa configuration payload.
+        """
+
         data = super().load()
         tool_section = data.get(PYPROJECT_TOOL_KEY)
         if not isinstance(tool_section, Mapping):
@@ -118,6 +179,12 @@ class PyProjectConfigSource(TomlConfigSource):
         return _normalise_pyproject_payload(dict(pyqa_section))
 
     def describe(self) -> str:
+        """Return a human-readable description of the pyproject source.
+
+        Returns:
+            Description string referencing the pyproject file path.
+        """
+
         return f"pyproject.toml ({self.name})"
 
 

@@ -21,7 +21,12 @@ from pyqa.cli.commands.lint import command as lint_module
 from pyqa.cli.commands.lint import runtime as lint_runtime
 from pyqa.cli.core.options import LintOptions
 from pyqa.cli.core.typer_ext import _primary_option_name
-from pyqa.cli.commands.lint.params import LintMetaParams
+from pyqa.cli.commands.lint.params import (
+    LintMetaParams,
+    MetaActionParams,
+    MetaAnalysisChecks,
+    MetaRuntimeChecks,
+)
 from pyqa.cli.commands.lint.preparation import PROVIDED_FLAG_INTERNAL_LINTERS
 from pyqa.config import Config
 from pyqa.core.config.loader import ConfigLoader
@@ -48,17 +53,23 @@ def _meta_flags(
     """Return ``LintMetaParams`` populated for test scenarios."""
 
     return LintMetaParams(
-        doctor=False,
-        tool_info=None,
-        fetch_all_tools=False,
-        validate_schema=False,
-        normal=normal,
-        check_docstrings=check_docstrings,
-        check_suppressions=check_suppressions,
-        check_types_strict=check_types_strict,
-        check_closures=check_closures,
-        check_signatures=check_signatures,
-        check_cache_usage=check_cache_usage,
+        actions=MetaActionParams(
+            doctor=False,
+            tool_info=None,
+            fetch_all_tools=False,
+            validate_schema=False,
+            normal=normal,
+        ),
+        analysis=MetaAnalysisChecks(
+            check_docstrings=check_docstrings,
+            check_suppressions=check_suppressions,
+            check_types_strict=check_types_strict,
+        ),
+        runtime=MetaRuntimeChecks(
+            check_closures=check_closures,
+            check_signatures=check_signatures,
+            check_cache_usage=check_cache_usage,
+        ),
     )
 
 
@@ -496,6 +507,11 @@ def _build_stub_state(
         @property
         def provided(self) -> frozenset[str]:
             return self._provided
+
+        def with_added_provided(self, *flags: str) -> None:
+            updated = set(self._provided)
+            updated.update(flag for flag in flags if flag)
+            self._provided = frozenset(updated)
 
     return SimpleNamespace(
         root=root,

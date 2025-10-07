@@ -11,12 +11,21 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, cast
 
 from pydantic import BaseModel, ConfigDict
 
 from ...core.logging import warn
 from ...core.models import Diagnostic
+
+EnsureLanguageCallable = Callable[[str], Any | None]
+
+try:
+    from .grammars import ensure_language as _ensure_language_impl
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    _ENSURE_LANGUAGE: EnsureLanguageCallable | None = None
+else:
+    _ENSURE_LANGUAGE = cast(EnsureLanguageCallable, _ensure_language_impl)
 
 MARKDOWN_HEADING_NODE_TYPE: Final[str] = "heading"
 JSON_PAIR_NODE_TYPE: Final[str] = "pair"
@@ -57,8 +66,22 @@ class ParserFactory:
     get_parser: Callable[[str], Any] | None
     language_cls: type[Any] | None
 
-    def create(self, grammar_name: str) -> Any | None:
-        """Return an initialised parser for ``grammar_name`` when possible."""
+    def create(
+        self,
+        grammar_name: str,
+        *,
+        register_warning: Callable[[str], None] | None = None,
+    ) -> Any | None:
+        """Build a parser capable of handling ``grammar_name``.
+
+        Args:
+            grammar_name: Canonical Tree-sitter grammar name to load.
+            register_warning: Optional callback used to surface warning messages.
+
+        Returns:
+            Any | None: Parser configured with the requested language, or ``None`` when
+            the parser cannot be created.
+        """
 
         if self.get_parser is not None:
             return self.get_parser(grammar_name)
@@ -66,17 +89,25 @@ class ParserFactory:
             return None
         module_name = f"tree_sitter_{grammar_name.replace('-', '_')}"
         module = self._import_language_module(module_name)
-        if module is not None:
-            language = self._build_language(module)
-        else:
-            language = self._compile_language(grammar_name)
+        language = (
+            self._build_language(module)
+            if module is not None
+            else self._compile_language(grammar_name, register_warning=register_warning)
+        )
         parser = self._build_parser()
         if language is None or parser is None:
             return None
         return self._assign_language(parser, language)
 
     def _build_language(self, module: Any) -> Any | None:
-        """Return a language object constructed from ``module`` when possible."""
+        """Construct a Tree-sitter language from a packaged module.
+
+        Args:
+            module: Imported grammar module exposing a ``language`` factory.
+
+        Returns:
+            Any | None: Instantiated language object when the factory succeeds.
+        """
 
         language_factory = getattr(module, "language", None)
         if not callable(language_factory) or not callable(self.language_cls):
@@ -86,32 +117,50 @@ class ParserFactory:
         except (TypeError, ValueError):
             return None
 
-    def _compile_language(self, grammar_name: str) -> Any | None:
-        """Compile grammar sources when bundled modules are unavailable."""
+    def _compile_language(
+        self,
+        grammar_name: str,
+        *,
+        register_warning: Callable[[str], None] | None,
+    ) -> Any | None:
+        """Compile grammar sources when bundled modules are unavailable.
 
-        try:
-            from .grammars import ensure_language
-        except ModuleNotFoundError:
-            self._register_warning(
+        Args:
+            grammar_name: Canonical Tree-sitter grammar name to compile.
+            register_warning: Optional callback used to record warnings.
+
+        Returns:
+            Any | None: Compiled language when successful; otherwise ``None``.
+        """
+
+        if _ENSURE_LANGUAGE is None:
+            self._emit_warning(
+                register_warning,
                 f"Tree-sitter grammar '{grammar_name}' missing and auto-compilation helpers are unavailable.",
             )
             return None
         try:
-            language = ensure_language(grammar_name)
+            language = _ENSURE_LANGUAGE(grammar_name)
         except RuntimeError as exc:
-            self._register_warning(
+            self._emit_warning(
+                register_warning,
                 f"Failed to compile Tree-sitter grammar '{grammar_name}': {exc}",
             )
             return None
         if language is None:
-            self._register_warning(
+            self._emit_warning(
+                register_warning,
                 f"Tree-sitter grammar '{grammar_name}' could not be compiled automatically.",
             )
             return None
         return language
 
     def _build_parser(self) -> Any | None:
-        """Return a fresh parser instance when available."""
+        """Instantiate a parser using the configured parser factory.
+
+        Returns:
+            Any | None: Parser instance when creation succeeds; otherwise ``None``.
+        """
 
         parser_factory = self.parser_cls
         if parser_factory is None:
@@ -123,7 +172,14 @@ class ParserFactory:
 
     @staticmethod
     def _import_language_module(module_name: str) -> Any | None:
-        """Import the Tree-sitter language module if present."""
+        """Import the Tree-sitter language module when it is installed.
+
+        Args:
+            module_name: Fully-qualified module name to import.
+
+        Returns:
+            Any | None: Imported module or ``None`` if the module cannot be located.
+        """
 
         try:
             return importlib.import_module(module_name)
@@ -132,7 +188,15 @@ class ParserFactory:
 
     @staticmethod
     def _assign_language(parser: Any, language: Any) -> Any | None:
-        """Attach ``language`` to ``parser`` returning the parser or ``None``."""
+        """Attach ``language`` to ``parser`` returning the parser when successful.
+
+        Args:
+            parser: Parser instance produced by the Tree-sitter bindings.
+            language: Language object returned by ``create``.
+
+        Returns:
+            Any | None: Parser after assignment, or ``None`` when assignment fails.
+        """
 
         setter = getattr(parser, "set_language", None)
         if callable(setter):
@@ -145,6 +209,20 @@ class ParserFactory:
                 return None
             return parser
         return None
+
+    @staticmethod
+    def _emit_warning(register_warning: Callable[[str], None] | None, message: str) -> None:
+        """Forward ``message`` to ``register_warning`` or log directly.
+
+        Args:
+            register_warning: Optional callback that records warning messages.
+            message: Warning text to surface to the caller.
+        """
+
+        if register_warning is not None:
+            register_warning(message)
+        else:
+            warn(message, use_emoji=True)
 
 
 def _build_parser_loader() -> ParserFactory | None:
@@ -330,7 +408,10 @@ class TreeSitterContextResolver:
         parser_factory = factory
 
         def _loader() -> Any:
-            parser = parser_factory.create(grammar_name)
+            parser = parser_factory.create(
+                grammar_name,
+                register_warning=self._register_warning,
+            )
             if parser is None:
                 self._register_warning(
                     f"Tree-sitter grammar '{grammar_name}' unavailable; falling back to heuristic context extraction.",
@@ -351,6 +432,12 @@ class TreeSitterContextResolver:
         warn(message, use_emoji=True)
 
     def consume_warnings(self) -> list[str]:
+        """Return and clear accumulated warning messages.
+
+        Returns:
+            list[str]: Sorted list of warning strings emitted since the last call.
+        """
+
         warnings = sorted(self._warnings)
         self._warnings.clear()
         return warnings

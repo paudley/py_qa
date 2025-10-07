@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Linter that warns when ``functools.lru_cache`` is used directly."""
+"""Warn when ``functools.lru_cache`` is used directly."""
 
 from __future__ import annotations
 
@@ -7,112 +7,131 @@ import ast
 from pathlib import Path
 
 from pyqa.cli.commands.lint.preparation import PreparedLintState
-from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome
-from pyqa.core.severity import Severity
-from pyqa.filesystem.paths import normalize_path_key
 
+from ._ast_visitors import BaseAstLintVisitor, VisitorMetadata, run_ast_linter
 from .base import InternalLintReport
-from .utils import collect_python_files
+
+_FUNCTOOLS_MODULE = "functools"
+_LRU_CACHE_NAME = "lru_cache"
 
 
 def run_cache_linter(state: PreparedLintState, *, emit_to_logger: bool = True) -> InternalLintReport:
-    """Flag direct ``functools.lru_cache`` usage to enforce internal cache wrappers."""
+    """Flag direct ``functools.lru_cache`` usage to enforce internal cache wrappers.
+
+    Args:
+        state: Prepared lint execution context describing the workspace.
+        emit_to_logger: Compatibility flag; internal tools emit diagnostics via
+            the orchestrator rather than direct logging so the flag is ignored.
+
+    Returns:
+        ``InternalLintReport`` with diagnostics for every forbidden decorator.
+    """
 
     _ = emit_to_logger
-    files = collect_python_files(state)
-    diagnostics: list[Diagnostic] = []
-    stdout_lines: list[str] = []
-
-    for file_path in files:
-        source = file_path.read_text(encoding="utf-8")
-        try:
-            tree = ast.parse(source)
-        except SyntaxError:
-            continue
-        visitor = _CacheVisitor(file_path, state)
-        visitor.visit(tree)
-        diagnostics.extend(visitor.diagnostics)
-        stdout_lines.extend(visitor.stdout)
-
-    return InternalLintReport(
-        outcome=ToolOutcome(
-            tool="internal-cache",
-            action="check",
-            returncode=1 if diagnostics else 0,
-            stdout=stdout_lines,
-            stderr=[],
-            diagnostics=diagnostics,
-            exit_category=ToolExitCategory.DIAGNOSTIC if diagnostics else ToolExitCategory.SUCCESS,
-        ),
-        files=tuple(files),
+    metadata = VisitorMetadata(tool="internal-cache", code="internal:cache")
+    return run_ast_linter(
+        state,
+        metadata=metadata,
+        visitor_factory=_CacheVisitor,
     )
 
 
-class _CacheVisitor(ast.NodeVisitor):
+class _CacheVisitor(BaseAstLintVisitor):
     """Detect references to ``lru_cache`` decorators."""
 
-    def __init__(self, path: Path, state: PreparedLintState) -> None:
-        self._path = path
-        self._state = state
-        self.diagnostics: list[Diagnostic] = []
-        self.stdout: list[str] = []
-        self._functools_aliases: set[str] = set()
-        self._lru_aliases: set[str] = {"lru_cache"}
+    def __init__(self, path: Path, state: PreparedLintState, metadata: VisitorMetadata) -> None:
+        """Initialise visitor state and alias registries.
 
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: D401 - visitor signature
-        if node.module == "functools":
+        Args:
+            path: File currently under analysis.
+            state: Prepared lint execution context.
+            metadata: Tool descriptor for diagnostics emitted by this visitor.
+        """
+
+        super().__init__(path, state, metadata)
+        self._functools_aliases: set[str] = set()
+        self._lru_aliases: set[str] = {_LRU_CACHE_NAME}
+
+    def visit_import_from(self, node: ast.ImportFrom) -> None:
+        """Track ``lru_cache`` names imported from functools.
+
+        Args:
+            node: AST node describing the ``from x import`` statement.
+        """
+
+        if node.module == _FUNCTOOLS_MODULE:
             for alias in node.names:
                 name = alias.asname or alias.name
-                if alias.name == "lru_cache":
+                if alias.name == _LRU_CACHE_NAME:
                     self._lru_aliases.add(name)
         self.generic_visit(node)
 
-    def visit_Import(self, node: ast.Import) -> None:  # noqa: D401 - visitor signature
+    def visit_import(self, node: ast.Import) -> None:
+        """Track aliases referencing the ``functools`` module.
+
+        Args:
+            node: AST node describing the import statement.
+        """
+
         for alias in node.names:
-            if alias.name == "functools":
+            if alias.name == _FUNCTOOLS_MODULE:
                 name = alias.asname or alias.name
                 self._functools_aliases.add(name)
         self.generic_visit(node)
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:  # noqa: D401 - visitor signature
+    def visit_function_def(self, node: ast.FunctionDef) -> None:
+        """Inspect decorators on synchronous function definitions.
+
+        Args:
+            node: Function definition node to analyse.
+        """
+
         self._check_decorators(node.decorator_list)
         self.generic_visit(node)
 
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:  # noqa: D401 - visitor signature
+    def visit_async_function_def(self, node: ast.AsyncFunctionDef) -> None:
+        """Inspect decorators on asynchronous function definitions.
+
+        Args:
+            node: Async function definition node to analyse.
+        """
+
         self._check_decorators(node.decorator_list)
         self.generic_visit(node)
 
     def _check_decorators(self, decorators: list[ast.expr]) -> None:
+        """Emit diagnostics when ``decorators`` reference banned cache usage.
+
+        Args:
+            decorators: Decorator expressions applied to the target function.
+        """
+
         for decorator in decorators:
             if self._is_banned_decorator(decorator):
-                self._record(decorator, "Use pyqa.cache helpers instead of functools.lru_cache")
+                self.record_issue(
+                    decorator,
+                    "Use pyqa.cache helpers instead of functools.lru_cache",
+                )
 
     def _is_banned_decorator(self, expr: ast.expr) -> bool:
+        """Return ``True`` when ``expr`` resolves to ``functools.lru_cache``.
+
+        Args:
+            expr: Decorator expression to evaluate.
+
+        Returns:
+            ``True`` if the expression refers to the prohibited decorator.
+        """
+
         if isinstance(expr, ast.Name):
             return expr.id in self._lru_aliases
         if isinstance(expr, ast.Attribute):
             value = expr.value
-            if isinstance(value, ast.Name) and value.id in self._functools_aliases and expr.attr == "lru_cache":
+            if isinstance(value, ast.Name) and value.id in self._functools_aliases and expr.attr == _LRU_CACHE_NAME:
                 return True
         if isinstance(expr, ast.Call):
             return self._is_banned_decorator(expr.func)
         return False
-
-    def _record(self, node: ast.AST, message: str) -> None:
-        normalized = normalize_path_key(self._path, base_dir=self._state.root)
-        line = getattr(node, "lineno", 1)
-        diagnostic = Diagnostic(
-            file=normalized,
-            line=line,
-            column=getattr(node, "col_offset", None),
-            severity=Severity.WARNING,
-            message=message,
-            tool="internal-cache",
-            code="internal:cache",
-        )
-        self.diagnostics.append(diagnostic)
-        formatted = f"{normalized}:{line}: {message}"
-        self.stdout.append(formatted)
 
 
 __all__ = ["run_cache_linter"]

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+from typing import Final
 
 from pyqa.cli.commands.lint.preparation import PreparedLintState
 from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome
@@ -13,11 +14,24 @@ from pyqa.filesystem.paths import normalize_path_key
 from .base import InternalLintReport
 from .utils import collect_python_files
 
-_SUPPRESSION_PATTERN = re.compile(r"#.*?(noqa|pylint:|mypy:|type:\s*ignore|nosec|pyright:)", re.IGNORECASE)
+_SUPPRESSION_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"#.*?(noqa|pylint:|mypy:|type:\s*ignore|nosec|pyright:)",
+    re.IGNORECASE,
+)
+_DEFAULT_TEST_SEGMENT: Final[str] = "tests"
 
 
 def run_suppression_linter(state: PreparedLintState, *, emit_to_logger: bool = True) -> InternalLintReport:
-    """Detect suppression directives that require manual review."""
+    """Detect suppression directives that require manual review.
+
+    Args:
+        state: Prepared lint execution context describing the workspace.
+        emit_to_logger: Compatibility flag retained for legacy callers; ignored
+            because diagnostic output is routed through the orchestrator.
+
+    Returns:
+        ``InternalLintReport`` detailing suppression findings in production code.
+    """
 
     _ = emit_to_logger
     files = collect_python_files(state)
@@ -30,7 +44,7 @@ def run_suppression_linter(state: PreparedLintState, *, emit_to_logger: bool = T
             relative_parts = file_path.relative_to(state.root).parts
         except ValueError:
             relative_parts = file_path.parts
-        if "tests" in relative_parts:
+        if _DEFAULT_TEST_SEGMENT in relative_parts:
             continue
         text = file_path.read_text(encoding="utf-8")
         for idx, line in enumerate(text.splitlines(), start=1):

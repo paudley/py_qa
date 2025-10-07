@@ -5,15 +5,26 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from pathlib import Path
+from typing import TYPE_CHECKING, Final
 
 from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS
 
-if False:  # pragma: no cover - import guard for type checking
+if TYPE_CHECKING:  # pragma: no cover - type checking import
     from pyqa.cli.commands.lint.preparation import PreparedLintState
 
 
+_PYTHON_EXTENSIONS: Final[tuple[str, ...]] = (".py", ".pyi")
+
+
 def collect_python_files(state: PreparedLintState) -> list[Path]:
-    """Return Python source files addressed by the current lint invocation."""
+    """Return Python source files addressed by the current lint invocation.
+
+    Args:
+        state: Prepared lint state exposing discovery options and root paths.
+
+    Returns:
+        Sorted list of Python files targeted for internal lint passes.
+    """
 
     options = state.options.target_options
     candidates: set[Path] = set()
@@ -24,7 +35,7 @@ def collect_python_files(state: PreparedLintState) -> list[Path]:
     for path in paths:
         if _is_excluded(path, options.exclude, root):
             continue
-        if path.is_file() and path.suffix in {".py", ".pyi"}:
+        if path.is_file() and path.suffix in _PYTHON_EXTENSIONS:
             candidates.add(path)
         elif path.is_dir():
             candidates.update(_walk_python_files(path, options.exclude, root))
@@ -35,20 +46,39 @@ def collect_python_files(state: PreparedLintState) -> list[Path]:
 
 
 def _walk_python_files(directory: Path, exclude: Iterable[Path], root: Path) -> set[Path]:
+    """Return Python files beneath ``directory`` after applying exclusions.
+
+    Args:
+        directory: Directory to scan recursively.
+        exclude: Iterable of paths that should be excluded from scanning.
+        root: Repository root used for relative exclusion matching.
+
+    Returns:
+        Set of resolved Python file paths.
+    """
+
     excluded = [path.resolve() for path in exclude]
     results: set[Path] = set()
-    for candidate in directory.rglob("*.py"):
-        if _is_excluded(candidate, excluded, root):
-            continue
-        results.add(candidate)
-    for candidate in directory.rglob("*.pyi"):
-        if _is_excluded(candidate, excluded, root):
-            continue
-        results.add(candidate)
+    for extension in _PYTHON_EXTENSIONS:
+        for candidate in directory.rglob(f"*{extension}"):
+            if _is_excluded(candidate, excluded, root):
+                continue
+            results.add(candidate)
     return results
 
 
 def _is_excluded(path: Path, excluded: Iterable[Path], root: Path) -> bool:
+    """Return ``True`` when ``path`` should be ignored during scanning.
+
+    Args:
+        path: File or directory under consideration.
+        excluded: Paths explicitly excluded by user configuration.
+        root: Repository root for default exclusion checks.
+
+    Returns:
+        ``True`` if the path should be skipped by internal linters.
+    """
+
     path = path.resolve()
     for skip in excluded:
         try:

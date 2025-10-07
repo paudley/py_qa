@@ -235,9 +235,7 @@ def _activate_internal_linters(state: PreparedLintState) -> None:
     selection = state.options.selection_options
     meta = state.meta
     if meta.normal:
-        provided = set(state.options.provided)
-        provided.add(PROVIDED_FLAG_INTERNAL_LINTERS)
-        state.options._provided = frozenset(provided)  # type: ignore[attr-defined]
+        state.options.with_added_provided(PROVIDED_FLAG_INTERNAL_LINTERS)
         return
 
     existing = {name.lower() for name in selection.only}
@@ -250,7 +248,4 @@ def _activate_internal_linters(state: PreparedLintState) -> None:
                 existing.add(definition.name.lower())
                 added = True
     if added:
-        provided = set(state.options.provided)
-        provided.add("only")
-        provided.add(PROVIDED_FLAG_INTERNAL_LINTERS)
-        state.options._provided = frozenset(provided)  # type: ignore[attr-defined]
+        state.options.with_added_provided("only", PROVIDED_FLAG_INTERNAL_LINTERS)

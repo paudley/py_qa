@@ -262,6 +262,12 @@ Following the SOLID-focused refactors, we must bring the codebase into alignment
 4. **Testing**
    * Add integration tests covering mixed internal/external runs, internal-only runs, and `--normal` presets to confirm orchestrator scheduling, progress rendering, and consolidated output.
    * Provide regression coverage ensuring internal tools contribute to RunResult diagnostics and stats without extra log noise.
+5. **Operational parity checklist**
+   * Ensure every internal linter shares the standard diagnostics pipeline: normalized workspace-relative paths, suppression handling, deduplicated highlights, and stats aggregation identical to external tools.
+   * Remove pre-run console spam by routing docstring/license findings through the orchestrator result printer and progress controller rather than direct logging.
+   * Honour global directory/file exclusions (`.lintignore`, default skip sets) and ensure progress bars tick per tool with accurate counts for internal-only and mixed runs.
+   * Guarantee `./lint -n` enables the full suite of new internal passes by default so consolidated runs exercise the entire policy surface.
+   * Update documentation and developer notes to reflect the parity expectations so future internal tools follow the same contract without bespoke glue code.
 
 ### Phase 8A – Documentation & Commentary
 

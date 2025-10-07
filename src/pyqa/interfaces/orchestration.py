@@ -3,8 +3,6 @@
 
 """Execution orchestration contracts."""
 
-# pylint: disable=too-few-public-methods -- Protocol definitions intentionally expose minimal method surfaces.
-
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
@@ -22,6 +20,11 @@ if TYPE_CHECKING:
 class ActionExecutor(Protocol):
     """Execute a single tool action."""
 
+    @property
+    def executor_name(self) -> str:
+        """Return the identifier of the executor implementation."""
+        raise NotImplementedError("ActionExecutor.executor_name must be implemented")
+
     def execute(self, action_name: str) -> None:
         """Run the action identified by ``action_name``.
 
@@ -34,6 +37,11 @@ class ActionExecutor(Protocol):
 @runtime_checkable
 class RunHooks(Protocol):
     """Lifecycle callbacks invoked before/after pipeline stages."""
+
+    @property
+    def supported_phases(self) -> Sequence[str]:
+        """Return the ordered phases for which hooks are registered."""
+        raise NotImplementedError("RunHooks.supported_phases must be implemented")
 
     def before_phase(self, phase: str) -> None:
         """Called before executing ``phase``.
@@ -55,6 +63,11 @@ class RunHooks(Protocol):
 @runtime_checkable
 class ExecutionPipeline(Protocol):
     """Coordinate tool execution phases."""
+
+    @property
+    def pipeline_name(self) -> str:
+        """Return the name of the execution pipeline."""
+        raise NotImplementedError("ExecutionPipeline.pipeline_name must be implemented")
 
     def run(self, config: Config, *, root: Path) -> RunResult:
         """Execute tool actions for a configuration rooted at ``root``.

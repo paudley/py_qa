@@ -42,6 +42,9 @@ from .params import (
     LintSeverityParams,
     LintSummaryParams,
     LintTargetGroup,
+    MetaActionParams,
+    MetaAnalysisChecks,
+    MetaRuntimeChecks,
     OverrideFormattingParams,
     OverrideStrictnessParams,
     OverrideThresholdParams,
@@ -685,7 +688,7 @@ def _severity_params_dependency(
     )
 
 
-def _meta_params_dependency(
+def _meta_action_dependency(
     doctor: Annotated[
         bool,
         typer.Option(False, "--doctor", help="Run environment diagnostics and exit."),
@@ -706,6 +709,19 @@ def _meta_params_dependency(
         bool,
         typer.Option(False, "-n", "--normal", help=NORMAL_PRESET_HELP),
     ],
+) -> MetaActionParams:
+    """Return meta-action toggles captured from CLI options."""
+
+    return MetaActionParams(
+        doctor=doctor,
+        tool_info=tool_info,
+        fetch_all_tools=fetch_all_tools,
+        validate_schema=validate_schema,
+        normal=normal,
+    )
+
+
+def _meta_analysis_checks_dependency(
     check_docstrings: Annotated[
         bool,
         typer.Option(False, "--check-docstrings", help=DOCSTRINGS_HELP),
@@ -718,6 +734,17 @@ def _meta_params_dependency(
         bool,
         typer.Option(False, "--check-types-strict", help=TYPING_HELP),
     ],
+) -> MetaAnalysisChecks:
+    """Return analysis-focused meta-check toggles."""
+
+    return MetaAnalysisChecks(
+        check_docstrings=check_docstrings,
+        check_suppressions=check_suppressions,
+        check_types_strict=check_types_strict,
+    )
+
+
+def _meta_runtime_checks_dependency(
     check_closures: Annotated[
         bool,
         typer.Option(False, "--check-closures", help=CLOSURES_HELP),
@@ -730,47 +757,39 @@ def _meta_params_dependency(
         bool,
         typer.Option(False, "--check-cache-usage", help=CACHE_HELP),
     ],
-) -> LintMetaParams:
-    """Return meta-command parameters influencing lint execution flow.
+) -> MetaRuntimeChecks:
+    """Return runtime-focused meta-check toggles."""
 
-    Args:
-        doctor: Whether to run environment diagnostics and exit.
-        tool_info: Optional tool identifier for the tool-info meta action.
-        fetch_all_tools: Whether to fetch all tool runtimes and exit.
-        validate_schema: Whether to validate the tooling catalog and exit.
-        normal: Whether to apply the normal lint preset.
-        check_docstrings: Whether to run the internal docstring linter and exit.
-        check_suppressions: Whether to run the suppression checker and exit.
-        check_types_strict: Whether to run the strict typing checker and exit.
-        check_closures: Whether to run the closure checker and exit.
-        check_signatures: Whether to run the signature width checker and exit.
-        check_cache_usage: Whether to run the cache usage checker and exit.
-
-    Returns:
-        LintMetaParams: Structured meta-action configuration.
-    """
-
-    if normal:
-        check_docstrings = True
-        check_suppressions = True
-        check_types_strict = True
-        check_closures = True
-        check_signatures = True
-        check_cache_usage = True
-
-    return LintMetaParams(
-        doctor=doctor,
-        tool_info=tool_info,
-        fetch_all_tools=fetch_all_tools,
-        validate_schema=validate_schema,
-        normal=normal,
-        check_docstrings=check_docstrings,
-        check_suppressions=check_suppressions,
-        check_types_strict=check_types_strict,
+    return MetaRuntimeChecks(
         check_closures=check_closures,
         check_signatures=check_signatures,
         check_cache_usage=check_cache_usage,
     )
+
+
+def _meta_params_dependency(
+    actions: Annotated[MetaActionParams, Depends(_meta_action_dependency)],
+    analysis_checks: Annotated[MetaAnalysisChecks, Depends(_meta_analysis_checks_dependency)],
+    runtime_checks: Annotated[MetaRuntimeChecks, Depends(_meta_runtime_checks_dependency)],
+) -> LintMetaParams:
+    """Return meta-command parameters influencing lint execution flow."""
+
+    if actions.normal:
+        analysis = MetaAnalysisChecks(
+            check_docstrings=True,
+            check_suppressions=True,
+            check_types_strict=True,
+        )
+        runtime = MetaRuntimeChecks(
+            check_closures=True,
+            check_signatures=True,
+            check_cache_usage=True,
+        )
+    else:
+        analysis = analysis_checks
+        runtime = runtime_checks
+
+    return LintMetaParams(actions=actions, analysis=analysis, runtime=runtime)
 
 
 def _build_target_group(

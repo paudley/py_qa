@@ -3,8 +3,6 @@
 
 """Protocols describing diagnostic processing pipelines."""
 
-# pylint: disable=too-few-public-methods -- Protocol definitions intentionally expose minimal method surfaces.
-
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -31,6 +29,11 @@ class DiagnosticPipelineRequest:
 @runtime_checkable
 class DiagnosticPipeline(Protocol):
     """Process raw diagnostics into filtered results for consumption."""
+
+    @property
+    def pipeline_name(self) -> str:
+        """Return the identifier of the pipeline implementation."""
+        raise NotImplementedError("DiagnosticPipeline.pipeline_name must be implemented")
 
     def run(self, request: DiagnosticPipelineRequest) -> list[Diagnostic]:
         """Return filtered diagnostics ready for presentation."""

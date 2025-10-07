@@ -3,18 +3,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from functools import partial
-from collections.abc import Callable
 
 from pyqa.cli.commands.lint.preparation import PreparedLintState
 from pyqa.config import Config
 from pyqa.core.models import ToolOutcome
-from pyqa.tools.base import DeferredCommand, Tool, ToolAction, ToolContext
+from pyqa.tools.base import DeferredCommand, PhaseLiteral, Tool, ToolAction, ToolContext
 from pyqa.tools.registry import ToolRegistry
 
-from .base import InternalLintReport, InternalLintRunner
+from .base import InternalLintReport, InternalLintRunner, as_internal_runner
 from .cache_usage import run_cache_linter
 from .closures import run_closure_linter
 from .docstrings import run_docstring_linter
@@ -25,18 +24,25 @@ from .typing_strict import run_typing_linter
 
 
 @dataclass(slots=True)
+class InternalLinterOptions:
+    """Describe execution-time options for an internal linter."""
+
+    phase: PhaseLiteral = "lint"
+    tags: tuple[str, ...] = ("internal-linter",)
+    default_enabled: bool = False
+    requires_config: bool = False
+
+
+@dataclass(slots=True)
 class InternalLinterDefinition:
     """Describe how a CLI meta flag maps to an internal linter."""
 
     name: str
     meta_attribute: str | None
     selection_tokens: tuple[str, ...]
-    runner: InternalLintRunner
+    runner: Callable[..., InternalLintReport]
     description: str
-    phase: str = "lint"
-    tags: tuple[str, ...] = ("internal-linter",)
-    default_enabled: bool = False
-    requires_config: bool = False
+    options: InternalLinterOptions = field(default_factory=InternalLinterOptions)
 
 
 INTERNAL_LINTERS: tuple[InternalLinterDefinition, ...] = (
@@ -88,10 +94,12 @@ INTERNAL_LINTERS: tuple[InternalLinterDefinition, ...] = (
         selection_tokens=("quality", "license"),
         runner=run_quality_linter,
         description="Enforce license compliance and structural quality checks.",
-        phase="utility",
-        tags=("internal-linter", "quality"),
-        default_enabled=True,
-        requires_config=True,
+        options=InternalLinterOptions(
+            phase="utility",
+            tags=("internal-linter", "quality"),
+            default_enabled=True,
+            requires_config=True,
+        ),
     ),
 )
 
@@ -113,9 +121,10 @@ def ensure_internal_tools_registered(
     for definition in INTERNAL_LINTERS:
         if registry.try_get(definition.name) is not None:
             continue
-        runner = definition.runner
-        if definition.requires_config:
-            runner = partial(runner, config=config)
+        runner_callable = definition.runner
+        if definition.options.requires_config:
+            runner_callable = partial(runner_callable, config=config)
+        runner = as_internal_runner(definition.name, _bind_runner_callable(runner_callable))
         tool = _build_internal_tool(
             definition=definition,
             state=state,
@@ -145,16 +154,16 @@ def _build_internal_tool(
     return Tool(
         name=definition.name,
         actions=(action,),
-        phase=definition.phase,
+        phase=definition.options.phase,
         before=(),
         after=(),
         languages=(),
         file_extensions=(),
         config_files=(),
         description=definition.description,
-        tags=definition.tags,
+        tags=definition.options.tags,
         auto_install=False,
-        default_enabled=definition.default_enabled,
+        default_enabled=definition.options.default_enabled,
     )
 
 
@@ -165,7 +174,7 @@ def configure_internal_tool_defaults(*, registry: ToolRegistry, state: PreparedL
         tool = registry.try_get(definition.name)
         if tool is None:
             continue
-        enable = definition.default_enabled
+        enable = definition.options.default_enabled
         if getattr(state.meta, "normal", False):
             enable = True
         tool.default_enabled = enable
@@ -178,7 +187,7 @@ def _wrap_internal_runner(
 ) -> Callable[[ToolContext], ToolOutcome]:
     """Return an action runner compatible with :class:`ToolAction`."""
 
-    def _execute(context: ToolContext) -> ToolOutcome:
+    def _execute(_context: ToolContext) -> ToolOutcome:
         report: InternalLintReport = runner(state, emit_to_logger=False)
         outcome = report.outcome.model_copy(deep=True)
         outcome.tool = definition.name
@@ -188,7 +197,19 @@ def _wrap_internal_runner(
     return _execute
 
 
+def _bind_runner_callable(
+    func: Callable[..., InternalLintReport],
+) -> Callable[[PreparedLintState, bool], InternalLintReport]:
+    """Return a callable enforcing the standard internal runner signature."""
+
+    def _runner(state: PreparedLintState, emit_to_logger: bool) -> InternalLintReport:
+        return func(state, emit_to_logger=emit_to_logger)
+
+    return _runner
+
+
 __all__ = [
+    "InternalLinterOptions",
     "InternalLinterDefinition",
     "INTERNAL_LINTERS",
     "iter_internal_linters",

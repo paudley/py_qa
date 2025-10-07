@@ -3,8 +3,6 @@
 
 """Analysis-oriented interfaces (Tree-sitter, spaCy, etc.)."""
 
-# pylint: disable=too-few-public-methods -- Protocol definitions intentionally expose minimal method surfaces.
-
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
@@ -16,10 +14,25 @@ from typing import Any, Protocol, runtime_checkable
 class MessageSpan(Protocol):
     """Lightweight structure describing a span highlighted in a message."""
 
-    start: int
-    end: int
-    kind: str
-    style: str
+    @property
+    def start(self) -> int:
+        """Return the inclusive start offset of the span."""
+        raise NotImplementedError("MessageSpan.start must be implemented")
+
+    @property
+    def end(self) -> int:
+        """Return the exclusive end offset of the span."""
+        raise NotImplementedError("MessageSpan.end must be implemented")
+
+    @property
+    def kind(self) -> str:
+        """Return the semantic kind associated with the span."""
+        raise NotImplementedError("MessageSpan.kind must be implemented")
+
+    @property
+    def style(self) -> str:
+        """Return the presentation style hint for the span."""
+        raise NotImplementedError("MessageSpan.style must be implemented")
 
 
 @runtime_checkable
@@ -61,6 +74,11 @@ class ContextResolver(Protocol):
 @runtime_checkable
 class FunctionScaleEstimator(Protocol):
     """Protocol for services that estimate function size and complexity."""
+
+    @property
+    def supported_languages(self) -> Sequence[str]:
+        """Return languages this estimator can analyse."""
+        raise NotImplementedError("FunctionScaleEstimator.supported_languages must be implemented")
 
     def estimate(self, path: Path, function: str) -> tuple[int | None, int | None]:
         """Return approximate line count and complexity for ``function``.

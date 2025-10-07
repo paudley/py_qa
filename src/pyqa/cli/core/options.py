@@ -557,6 +557,19 @@ class LintOptions:
 
         return self._provided
 
+    def with_added_provided(self, *flags: str) -> None:
+        """Record additional CLI flag names as explicitly provided.
+
+        Args:
+            *flags: Names of CLI options to mark as user supplied.
+        """
+
+        if not flags:
+            return
+        updated = set(self._provided)
+        updated.update(flag for flag in flags if flag)
+        self._provided = frozenset(updated)
+
 
 @dataclass(slots=True)
 class InstallOptions:

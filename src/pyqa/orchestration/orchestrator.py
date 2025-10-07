@@ -32,7 +32,7 @@ from ..core.runtime import ServiceContainer, ServiceResolutionError, register_de
 from ..core.runtime.process import CommandOptions
 from ..diagnostics import build_severity_rules, dedupe_outcomes
 from ..discovery.base import SupportsDiscovery
-from ..interfaces.analysis import AnnotationProvider
+from ..interfaces.analysis import AnnotationProvider, ContextResolver, FunctionScaleEstimator
 from ..tools import Tool, ToolAction, ToolContext
 from ..tools.registry import ToolRegistry
 from .action_executor import (
@@ -72,6 +72,12 @@ class OrchestratorHooks:
     after_execution: Callable[[RunResult], None] | None = None
     after_plan: Callable[[int], None] | None = None
 
+    @property
+    def supported_phases(self) -> Sequence[str]:
+        """Return lifecycle phases that may trigger hooks."""
+
+        return ("plan", "discovery", "tool", "execution")
+
 
 @dataclass(frozen=True)
 class OrchestratorDeps:
@@ -93,6 +99,24 @@ class OrchestratorOverrides:
     hooks: OrchestratorHooks | None = None
     cmd_preparer: CommandPreparationFn | None = None
     services: ServiceContainer | None = None
+
+
+@dataclass(slots=True)
+class _ToolingPipeline:
+    """Bundle tool selection, execution, and preparation helpers."""
+
+    selector: ToolSelector
+    executor: ActionExecutor
+    prepare_command: CommandPreparationFn
+
+
+@dataclass(slots=True)
+class _AnalysisProviders:
+    """Group annotation and analysis services required by the orchestrator."""
+
+    annotation: AnnotationProvider
+    function_scale: FunctionScaleEstimator
+    context_resolver: ContextResolver
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,33 +187,65 @@ class Orchestrator:
         self._runner = base_runner if isinstance(base_runner, RunnerCallable) else wrap_runner(base_runner)
         self._hooks = final_hooks or OrchestratorHooks()
         self._services: ServiceContainer = services
-        preparer = final_preparer
+        self._pipeline = self._create_pipeline(final_preparer)
+        self._analysis = self._create_analysis_providers()
+
+    def _create_pipeline(
+        self,
+        preparer_override: CommandPreparer | CommandPreparationFn | Callable[..., PreparedCommand] | None,
+    ) -> _ToolingPipeline:
+        """Return a tooling pipeline configured with preparer and executor.
+
+        Args:
+            preparer_override: Optional callable supplied by the caller.
+
+        Returns:
+            _ToolingPipeline encapsulating selection, preparation, and execution.
+        """
+
+        preparer: CommandPreparationFn | Callable[..., PreparedCommand] | CommandPreparer | None = preparer_override
         if preparer is None:
             default_preparer = CommandPreparer()
             preparer = default_preparer.prepare_request
         prepare_callable = self._resolve_preparer(preparer)
-        self._prepare_command = self._coerce_preparer(prepare_callable)
-        self._selector = ToolSelector(self._context.registry)
-        self._executor = ActionExecutor(self._runner, self._hooks.after_tool)
-        self._annotation_provider: AnnotationProvider = self._resolve_annotation_provider()
+        prepare_fn = self._coerce_preparer(prepare_callable)
+        selector = ToolSelector(self._context.registry)
+        executor = ActionExecutor(self._runner, self._hooks.after_tool)
+        return _ToolingPipeline(selector=selector, executor=executor, prepare_command=prepare_fn)
+
+    def _create_analysis_providers(self) -> _AnalysisProviders:
+        """Return annotation and analysis providers for the orchestrator."""
+
+        annotation_provider = self._resolve_annotation_provider()
         try:
-            self._function_scale = resolve_function_scale_estimator(self._services)
+            function_scale = resolve_function_scale_estimator(self._services)
         except ServiceResolutionError:
-            self._function_scale = resolve_function_scale_estimator()
+            function_scale = resolve_function_scale_estimator()
         try:
-            self._context_resolver = resolve_context_resolver(self._services)
+            context_resolver = resolve_context_resolver(self._services)
         except ServiceResolutionError:
-            self._context_resolver = resolve_context_resolver()
+            context_resolver = resolve_context_resolver()
+        return _AnalysisProviders(
+            annotation=annotation_provider,
+            function_scale=function_scale,
+            context_resolver=context_resolver,
+        )
+
+    @property
+    def _annotation_provider(self) -> AnnotationProvider:
+        """Expose the active annotation provider for legacy integrations."""
+
+        return self._analysis.annotation
 
     def run(self, cfg: Config, *, root: Path | None = None) -> RunResult:
         """Execute configured tools and aggregate their outcomes."""
 
         environment, matched_files = self._build_environment(cfg, root)
         state = ExecutionState()
-        self._executor.after_tool_hook = self._hooks.after_tool
+        self._pipeline.executor.after_tool_hook = self._hooks.after_tool
         self._notify_discovery(len(matched_files))
 
-        tool_names = self._selector.select_tools(cfg, matched_files, environment.root)
+        tool_names = self._pipeline.selector.select_tools(cfg, matched_files, environment.root)
         self._notify_plan(tool_names, cfg)
 
         for name in tool_names:
@@ -201,9 +257,9 @@ class Orchestrator:
             ):
                 break
 
-        self._executor.execute_scheduled(environment, state)
+        self._pipeline.executor.execute_scheduled(environment, state)
         outcomes = [state.outcomes[index] for index in sorted(state.outcomes)]
-        self._executor.populate_missing_metrics(state, matched_files)
+        self._pipeline.executor.populate_missing_metrics(state, matched_files)
         result = RunResult(
             root=environment.root,
             files=matched_files,
@@ -214,15 +270,15 @@ class Orchestrator:
         dedupe_outcomes(
             result,
             cfg.dedupe,
-            annotation_provider=self._annotation_provider,
+            annotation_provider=self._analysis.annotation,
         )
-        self._annotation_provider.annotate_run(result)
-        apply_suppression_hints(result, self._annotation_provider)
-        apply_change_impact(result, context_resolver=self._context_resolver)
+        self._analysis.annotation.annotate_run(result)
+        apply_suppression_hints(result, self._analysis.annotation)
+        apply_change_impact(result, context_resolver=self._analysis.context_resolver)
         build_refactor_navigator(
             result,
-            self._annotation_provider,
-            function_scale=self._function_scale,
+            self._analysis.annotation,
+            function_scale=self._analysis.function_scale,
         )
         if environment.cache.cache and environment.cache.versions_dirty:
             save_versions(environment.cache.cache_dir, environment.cache.versions)
@@ -511,7 +567,7 @@ class Orchestrator:
             file_metrics=cached_entry.file_metrics,
             from_cache=True,
         )
-        self._executor.record_outcome(state, environment, record)
+        self._pipeline.executor.record_outcome(state, environment, record)
         state.order += 1
         if cfg.execution.bail and cached_entry.outcome.returncode != 0:
             state.bail_triggered = True
@@ -544,7 +600,7 @@ class Orchestrator:
             bool: ``True`` when bail mode should halt further execution.
         """
 
-        outcome = self._executor.run_action(invocation, environment)
+        outcome = self._pipeline.executor.run_action(invocation, environment)
         record = OutcomeRecord(
             order=state.order,
             invocation=invocation,
@@ -552,7 +608,7 @@ class Orchestrator:
             file_metrics=None,
             from_cache=False,
         )
-        self._executor.record_outcome(state, environment, record)
+        self._pipeline.executor.record_outcome(state, environment, record)
         state.order += 1
         bail_enabled = environment.config.execution.bail
         if bail_enabled and outcome.returncode != 0 and not action.ignore_exit:
@@ -674,7 +730,7 @@ class Orchestrator:
             PreparedCommand: Command ready for execution.
         """
 
-        return self._prepare_command(request)
+        return self._pipeline.prepare_command(request)
 
     def _build_invocation(
         self,
@@ -712,7 +768,7 @@ class Orchestrator:
             list[tuple[Tool, ToolAction]]: Ordered tool/action pairs used for planning.
         """
 
-        ordered_names = self._selector.order_tools([tool.name for tool in self._context.registry.tools()])
+        ordered_names = self._pipeline.selector.order_tools([tool.name for tool in self._context.registry.tools()])
         pairs: list[tuple[Tool, ToolAction]] = []
         for name in ordered_names:
             tool = self._context.registry.try_get(name)

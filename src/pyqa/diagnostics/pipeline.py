@@ -74,6 +74,12 @@ class DiagnosticPipeline(DiagnosticPipelineProtocol):
     normalize: Normalizer = _default_normalizer
     filter: Filterer = _default_filter
 
+    @property
+    def pipeline_name(self) -> str:
+        """Return the identifier for this diagnostic pipeline."""
+
+        return "default"
+
     def run(self, request: DiagnosticPipelineRequest) -> list[Diagnostic]:
         """Execute the pipeline and return the retained diagnostics.
 

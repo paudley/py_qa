@@ -30,25 +30,21 @@ class TokenLike(Protocol):
     @property
     def is_stop(self) -> bool:
         """Return ``True`` when the token represents a stop word."""
-
-        raise NotImplementedError  # pragma: no cover - protocol definition
+        raise NotImplementedError("TokenLike.is_stop must be implemented")
 
     @property
     def pos_(self) -> str:
         """Return the coarse part-of-speech tag for the token."""
-
-        raise NotImplementedError  # pragma: no cover - protocol definition
+        raise NotImplementedError("TokenLike.pos_ must be implemented")
 
     @property
     def lemma_(self) -> str:
         """Return the lemmatised token form."""
-
-        raise NotImplementedError  # pragma: no cover - protocol definition
+        raise NotImplementedError("TokenLike.lemma_ must be implemented")
 
     def __len__(self) -> int:
         """Return the number of characters comprising the token."""
-
-        raise NotImplementedError  # pragma: no cover - protocol definition
+        raise NotImplementedError("TokenLike.__len__ must be implemented")
 
 
 @runtime_checkable
@@ -57,18 +53,15 @@ class DocLike(Protocol):
 
     def __iter__(self) -> Iterator[TokenLike]:  # pragma: no cover - protocol definition
         """Return an iterator across contained tokens."""
-
-        raise NotImplementedError
+        raise NotImplementedError("DocLike.__iter__ must be implemented")
 
     def __len__(self) -> int:  # pragma: no cover - protocol definition
         """Return the number of tokens contained within the document."""
-
-        raise NotImplementedError
+        raise NotImplementedError("DocLike.__len__ must be implemented")
 
     def __getitem__(self, index: int) -> TokenLike:  # pragma: no cover - protocol definition
         """Return the token located at ``index``."""
-
-        raise NotImplementedError
+        raise NotImplementedError("DocLike.__getitem__ must be implemented")
 
 
 class SpacyLanguage(Protocol):

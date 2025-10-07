@@ -160,6 +160,11 @@ class DeferredCommand(BaseModel):
         del ctx
         return tuple(self.args)
 
+    def describe(self) -> str:
+        """Return a human-readable description of the deferred command."""
+
+        return "DeferredCommand"
+
 
 class ToolAction(BaseModel):
     """Single executable action belonging to a tool (e.g. lint, fix)."""

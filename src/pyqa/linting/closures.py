@@ -1,114 +1,138 @@
 # SPDX-License-Identifier: MIT
-"""Linter that flags ad-hoc closures and inline lambdas."""
+"""Flag ad-hoc closures and inline lambdas."""
 
 from __future__ import annotations
 
 import ast
-from pathlib import Path
+from collections.abc import Iterable
 
 from pyqa.cli.commands.lint.preparation import PreparedLintState
-from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome
-from pyqa.core.severity import Severity
-from pyqa.filesystem.paths import normalize_path_key
 
+from ._ast_visitors import BaseAstLintVisitor, VisitorMetadata, run_ast_linter
 from .base import InternalLintReport
-from .utils import collect_python_files
 
 
 def run_closure_linter(state: PreparedLintState, *, emit_to_logger: bool = True) -> InternalLintReport:
-    """Highlight closure factories that should use partials or helpers."""
+    """Highlight closure factories that should use partials or helpers.
+
+    Args:
+        state: Prepared lint execution context describing the workspace.
+        emit_to_logger: Compatibility flag retained for legacy callers; ignored
+            because diagnostics flow through the orchestrator pipeline.
+
+    Returns:
+        ``InternalLintReport`` enumerating closure/lambda misuse incidents.
+    """
 
     _ = emit_to_logger
-    files = collect_python_files(state)
-    diagnostics: list[Diagnostic] = []
-    stdout_lines: list[str] = []
-
-    for file_path in files:
-        source = file_path.read_text(encoding="utf-8")
-        try:
-            tree = ast.parse(source)
-        except SyntaxError:
-            continue
-        visitor = _ClosureVisitor(file_path, state)
-        visitor.visit(tree)
-        diagnostics.extend(visitor.diagnostics)
-        stdout_lines.extend(visitor.stdout)
-
-    return InternalLintReport(
-        outcome=ToolOutcome(
-            tool="internal-closures",
-            action="check",
-            returncode=1 if diagnostics else 0,
-            stdout=stdout_lines,
-            stderr=[],
-            diagnostics=diagnostics,
-            exit_category=ToolExitCategory.DIAGNOSTIC if diagnostics else ToolExitCategory.SUCCESS,
-        ),
-        files=tuple(files),
+    metadata = VisitorMetadata(tool="internal-closures", code="internal:closures")
+    return run_ast_linter(
+        state,
+        metadata=metadata,
+        visitor_factory=_ClosureVisitor,
     )
 
 
-class _ClosureVisitor(ast.NodeVisitor):
+class _ClosureVisitor(BaseAstLintVisitor):
     """Detect nested function factories and lambda assignments."""
 
-    def __init__(self, path: Path, state: PreparedLintState) -> None:
-        self._path = path
-        self._state = state
-        self.diagnostics: list[Diagnostic] = []
-        self.stdout: list[str] = []
+    def visit_function_def(self, node: ast.FunctionDef) -> None:
+        """Inspect synchronous function definitions for factories/lambdas.
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:  # noqa: D401 - visitor signature
-        self._flag_lambda_assignments(node.body)
-        for inner in node.body:
-            if isinstance(inner, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if _is_factory_function(node, inner.name):
-                    self._record(inner, f"Nested function '{inner.name}' suggests using functools.partial or a helper")
-        self.generic_visit(node)
+        Args:
+            node: Function definition node to analyse.
+        """
 
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:  # noqa: D401 - visitor signature
-        self.visit_FunctionDef(node)
+        self._inspect_function(node, node.body, node)
 
-    def visit_Assign(self, node: ast.Assign) -> None:  # noqa: D401 - visitor signature
+    def visit_async_function_def(self, node: ast.AsyncFunctionDef) -> None:
+        """Inspect asynchronous function definitions for factories/lambdas.
+
+        Args:
+            node: Async function definition node to analyse.
+        """
+
+        self._inspect_function(node, node.body, node)
+
+    def visit_assign(self, node: ast.Assign) -> None:
+        """Flag lambda assignments at module scope.
+
+        Args:
+            node: Assignment node to analyse for lambda binding.
+        """
+
         if isinstance(node.value, ast.Lambda):
-            self._record(node.value, "Lambda assigned to a name should use functools.partial or a helper function")
+            self.record_issue(
+                node.value,
+                "Lambda assigned to a name should use functools.partial or itertools helpers",
+            )
         self.generic_visit(node)
 
-    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:  # noqa: D401 - visitor signature
+    def visit_ann_assign(self, node: ast.AnnAssign) -> None:
+        """Flag annotated lambda assignments at module scope.
+
+        Args:
+            node: Annotated assignment node to analyse for lambda binding.
+        """
+
         if isinstance(node.value, ast.Lambda):
-            self._record(node.value, "Lambda assigned to a name should use functools.partial or a helper function")
+            self.record_issue(
+                node.value,
+                "Lambda assigned to a name should use functools.partial or itertools helpers",
+            )
         self.generic_visit(node)
 
-    def _flag_lambda_assignments(self, statements: list[ast.stmt]) -> None:
+    def _inspect_function(
+        self,
+        node: ast.AST,
+        statements: Iterable[ast.stmt],
+        container: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> None:
+        """Inspect ``container`` for nested factories and lambda assignments.
+
+        Args:
+            node: AST node currently being visited (function or async function).
+            statements: Body statements contained within ``container``.
+            container: Function definition that might host nested factories.
+        """
+
+        self._flag_lambda_assignments(statements)
+        for inner in statements:
+            if isinstance(inner, (ast.FunctionDef, ast.AsyncFunctionDef)) and _is_factory_function(
+                container, inner.name
+            ):
+                self.record_issue(
+                    inner,
+                    f"Nested function '{inner.name}' suggests using functools.partial or a helper",
+                )
+        self.generic_visit(node)
+
+    def _flag_lambda_assignments(self, statements: Iterable[ast.stmt]) -> None:
+        """Record lambda assignments found within ``statements``.
+
+        Args:
+            statements: Iterable of AST statements to inspect for lambda usage.
+        """
+
+        message = "Lambda assigned inside function should leverage functools.partial or itertools utilities"
         for stmt in statements:
             if isinstance(stmt, ast.Assign) and isinstance(stmt.value, ast.Lambda):
-                self._record(
-                    stmt.value,
-                    "Lambda assigned inside function should leverage functools.partial or itertools utilities",
-                )
+                self.record_issue(stmt.value, message)
             if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.value, ast.Lambda):
-                self._record(
-                    stmt.value,
-                    "Lambda assigned inside function should leverage functools.partial or itertools utilities",
-                )
-
-    def _record(self, node: ast.AST, message: str) -> None:
-        line = getattr(node, "lineno", 1)
-        normalized = normalize_path_key(self._path, base_dir=self._state.root)
-        diagnostic = Diagnostic(
-            file=normalized,
-            line=line,
-            column=getattr(node, "col_offset", None),
-            severity=Severity.WARNING,
-            message=message,
-            tool="internal-closures",
-            code="internal:closures",
-        )
-        self.diagnostics.append(diagnostic)
-        formatted = f"{normalized}:{line}: {message}"
-        self.stdout.append(formatted)
+                self.record_issue(stmt.value, message)
 
 
 def _is_factory_function(container: ast.FunctionDef | ast.AsyncFunctionDef, inner_name: str) -> bool:
+    """Return ``True`` when ``inner_name`` is returned or assigned in ``container``.
+
+    Args:
+        container: Function whose body is inspected for delegation patterns.
+        inner_name: Name of the nested function under scrutiny.
+
+    Returns:
+        ``True`` if the nested function behaves like a closure factory helper.
+    """
+
     for stmt in container.body:
         if isinstance(stmt, ast.Return) and isinstance(stmt.value, ast.Name) and stmt.value.id == inner_name:
             return True

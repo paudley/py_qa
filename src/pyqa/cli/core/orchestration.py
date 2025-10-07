@@ -28,6 +28,12 @@ class OrchestratorExecutionPipeline(ExecutionPipeline):
     def __init__(self, orchestrator: Orchestrator) -> None:
         self._orchestrator = orchestrator
 
+    @property
+    def pipeline_name(self) -> str:
+        """Return the human-readable name for this execution pipeline."""
+
+        return "orchestrator"
+
     def run(self, config: Config, *, root: Path) -> RunResult:
         """Execute the orchestrator for ``config`` rooted at ``root``.
 

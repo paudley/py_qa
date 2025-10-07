@@ -22,8 +22,30 @@ from ..advice.builder import AdviceBuilder, AdviceEntry
 SARIF_VERSION = "2.1.0"
 SARIF_SCHEMA = "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json"
 
-_ADVICE_BUILDER = AdviceBuilder()
-_ANNOTATION_ENGINE = _ADVICE_BUILDER.annotation_engine
+
+@dataclass(slots=True)
+class _AdviceProviderContext:
+    """Hold mutable advice builder state without relying on globals."""
+
+    builder: AdviceBuilder
+
+    @property
+    def annotation_engine(self) -> AnnotationProvider:
+        """Return the active annotation provider used by the builder."""
+
+        return self.builder.annotation_engine
+
+    def replace(self, provider: AnnotationProvider) -> None:
+        """Replace the underlying advice builder using ``provider``.
+
+        Args:
+            provider: Annotation provider injected into the new builder.
+        """
+
+        self.builder = AdviceBuilder(annotation_engine=provider)
+
+
+_ADVICE_PROVIDER_CONTEXT = _AdviceProviderContext(builder=AdviceBuilder())
 SEVERITY_ORDER: Final[dict[Severity, int]] = {
     Severity.ERROR: 0,
     Severity.WARNING: 1,
@@ -33,6 +55,26 @@ SEVERITY_ORDER: Final[dict[Severity, int]] = {
 UNKNOWN_SEVERITY_RANK: Final[int] = 99
 ADVICE_PLACEHOLDER: Final[str] = "{advice"
 HIGHLIGHT_PLACEHOLDER: Final[str] = "{highlighted_message"
+
+
+@dataclass(frozen=True)
+class HighlightWrapper:
+    """Represent Markdown wrappers applied to highlighted spans."""
+
+    prefix: str
+    suffix: str
+
+
+_HIGHLIGHT_WRAPPERS: Final[dict[HighlightKind, HighlightWrapper]] = {
+    "function": HighlightWrapper(prefix="**`", suffix="`**"),
+    "class": HighlightWrapper(prefix="**`", suffix="`**"),
+    "argument": HighlightWrapper(prefix="`", suffix="`"),
+    "variable": HighlightWrapper(prefix="`", suffix="`"),
+    "attribute": HighlightWrapper(prefix="`", suffix="`"),
+    "file": HighlightWrapper(prefix="`", suffix="`"),
+}
+_DEFAULT_HIGHLIGHT_KIND: Final[HighlightKind] = "argument"
+_DEFAULT_HIGHLIGHT_WRAPPER: Final[HighlightWrapper] = HighlightWrapper(prefix="`", suffix="`")
 
 
 @dataclass(slots=True)
@@ -541,7 +583,7 @@ def _build_advice_context(
         return _AdviceContext(entries=[], summary="", primary_body="", primary_category="", count=0)
 
     advice_inputs = _diagnostics_to_advice_inputs(diagnostics)
-    advice_entries = _ADVICE_BUILDER.build(advice_inputs)
+    advice_entries = _ADVICE_PROVIDER_CONTEXT.builder.build(advice_inputs)
     advice_count = len(advice_entries)
     if not advice_entries:
         return _AdviceContext(entries=[], summary="", primary_body="", primary_category="", count=0)
@@ -736,18 +778,10 @@ def _highlight_markdown(message: str) -> str:
     Returns:
         str: Message with highlighted spans wrapped in Markdown emphasis.
     """
-    spans = _ANNOTATION_ENGINE.message_spans(message)
+    spans = _ADVICE_PROVIDER_CONTEXT.annotation_engine.message_spans(message)
     if not spans:
         return message
     sorted_spans = sorted(spans, key=lambda span: (span.start, span.end))
-    wrappers: dict[HighlightKind, tuple[str, str]] = {
-        "function": ("**`", "`**"),
-        "class": ("**`", "`**"),
-        "argument": ("`", "`"),
-        "variable": ("`", "`"),
-        "attribute": ("`", "`"),
-        "file": ("`", "`"),
-    }
     result: list[str] = []
     cursor = 0
     for span in sorted_spans:
@@ -756,16 +790,19 @@ def _highlight_markdown(message: str) -> str:
             continue
         result.append(message[cursor:start])
         token = message[start:end]
-        prefix, suffix = wrappers.get(span.kind or "argument", ("`", "`"))
-        result.append(f"{prefix}{token}{suffix}")
+        key = cast(HighlightKind, span.kind) if span.kind is not None else _DEFAULT_HIGHLIGHT_KIND
+        wrapper = _HIGHLIGHT_WRAPPERS.get(key, _DEFAULT_HIGHLIGHT_WRAPPER)
+        result.append(f"{wrapper.prefix}{token}{wrapper.suffix}")
         cursor = end
     result.append(message[cursor:])
     return "".join(result)
 
 
 def set_annotation_provider(provider: AnnotationProvider) -> None:
-    """Override the annotation provider used by report emitters."""
+    """Override the annotation provider used by report emitters.
 
-    global _ADVICE_BUILDER, _ANNOTATION_ENGINE
-    _ADVICE_BUILDER = AdviceBuilder(annotation_engine=provider)
-    _ANNOTATION_ENGINE = _ADVICE_BUILDER.annotation_engine
+    Args:
+        provider: Provider that should service future annotation requests.
+    """
+
+    _ADVICE_PROVIDER_CONTEXT.replace(provider)

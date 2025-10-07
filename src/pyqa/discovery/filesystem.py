@@ -42,6 +42,12 @@ class FilesystemDiscovery(DiscoveryStrategy):
 
         self.follow_symlinks = follow_symlinks
 
+    @property
+    def identifier(self) -> str:
+        """Return the identifier for the filesystem discovery strategy."""
+
+        return "filesystem"
+
     def discover(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
         """Yield files deemed discoverable under ``root``.
 
