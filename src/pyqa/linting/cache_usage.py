@@ -7,7 +7,7 @@ import ast
 from pathlib import Path
 
 from pyqa.cli.commands.lint.preparation import PreparedLintState
-from pyqa.core.models import Diagnostic, ToolOutcome, ToolExitCategory
+from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path_key
 
@@ -18,7 +18,7 @@ from .utils import collect_python_files
 def run_cache_linter(state: PreparedLintState, *, emit_to_logger: bool = True) -> InternalLintReport:
     """Flag direct ``functools.lru_cache`` usage to enforce internal cache wrappers."""
 
-    logger = state.logger
+    _ = emit_to_logger
     files = collect_python_files(state)
     diagnostics: list[Diagnostic] = []
     stdout_lines: list[str] = []
@@ -29,7 +29,7 @@ def run_cache_linter(state: PreparedLintState, *, emit_to_logger: bool = True) -
             tree = ast.parse(source)
         except SyntaxError:
             continue
-        visitor = _CacheVisitor(file_path, state, emit_to_logger)
+        visitor = _CacheVisitor(file_path, state)
         visitor.visit(tree)
         diagnostics.extend(visitor.diagnostics)
         stdout_lines.extend(visitor.stdout)
@@ -51,11 +51,9 @@ def run_cache_linter(state: PreparedLintState, *, emit_to_logger: bool = True) -
 class _CacheVisitor(ast.NodeVisitor):
     """Detect references to ``lru_cache`` decorators."""
 
-    def __init__(self, path: Path, state: PreparedLintState, emit: bool) -> None:
+    def __init__(self, path: Path, state: PreparedLintState) -> None:
         self._path = path
         self._state = state
-        self._emit = emit
-        self._logger = state.logger
         self.diagnostics: list[Diagnostic] = []
         self.stdout: list[str] = []
         self._functools_aliases: set[str] = set()
@@ -115,8 +113,6 @@ class _CacheVisitor(ast.NodeVisitor):
         self.diagnostics.append(diagnostic)
         formatted = f"{normalized}:{line}: {message}"
         self.stdout.append(formatted)
-        if self._emit:
-            self._logger.fail(formatted)
 
 
 __all__ = ["run_cache_linter"]

@@ -7,7 +7,7 @@ from .base import InternalLintReport, InternalLintRunner
 from .cache_usage import run_cache_linter
 from .closures import run_closure_linter
 from .docstrings import run_docstring_linter
-from .registry import InternalLinterDefinition, INTERNAL_LINTERS, iter_internal_linters
+from .registry import INTERNAL_LINTERS, InternalLinterDefinition, iter_internal_linters
 from .signatures import run_signature_linter
 from .suppressions import run_suppression_linter
 from .typing_strict import run_typing_linter

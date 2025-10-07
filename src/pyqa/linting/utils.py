@@ -12,7 +12,7 @@ if False:  # pragma: no cover - import guard for type checking
     from pyqa.cli.commands.lint.preparation import PreparedLintState
 
 
-def collect_python_files(state: "PreparedLintState") -> list[Path]:
+def collect_python_files(state: PreparedLintState) -> list[Path]:
     """Return Python source files addressed by the current lint invocation."""
 
     options = state.options.target_options

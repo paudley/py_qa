@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Final, Literal, Protocol, cast, runtime_c
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
-from ..core.models import Diagnostic, OutputFilter, RawDiagnostic
+from ..core.models import Diagnostic, OutputFilter, RawDiagnostic, ToolOutcome
 
 
 class ToolContext(BaseModel):
@@ -97,6 +97,7 @@ else:
 
 
 InstallerCallable = Callable[["ToolContext"], None]
+InternalActionRunner = Callable[["ToolContext"], ToolOutcome]
 
 
 class ActionExitCodes(BaseModel):
@@ -176,6 +177,7 @@ class ToolAction(BaseModel):
     env: Mapping[str, str] = Field(default_factory=dict)
     parser: ParserField = None
     exit_codes: ActionExitCodes = Field(default_factory=ActionExitCodes)
+    internal_runner: InternalActionRunner | None = None
 
     @field_validator("filter_patterns", mode="before")
     @classmethod
@@ -197,6 +199,18 @@ class ToolAction(BaseModel):
             return {str(k): str(v) for k, v in value.items()}
         raise TypeError("env must be a mapping of strings")
 
+    @field_validator("internal_runner", mode="before")
+    @classmethod
+    def _coerce_internal_runner(
+        cls,
+        value: object,
+    ) -> InternalActionRunner | None:
+        if value is None:
+            return None
+        if callable(value):
+            return cast(InternalActionRunner, value)
+        raise TypeError("internal_runner must be callable")
+
     def build_command(self, ctx: ToolContext) -> list[str]:
         """Return the command arguments for this action within *ctx*."""
 
@@ -204,6 +218,12 @@ class ToolAction(BaseModel):
         if self.append_files and ctx.files:
             cmd.extend(str(path) for path in ctx.files)
         return cmd
+
+    @property
+    def is_internal(self) -> bool:
+        """Return ``True`` when the action executes via an internal runner."""
+
+        return self.internal_runner is not None
 
     def filter_stdout(self, text: str, extra_patterns: Sequence[str] | None = None) -> str:
         """Filter stdout text using configured patterns and *extra_patterns*."""

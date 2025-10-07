@@ -490,6 +490,9 @@ class Orchestrator:
             if bail mode should halt execution, otherwise ``"execute"``.
         """
 
+        if invocation.internal_runner is not None:
+            return _DECISION_EXECUTE
+
         files: Sequence[Path] = invocation.context.files
         cached_entry = load_cached_outcome(
             environment.cache,
@@ -699,6 +702,7 @@ class Orchestrator:
             context=context,
             command=tuple(prepared.cmd),
             env_overrides=env_overrides,
+            internal_runner=action.internal_runner,
         )
 
     def _iter_tool_actions(self) -> list[tuple[Tool, ToolAction]]:
@@ -736,6 +740,15 @@ class Orchestrator:
         Returns:
             PreparationResult: Description of the preparation outcome.
         """
+
+        if action.internal_runner is not None:
+            prepared = PreparedCommand.from_parts(
+                cmd=(f"internal::{tool.name}", action.name),
+                env={},
+                version=None,
+                source="project",
+            )
+            return PreparationResult(tool=tool.name, action=action.name, prepared=prepared, error=None)
 
         try:
             command = tuple(action.build_command(context))

@@ -21,7 +21,9 @@ class InternalLintReport:
 class InternalLintRunner(Protocol):
     """Protocol describing reusable internal linter callables."""
 
-    def __call__(self, state: "PreparedLintState", *, emit_to_logger: bool) -> InternalLintReport:  # pragma: no cover - structural contract
+    def __call__(
+        self, state: PreparedLintState, *, emit_to_logger: bool
+    ) -> InternalLintReport:  # pragma: no cover - structural contract
         """Execute the linter using CLI-prepared state."""
 
 

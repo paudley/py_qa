@@ -15,6 +15,7 @@ from ....config import Config
 from ....discovery import build_default_discovery
 from ....discovery.base import SupportsDiscovery
 from ....interfaces.orchestration import ExecutionPipeline
+from ....linting.registry import configure_internal_tool_defaults, ensure_internal_tools_registered
 from ....orchestration.orchestrator import OrchestratorHooks
 from ....tools.builtin_registry import initialize_registry
 from ....tools.registry import DEFAULT_REGISTRY, ToolRegistry
@@ -113,10 +114,12 @@ def build_lint_runtime_context(
     """
 
     deps = dependencies or DEFAULT_LINT_DEPENDENCIES
+    catalog_snapshot = deps.catalog_initializer(deps.registry)
+    ensure_internal_tools_registered(registry=deps.registry, state=state, config=config)
+    configure_internal_tool_defaults(registry=deps.registry, state=state)
     hooks = OrchestratorHooks()
     discovery = deps.discovery_factory()
     orchestrator = deps.orchestrator_factory(deps.registry, discovery, hooks)
-    catalog_snapshot = deps.catalog_initializer(deps.registry)
     services = deps.services
     plugins: SimpleNamespace | None = None
     if services is not None:

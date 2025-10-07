@@ -14,7 +14,7 @@ from ..analysis.spacy.loader import load_language
 from ..analysis.treesitter.grammars import ensure_language
 from ..analysis.treesitter.resolver import _build_parser_loader
 from ..cli.commands.lint.preparation import PreparedLintState
-from ..core.models import Diagnostic, ToolOutcome, ToolExitCategory
+from ..core.models import Diagnostic, ToolExitCategory, ToolOutcome
 from ..core.severity import Severity
 from ..filesystem.paths import normalize_path_key
 from .base import InternalLintReport
@@ -519,8 +519,8 @@ def run_docstring_linter(
         InternalLintReport: Aggregated outcome and file context for the run.
     """
 
+    _ = emit_to_logger  # Retained for CLI compatibility; output is handled via ToolOutcome.
     files = collect_python_files(state)
-    logger = state.logger
     stdout_lines: list[str] = []
     stderr_lines: list[str] = []
     diagnostics: list[Diagnostic] = []
@@ -528,22 +528,9 @@ def run_docstring_linter(
     returncode = 0
     files_tuple = tuple(files)
 
-    def _emit_ok(message: str) -> None:
-        if emit_to_logger:
-            logger.ok(message)
-
-    def _emit_warn(message: str) -> None:
-        if emit_to_logger:
-            logger.warn(message)
-
-    def _emit_fail(message: str) -> None:
-        if emit_to_logger:
-            logger.fail(message)
-
     if not files:
         message = "No Python files discovered for docstring analysis"
         stdout_lines.append(message)
-        _emit_ok(message)
         outcome = ToolOutcome(
             tool="docstrings",
             action="check",
@@ -560,7 +547,6 @@ def run_docstring_linter(
     except RuntimeError as exc:
         warning = str(exc)
         stderr_lines.append(warning)
-        _emit_warn(warning)
         outcome = ToolOutcome(
             tool="docstrings",
             action="check",
@@ -575,7 +561,6 @@ def run_docstring_linter(
     issues = linter.lint_paths(files)
     for warning in linter.consume_warnings():
         stderr_lines.append(warning)
-        _emit_warn(warning)
 
     if issues:
         exit_category = ToolExitCategory.DIAGNOSTIC
@@ -584,15 +569,12 @@ def run_docstring_linter(
             normalized = normalize_path_key(issue.path, base_dir=state.root)
             message = f"{normalized}:{issue.line}: {issue.message}"
             stdout_lines.append(message)
-            _emit_fail(message)
             diagnostics.append(_issue_to_diagnostic(issue, root=state.root))
         summary = f"Docstring linter reported {len(issues)} issue(s) across {len(files)} file(s)"
         stdout_lines.append(summary)
-        _emit_fail(summary)
     else:
         message = f"Docstring checks passed for {len(files)} file(s)"
         stdout_lines.append(message)
-        _emit_ok(message)
 
     outcome = ToolOutcome(
         tool="docstrings",

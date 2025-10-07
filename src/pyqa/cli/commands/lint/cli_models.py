@@ -750,6 +750,14 @@ def _meta_params_dependency(
         LintMetaParams: Structured meta-action configuration.
     """
 
+    if normal:
+        check_docstrings = True
+        check_suppressions = True
+        check_types_strict = True
+        check_closures = True
+        check_signatures = True
+        check_cache_usage = True
+
     return LintMetaParams(
         doctor=doctor,
         tool_info=tool_info,

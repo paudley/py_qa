@@ -12,6 +12,7 @@ from rich.progress import Progress
 from pyqa.runtime.console import is_tty
 
 from ....config import ConfigError
+from ....linting.registry import iter_internal_linters
 from ....orchestration.tool_selection import PHASE_ORDER, PhaseLiteral
 from ...core.config_builder import build_config
 from ...core.runtime import ServiceResolutionError
@@ -23,9 +24,9 @@ from .meta import (
     handle_runtime_meta_actions,
 )
 from .params import LintCLIInputs
-from .preparation import PreparedLintState, prepare_lint_state
+from .preparation import PROVIDED_FLAG_INTERNAL_LINTERS, PreparedLintState, prepare_lint_state
 from .progress import ExecutionProgressController
-from .reporting import append_internal_quality_checks, handle_reporting
+from .reporting import handle_reporting
 from .runtime import LintRuntimeContext, build_lint_runtime_context
 
 LintPhaseLiteral = PhaseLiteral
@@ -62,6 +63,7 @@ def _execute_lint(
     """
     _validate_cli_combinations(inputs)
     state = prepare_lint_state(ctx, inputs, logger=logger)
+    _activate_internal_linters(state)
     early_meta = handle_initial_meta_actions(state)
     _exit_if_handled(early_meta)
     runtime = _build_runtime_context(state)
@@ -181,12 +183,6 @@ def _run_lint_pipeline(runtime: LintRuntimeContext) -> None:
     controller.install(runtime.hooks)
 
     result = runtime.orchestrator.run(config, root=runtime.state.root)
-    append_internal_quality_checks(
-        config=config,
-        state=runtime.state,
-        run_result=result,
-        logger=runtime.state.logger,
-    )
 
     controller.advance_rendering_phase()
 
@@ -230,5 +226,31 @@ def _exit_if_handled(outcome: MetaActionOutcome) -> None:
 
 # Backwards compatibility ------------------------------------------------------
 
-_append_internal_quality_checks = append_internal_quality_checks
 _handle_reporting = handle_reporting
+
+
+def _activate_internal_linters(state: PreparedLintState) -> None:
+    """Ensure meta flags translate into internal tool selection."""
+
+    selection = state.options.selection_options
+    meta = state.meta
+    if meta.normal:
+        provided = set(state.options.provided)
+        provided.add(PROVIDED_FLAG_INTERNAL_LINTERS)
+        state.options._provided = frozenset(provided)  # type: ignore[attr-defined]
+        return
+
+    existing = {name.lower() for name in selection.only}
+    added = False
+    for definition in iter_internal_linters():
+        attribute = definition.meta_attribute
+        if attribute and getattr(meta, attribute, False):
+            if definition.name.lower() not in existing:
+                selection.only.append(definition.name)
+                existing.add(definition.name.lower())
+                added = True
+    if added:
+        provided = set(state.options.provided)
+        provided.add("only")
+        provided.add(PROVIDED_FLAG_INTERNAL_LINTERS)
+        state.options._provided = frozenset(provided)  # type: ignore[attr-defined]

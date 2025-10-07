@@ -63,6 +63,7 @@ PROVIDED_FLAG_ADVICE: Final[str] = "advice"
 PROVIDED_FLAG_EXCLUDE: Final[str] = "exclude"
 PROVIDED_FLAG_USE_LOCAL_LINTERS: Final[str] = "use_local_linters"
 PROVIDED_FLAG_NO_LINT_TESTS: Final[str] = "no_lint_tests"
+PROVIDED_FLAG_INTERNAL_LINTERS: Final[str] = "internal_linters"
 
 
 @dataclass(slots=True)
@@ -579,6 +580,7 @@ def _apply_normal_preset(
                 PROVIDED_FLAG_EXCLUDE,
                 PROVIDED_FLAG_USE_LOCAL_LINTERS,
                 PROVIDED_FLAG_NO_LINT_TESTS,
+                PROVIDED_FLAG_INTERNAL_LINTERS,
             },
         )
 
@@ -675,6 +677,12 @@ def _collect_provided_flags(
         "only",
         "language",
         "normal",
+        "check_docstrings",
+        "check_suppressions",
+        "check_types_strict",
+        "check_closures",
+        "check_signatures",
+        "check_cache_usage",
         "fix_only",
         "check_only",
         "verbose",
@@ -703,6 +711,7 @@ def _collect_provided_flags(
         "sensitivity",
         "sql_dialect",
         PROVIDED_FLAG_ADVICE,
+        PROVIDED_FLAG_INTERNAL_LINTERS,
     }
     provided: set[str] = set()
     for name in tracked:

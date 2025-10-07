@@ -18,17 +18,70 @@ from typer.testing import CliRunner
 
 from pyqa.cli.app import app
 from pyqa.cli.commands.lint import command as lint_module
-from pyqa.cli.commands.lint import reporting as lint_reporting
 from pyqa.cli.commands.lint import runtime as lint_runtime
 from pyqa.cli.core.options import LintOptions
 from pyqa.cli.core.typer_ext import _primary_option_name
+from pyqa.cli.commands.lint.params import LintMetaParams
+from pyqa.cli.commands.lint.preparation import PROVIDED_FLAG_INTERNAL_LINTERS
 from pyqa.config import Config
 from pyqa.core.config.loader import ConfigLoader
 from pyqa.core.environment.tool_env.models import PreparedCommand
 from pyqa.core.models import Diagnostic, RunResult, ToolOutcome, ToolExitCategory
 from pyqa.core.severity import Severity
 from pyqa.linting.base import InternalLintReport
-from pyqa.linting.registry import InternalLinterDefinition
+from pyqa.linting.quality import run_quality_linter
+from pyqa.linting.registry import ensure_internal_tools_registered
+from pyqa.tools.base import ToolContext
+from pyqa.tools.registry import ToolRegistry
+
+
+def _meta_flags(
+    *,
+    normal: bool = False,
+    check_docstrings: bool = False,
+    check_suppressions: bool = False,
+    check_types_strict: bool = False,
+    check_closures: bool = False,
+    check_signatures: bool = False,
+    check_cache_usage: bool = False,
+) -> LintMetaParams:
+    """Return ``LintMetaParams`` populated for test scenarios."""
+
+    return LintMetaParams(
+        doctor=False,
+        tool_info=None,
+        fetch_all_tools=False,
+        validate_schema=False,
+        normal=normal,
+        check_docstrings=check_docstrings,
+        check_suppressions=check_suppressions,
+        check_types_strict=check_types_strict,
+        check_closures=check_closures,
+        check_signatures=check_signatures,
+        check_cache_usage=check_cache_usage,
+    )
+
+
+class _CapturingLogger:
+    """Stub CLI logger that records messages for assertions."""
+
+    def __init__(self) -> None:
+        self.ok_messages: list[str] = []
+        self.warn_messages: list[str] = []
+        self.fail_messages: list[str] = []
+        self.echo_messages: list[str] = []
+
+    def ok(self, message: str) -> None:
+        self.ok_messages.append(message)
+
+    def warn(self, message: str) -> None:
+        self.warn_messages.append(message)
+
+    def fail(self, message: str) -> None:
+        self.fail_messages.append(message)
+
+    def echo(self, message: str) -> None:
+        self.echo_messages.append(message)
 
 
 def test_lint_warns_when_py_qa_path_outside_workspace(tmp_path: Path, monkeypatch) -> None:
@@ -188,7 +241,7 @@ def test_docstring_linter_passes(tmp_path: Path, monkeypatch) -> None:
     result = runner.invoke(app, ["lint", "--check-docstrings", "--root", str(tmp_path), "--no-emoji"])
 
     assert result.exit_code == 0
-    assert "Docstring checks passed" in result.stdout
+    assert "0 diagnostic(s)" in result.stdout
 
 
 def test_docstring_linter_fails(tmp_path: Path, monkeypatch) -> None:
@@ -365,7 +418,7 @@ def test_lint_no_lint_tests_flag(monkeypatch, tmp_path: Path) -> None:
     assert any(path == resolved_tests for path in config.file_discovery.excludes)
 
 
-def test_append_quality_checks_adds_outcome(tmp_path: Path) -> None:
+def test_quality_linter_reports_issues(tmp_path: Path) -> None:
     target = tmp_path / "module.py"
     target.write_text("print('hello')\n", encoding="utf-8")
 
@@ -389,46 +442,34 @@ copyright = "Blackcat"
     config = load_result.config
     config.severity.sensitivity = "maximum"
 
-    run_result = RunResult(
-        root=tmp_path,
-        files=[target],
-        outcomes=[],
-        tool_versions={},
-    )
-
     class _StubLogger:
-        """Minimal CLI logger stub used for quality check tests."""
-
-        def ok(self, message: str) -> None:
-            pass
+        def ok(self, message: str) -> None:  # noqa: D401 - stub
+            return None
 
         def warn(self, message: str) -> None:
-            pass
+            return None
 
         def fail(self, message: str) -> None:
-            pass
+            return None
 
-    stub_state = SimpleNamespace(
+    state = SimpleNamespace(
         root=tmp_path,
-        options=SimpleNamespace(selection_options=SimpleNamespace(only=[], filters=[])),
-        meta=_meta_flags(check_docstrings=False),
+        options=SimpleNamespace(
+            target_options=SimpleNamespace(
+                root=tmp_path,
+                paths=[target],
+                dirs=[],
+                exclude=[],
+                paths_from_stdin=False,
+            ),
+        ),
+        meta=_meta_flags(),
         logger=_StubLogger(),
     )
 
-    lint_module._append_internal_quality_checks(
-        config=config,
-        state=stub_state,
-        run_result=run_result,
-    )
-
-    quality_outcomes = [outcome for outcome in run_result.outcomes if outcome.tool == "quality"]
-    assert quality_outcomes
-    assert any("license" in outcome.action for outcome in quality_outcomes)
-    assert any(
-        "SPDX" in line or "license" in line.lower() or "copyright" in line.lower()
-        for outcome in quality_outcomes
-        for line in outcome.stdout
-    )
+    report = run_quality_linter(state, emit_to_logger=False, config=config)
+    assert report.outcome.returncode != 0
+    assert any("license" in line.lower() for line in report.outcome.stdout)
 
 
 def _build_stub_state(
@@ -438,92 +479,68 @@ def _build_stub_state(
     filters: list[str],
     check_docstrings: bool,
     logger,
+    target_paths: list[Path] | None = None,
 ):
+    class _StubOptions:
+        def __init__(self, root: Path, only: list[str], filters: list[str], target_paths: list[Path] | None) -> None:
+            self.selection_options = SimpleNamespace(only=list(only), filters=list(filters))
+            self.target_options = SimpleNamespace(
+                root=root,
+                paths=list(target_paths or []),
+                dirs=[],
+                exclude=[],
+                paths_from_stdin=False,
+            )
+            self._provided = frozenset()
+
+        @property
+        def provided(self) -> frozenset[str]:
+            return self._provided
+
     return SimpleNamespace(
         root=root,
-        options=SimpleNamespace(selection_options=SimpleNamespace(only=only, filters=filters)),
+        options=_StubOptions(root, only, filters, target_paths),
         meta=_meta_flags(check_docstrings=check_docstrings),
         logger=logger,
     )
 
 
-def _make_docstring_report(path: Path, *, warnings: list[str] | None = None) -> InternalLintReport:
-    diagnostics = [
-        Diagnostic(
-            file=str(path),
-            line=1,
-            column=None,
-            severity=Severity.ERROR,
-            message="Missing module docstring",
-            tool="docstrings",
-            code="docstrings:missing-module-docstring",
-        ),
-    ]
-    outcome = ToolOutcome(
-        tool="docstrings",
-        action="check",
-        returncode=1,
-        stdout=[f"{path}:1: Missing module docstring"],
-        stderr=warnings or [],
-        diagnostics=diagnostics,
-        exit_category=ToolExitCategory.DIAGNOSTIC,
-    )
-    return InternalLintReport(outcome=outcome, files=(path,))
-
-
-class _CapturingLogger:
-    def __init__(self) -> None:
-        self.ok_messages: list[str] = []
-        self.warn_messages: list[str] = []
-        self.fail_messages: list[str] = []
-
-    def ok(self, message: str) -> None:
-        self.ok_messages.append(message)
-
-    def warn(self, message: str) -> None:
-        self.warn_messages.append(message)
-
-    def fail(self, message: str) -> None:
-        self.fail_messages.append(message)
-
-
-def _meta_flags(**overrides) -> SimpleNamespace:
-    defaults = {
-        "doctor": False,
-        "tool_info": None,
-        "fetch_all_tools": False,
-        "validate_schema": False,
-        "normal": False,
-        "check_docstrings": False,
-        "check_suppressions": False,
-        "check_types_strict": False,
-        "check_closures": False,
-        "check_signatures": False,
-        "check_cache_usage": False,
-    }
-    defaults.update(overrides)
-    return SimpleNamespace(**defaults)
-
-
-def test_append_quality_docstrings_meta(monkeypatch, tmp_path: Path) -> None:
-    doc_path = tmp_path / "pkg" / "module.py"
-    report = _make_docstring_report(doc_path, warnings=["spaCy missing"])
-    captures: dict[str, Any] = {}
-
-    def fake_run(state, *, emit_to_logger: bool):
-        captures["emit_to_logger"] = emit_to_logger
-        return report
-
-    definition = InternalLinterDefinition(
-        name="docstrings",
-        meta_attribute="check_docstrings",
-        selection_tokens=("docstring", "docstrings"),
-        runner=fake_run,
-        description="stub",
+def test_activate_internal_linters_meta_sets_only(tmp_path: Path) -> None:
+    logger = _CapturingLogger()
+    state = _build_stub_state(
+        root=tmp_path,
+        only=[],
+        filters=[],
+        check_docstrings=True,
+        logger=logger,
+        target_paths=[tmp_path / "module.py"],
     )
 
-    monkeypatch.setattr(lint_reporting, "iter_internal_linters", lambda: (definition,))
+    lint_module._activate_internal_linters(state)
 
+    assert state.options.selection_options.only == ["docstrings"]
+    provided = state.options.provided
+    assert "only" in provided
+    assert PROVIDED_FLAG_INTERNAL_LINTERS in provided
+
+
+def test_activate_internal_linters_no_meta(tmp_path: Path) -> None:
+    logger = _CapturingLogger()
+    state = _build_stub_state(
+        root=tmp_path,
+        only=[],
+        filters=[],
+        check_docstrings=False,
+        logger=logger,
+    )
+
+    lint_module._activate_internal_linters(state)
+
+    assert state.options.selection_options.only == []
+    assert PROVIDED_FLAG_INTERNAL_LINTERS not in state.options.provided
+
+
+def test_activate_internal_linters_idempotent(tmp_path: Path) -> None:
     logger = _CapturingLogger()
     state = _build_stub_state(
         root=tmp_path,
@@ -532,175 +549,39 @@ def test_append_quality_docstrings_meta(monkeypatch, tmp_path: Path) -> None:
         check_docstrings=True,
         logger=logger,
     )
-    config = SimpleNamespace(
-        quality=SimpleNamespace(enforce_in_lint=False),
-        severity=SimpleNamespace(sensitivity="standard"),
-        license=SimpleNamespace(),
-    )
-    run_result = RunResult(root=tmp_path, files=[], outcomes=[], tool_versions={})
 
-    lint_module._append_internal_quality_checks(
-        config=config,
-        state=state,
-        run_result=run_result,
-        logger=state.logger,
-    )
+    lint_module._activate_internal_linters(state)
+    lint_module._activate_internal_linters(state)
 
-    assert captures["emit_to_logger"] is True
-    assert run_result.outcomes[-1] is report.outcome
-    assert doc_path in run_result.files
-    assert not logger.warn_messages
+    assert state.options.selection_options.only == ["docstrings"]
 
 
-def test_append_quality_docstrings_filters(monkeypatch, tmp_path: Path) -> None:
-    doc_path = tmp_path / "pkg" / "module.py"
-    report = _make_docstring_report(doc_path, warnings=["spaCy missing"])
-    captures: dict[str, Any] = {}
-
-    def fake_run(state, *, emit_to_logger: bool):
-        captures["emit_to_logger"] = emit_to_logger
-        return report
-
-    definition = InternalLinterDefinition(
-        name="docstrings",
-        meta_attribute="check_docstrings",
-        selection_tokens=("docstring", "docstrings"),
-        runner=fake_run,
-        description="stub",
-    )
-
-    monkeypatch.setattr(lint_reporting, "iter_internal_linters", lambda: (definition,))
-
+def test_ensure_internal_tools_registered(tmp_path: Path) -> None:
+    registry = ToolRegistry()
     logger = _CapturingLogger()
+    target = tmp_path / "module.py"
+    target.write_text("print('hello')\\n", encoding="utf-8")
     state = _build_stub_state(
         root=tmp_path,
-        only=["docstrings"],
+        only=[],
         filters=[],
         check_docstrings=False,
         logger=logger,
-    )
-    config = SimpleNamespace(
-        quality=SimpleNamespace(enforce_in_lint=False),
-        severity=SimpleNamespace(sensitivity="standard"),
-        license=SimpleNamespace(),
-    )
-    run_result = RunResult(root=tmp_path, files=[], outcomes=[], tool_versions={})
-
-    lint_module._append_internal_quality_checks(
-        config=config,
-        state=state,
-        run_result=run_result,
-        logger=state.logger,
+        target_paths=[target],
     )
 
-    assert captures["emit_to_logger"] is False
-    assert run_result.outcomes[-1] is report.outcome
-    assert doc_path in run_result.files
-    assert logger.warn_messages == report.outcome.stderr
+    config = ConfigLoader.for_root(tmp_path).load_with_trace().config
+    ensure_internal_tools_registered(registry=registry, state=state, config=config)
+    ensure_internal_tools_registered(registry=registry, state=state, config=config)
 
+    internal_tool = registry.try_get('docstrings')
+    assert internal_tool is not None
+    action = internal_tool.actions[0]
+    assert action.is_internal
 
-def test_append_internal_linter_meta_flag(monkeypatch, tmp_path: Path) -> None:
-    captures: dict[str, Any] = {}
-
-    def fake_runner(state, *, emit_to_logger: bool) -> InternalLintReport:
-        captures["emit"] = emit_to_logger
-        outcome = ToolOutcome(
-            tool="internal-suppressions",
-            action="check",
-            returncode=0,
-            stdout=[],
-            stderr=[],
-            diagnostics=[],
-            exit_category=ToolExitCategory.SUCCESS,
-        )
-        return InternalLintReport(outcome=outcome, files=())
-
-    definition = InternalLinterDefinition(
-        name="suppressions",
-        meta_attribute="check_suppressions",
-        selection_tokens=("suppressions",),
-        runner=fake_runner,
-        description="stub",
-    )
-
-    monkeypatch.setattr(lint_reporting, "iter_internal_linters", lambda: (definition,))
-
-    state = SimpleNamespace(
-        root=tmp_path,
-        options=SimpleNamespace(selection_options=SimpleNamespace(only=[], filters=[])),
-        meta=_meta_flags(check_suppressions=True),
-        logger=_CapturingLogger(),
-    )
-    config = SimpleNamespace(
-        quality=SimpleNamespace(enforce_in_lint=False),
-        severity=SimpleNamespace(sensitivity="standard"),
-        license=SimpleNamespace(),
-    )
-    run_result = RunResult(root=tmp_path, files=[], outcomes=[], tool_versions={})
-
-    lint_module._append_internal_quality_checks(
-        config=config,
-        state=state,
-        run_result=run_result,
-        logger=state.logger,
-    )
-
-    assert captures["emit"] is True
-    assert any(outcome.tool == "internal-suppressions" for outcome in run_result.outcomes)
-
-
-def test_append_internal_linter_selection(monkeypatch, tmp_path: Path) -> None:
-    captures: dict[str, Any] = {}
-
-    def fake_runner(state, *, emit_to_logger: bool) -> InternalLintReport:
-        captures.setdefault("invocations", 0)
-        captures["invocations"] += 1
-        outcome = ToolOutcome(
-            tool="internal-cache",
-            action="check",
-            returncode=0,
-            stdout=["warning"],
-            stderr=["warning"],
-            diagnostics=[],
-            exit_category=ToolExitCategory.SUCCESS,
-        )
-        return InternalLintReport(outcome=outcome, files=())
-
-    definition = InternalLinterDefinition(
-        name="cache",
-        meta_attribute="check_cache_usage",
-        selection_tokens=("cache",),
-        runner=fake_runner,
-        description="stub",
-    )
-
-    monkeypatch.setattr(lint_reporting, "iter_internal_linters", lambda: (definition,))
-
-    capturing_logger = _CapturingLogger()
-    state = SimpleNamespace(
-        root=tmp_path,
-        options=SimpleNamespace(selection_options=SimpleNamespace(only=["cache"], filters=[])),
-        meta=_meta_flags(),
-        logger=capturing_logger,
-    )
-    config = SimpleNamespace(
-        quality=SimpleNamespace(enforce_in_lint=False),
-        severity=SimpleNamespace(sensitivity="standard"),
-        license=SimpleNamespace(),
-    )
-    run_result = RunResult(root=tmp_path, files=[], outcomes=[], tool_versions={})
-
-    lint_module._append_internal_quality_checks(
-        config=config,
-        state=state,
-        run_result=run_result,
-        logger=capturing_logger,
-    )
-
-    assert captures.get("invocations", 0) == 1
-    assert capturing_logger.warn_messages == ["warning"]
-    assert any(outcome.tool == "internal-cache" for outcome in run_result.outcomes)
-
+    context = ToolContext(cfg=config, root=tmp_path, files=tuple(), settings={})
+    outcome = action.internal_runner(context)
+    assert outcome.tool == 'docstrings'
 
 def test_lint_meta_normal_applies_defaults(monkeypatch, tmp_path: Path) -> None:
     runner = CliRunner()
@@ -761,6 +642,7 @@ def test_lint_meta_normal_applies_defaults(monkeypatch, tmp_path: Path) -> None:
     assert options.no_lint_tests is True
     assert options.output_mode == "concise"
     assert Path("tests") in options.exclude
+    assert "internal_linters" in options.provided
     config = captured["config"]
     assert isinstance(config, Config)
     resolved_tests = (tmp_path / "tests").resolve()

@@ -7,7 +7,7 @@ import ast
 from pathlib import Path
 
 from pyqa.cli.commands.lint.preparation import PreparedLintState
-from pyqa.core.models import Diagnostic, ToolOutcome, ToolExitCategory
+from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path_key
 
@@ -20,7 +20,7 @@ _PARAMETER_THRESHOLD = 5
 def run_signature_linter(state: PreparedLintState, *, emit_to_logger: bool = True) -> InternalLintReport:
     """Flag functions exceeding the parameter threshold or using ``**kwargs``."""
 
-    logger = state.logger
+    _ = emit_to_logger
     files = collect_python_files(state)
     diagnostics: list[Diagnostic] = []
     stdout_lines: list[str] = []
@@ -31,7 +31,7 @@ def run_signature_linter(state: PreparedLintState, *, emit_to_logger: bool = Tru
             tree = ast.parse(source)
         except SyntaxError:
             continue
-        visitor = _SignatureVisitor(file_path, state, emit_to_logger)
+        visitor = _SignatureVisitor(file_path, state)
         visitor.visit(tree)
         diagnostics.extend(visitor.diagnostics)
         stdout_lines.extend(visitor.stdout)
@@ -53,11 +53,9 @@ def run_signature_linter(state: PreparedLintState, *, emit_to_logger: bool = Tru
 class _SignatureVisitor(ast.NodeVisitor):
     """Analyse function definitions for signature width."""
 
-    def __init__(self, path: Path, state: PreparedLintState, emit: bool) -> None:
+    def __init__(self, path: Path, state: PreparedLintState) -> None:
         self._path = path
         self._state = state
-        self._emit = emit
-        self._logger = state.logger
         self.diagnostics: list[Diagnostic] = []
         self.stdout: list[str] = []
 
@@ -98,8 +96,6 @@ class _SignatureVisitor(ast.NodeVisitor):
             self.diagnostics.append(diagnostic)
             formatted = f"{normalized}:{line}: {message}"
             self.stdout.append(formatted)
-            if self._emit:
-                self._logger.fail(formatted)
 
 
 __all__ = ["run_signature_linter"]

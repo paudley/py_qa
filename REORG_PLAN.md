@@ -248,6 +248,21 @@ specification as a standalone project.
 
 Following the SOLID-focused refactors, we must bring the codebase into alignment with the reinforced coding rules, splitting the initiative into targeted sub-phases.
 
+### Phase 8.0 – Internal Linter Orchestration
+
+1. **Unify internal linter infrastructure**
+   * Introduce an `InternalToolDefinition` registry that maps the existing internal linters (docstrings, suppressions, strict typing, closures, signatures, cache usage, and the quality/license enforcement) onto the standard `Tool` execution pipeline.
+   * Provide an adapter layer that converts each internal runner into a `ToolAction` producing `ToolOutcome` objects, avoiding direct logging and aligning with the diagnostics pipeline.
+2. **Orchestrator integration**
+   * Extend the orchestrator plan/build steps so internal linters are scheduled alongside external tools when selected (via `--only`, meta flags, or presets). Ensure cache semantics and disable/enable flags work consistently.
+   * Update progress handling (`ExecutionProgressController`) so totals/descriptions include internal tools and the live status reflects their execution.
+3. **CLI/config wiring**
+   * Map CLI flags (`--check-*`, `--normal`) to internal tool selection through the registry; set `LintOptions.provided` markers for reporting.
+   * Document the selection semantics in CLI help and developer docs.
+4. **Testing**
+   * Add integration tests covering mixed internal/external runs, internal-only runs, and `--normal` presets to confirm orchestrator scheduling, progress rendering, and consolidated output.
+   * Provide regression coverage ensuring internal tools contribute to RunResult diagnostics and stats without extra log noise.
+
 ### Phase 8A – Documentation & Commentary
 
 1. **Docstring coverage audit**
@@ -256,7 +271,7 @@ Following the SOLID-focused refactors, we must bring the codebase into alignment
    * Add concise Google-style docstrings and rationale comments where logic is non-trivial (e.g., `_build_cli_invocation_code`, `_handle_cached_outcome`).
 3. **Automation**
    * Build a hybrid docstring linter that combines Tree-sitter structural analysis with spaCy quality checks (section completeness, language heuristics); expose it via `pyqa lint --check-docstrings` and wire into CI before documentation updates land. Ensure the implementation hooks align with the broader roadmap in `SPACY_TREESITTER.md`, so later duplicate-comment detection can reuse the same pipeline.
-   * Lessons learned: the linter must emit a fully populated `ToolOutcome`, integrate through `append_internal_quality_checks` using the prepared CLI state (to respect `--check-docstrings` vs. selective runs), and stream warnings only once. Regression coverage now exercises these paths via `tests/test_lint_cli.py::test_append_quality_docstrings_meta` and `tests/test_lint_cli.py::test_append_quality_docstrings_filters`, ensuring diagnostics surface alongside external tools without duplicate warnings.
+   * Lessons learned: each linter must emit a fully populated `ToolOutcome` and integrate directly through the orchestrator so progress, suppression, and highlighting work uniformly. Regression coverage now exercises these paths via `tests/test_lint_cli.py::test_activate_internal_linters_meta_sets_only` and `tests/test_lint_cli.py::test_ensure_internal_tools_registered`, ensuring meta flags map to tool selection without duplicate warnings.
 
 ### Phase 8B – Lint Suppression Rationalisation
 

@@ -4,10 +4,9 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from pyqa.cli.commands.lint.preparation import PreparedLintState
-from pyqa.core.models import Diagnostic, ToolOutcome, ToolExitCategory
+from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path_key
 
@@ -20,16 +19,11 @@ _SUPPRESSION_PATTERN = re.compile(r"#.*?(noqa|pylint:|mypy:|type:\s*ignore|nosec
 def run_suppression_linter(state: PreparedLintState, *, emit_to_logger: bool = True) -> InternalLintReport:
     """Detect suppression directives that require manual review."""
 
-    logger = state.logger
+    _ = emit_to_logger
     files = collect_python_files(state)
     diagnostics: list[Diagnostic] = []
     stdout_lines: list[str] = []
     stderr_lines: list[str] = []
-
-    def _emit(message: str) -> None:
-        if emit_to_logger:
-            logger.fail(message)
-        stdout_lines.append(message)
 
     for file_path in files:
         try:
@@ -57,7 +51,7 @@ def run_suppression_linter(state: PreparedLintState, *, emit_to_logger: bool = T
                         code="internal:suppressions",
                     ),
                 )
-                _emit(f"{normalized}:{idx}: {message}")
+                stdout_lines.append(f"{normalized}:{idx}: {message}")
 
     return InternalLintReport(
         outcome=ToolOutcome(

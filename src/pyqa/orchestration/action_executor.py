@@ -31,7 +31,7 @@ from ..interfaces.diagnostics import DiagnosticPipeline as DiagnosticPipelinePro
 from ..interfaces.diagnostics import (
     DiagnosticPipelineRequest,
 )
-from ..tools import ToolAction, ToolContext
+from ..tools import InternalActionRunner, ToolAction, ToolContext
 
 _DIAGNOSTIC_PIPELINE: Final[DiagnosticPipelineProtocol] = DiagnosticPipelineImpl()
 
@@ -157,6 +157,7 @@ class ActionInvocation:
     context: ToolContext
     command: tuple[str, ...]
     env_overrides: Mapping[str, str]
+    internal_runner: InternalActionRunner | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -317,7 +318,13 @@ class ActionExecutor:
                 from_cache=True,
             )
         cache_ctx = environment.cache
-        if cache_ctx.cache and cache_ctx.token is not None and not record.from_cache:
+        cache_enabled = (
+            cache_ctx.cache is not None
+            and cache_ctx.token is not None
+            and not record.from_cache
+            and record.invocation.internal_runner is None
+        )
+        if cache_enabled:
             request = CacheRequest(
                 tool=invocation.tool_name,
                 action=invocation.action.name,
@@ -340,41 +347,53 @@ class ActionExecutor:
             ToolOutcome: Normalized tool output with diagnostics populated.
         """
 
-        env = self._compose_environment(invocation)
-        completed = self.runner(
-            list(invocation.command),
-            options=CommandOptions(
-                cwd=environment.root,
-                env=env,
-                timeout=invocation.action.timeout_s,
-                capture_output=True,
-                discard_stdin=True,
-                check=False,
-            ),
-        )
         filters = tuple(invocation.context.cfg.output.tool_filters.get(invocation.tool_name, []))
-        stdout_lines, stderr_lines = self._filter_outputs(invocation, completed, filters)
-        parsed = self._parse_diagnostics(invocation, stdout_lines, stderr_lines)
+
+        completed: CompletedProcess[str] | None = None
+        stdout_lines: list[str]
+        stderr_lines: list[str]
+        raw_candidates: Sequence[RawDiagnostic | Diagnostic]
+        base_returncode: int
+
+        if invocation.internal_runner is not None:
+            outcome = invocation.internal_runner(invocation.context)
+            stdout_lines = list(outcome.stdout)
+            stderr_lines = list(outcome.stderr)
+            raw_candidates = tuple(outcome.diagnostics)
+            base_returncode = outcome.returncode
+        else:
+            env = self._compose_environment(invocation)
+            completed = self.runner(
+                list(invocation.command),
+                options=CommandOptions(
+                    cwd=environment.root,
+                    env=env,
+                    timeout=invocation.action.timeout_s,
+                    capture_output=True,
+                    discard_stdin=True,
+                    check=False,
+                ),
+            )
+            stdout_lines, stderr_lines = self._filter_outputs(invocation, completed, filters)
+            raw_candidates = self._parse_diagnostics(invocation, stdout_lines, stderr_lines)
+            base_returncode = completed.returncode
+
         pipeline_request = DiagnosticPipelineRequest(
             tool_name=invocation.tool_name,
-            candidates=tuple(parsed),
+            candidates=tuple(raw_candidates),
             severity_rules=environment.severity_rules,
             suppression_patterns=filters,
             project_root=environment.root,
         )
         diagnostics = _DIAGNOSTIC_PIPELINE.run(pipeline_request)
-        evaluation = self._evaluate_exit_status(
-            invocation,
-            completed.returncode,
-            diagnostics,
-        )
+        evaluation = self._evaluate_exit_status(invocation, base_returncode, diagnostics)
 
         if diagnostics:
             CONTEXT_RESOLVER.annotate(diagnostics, root=environment.root)
         should_log_failure = evaluation.category == ToolExitCategory.TOOL_FAILURE or (
             evaluation.returncode != 0 and not invocation.action.ignore_exit and not diagnostics
         )
-        if should_log_failure:
+        if should_log_failure and completed is not None:
             _log_action_failure(
                 invocation=invocation,
                 completed=completed,
@@ -382,13 +401,14 @@ class ActionExecutor:
                 root=environment.root,
                 from_cache=False,
             )
+
         return ToolOutcome(
             tool=invocation.tool_name,
             action=invocation.action.name,
             returncode=evaluation.returncode,
             stdout=stdout_lines,
             stderr=stderr_lines,
-            diagnostics=diagnostics,
+            diagnostics=list(diagnostics),
             exit_category=evaluation.category,
         )
 
