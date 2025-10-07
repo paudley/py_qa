@@ -13,10 +13,11 @@ from typing import Final
 
 import typer
 
+from pyqa.core.config.constants import PY_QA_DIR_NAME
+from pyqa.platform.workspace import is_py_qa_workspace
+
 from ....config import default_parallel_jobs
-from ....constants import PY_QA_DIR_NAME
 from ....filesystem.paths import normalize_path
-from ....workspace import is_py_qa_workspace
 from ...core.options import (
     ExecutionFormattingOptions,
     ExecutionRuntimeOptions,

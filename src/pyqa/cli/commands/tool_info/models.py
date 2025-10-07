@@ -10,10 +10,11 @@ from pathlib import Path
 
 from rich.console import Console
 
+from pyqa.core.config.loader import FieldUpdate
+
 from ....catalog.model_catalog import CatalogSnapshot
 from ....catalog.model_tool import ToolDefinition
 from ....config import Config
-from ....config_loader import FieldUpdate
 from ....tools.base import Tool
 from ...core.shared import CLIError
 from ...core.utils import ToolStatus

@@ -7,21 +7,28 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
+from textwrap import dedent
 from typing import Any
+from types import SimpleNamespace
 
 import click
+import pytest
 from typer.main import get_group
 from typer.testing import CliRunner
 
-from pyqa.cli.commands.lint import command as lint_module
-from pyqa.cli.commands.lint import runtime as lint_runtime
 from pyqa.cli.app import app
+from pyqa.cli.commands.lint import command as lint_module
+from pyqa.cli.commands.lint import reporting as lint_reporting
+from pyqa.cli.commands.lint import runtime as lint_runtime
 from pyqa.cli.core.options import LintOptions
 from pyqa.cli.core.typer_ext import _primary_option_name
 from pyqa.config import Config
-from pyqa.config_loader import ConfigLoader
-from pyqa.models import RunResult, ToolOutcome
-from pyqa.tool_env.models import PreparedCommand
+from pyqa.core.config.loader import ConfigLoader
+from pyqa.core.environment.tool_env.models import PreparedCommand
+from pyqa.core.models import Diagnostic, RunResult, ToolOutcome, ToolExitCategory
+from pyqa.core.severity import Severity
+from pyqa.linting.base import InternalLintReport
+from pyqa.linting.registry import InternalLinterDefinition
 
 
 def test_lint_warns_when_py_qa_path_outside_workspace(tmp_path: Path, monkeypatch) -> None:
@@ -142,6 +149,112 @@ def test_lint_validate_schema_conflicts(monkeypatch) -> None:
     assert result.exit_code != 0
     combined_output = (result.stdout or "") + (result.stderr or "")
     assert "cannot be combined" in combined_output
+
+
+def test_docstring_linter_passes(tmp_path: Path, monkeypatch) -> None:
+    from pyqa.analysis.treesitter.grammars import ensure_language
+
+    if ensure_language("python") is None:
+        pytest.skip("Python Tree-sitter grammar unavailable")
+
+    package = tmp_path / "pkg"
+    package.mkdir()
+    module = package / "helpers.py"
+    module.write_text(
+        dedent(
+            '''
+            """Module docstring."""
+
+
+            def add(first: int, second: int) -> int:
+                """Add two integers.
+
+                Args:
+                    first: First operand.
+                    second: Second operand.
+
+                Returns:
+                    int: Sum of the operands.
+                """
+
+                return first + second
+            '''
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(app, ["lint", "--check-docstrings", "--root", str(tmp_path), "--no-emoji"])
+
+    assert result.exit_code == 0
+    assert "Docstring checks passed" in result.stdout
+
+
+def test_docstring_linter_fails(tmp_path: Path, monkeypatch) -> None:
+    from pyqa.analysis.treesitter.grammars import ensure_language
+
+    if ensure_language("python") is None:
+        pytest.skip("Python Tree-sitter grammar unavailable")
+
+    package = tmp_path / "pkg"
+    package.mkdir()
+    module = package / "utils.py"
+    module.write_text(
+        dedent(
+            '''
+            """Module docstring missing function docs."""
+
+
+            def helper(value: int) -> int:
+                return value
+            '''
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(app, ["lint", "--check-docstrings", "--root", str(tmp_path), "--no-emoji"])
+
+    assert result.exit_code != 0
+    combined = result.stdout + result.stderr
+    assert "missing a docstring" in combined.lower()
+
+
+def test_docstring_only_flag_surfaces_diagnostics(tmp_path: Path, monkeypatch) -> None:
+    from pyqa.analysis.treesitter.grammars import ensure_language
+
+    if ensure_language("python") is None:
+        pytest.skip("Python Tree-sitter grammar unavailable")
+
+    module = tmp_path / "cli.py"
+    module.write_text(
+        """
+def command() -> None:
+    pass
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "lint",
+            "--only",
+            "docstrings",
+            "--root",
+            str(tmp_path),
+            "--no-emoji",
+        ],
+    )
+
+    assert result.exit_code != 0
+    combined = (result.stdout + result.stderr).lower()
+    assert "missing a docstring" in combined
 
 
 def test_lint_no_stats_flag(monkeypatch, tmp_path: Path) -> None:
@@ -283,9 +396,28 @@ copyright = "Blackcat"
         tool_versions={},
     )
 
+    class _StubLogger:
+        """Minimal CLI logger stub used for quality check tests."""
+
+        def ok(self, message: str) -> None:
+            pass
+
+        def warn(self, message: str) -> None:
+            pass
+
+        def fail(self, message: str) -> None:
+            pass
+
+    stub_state = SimpleNamespace(
+        root=tmp_path,
+        options=SimpleNamespace(selection_options=SimpleNamespace(only=[], filters=[])),
+        meta=_meta_flags(check_docstrings=False),
+        logger=_StubLogger(),
+    )
+
     lint_module._append_internal_quality_checks(
         config=config,
-        root=tmp_path,
+        state=stub_state,
         run_result=run_result,
     )
 
@@ -297,6 +429,277 @@ copyright = "Blackcat"
         for outcome in quality_outcomes
         for line in outcome.stdout
     )
+
+
+def _build_stub_state(
+    *,
+    root: Path,
+    only: list[str],
+    filters: list[str],
+    check_docstrings: bool,
+    logger,
+):
+    return SimpleNamespace(
+        root=root,
+        options=SimpleNamespace(selection_options=SimpleNamespace(only=only, filters=filters)),
+        meta=_meta_flags(check_docstrings=check_docstrings),
+        logger=logger,
+    )
+
+
+def _make_docstring_report(path: Path, *, warnings: list[str] | None = None) -> InternalLintReport:
+    diagnostics = [
+        Diagnostic(
+            file=str(path),
+            line=1,
+            column=None,
+            severity=Severity.ERROR,
+            message="Missing module docstring",
+            tool="docstrings",
+            code="docstrings:missing-module-docstring",
+        ),
+    ]
+    outcome = ToolOutcome(
+        tool="docstrings",
+        action="check",
+        returncode=1,
+        stdout=[f"{path}:1: Missing module docstring"],
+        stderr=warnings or [],
+        diagnostics=diagnostics,
+        exit_category=ToolExitCategory.DIAGNOSTIC,
+    )
+    return InternalLintReport(outcome=outcome, files=(path,))
+
+
+class _CapturingLogger:
+    def __init__(self) -> None:
+        self.ok_messages: list[str] = []
+        self.warn_messages: list[str] = []
+        self.fail_messages: list[str] = []
+
+    def ok(self, message: str) -> None:
+        self.ok_messages.append(message)
+
+    def warn(self, message: str) -> None:
+        self.warn_messages.append(message)
+
+    def fail(self, message: str) -> None:
+        self.fail_messages.append(message)
+
+
+def _meta_flags(**overrides) -> SimpleNamespace:
+    defaults = {
+        "doctor": False,
+        "tool_info": None,
+        "fetch_all_tools": False,
+        "validate_schema": False,
+        "normal": False,
+        "check_docstrings": False,
+        "check_suppressions": False,
+        "check_types_strict": False,
+        "check_closures": False,
+        "check_signatures": False,
+        "check_cache_usage": False,
+    }
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
+
+
+def test_append_quality_docstrings_meta(monkeypatch, tmp_path: Path) -> None:
+    doc_path = tmp_path / "pkg" / "module.py"
+    report = _make_docstring_report(doc_path, warnings=["spaCy missing"])
+    captures: dict[str, Any] = {}
+
+    def fake_run(state, *, emit_to_logger: bool):
+        captures["emit_to_logger"] = emit_to_logger
+        return report
+
+    definition = InternalLinterDefinition(
+        name="docstrings",
+        meta_attribute="check_docstrings",
+        selection_tokens=("docstring", "docstrings"),
+        runner=fake_run,
+        description="stub",
+    )
+
+    monkeypatch.setattr(lint_reporting, "iter_internal_linters", lambda: (definition,))
+
+    logger = _CapturingLogger()
+    state = _build_stub_state(
+        root=tmp_path,
+        only=[],
+        filters=[],
+        check_docstrings=True,
+        logger=logger,
+    )
+    config = SimpleNamespace(
+        quality=SimpleNamespace(enforce_in_lint=False),
+        severity=SimpleNamespace(sensitivity="standard"),
+        license=SimpleNamespace(),
+    )
+    run_result = RunResult(root=tmp_path, files=[], outcomes=[], tool_versions={})
+
+    lint_module._append_internal_quality_checks(
+        config=config,
+        state=state,
+        run_result=run_result,
+        logger=state.logger,
+    )
+
+    assert captures["emit_to_logger"] is True
+    assert run_result.outcomes[-1] is report.outcome
+    assert doc_path in run_result.files
+    assert not logger.warn_messages
+
+
+def test_append_quality_docstrings_filters(monkeypatch, tmp_path: Path) -> None:
+    doc_path = tmp_path / "pkg" / "module.py"
+    report = _make_docstring_report(doc_path, warnings=["spaCy missing"])
+    captures: dict[str, Any] = {}
+
+    def fake_run(state, *, emit_to_logger: bool):
+        captures["emit_to_logger"] = emit_to_logger
+        return report
+
+    definition = InternalLinterDefinition(
+        name="docstrings",
+        meta_attribute="check_docstrings",
+        selection_tokens=("docstring", "docstrings"),
+        runner=fake_run,
+        description="stub",
+    )
+
+    monkeypatch.setattr(lint_reporting, "iter_internal_linters", lambda: (definition,))
+
+    logger = _CapturingLogger()
+    state = _build_stub_state(
+        root=tmp_path,
+        only=["docstrings"],
+        filters=[],
+        check_docstrings=False,
+        logger=logger,
+    )
+    config = SimpleNamespace(
+        quality=SimpleNamespace(enforce_in_lint=False),
+        severity=SimpleNamespace(sensitivity="standard"),
+        license=SimpleNamespace(),
+    )
+    run_result = RunResult(root=tmp_path, files=[], outcomes=[], tool_versions={})
+
+    lint_module._append_internal_quality_checks(
+        config=config,
+        state=state,
+        run_result=run_result,
+        logger=state.logger,
+    )
+
+    assert captures["emit_to_logger"] is False
+    assert run_result.outcomes[-1] is report.outcome
+    assert doc_path in run_result.files
+    assert logger.warn_messages == report.outcome.stderr
+
+
+def test_append_internal_linter_meta_flag(monkeypatch, tmp_path: Path) -> None:
+    captures: dict[str, Any] = {}
+
+    def fake_runner(state, *, emit_to_logger: bool) -> InternalLintReport:
+        captures["emit"] = emit_to_logger
+        outcome = ToolOutcome(
+            tool="internal-suppressions",
+            action="check",
+            returncode=0,
+            stdout=[],
+            stderr=[],
+            diagnostics=[],
+            exit_category=ToolExitCategory.SUCCESS,
+        )
+        return InternalLintReport(outcome=outcome, files=())
+
+    definition = InternalLinterDefinition(
+        name="suppressions",
+        meta_attribute="check_suppressions",
+        selection_tokens=("suppressions",),
+        runner=fake_runner,
+        description="stub",
+    )
+
+    monkeypatch.setattr(lint_reporting, "iter_internal_linters", lambda: (definition,))
+
+    state = SimpleNamespace(
+        root=tmp_path,
+        options=SimpleNamespace(selection_options=SimpleNamespace(only=[], filters=[])),
+        meta=_meta_flags(check_suppressions=True),
+        logger=_CapturingLogger(),
+    )
+    config = SimpleNamespace(
+        quality=SimpleNamespace(enforce_in_lint=False),
+        severity=SimpleNamespace(sensitivity="standard"),
+        license=SimpleNamespace(),
+    )
+    run_result = RunResult(root=tmp_path, files=[], outcomes=[], tool_versions={})
+
+    lint_module._append_internal_quality_checks(
+        config=config,
+        state=state,
+        run_result=run_result,
+        logger=state.logger,
+    )
+
+    assert captures["emit"] is True
+    assert any(outcome.tool == "internal-suppressions" for outcome in run_result.outcomes)
+
+
+def test_append_internal_linter_selection(monkeypatch, tmp_path: Path) -> None:
+    captures: dict[str, Any] = {}
+
+    def fake_runner(state, *, emit_to_logger: bool) -> InternalLintReport:
+        captures.setdefault("invocations", 0)
+        captures["invocations"] += 1
+        outcome = ToolOutcome(
+            tool="internal-cache",
+            action="check",
+            returncode=0,
+            stdout=["warning"],
+            stderr=["warning"],
+            diagnostics=[],
+            exit_category=ToolExitCategory.SUCCESS,
+        )
+        return InternalLintReport(outcome=outcome, files=())
+
+    definition = InternalLinterDefinition(
+        name="cache",
+        meta_attribute="check_cache_usage",
+        selection_tokens=("cache",),
+        runner=fake_runner,
+        description="stub",
+    )
+
+    monkeypatch.setattr(lint_reporting, "iter_internal_linters", lambda: (definition,))
+
+    capturing_logger = _CapturingLogger()
+    state = SimpleNamespace(
+        root=tmp_path,
+        options=SimpleNamespace(selection_options=SimpleNamespace(only=["cache"], filters=[])),
+        meta=_meta_flags(),
+        logger=capturing_logger,
+    )
+    config = SimpleNamespace(
+        quality=SimpleNamespace(enforce_in_lint=False),
+        severity=SimpleNamespace(sensitivity="standard"),
+        license=SimpleNamespace(),
+    )
+    run_result = RunResult(root=tmp_path, files=[], outcomes=[], tool_versions={})
+
+    lint_module._append_internal_quality_checks(
+        config=config,
+        state=state,
+        run_result=run_result,
+        logger=capturing_logger,
+    )
+
+    assert captures.get("invocations", 0) == 1
+    assert capturing_logger.warn_messages == ["warning"]
+    assert any(outcome.tool == "internal-cache" for outcome in run_result.outcomes)
 
 
 def test_lint_meta_normal_applies_defaults(monkeypatch, tmp_path: Path) -> None:

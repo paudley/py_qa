@@ -11,9 +11,7 @@ from collections.abc import Iterable, Mapping, MutableMapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from fnmatch import fnmatch
-from importlib import import_module
 from pathlib import Path
-from types import ModuleType
 from typing import Final, Protocol, TypeGuard, cast, runtime_checkable
 
 
@@ -37,25 +35,30 @@ class _LicenseConfigProtocol(Protocol):
 LicenseConfigProtocol = _LicenseConfigProtocol
 
 
-def _import_pyqa_module(module: str) -> ModuleType:
+def _import_license_config() -> type[LicenseConfigProtocol]:
     try:
-        return import_module(f"pyqa.{module}")
+        from pyqa.config import LicenseConfig
     except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
         project_root = Path(__file__).resolve().parents[2]
         if str(project_root) not in sys.path:
             sys.path.insert(0, str(project_root))
-        return import_module(f"pyqa.{module}")
+        from pyqa.config import LicenseConfig
+    return cast("type[LicenseConfigProtocol]", LicenseConfig)
 
 
-_config_module = _import_pyqa_module("config")
-_constants_module = _import_pyqa_module("constants")
-LicenseConfigRuntime = cast(
-    "type[LicenseConfigProtocol]",
-    _config_module.LicenseConfig,
-)
-ALWAYS_EXCLUDE_DIRS = frozenset(
-    cast(Iterable[str], _constants_module.ALWAYS_EXCLUDE_DIRS),
-)
+def _import_exclude_dirs() -> frozenset[str]:
+    try:
+        from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS
+    except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
+        project_root = Path(__file__).resolve().parents[2]
+        if str(project_root) not in sys.path:
+            sys.path.insert(0, str(project_root))
+        from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS
+    return frozenset(cast(Iterable[str], ALWAYS_EXCLUDE_DIRS))
+
+
+LicenseConfigRuntime = _import_license_config()
+ALWAYS_EXCLUDE_DIRS = _import_exclude_dirs()
 
 
 KNOWN_LICENSE_SNIPPETS: Final[Mapping[str, str]] = {

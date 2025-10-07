@@ -10,8 +10,9 @@ from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
 from typing import Final, cast
 
+from pyqa.platform.languages import detect_languages
+
 from ..config import Config
-from ..languages import detect_languages
 from ..tools.base import PHASE_NAMES, PhaseLiteral, Tool
 from ..tools.registry import ToolRegistry
 

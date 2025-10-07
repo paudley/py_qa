@@ -8,8 +8,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from pyqa.config import Config
 from pyqa.catalog import CatalogSnapshot, ToolCatalogLoader
+from pyqa.config import Config
 from pyqa.tools.base import ToolContext
 from pyqa.tools.builtin_registry import (
     clear_catalog_cache,

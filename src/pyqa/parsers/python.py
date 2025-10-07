@@ -7,8 +7,9 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, Final
 
-from ..models import RawDiagnostic
-from ..severity import Severity, severity_from_code
+from pyqa.core.severity import Severity, severity_from_code
+
+from ..core.models import RawDiagnostic
 from ..tools.base import ToolContext
 from .base import (
     DiagnosticDetails,

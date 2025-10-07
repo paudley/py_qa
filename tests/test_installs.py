@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Blackcat Informatics® Inc.
-"""Unit tests for ``pyqa.installs`` helper functions."""
+"""Unit tests for ``pyqa.runtime.installers`` helper functions."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from subprocess import CompletedProcess
 
-from pyqa.installs import install_dev_environment
+from pyqa.runtime.installers import install_dev_environment
 
 
 def _completed(
@@ -28,7 +28,7 @@ def test_install_dev_environment_installs_core_packages(monkeypatch, tmp_path: P
         commands.append(list(args))
         return _completed(list(args))
 
-    monkeypatch.setattr("pyqa.installs.run_command", fake_run_command)
+    monkeypatch.setattr("pyqa.runtime.installers.dev.run_command", fake_run_command)
 
     summary = install_dev_environment(
         tmp_path,
@@ -62,7 +62,7 @@ def test_install_dev_environment_handles_optional_and_stubs(monkeypatch, tmp_pat
             return _completed(list(args), stdout=json.dumps(packages))
         return _completed(list(args))
 
-    monkeypatch.setattr("pyqa.installs.run_command", fake_run_command)
+    monkeypatch.setattr("pyqa.runtime.installers.dev.run_command", fake_run_command)
 
     summary = install_dev_environment(
         tmp_path,

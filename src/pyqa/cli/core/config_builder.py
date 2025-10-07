@@ -9,6 +9,8 @@ from functools import partial
 from pathlib import Path
 from typing import Final, cast
 
+from pyqa.core.config.loader import ConfigLoader
+
 from ...config import (
     BanditConfidence,
     BanditLevel,
@@ -19,7 +21,6 @@ from ...config import (
     SensitivityLevel,
     StrictnessLevel,
 )
-from ...config_loader import ConfigLoader
 from ...interfaces.config import ConfigSource
 from ._config_builder_constants import (
     DEDUPE_SECTION,

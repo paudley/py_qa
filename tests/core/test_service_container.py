@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 from pyqa.core.runtime import ServiceContainer, ServiceResolutionError, register_default_services

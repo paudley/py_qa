@@ -31,8 +31,8 @@ specification as a standalone project.
 * For functions that have more than 5 args or use kwargs, prefer using a paramater dataclass instead.
 * Use typing.Literal, typing.Final, abc.\* and enum where possible to improve code.
 * Consider adding dunder methods to classes where it makes them more useful to callers.i
-* The use of lint warning suppression commments is FORBIDDEN, please remove them when found unless they are acompantied with a robust explanation - you MUST fix lint warnings by fixing code.
-* Apply functools where profitable.
+* Lint suppressions are discouraged; only the documented set (dynamic cache helpers, subprocess hardening, protocol annotations, controlled CLI imports, and download safety checks) remain approved. Any new suppression must include an inline justification and prior review.
+* Prefer `functools.partial` (or companion helpers), the relevant utilities from `itertools` (including `starproduct` on Python ≥3.13), and high-level helpers from `operator`/`contextlib` before rolling custom closures or resource wrappers.
 
 ## Phase 0 – Readiness & Tooling (1 sprint)
 
@@ -167,6 +167,161 @@ specification as a standalone project.
    * Track plugin adoption, gather feedback, and schedule follow-up work for
      additional tooling spec features.
 
+## Phase 7 – SOLID Hardening & Backlog Cleanup (1 sprint)
+
+1. **Analysis restructuring**
+   * Move `AnnotationEngine` heuristics into `analysis/spacy` and
+     `analysis/treesitter` subpackages, wiring `TreeSitterContextResolver` through
+     protocols defined in `interfaces/analysis.py`.
+   * Update orchestrator and reporting flows to depend on the `AnnotationProvider`
+     interface so spaCy/Tree-sitter integrations can be swapped or faked in
+     tests.
+2. **Core + DI conformance**
+   * Relocate remaining foundational modules (`models.py`, `logging.py`,
+     `process_utils.py`, `metrics.py`, `serialization.py`) into the `core/`
+     hierarchy, exposing narrow factories that higher layers resolve via the
+     service container.
+   * Refine `core/runtime/di.py` registrations so they import interfaces (not
+     concrete packages), and register implementation factories inside their own
+     packages to restore dependency inversion.
+3. **Repository hygiene**
+   * Purge tooling caches (`.ruff_cache`, `.mypy_cache`, other artifacts) from
+     package directories and add safeguards to prevent them from re-entering the
+     tree.
+   * Audit remaining modules against the `REORG_MODULES.md` layout, capturing any
+     stragglers in follow-up tickets if they cannot move in this phase.
+4. **Verification**
+   * Extend architectural tests to cover the new interfaces and layering rules
+     (e.g., orchestrator must resolve analyzers via interfaces, `core/` may not
+     depend on feature packages).
+   * Add regression tests for the analyzer injection seam to prove alternative
+     implementations can be wired without touching orchestration code.
+5. **CLI surface packages**
+   * Promote `clean.py` into a dedicated `clean/` package (`plan.py`, `runner.py`,
+     `cli.py`) that exports a narrow API for workspace cleanup.
+   * Extract hook orchestration into a standalone `hooks/` package (`registry.py`,
+     `runner.py`, `models.py`) and update service registration via interfaces.
+6. **Root module decomposition roadmap**
+   * **Responsibility audit (SRP):** catalogue every remaining top-level module
+     (`environments.py`, `console.py`, `config_loader.py`, `update.py`, etc.) and
+     record its primary responsibility in `docs/reorg/PHASE7A.md` before moving
+     code. Use the audit to assign each responsibility into the future `core/`,
+     `cli/`, `runtime/`, or `platform/` families.
+   * **Interfaces first (ISP/DIP):** expand `src/pyqa/interfaces` with the
+     protocols the refactors will rely on—`EnvironmentInspector` and
+     `VirtualEnvDetector` for environment work, `ConsoleManager`/`AnsiFormatter`
+     for terminal IO, `Installer`/`RuntimeBootstrapper` for tooling installs, and
+     a `ConfigLoader` contract for configuration wiring. Update current consumers
+     to depend on these interfaces ahead of file moves to keep churn incremental.
+   * **Subpackage creation:**
+     * `core/environment/` for `environments.py` and the `tool_env/` runtime
+       helpers (split into `detectors.py`, `runtimes/`, `versioning.py`).
+     * `core/config/` hosting the new loader/sections/util modules that replace
+       `config_loader.py`, `config_loader_sections.py`, and `config/utils.py`.
+     * `runtime/console/` for console and logging bootstrap glue now under
+       `console.py`, `hooks.py`, and related helpers.
+     * `runtime/installers/` for `installs.py`, installer helpers in
+       `tool_env`, and `update.py` orchestration.
+     * `platform/languages/` for language/paths heuristics currently under
+       `languages.py`, `paths.py`, and parser glue.
+   * **Incremental migration:** for each subpackage create the empty package and
+     architectural guardrail, move code with `git mv`, update imports, run
+     focused pytest targets, then delete the legacy module and refresh docs to
+     avoid large, risky commits.
+   * **LSP/DIP enforcement:** add new contract tests that exercise implementations
+     through the freshly introduced interfaces (e.g., CLI tests using fake
+     `EnvironmentInspector`), and extend `core/runtime/di.py` registrations to
+     resolve only interface names while concrete packages self-register.
+
+* **Docs & tooling:** once moves complete, refresh `REORG_MODULES.md`, developer
+  documentation, and dependency-graph artefacts so the new layout is
+  discoverable.
+
+7. **Interface gap audit (2025-02-??)**
+   * Replace direct `AnnotationEngine` construction in orchestrator and CLI/reporting surfaces with interface-driven factories registered via DI (`src/pyqa/orchestration/orchestrator.py:18`, `src/pyqa/orchestration/orchestrator.py:303`, `src/pyqa/cli/commands/lint/reporting.py:13`, `src/pyqa/cli/commands/lint/reporting.py:47`).
+   * Inject diagnostic annotation providers instead of relying on module-level singletons inside diagnostics and reporting presenters (`src/pyqa/diagnostics/core.py:22`, `src/pyqa/diagnostics/core.py:48`, `src/pyqa/reporting/presenters/formatters.py:14`, `src/pyqa/reporting/presenters/formatters.py:135`, `src/pyqa/reporting/output/highlighting.py:14`, `src/pyqa/reporting/output/highlighting.py:18`, `src/pyqa/reporting/presenters/emitters.py:25`, `src/pyqa/reporting/presenters/emitters.py:770`).
+   * Expand analysis interfaces to cover change-impact, suppression, and navigator passes so orchestration no longer imports concrete functions (`src/pyqa/orchestration/orchestrator.py:18`).
+   * Promote function-scale estimation to the DI container and update consumers to request the interface rather than instantiating services inline (`src/pyqa/analysis/navigator.py:137`, `src/pyqa/reporting/advice/builder.py:84`, `src/pyqa/reporting/advice/builder.py:665`).
+   * Introduce a `ContextResolver` provider seam for modules that still instantiate `TreeSitterContextResolver` directly (`src/pyqa/analysis/change_impact.py:32`, `src/pyqa/analysis/annotations/engine.py:120`, `src/pyqa/analysis/treesitter/resolver.py:676`, `src/pyqa/cli/commands/doctor/command.py:310`).
+
+## Phase 8 – Code Quality Compliance Sweep (multi-sprint)
+
+Following the SOLID-focused refactors, we must bring the codebase into alignment with the reinforced coding rules, splitting the initiative into targeted sub-phases.
+
+### Phase 8A – Documentation & Commentary
+
+1. **Docstring coverage audit**
+   * Record every module/function lacking a Google-style docstring; prioritise high-touch areas (`src/pyqa/core/runtime/process.py`, `src/pyqa/cli/launcher/__init__.py`, `src/pyqa/orchestration/orchestrator.py`, `src/pyqa/reporting/output/modes.py`).
+2. **Documentation rollout**
+   * Add concise Google-style docstrings and rationale comments where logic is non-trivial (e.g., `_build_cli_invocation_code`, `_handle_cached_outcome`).
+3. **Automation**
+   * Build a hybrid docstring linter that combines Tree-sitter structural analysis with spaCy quality checks (section completeness, language heuristics); expose it via `pyqa lint --check-docstrings` and wire into CI before documentation updates land. Ensure the implementation hooks align with the broader roadmap in `SPACY_TREESITTER.md`, so later duplicate-comment detection can reuse the same pipeline.
+   * Lessons learned: the linter must emit a fully populated `ToolOutcome`, integrate through `append_internal_quality_checks` using the prepared CLI state (to respect `--check-docstrings` vs. selective runs), and stream warnings only once. Regression coverage now exercises these paths via `tests/test_lint_cli.py::test_append_quality_docstrings_meta` and `tests/test_lint_cli.py::test_append_quality_docstrings_filters`, ensuring diagnostics surface alongside external tools without duplicate warnings.
+
+### Phase 8B – Lint Suppression Rationalisation
+
+1. **Catalogue verification**
+   * Confirm the existing approved suppressions (cache helpers, subprocess wrappers, protocol headers, CLI imports, download safeguards) match the allowed list in the guidelines.
+2. **Refactor opportunity scan**
+   * For each approved suppression, investigate whether refactoring can eliminate it (e.g., attach cache helpers via Protocol typing).
+3. **Policy enforcement**
+   * Implement a suppression-whitelist linter, surfaced as `pyqa lint --check-suppressions`, to flag any inline directive outside the sanctioned list and require a justification block.
+
+### Phase 8C – Strict Typing & Interface Refinement
+
+1. **Reduce `Any` usage**
+   * Focus on high-traffic modules: `src/pyqa/core/runtime/di.py`, `src/pyqa/cache/in_memory.py`, `src/pyqa/interfaces/*`, `src/pyqa/reporting/*`.
+2. **Protocol enhancements**
+   * Introduce typed payload classes or generics for service containers, cache keys, CLI pipelines.
+3. **Static analysis**
+   * Deliver a typing linter (`pyqa lint --check-types-strict`) that scans annotations for `Any`/`object` and flags unapproved usages before tightening type checkers.
+
+### Phase 8D – Callable Composition & Helpers
+
+1. **Replace bespoke closures**
+   * Identify closure-heavy helpers (`cli/launcher`, orchestration preparation hooks, reporting adapters) and refactor to `functools.partial`, `itertools` (e.g., `chain`, `batched`, `starproduct`), `operator` call adapters, or `contextlib` utilities instead of bespoke logic.
+2. **Guideline enforcement**
+   * Add a callable-composition linter, invokable via `pyqa lint --check-closures`, that detects simple closure factories better served by `functools.partial`, `itertools` (with Python-version awareness for `starproduct`), or `operator` helpers.
+
+### Phase 8E – Parameter Object Introduction
+
+1. **Survey high-arity functions**
+   * Target CLI entry points, reporting renderers, and orchestration helpers exceeding five parameters.
+2. **Introduce dataclasses**
+   * Define parameter objects (e.g., `HighlightOptions`, `NavigatorContext`, `FetchPlan`) to consolidate arguments.
+3. **Update call sites & tests**
+   * Precede refactors with a signature-width linter (`pyqa lint --check-signatures`) that reports functions surpassing the parameter threshold or relying on `**kwargs` without approved patterns.
+
+### Phase 8F – Caching Consistency
+
+1. **Inventory `functools.lru_cache` usage**
+   * Replace occurrences listed in the audit (`catalog/metadata.py`, `discovery/rules.py`, `analysis/treesitter/resolver.py`, etc.) with adapters leveraging `pyqa.cache`.
+2. **Decorator alignment**
+   * Extend `pyqa.cache` with variants (e.g., `memoize_typed`) if needed to mirror missing functionality.
+3. **Guardrail linter**
+   * Implement a static check (`pyqa lint --check-cache-usage`) that rejects new `functools.lru_cache` imports/usages outside the caching package.
+
+### Phase 8G – Verification & Tooling
+
+1. **Automated checks**
+   * Integrate the newly built linters (docstrings, suppressions, typing, closures, signature width, caching) into the CI pipeline and surface them collectively via `pyqa lint --strict`; ensure the closures linter recognises Python 3.13 features such as `itertools.starproduct` and warns when unavailable. The `./lint -n` entrypoint must invoke each checker so local presubmits match CI coverage.
+   * Maintain regression coverage validating that internal linters append diagnostics to `RunResult` with accurate stats/diagnostic counts and no double-logged warnings when invoked both via meta flags and selection filters (`--check-docstrings`, `--only docstrings`); see `tests/test_lint_cli.py::test_append_quality_docstrings_meta` and `tests/test_lint_cli.py::test_append_quality_docstrings_filters`.
+2. **Documentation update**
+   * Refresh developer docs summarising the new compliance expectations and tooling support.
+3. **Parity expectations**
+   * Each in-house linter should mimic external behaviour: honour CLI/config exclusions, emit structured diagnostics (tool/action, severity, path), integrate with the existing stats/reporting pipeline, and record warnings whenever dependencies such as spaCy models or Tree-sitter grammars are missing.
+
+### Phase 8H – Value-Type Ergonomics
+
+1. **Navigator buckets**
+   * Implement `__len__` (and, if beneficial, `__iter__`) on `NavigatorBucket` (`src/pyqa/analysis/navigator.py`) so hotspot collections integrate naturally with standard iteration utilities.
+2. **Cleanup results**
+   * Provide a truthy semantic (e.g., `__bool__` or `__len__`) for `CleanResult` (`src/pyqa/clean/runner.py`) to reflect whether anything was removed or skipped without inspecting internals.
+3. **Service container conveniences**
+   * Add `__contains__`/`__len__` helpers to `ServiceContainer` (`src/pyqa/core/runtime/di.py`) to simplify optional dependency checks and diagnostics.
+
+Deliverable: Completion of Phase 8 means every coding-rule exception is justified, doc coverage is high, type annotations are strict, callable composition prefers the standard toolbox, and high-arity signatures are encapsulated.
+
 ## Risk Mitigation & QA
 
 * **CI gating:** Block merges unless type checks, unit tests, and architectural
@@ -187,6 +342,7 @@ specification as a standalone project.
 | 4     | 2       | CLI/orchestration realignment                                    |
 | 5     | 2       | Diagnostics/reporting/compliance packages                        |
 | 6     | 1–2     | Final docs, releases, monitoring                                 |
+| 7     | 1       | SOLID hardening, DI cleanup, analysis package split              |
 
-Total: roughly 13–14 sprints (~6 months) assuming two-week iterations and
+Total: roughly 14–15 sprints (~6.5 months) assuming two-week iterations and
 parallel work streams where feasible.

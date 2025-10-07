@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
+from ..core.models import Diagnostic
 from ..filesystem.paths import normalize_path_key
-from ..models import Diagnostic
 
 _DUPLICATE_PREFIX: Final[str] = "=="
 _TRAILING_SPAN = re.compile(r":(?P<start>\d+)(?::(?P<end>\d+))?\s*$")

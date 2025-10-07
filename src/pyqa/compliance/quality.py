@@ -15,12 +15,13 @@ from typing import Final, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS
+
 from ..config import FileDiscoveryConfig, LicenseConfig, QualityConfigSection
-from ..constants import ALWAYS_EXCLUDE_DIRS
+from ..core.runtime.process import run_command
 from ..discovery.filesystem import FilesystemDiscovery
 from ..discovery.git import GitDiscovery, list_tracked_files
 from ..filesystem.paths import normalize_path
-from ..process_utils import run_command
 from ..tools.settings import tool_setting_schema_as_dict
 from .banned import BannedWordChecker
 from .checks.license_fixer import LicenseFixError, LicenseHeaderFixer

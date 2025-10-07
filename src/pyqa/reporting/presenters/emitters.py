@@ -10,10 +10,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, cast
 
-from ...annotations import HighlightKind
-from ...models import Diagnostic, RunResult
-from ...serialization import serialize_outcome
-from ...severity import Severity, severity_to_sarif
+from pyqa.core.severity import Severity, severity_to_sarif
+
+from ...analysis.annotations import HighlightKind
+from ...core.models import Diagnostic, RunResult
+from ...core.serialization import serialize_outcome
+from ...interfaces.analysis import AnnotationProvider
 from ...utils.bool_utils import interpret_optional_bool
 from ..advice.builder import AdviceBuilder, AdviceEntry
 
@@ -759,3 +761,11 @@ def _highlight_markdown(message: str) -> str:
         cursor = end
     result.append(message[cursor:])
     return "".join(result)
+
+
+def set_annotation_provider(provider: AnnotationProvider) -> None:
+    """Override the annotation provider used by report emitters."""
+
+    global _ADVICE_BUILDER, _ANNOTATION_ENGINE
+    _ADVICE_BUILDER = AdviceBuilder(annotation_engine=provider)
+    _ANNOTATION_ENGINE = _ADVICE_BUILDER.annotation_engine

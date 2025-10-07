@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from pyqa.config import ConfigError
-from pyqa.config_loader import ConfigLoader, generate_config_schema, load_config
+from pyqa.core.config.loader import ConfigLoader, generate_config_schema, load_config
 from pyqa.interfaces.config import ConfigSource
 
 

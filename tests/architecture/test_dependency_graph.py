@@ -8,7 +8,6 @@ from pathlib import Path
 
 from reorg.scripts.generate_dependency_graph import build_graph
 
-
 PACKAGE_ROOT = Path("src/pyqa").resolve()
 
 
@@ -28,4 +27,3 @@ def test_dependency_graph_contains_pyqa_modules(tmp_path: Path) -> None:
     output.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     loaded = json.loads(output.read_text(encoding="utf-8"))
     assert loaded["module_count"] == len(graph)
-

@@ -11,10 +11,23 @@ from typing import Final
 
 from rich.text import Text
 
-from ...annotations import AnnotationEngine, MessageSpan
-from ...logging import colorize
+from ...analysis import MessageSpan
+from ...analysis.services import resolve_annotation_provider
+from ...core.logging import colorize
+from ...interfaces.analysis import AnnotationProvider
 
-ANNOTATION_ENGINE = AnnotationEngine()
+_DEFAULT_ANNOTATION_PROVIDER: AnnotationProvider = resolve_annotation_provider()
+ANNOTATION_ENGINE = _DEFAULT_ANNOTATION_PROVIDER
+
+
+def set_annotation_provider(provider: AnnotationProvider) -> None:
+    """Override the module-level annotation provider used for highlighting."""
+
+    global _DEFAULT_ANNOTATION_PROVIDER, ANNOTATION_ENGINE
+    _DEFAULT_ANNOTATION_PROVIDER = provider
+    ANNOTATION_ENGINE = provider
+
+
 CODE_TINT: Final[str] = "ansi256:105"
 LITERAL_TINT: Final[str] = "ansi256:208"
 ANNOTATION_SPAN_STYLE: Final[str] = "ansi256:213"
@@ -26,12 +39,22 @@ _LITERAL_PATTERN = re.compile(r"''(.*?)''")
 def collect_highlight_spans(
     text: str,
     *,
-    engine: AnnotationEngine | None = None,
+    engine: AnnotationProvider | None = None,
 ) -> list[MessageSpan]:
     """Return annotation spans present in *text* using the provided engine."""
 
-    target_engine = engine or ANNOTATION_ENGINE
-    return list(target_engine.message_spans(text))
+    target_engine = engine or _DEFAULT_ANNOTATION_PROVIDER
+    spans: list[MessageSpan] = []
+    for span in target_engine.message_spans(text):
+        spans.append(
+            MessageSpan(
+                start=span.start,
+                end=span.end,
+                style=getattr(span, "style", ""),
+                kind=getattr(span, "kind", None),
+            ),
+        )
+    return spans
 
 
 def strip_literal_quotes(text: str) -> tuple[str, list[MessageSpan]]:
@@ -68,7 +91,7 @@ def apply_highlighting_text(
     message: str,
     *,
     base_style: str | None = None,
-    engine: AnnotationEngine | None = None,
+    engine: AnnotationProvider | None = None,
 ) -> Text:
     """Return a Rich text object with annotation-aware highlighting applied."""
 
@@ -108,7 +131,7 @@ def highlight_for_output(
     *,
     color: bool,
     extra_spans: Sequence[MessageSpan] | None = None,
-    engine: AnnotationEngine | None = None,
+    engine: AnnotationProvider | None = None,
 ) -> str:
     """Return a string with inline highlighting suitable for terminal output."""
 
@@ -163,5 +186,6 @@ __all__ = [
     "format_code_value",
     "highlight_for_output",
     "location_function_spans",
+    "set_annotation_provider",
     "strip_literal_quotes",
 ]

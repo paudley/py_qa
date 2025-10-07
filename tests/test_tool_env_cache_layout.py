@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from pytest_bdd import given, scenarios, then, when
 
-from pyqa.tool_env import CommandPreparer, cache_layout
+from pyqa.core.environment.tool_env import CommandPreparer, cache_layout
 from pyqa.tools.base import Tool
 
 scenarios("tool_env/features/cache_layout.feature")

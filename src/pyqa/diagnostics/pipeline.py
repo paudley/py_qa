@@ -8,12 +8,13 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
+from pyqa.core.severity import SeverityRuleView
+
+from ..core.models import Diagnostic, RawDiagnostic
 from ..interfaces.diagnostics import DiagnosticPipeline as DiagnosticPipelineProtocol
 from ..interfaces.diagnostics import (
     DiagnosticPipelineRequest,
 )
-from ..models import Diagnostic, RawDiagnostic
-from ..severity import SeverityRuleView
 from .core import normalize_diagnostics
 from .filtering import filter_diagnostics
 

@@ -8,8 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...config import OutputConfig
-from ...logging import colorize
-from ...models import RunResult
+from ...core.logging import colorize
+from ...core.models import RunResult
 from .diagnostics import dump_diagnostics, join_output
 
 

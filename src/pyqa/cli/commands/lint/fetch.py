@@ -20,9 +20,10 @@ from rich.progress import (
 )
 from rich.table import Table
 
+from pyqa.core.environment.tool_env.models import PreparedCommand
+from pyqa.runtime.console import console_manager, is_tty
+
 from ....config import Config
-from ....console import console_manager, is_tty
-from ....tool_env.models import PreparedCommand
 from ....tools.base import Tool
 from ....tools.registry import DEFAULT_REGISTRY
 from .preparation import PreparedLintState

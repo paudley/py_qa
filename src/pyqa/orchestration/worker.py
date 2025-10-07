@@ -10,8 +10,8 @@ from shutil import which as _which
 from subprocess import CompletedProcess
 from typing import Final
 
-from ..process_utils import CommandOptions
-from ..process_utils import run_command as _run_command
+from ..core.runtime.process import CommandOptions
+from ..core.runtime.process import run_command as _run_command
 
 ENV_OVERRIDE_KEY: Final[str] = "env"
 CWD_OVERRIDE_KEY: Final[str] = "cwd"

@@ -11,7 +11,7 @@ version = "0.2.0"
 description = "Polyglot lint orchestration toolkit"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
     "autopep8>=2.3.2",
     "bandit[baseline,sarif,toml]>=1.8.6",

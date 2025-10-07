@@ -11,7 +11,7 @@ from enum import StrEnum
 from functools import lru_cache
 from typing import Final, TypeAlias
 
-from ..models import RawDiagnostic
+from ..core.models import RawDiagnostic
 from ..tools.base import ToolContext
 
 __all__ = ["JsonDiagnosticExtractor", "JsonDiagnosticsConfigError"]

@@ -266,20 +266,19 @@ def _run_with_python(
     current_executable = Path(sys.executable).resolve()
     selected_executable = python_path.resolve()
     _debug(
-        f"Evaluating interpreter for in-process execution: current={current_executable} "
-        f"selected={selected_executable}"
+        f"Evaluating interpreter for in-process execution: current={current_executable} selected={selected_executable}"
     )
 
     if current_executable == selected_executable:
         _debug("Using current interpreter for in-process execution")
         _debug("Running with local interpreter")
         try:
-            # Importing inside the execution branch lets us detect missing optional
-            # dependencies and trigger the uv fallback without crashing at module
-            # import time. pylint: disable=import-outside-toplevel
-            from pyqa.cli.app import app
+            # Import lazily so optional CLI extras are only required when the
+            # current interpreter actually hosts the application; this allows us
+            # to fall back to ``uv`` gracefully when dependencies are absent.
+            from pyqa.cli.app import app  # pylint: disable=import-outside-toplevel
         except ModuleNotFoundError as exc:
-            _debug("Local interpreter missing dependencies; falling back to uv: " f"{exc.__class__.__name__}: {exc}")
+            _debug(f"Local interpreter missing dependencies; falling back to uv: {exc.__class__.__name__}: {exc}")
             uv_path = _ensure_uv()
             _run_with_uv(uv_path, command, args, require_locked=True)
             return
@@ -401,6 +400,7 @@ def _download_uv_archive() -> Path:
     # Bandit B310: The download is restricted to HTTPS GitHub releases; the
     # generated URL never uses file or custom schemes, so this network fetch is
     # a deliberate and safe dependency bootstrap.
+    # ``urllib`` fetch is limited to the trusted upgrade URL constructed above.
     with urllib.request.urlopen(url) as response, open(archive_path, "wb") as handle:  # nosec B310
         shutil.copyfileobj(response, handle)
     return archive_path

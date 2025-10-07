@@ -3,7 +3,7 @@
 
 """Interfaces for diagnostics presentation and advice generation."""
 
-# pylint: disable=too-few-public-methods
+# pylint: disable=too-few-public-methods -- Protocol definitions intentionally expose minimal method surfaces.
 
 from __future__ import annotations
 

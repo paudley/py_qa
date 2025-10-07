@@ -10,18 +10,21 @@ other presentation layers such as PR summaries or SARIF emitters.
 
 from __future__ import annotations
 
-import re
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
-from ...annotations import AnnotationEngine
+from ...analysis.services import resolve_annotation_provider, resolve_function_scale_estimator
 from ...catalog.metadata import catalog_duplicate_hint_codes
 from ...filesystem.paths import normalize_path
+from ...interfaces.analysis import AnnotationProvider, FunctionScaleEstimator
+
+if TYPE_CHECKING:  # pragma: no cover - types only
+    pass
 
 
 class AdviceCategory(str, Enum):
@@ -59,17 +62,23 @@ class AdviceEntry:
 class AdviceBuilder:
     """Reusable façade for generating advice with shared annotation state."""
 
-    def __init__(self, annotation_engine: AnnotationEngine | None = None) -> None:
-        self._engine = annotation_engine or AnnotationEngine()
+    def __init__(
+        self,
+        *,
+        annotation_engine: AnnotationProvider | None = None,
+        function_scale_estimator: FunctionScaleEstimator | None = None,
+    ) -> None:
+        self._engine: AnnotationProvider = annotation_engine or _create_default_annotation_provider()
+        self._function_scale: FunctionScaleEstimator = function_scale_estimator or resolve_function_scale_estimator()
 
     @property
-    def annotation_engine(self) -> AnnotationEngine:
-        """Return the underlying annotation engine (useful for cache priming)."""
+    def annotation_engine(self) -> AnnotationProvider:
+        """Return the underlying annotation provider (useful for cache priming)."""
         return self._engine
 
     def build(self, entries: Sequence[tuple[str, int, str, str, str, str]]) -> list[AdviceEntry]:
         """Generate advice entries from concise formatter tuples."""
-        return generate_advice(entries, self._engine)
+        return generate_advice(entries, self._engine, self._function_scale)
 
 
 MIN_DOC_FINDINGS: Final[int] = 3
@@ -120,13 +129,13 @@ class DiagnosticRecord:
 class _AdviceAccumulator:
     """Accumulator that deduplicates advice entries before emission."""
 
-    def __init__(self, annotation_engine: AnnotationEngine) -> None:
+    def __init__(self, annotation_engine: AnnotationProvider) -> None:
         self._annotation_engine = annotation_engine
         self._seen: set[tuple[AdviceCategory, str]] = set()
         self._entries: list[AdviceEntry] = []
 
     @property
-    def annotation_engine(self) -> AnnotationEngine:
+    def annotation_engine(self) -> AnnotationProvider:
         """Return the annotation engine used for message parsing."""
 
         return self._annotation_engine
@@ -149,7 +158,8 @@ class _AdviceAccumulator:
 
 def generate_advice(
     entries: Sequence[tuple[str, int, str, str, str, str]],
-    annotation_engine: AnnotationEngine,
+    annotation_engine: AnnotationProvider,
+    function_scale: FunctionScaleEstimator | None = None,
 ) -> list[AdviceEntry]:
     """Return SOLID-aligned guidance derived from normalised diagnostics.
 
@@ -160,6 +170,9 @@ def generate_advice(
             with ``-``.
         annotation_engine: Shared annotation engine capable of highlighting
             message spans used for weighting annotation-related advice.
+        function_scale: Optional estimator used to determine function size and
+            complexity metrics for complexity guidance. When ``None`` the
+            registered service implementation is resolved.
 
     Returns:
         list[AdviceEntry]: Ordered list of unique advice entries reflecting the
@@ -169,8 +182,9 @@ def generate_advice(
 
     diagnostics = _normalise_entries(entries)
     accumulator = _AdviceAccumulator(annotation_engine)
+    estimator = function_scale or resolve_function_scale_estimator()
 
-    _append_complexity_guidance(accumulator, diagnostics)
+    _append_complexity_guidance(accumulator, diagnostics, estimator)
     _append_documentation_guidance(accumulator, diagnostics)
     _append_annotation_guidance(accumulator, diagnostics)
     _append_stub_guidance(accumulator, diagnostics)
@@ -212,11 +226,12 @@ def _normalise_entries(
 def _append_complexity_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
+    estimator: FunctionScaleEstimator,
 ) -> None:
     """Highlight complexity hotspots by function and file."""
 
     function_targets, file_targets = _collect_complexity_targets(diagnostics)
-    _append_function_complexity_guidance(accumulator, function_targets)
+    _append_function_complexity_guidance(accumulator, function_targets, estimator)
     _append_file_complexity_guidance(accumulator, file_targets)
 
 
@@ -247,6 +262,7 @@ def _collect_complexity_targets(
 def _append_function_complexity_guidance(
     accumulator: _AdviceAccumulator,
     function_targets: Sequence[tuple[str, str]],
+    estimator: FunctionScaleEstimator,
 ) -> None:
     """Add refactor priority advice for complex functions."""
 
@@ -255,7 +271,7 @@ def _append_function_complexity_guidance(
 
     hotspots: list[tuple[str, str, int | None, int | None]] = []
     for file_path, function in function_targets:
-        size, complexity = _estimate_function_scale(Path(file_path), function)
+        size, complexity = estimator.estimate(Path(file_path), function)
         hotspots.append((file_path, function, size, complexity))
 
     def sort_key(item: tuple[str, str, int | None, int | None]) -> tuple[int, int, str]:
@@ -624,44 +640,10 @@ def _summarise_paths(paths: Sequence[str], *, limit: int = 5) -> str:
     return summary
 
 
-def _estimate_function_scale(path: Path, function: str) -> tuple[int | None, int | None]:
-    if not function:
-        return (None, None)
-    try:
-        text = path.read_text(encoding="utf-8", errors="ignore")
-    except OSError:
-        return (None, None)
-    lines = text.splitlines()
-    signature_pattern = re.compile(rf"^\s*(?:async\s+)?def\s+{re.escape(function)}\b")
-    start_index: int | None = None
-    indent_level: int | None = None
-    for idx, line in enumerate(lines):
-        if signature_pattern.match(line):
-            start_index = idx
-            indent_level = len(line) - len(line.lstrip(" \t"))
-            break
-    if start_index is None or indent_level is None:
-        return (None, None)
-
-    count = 1  # include signature
-    complexity = 0
-    keywords = re.compile(r"\b(if|for|while|elif|case|except|and|or|try|with)\b")
-    for line in lines[start_index + 1 :]:
-        stripped = line.strip()
-        if not stripped:
-            continue
-        current_indent = len(line) - len(line.lstrip(" \t"))
-        if current_indent <= indent_level:
-            break
-        count += 1
-        complexity += len(keywords.findall(stripped))
-    return (count if count else None, complexity if complexity else None)
-
-
 ANNOTATION_SPAN_STYLE: Final[str] = "ansi256:213"
 
 
-def _infer_annotation_targets(message: str, engine: AnnotationEngine) -> int:
+def _infer_annotation_targets(message: str, engine: AnnotationProvider) -> int:
     """Return the number of highlighted annotation spans within *message*."""
 
     spans = engine.message_spans(message)
@@ -673,3 +655,12 @@ __all__ = [
     "AdviceEntry",
     "generate_advice",
 ]
+
+
+def _create_default_annotation_provider() -> AnnotationProvider:
+    """Return the default annotation provider implementation.
+
+    Returns:
+        AnnotationProvider: Default annotation provider used for advice generation.
+    """
+    return resolve_annotation_provider()

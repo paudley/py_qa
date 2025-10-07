@@ -52,6 +52,12 @@ from .params import (
 NORMAL_PRESET_HELP: Final[str] = (
     "Apply the built-in 'normal' lint preset (concise output, advice, no tests, local linters)."
 )
+DOCSTRINGS_HELP: Final[str] = "Run the internal docstring quality linter and exit."
+SUPPRESSIONS_HELP: Final[str] = "Run the internal suppression checker and exit."
+TYPING_HELP: Final[str] = "Run the strict typing checker and exit."
+CLOSURES_HELP: Final[str] = "Run the closure/partial usage checker and exit."
+SIGNATURES_HELP: Final[str] = "Run the function signature width checker and exit."
+CACHE_HELP: Final[str] = "Run the functools cache usage checker and exit."
 FILTER_HELP: Final[str] = "Filter stdout/stderr from TOOL using regex (TOOL:pattern)."
 OUTPUT_MODE_HELP: Final[str] = "Output mode: concise, pretty, or raw."
 REPORT_JSON_HELP: Final[str] = "Write JSON report to the provided path."
@@ -700,6 +706,30 @@ def _meta_params_dependency(
         bool,
         typer.Option(False, "-n", "--normal", help=NORMAL_PRESET_HELP),
     ],
+    check_docstrings: Annotated[
+        bool,
+        typer.Option(False, "--check-docstrings", help=DOCSTRINGS_HELP),
+    ],
+    check_suppressions: Annotated[
+        bool,
+        typer.Option(False, "--check-suppressions", help=SUPPRESSIONS_HELP),
+    ],
+    check_types_strict: Annotated[
+        bool,
+        typer.Option(False, "--check-types-strict", help=TYPING_HELP),
+    ],
+    check_closures: Annotated[
+        bool,
+        typer.Option(False, "--check-closures", help=CLOSURES_HELP),
+    ],
+    check_signatures: Annotated[
+        bool,
+        typer.Option(False, "--check-signatures", help=SIGNATURES_HELP),
+    ],
+    check_cache_usage: Annotated[
+        bool,
+        typer.Option(False, "--check-cache-usage", help=CACHE_HELP),
+    ],
 ) -> LintMetaParams:
     """Return meta-command parameters influencing lint execution flow.
 
@@ -709,6 +739,12 @@ def _meta_params_dependency(
         fetch_all_tools: Whether to fetch all tool runtimes and exit.
         validate_schema: Whether to validate the tooling catalog and exit.
         normal: Whether to apply the normal lint preset.
+        check_docstrings: Whether to run the internal docstring linter and exit.
+        check_suppressions: Whether to run the suppression checker and exit.
+        check_types_strict: Whether to run the strict typing checker and exit.
+        check_closures: Whether to run the closure checker and exit.
+        check_signatures: Whether to run the signature width checker and exit.
+        check_cache_usage: Whether to run the cache usage checker and exit.
 
     Returns:
         LintMetaParams: Structured meta-action configuration.
@@ -720,6 +756,12 @@ def _meta_params_dependency(
         fetch_all_tools=fetch_all_tools,
         validate_schema=validate_schema,
         normal=normal,
+        check_docstrings=check_docstrings,
+        check_suppressions=check_suppressions,
+        check_types_strict=check_types_strict,
+        check_closures=check_closures,
+        check_signatures=check_signatures,
+        check_cache_usage=check_cache_usage,
     )
 
 
@@ -835,6 +877,12 @@ __all__ = (
     "BANDIT_LEVEL_CHOICES",
     "BANDIT_SEVERITY_HELP",
     "CACHE_DIR_HELP",
+    "DOCSTRINGS_HELP",
+    "SUPPRESSIONS_HELP",
+    "TYPING_HELP",
+    "CLOSURES_HELP",
+    "SIGNATURES_HELP",
+    "CACHE_HELP",
     "FETCH_ALL_TOOLS_HELP",
     "FILTER_HELP",
     "JOBS_HELP",

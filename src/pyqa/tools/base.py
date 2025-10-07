@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Final, Literal, Protocol, cast, runtime_c
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
-from ..models import Diagnostic, OutputFilter, RawDiagnostic
+from ..core.models import Diagnostic, OutputFilter, RawDiagnostic
 
 
 class ToolContext(BaseModel):
@@ -103,7 +103,7 @@ class ActionExitCodes(BaseModel):
     """Categorise exit codes reported by a tool action.
 
     The orchestrator converts these collections into
-    :class:`pyqa.models.ToolExitCategory` values so callers can distinguish
+    :class:`pyqa.core.models.ToolExitCategory` values so callers can distinguish
     between operational failures and diagnostics raised by the tool itself.
     """
 

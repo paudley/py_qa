@@ -3,12 +3,12 @@
 
 """Configuration loading and mutation interfaces."""
 
-# pylint: disable=too-few-public-methods
+# pylint: disable=too-few-public-methods -- Protocol definitions intentionally expose minimal method surfaces.
 
 from __future__ import annotations
 
 from collections.abc import Mapping, MutableMapping
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -42,3 +42,21 @@ class ConfigMutator(Protocol):
     def apply(self, data: MutableMapping[str, object]) -> None:
         """Mutate ``data`` in place."""
         raise NotImplementedError
+
+
+@runtime_checkable
+class ConfigLoader(Protocol):
+    """Load configuration values from registered sources."""
+
+    def load(self, *, strict: bool = False) -> Any:
+        """Return the resolved configuration object."""
+
+        raise NotImplementedError
+
+
+__all__ = [
+    "ConfigLoader",
+    "ConfigMutator",
+    "ConfigResolver",
+    "ConfigSource",
+]

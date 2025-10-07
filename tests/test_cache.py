@@ -4,10 +4,11 @@
 
 from pathlib import Path
 
+from pyqa.cache.in_memory import memoize
 from pyqa.cache.result_store import CacheRequest, ResultCache
-from pyqa.metrics import compute_file_metrics, normalise_path_key
-from pyqa.models import Diagnostic, ToolOutcome
-from pyqa.severity import Severity
+from pyqa.core.metrics import compute_file_metrics, normalise_path_key
+from pyqa.core.models import Diagnostic, ToolOutcome
+from pyqa.core.severity import Severity
 
 
 def make_outcome() -> ToolOutcome:
@@ -95,3 +96,39 @@ def test_result_cache_miss_on_modified_file(tmp_path: Path) -> None:
     source.write_text("print('bye')\n", encoding="utf-8")
 
     assert cache.load(request) is None
+
+
+def test_memoize_enforces_lru_capacity() -> None:
+    """Validate that ``memoize`` caches results and evicts older entries.
+
+    Returns:
+        None: This test asserts caching semantics directly.
+    """
+
+    call_counter = {"count": 0}
+
+    @memoize(maxsize=2)
+    def compute(value: int) -> int:
+        """Return ``value`` doubled while incrementing the call counter.
+
+        Args:
+            value: Integer value to double for validation purposes.
+
+        Returns:
+            int: The doubled value produced by the memoized function.
+        """
+
+        call_counter["count"] += 1
+        return value * 2
+
+    assert compute(1) == 2
+    assert compute(1) == 2
+    assert call_counter["count"] == 1
+
+    assert compute(2) == 4
+    assert compute(3) == 6
+    assert call_counter["count"] == 3
+
+    assert compute.cache_info() == (2, 2, 2)
+    compute.cache_clear()
+    assert compute.cache_info() == (0, 0, 2)

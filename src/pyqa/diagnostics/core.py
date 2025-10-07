@@ -10,10 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Final
 
-from ..annotations import AnnotationEngine
-from ..config import DedupeConfig
-from ..models import Diagnostic, RawDiagnostic, RunResult
-from ..severity import (
+from pyqa.core.severity import (
     DEFAULT_SEVERITY_RULES,
     Severity,
     SeverityRuleMap,
@@ -21,6 +18,11 @@ from ..severity import (
     add_custom_rule,
     apply_severity_rules,
 )
+
+from ..analysis.services import resolve_annotation_provider
+from ..config import DedupeConfig
+from ..core.models import Diagnostic, RawDiagnostic, RunResult
+from ..interfaces.analysis import AnnotationProvider
 
 _SEVERITY_RANK: MutableMapping[Severity, int] = {
     Severity.ERROR: 3,
@@ -43,8 +45,6 @@ _CROSS_TOOL_EQUIVALENT_CODES: Final[set[frozenset[str]]] = {
 _CODE_PREFERENCE: Final[dict[frozenset[str], str]] = {
     frozenset({"arg-type", "reportArgumentType"}): "pyright",
 }
-
-_ANNOTATION_ENGINE = AnnotationEngine()
 
 
 class IssueTag(str, Enum):
@@ -191,17 +191,26 @@ class _DedupEntry:
     outcome_index: int
 
 
-def dedupe_outcomes(result: RunResult, cfg: DedupeConfig) -> None:
+def dedupe_outcomes(
+    result: RunResult,
+    cfg: DedupeConfig,
+    *,
+    annotation_provider: AnnotationProvider | None = None,
+) -> None:
     """Deduplicate diagnostics found in ``result`` according to ``cfg``.
 
     Args:
         result: Run result containing outcome diagnostics that may overlap.
         cfg: Deduplication configuration describing scope and preference rules.
+        annotation_provider: Optional annotation provider used to enrich
+            diagnostics before semantic comparison. When omitted, the default
+            provider registered in the analysis service container is resolved.
     """
     if not cfg.dedupe:
         return
 
-    _ANNOTATION_ENGINE.annotate_run(result)
+    engine = annotation_provider or resolve_annotation_provider()
+    engine.annotate_run(result)
 
     kept: list[_DedupEntry] = []
     for outcome_index, outcome in enumerate(result.outcomes):
@@ -209,7 +218,7 @@ def dedupe_outcomes(result: RunResult, cfg: DedupeConfig) -> None:
         for diag in outcome.diagnostics:
             replacement = False
             for entry in kept:
-                if not _is_duplicate(entry.diagnostic, diag, cfg):
+                if not _is_duplicate(entry.diagnostic, diag, cfg, engine):
                     continue
                 preferred = _prefer(entry.diagnostic, diag, cfg)
                 if preferred is entry.diagnostic:
@@ -231,13 +240,19 @@ def dedupe_outcomes(result: RunResult, cfg: DedupeConfig) -> None:
         result.outcomes[entry.outcome_index].diagnostics.append(entry.diagnostic)
 
 
-def _is_duplicate(existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig) -> bool:
+def _is_duplicate(
+    existing: Diagnostic,
+    candidate: Diagnostic,
+    cfg: DedupeConfig,
+    engine: AnnotationProvider,
+) -> bool:
     """Return ``True`` when ``candidate`` duplicates ``existing`` under ``cfg``.
 
     Args:
         existing: Diagnostic already retained by the deduper.
         candidate: Newly observed diagnostic under evaluation.
         cfg: Deduplication configuration governing comparison behaviour.
+        engine: Annotation provider used to derive semantic message signatures.
 
     Returns:
         bool: ``True`` when both diagnostics represent the same issue.
@@ -246,7 +261,7 @@ def _is_duplicate(existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig
         return False
 
     if _codes_match(existing, candidate):
-        return _messages_compatible(existing, candidate) and _lines_within_fuzz(
+        return _messages_compatible(existing, candidate, engine) and _lines_within_fuzz(
             existing,
             candidate,
             cfg.dedupe_line_fuzz,
@@ -255,7 +270,7 @@ def _is_duplicate(existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig
     if _cross_tool_equivalent(existing, candidate):
         return True
 
-    return _semantic_overlap(existing, candidate)
+    return _semantic_overlap(existing, candidate, engine)
 
 
 def _line_distance(lhs: int | None, rhs: int | None) -> int:
@@ -302,12 +317,17 @@ def _prefer(existing: Diagnostic, candidate: Diagnostic, cfg: DedupeConfig) -> D
     raise ValueError(f"Unknown deduplication strategy: {strategy!r}")
 
 
-def _semantic_overlap(left: Diagnostic, right: Diagnostic) -> bool:
+def _semantic_overlap(
+    left: Diagnostic,
+    right: Diagnostic,
+    engine: AnnotationProvider,
+) -> bool:
     """Return ``True`` when diagnostics describe the same semantic issue.
 
     Args:
         left: First diagnostic candidate.
         right: Second diagnostic candidate.
+        engine: Annotation provider used to derive semantic signatures.
 
     Returns:
         bool: ``True`` when diagnostics align semantically.
@@ -318,12 +338,12 @@ def _semantic_overlap(left: Diagnostic, right: Diagnostic) -> bool:
     if left.function and right.function and left.function != right.function:
         return False
 
-    tag_left = _issue_tag(left)
-    if tag_left is None or tag_left != _issue_tag(right):
+    tag_left = _issue_tag(left, engine)
+    if tag_left is None or tag_left != _issue_tag(right, engine):
         return False
 
-    signature_left = set(_ANNOTATION_ENGINE.message_signature(left.message))
-    signature_right = set(_ANNOTATION_ENGINE.message_signature(right.message))
+    signature_left = set(engine.message_signature(left.message))
+    signature_right = set(engine.message_signature(right.message))
     signature_equal = _signatures_match(left, right, signature_left, signature_right)
 
     if tag_left is IssueTag.TYPING:
@@ -333,17 +353,18 @@ def _semantic_overlap(left: Diagnostic, right: Diagnostic) -> bool:
     return signature_equal
 
 
-def _issue_tag(diag: Diagnostic) -> IssueTag | None:
+def _issue_tag(diag: Diagnostic, engine: AnnotationProvider) -> IssueTag | None:
     """Return the semantic category inferred from a diagnostic.
 
     Args:
         diag: Diagnostic whose message signatures should be classified.
+        engine: Annotation provider used to extract signature tokens.
 
     Returns:
         IssueTag | None: Category describing the diagnostic or ``None`` when unknown.
     """
     code = (diag.code or "").upper()
-    signature = set(_ANNOTATION_ENGINE.message_signature(diag.message))
+    signature = set(engine.message_signature(diag.message))
 
     if code in _COMPLEXITY_CODES or signature & _COMPLEXITY_SIGNATURE_TOKENS:
         return IssueTag.COMPLEXITY
@@ -457,19 +478,24 @@ def _codes_match(existing: Diagnostic, candidate: Diagnostic) -> bool:
     return _normalized_code(existing) == _normalized_code(candidate)
 
 
-def _messages_compatible(existing: Diagnostic, candidate: Diagnostic) -> bool:
+def _messages_compatible(
+    existing: Diagnostic,
+    candidate: Diagnostic,
+    engine: AnnotationProvider,
+) -> bool:
     """Return ``True`` when diagnostic messages reference the same issue.
 
     Args:
         existing: Diagnostic already retained.
         candidate: Diagnostic being evaluated.
+        engine: Annotation provider used to extract semantic signatures.
 
     Returns:
         bool: ``True`` when both diagnostics describe the same situation.
     """
     if existing.message == candidate.message:
         return True
-    return _semantic_overlap(existing, candidate)
+    return _semantic_overlap(existing, candidate, engine)
 
 
 def _cross_tool_equivalent(existing: Diagnostic, candidate: Diagnostic) -> bool:

@@ -9,10 +9,12 @@ from typing import Annotated, Final
 import typer
 from rich.progress import Progress
 
+from pyqa.runtime.console import is_tty
+
 from ....config import ConfigError
-from ....console import is_tty
 from ....orchestration.tool_selection import PHASE_ORDER, PhaseLiteral
 from ...core.config_builder import build_config
+from ...core.runtime import ServiceResolutionError
 from ...core.shared import CLILogger, Depends, build_cli_logger
 from .cli_models import _build_lint_cli_inputs
 from .meta import (
@@ -119,6 +121,24 @@ def _validate_cli_combinations(inputs: LintCLIInputs) -> None:
         if condition:
             raise typer.BadParameter(message)
 
+    check_flags = (
+        meta.check_docstrings,
+        meta.check_suppressions,
+        meta.check_types_strict,
+        meta.check_closures,
+        meta.check_signatures,
+        meta.check_cache_usage,
+    )
+    if any(check_flags) and any(
+        (
+            meta.doctor,
+            meta.tool_info is not None,
+            meta.fetch_all_tools,
+            meta.validate_schema,
+        ),
+    ):
+        raise typer.BadParameter("Internal lint check flags cannot be combined with other meta actions")
+
 
 def _build_runtime_context(state: PreparedLintState) -> LintRuntimeContext:
     """Materialise runtime dependencies for lint execution.
@@ -163,7 +183,7 @@ def _run_lint_pipeline(runtime: LintRuntimeContext) -> None:
     result = runtime.orchestrator.run(config, root=runtime.state.root)
     append_internal_quality_checks(
         config=config,
-        root=runtime.state.root,
+        state=runtime.state,
         run_result=result,
         logger=runtime.state.logger,
     )
@@ -176,11 +196,19 @@ def _run_lint_pipeline(runtime: LintRuntimeContext) -> None:
         controller.console.print(final_summary)
     controller.stop()
 
+    annotation_provider = None
+    if runtime.services is not None:
+        try:
+            annotation_provider = runtime.services.resolve("annotation_provider")
+        except ServiceResolutionError:
+            annotation_provider = None
+
     handle_reporting(
         result,
         config,
         runtime.state.artifacts,
         logger=runtime.state.logger,
+        annotation_provider=annotation_provider,
     )
     raise typer.Exit(code=1 if issues_present else 0)
 

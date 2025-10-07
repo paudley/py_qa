@@ -8,8 +8,8 @@ from collections.abc import Iterable
 from enum import StrEnum
 from typing import Final
 
-from ..annotations import AnnotationEngine
-from ..models import Diagnostic, RunResult
+from ..core.models import Diagnostic, RunResult
+from ..interfaces.analysis import AnnotationProvider
 
 _TEST_PREFIXES: Final[tuple[str, ...]] = ("tests/", "test/")
 
@@ -29,7 +29,7 @@ class AnnotationTool(StrEnum):
 
 
 class DiagnosticSpanKind(StrEnum):
-    """Span kinds returned by :class:`AnnotationEngine`."""
+    """Span kinds returned by annotation providers."""
 
     ARGUMENT = "argument"
 
@@ -55,7 +55,7 @@ _TYPING_SUPPRESSION_TEMPLATE: Final[str] = (
 )
 
 
-def apply_suppression_hints(result: RunResult, engine: AnnotationEngine) -> None:
+def apply_suppression_hints(result: RunResult, engine: AnnotationProvider) -> None:
     """Populate ``diagnostic.hints`` with suppression guidance.
 
     Args:
@@ -71,7 +71,7 @@ def apply_suppression_hints(result: RunResult, engine: AnnotationEngine) -> None
                 diag.hints = tuple(dict.fromkeys(hints))
 
 
-def _hints_for_diagnostic(diag: Diagnostic, engine: AnnotationEngine) -> Iterable[str]:
+def _hints_for_diagnostic(diag: Diagnostic, engine: AnnotationProvider) -> Iterable[str]:
     """Return suppression hints tailored to ``diag``.
 
     Args:
@@ -152,7 +152,7 @@ def _format_hint(diag: Diagnostic, suppression_key: str, guidance: str) -> str:
     return f"Suppression candidate ({suppression_key}) in {function}: {guidance}"
 
 
-def _extract_arguments(diag: Diagnostic, engine: AnnotationEngine) -> list[str]:
+def _extract_arguments(diag: Diagnostic, engine: AnnotationProvider) -> list[str]:
     """Return argument identifiers highlighted in ``diag.message``.
 
     Args:

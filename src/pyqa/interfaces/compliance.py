@@ -3,7 +3,7 @@
 
 """Interfaces for policy/compliance subsystems."""
 
-# pylint: disable=too-few-public-methods
+# pylint: disable=too-few-public-methods -- Protocol definitions intentionally expose minimal method surfaces.
 
 from __future__ import annotations
 

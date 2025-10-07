@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from pyqa.config import Config
 from pyqa.catalog.command_options import command_option_map, compile_option_mappings
 from pyqa.catalog.errors import CatalogIntegrityError
+from pyqa.config import Config
 from pyqa.tools.base import ToolContext
 
 

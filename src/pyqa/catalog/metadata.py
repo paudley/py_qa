@@ -10,7 +10,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Final
 
-from ..paths import get_pyqa_root
+from pyqa.platform.paths import get_pyqa_root
+
 from .errors import CatalogIntegrityError
 from .loader import ToolCatalogLoader
 from .model_catalog import CatalogSnapshot

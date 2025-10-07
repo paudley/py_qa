@@ -3,7 +3,7 @@
 
 """Interfaces for file discovery and target planning."""
 
-# pylint: disable=too-few-public-methods
+# pylint: disable=too-few-public-methods -- Protocol definitions intentionally expose minimal method surfaces.
 
 from __future__ import annotations
 

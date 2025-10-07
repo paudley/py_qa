@@ -15,9 +15,10 @@ from importlib import import_module
 from pathlib import Path
 from typing import Final, Protocol, cast
 
+from pyqa.core.severity import Severity
+
+from ..core.models import RawDiagnostic
 from ..filesystem.paths import normalize_path
-from ..models import RawDiagnostic
-from ..severity import Severity
 from ..utils.bool_utils import interpret_optional_bool
 from .base import ToolContext
 

@@ -39,4 +39,3 @@ def test_ttl_cache_clear():
     compute.cache_clear()
     compute(3)
     assert calls["count"] == 2
-

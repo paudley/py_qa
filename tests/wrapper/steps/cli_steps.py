@@ -8,13 +8,12 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
-from typing import Dict, Optional
 
 from pytest_bdd import given, parsers, then, when
 
 PYQA_ROOT = Path(__file__).resolve().parents[3]
-WRAPPER_ENV: Dict[str, str] = {}
-RESULT: Dict[str, Optional[subprocess.CompletedProcess[str]]] = {"process": None}
+WRAPPER_ENV: dict[str, str] = {}
+RESULT: dict[str, subprocess.CompletedProcess[str] | None] = {"process": None}
 ARTIFACT_ROOT: Path | None = None
 
 
@@ -73,10 +72,7 @@ def assert_local_interpreter() -> None:
     assert process is not None
     stderr = process.stderr
     assert "Using repository virtualenv interpreter" in stderr
-    assert (
-        "Running with local interpreter" in stderr
-        or "Spawning separate interpreter for CLI execution" in stderr
-    )
+    assert "Running with local interpreter" in stderr or "Spawning separate interpreter for CLI execution" in stderr
 
 
 @then("the wrapper falls back to uv")
@@ -143,10 +139,5 @@ def _python_stub_for(name: str) -> str:
 
 def _shell_stub_for(name: str) -> str:
     if "fake_uv" in name:
-        return (
-            "#!/usr/bin/env bash\n"
-            "set -euo pipefail\n"
-            "echo \"fake uv invoked with args: $*\" >&2\n"
-            "exit 0\n"
-        )
+        return '#!/usr/bin/env bash\nset -euo pipefail\necho "fake uv invoked with args: $*" >&2\nexit 0\n'
     raise ValueError(f"Unknown shell stub requested: {name}")

@@ -10,9 +10,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Final, TypedDict
 
-from ..annotations import AnnotationEngine
-from ..models import Diagnostic, RunResult
-from ..reporting.advice import _estimate_function_scale as _reporting_estimate_function_scale
+from ..core.models import Diagnostic, RunResult
+from ..interfaces.analysis import AnnotationProvider, FunctionScaleEstimator
+from .services import resolve_function_scale_estimator
 
 MAX_NAVIGATOR_ENTRIES: Final[int] = 10
 COMPLEXITY_CODES: Final[set[str]] = {"C901", "R0915", "PLR0915", "R1260"}
@@ -124,14 +124,23 @@ class NavigatorBucket:
         )
 
 
-def build_refactor_navigator(result: RunResult, engine: AnnotationEngine) -> None:
+def build_refactor_navigator(
+    result: RunResult,
+    engine: AnnotationProvider,
+    *,
+    function_scale: FunctionScaleEstimator | None = None,
+) -> None:
     """Populate ``result.analysis['refactor_navigator']`` with hotspot data.
 
     Args:
         result: Run outcome containing diagnostics and analysis metadata.
         engine: Annotation engine used to derive diagnostic message signatures.
+        function_scale: Optional estimator used to approximate function size and
+            complexity for navigator prioritisation. When omitted, the
+            registered function scale estimator service is resolved.
     """
 
+    estimator = function_scale or resolve_function_scale_estimator()
     hotspots: defaultdict[tuple[str, str], NavigatorBucket] = defaultdict(NavigatorBucket)
 
     for outcome in result.outcomes:
@@ -147,7 +156,7 @@ def build_refactor_navigator(result: RunResult, engine: AnnotationEngine) -> Non
     for (file_path, function), bucket in hotspots.items():
         if not bucket.issue_tags:
             continue
-        size, complexity = _estimate_function_scale(root_path / file_path, function)
+        size, complexity = estimator.estimate(root_path / file_path, function)
         bucket.size = size
         bucket.complexity = complexity
         summary.append(bucket)
@@ -162,7 +171,7 @@ def build_refactor_navigator(result: RunResult, engine: AnnotationEngine) -> Non
     result.analysis["refactor_navigator"] = [bucket.to_payload() for bucket in summary[:MAX_NAVIGATOR_ENTRIES]]
 
 
-def _issue_tag(diag: Diagnostic, engine: AnnotationEngine) -> IssueTag | None:
+def _issue_tag(diag: Diagnostic, engine: AnnotationProvider) -> IssueTag | None:
     """Return the navigator issue tag for ``diag`` when recognised."""
 
     code = (diag.code or "").upper()
@@ -177,12 +186,6 @@ def _issue_tag(diag: Diagnostic, engine: AnnotationEngine) -> IssueTag | None:
     if code in MAGIC_CODES or MAGIC_SIGNATURES & signature:
         return IssueTag.MAGIC_NUMBER
     return None
-
-
-def _estimate_function_scale(path: Path, function: str) -> tuple[int | None, int | None]:
-    """Return the function length and complexity scores for ``function``."""
-
-    return _reporting_estimate_function_scale(path, function)
 
 
 __all__ = ["build_refactor_navigator"]

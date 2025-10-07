@@ -36,8 +36,12 @@
 ### 4. Docstring and Comment Auditing
 
 * Add catalog flag (`documentationChecks`) for Python tools requiring Google-style docstrings.
-* Reuse spaCy pipelines to verify docstring sections and produce normalized suggestions.
+* Reuse spaCy pipelines to verify docstring sections and produce normalized suggestions; combine with Tree-sitter queries to ensure structure coverage.
 * Update tests to cover CLI advice emitted when docstrings are missing or malformed.
+
+#### Future enhancement
+
+* Extend the combined spaCy/Tree-sitter pipeline to flag clusters of highly similar comments or docstrings, surfacing potential duplicate functionality or copy-paste regions for review.
 
 ### 5. Contextual Suppression Suggestions
 

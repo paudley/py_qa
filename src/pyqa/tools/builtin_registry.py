@@ -9,12 +9,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal, cast
 
+from pyqa.platform.paths import get_pyqa_root
+
 from ..catalog.errors import CatalogIntegrityError
 from ..catalog.loader import ToolCatalogLoader
 from ..catalog.model_catalog import CatalogSnapshot
 from ..catalog.model_runtime import SUPPORTED_RUNTIME_TYPES
 from ..catalog.model_strategy import StrategyDefinition
-from ..paths import get_pyqa_root
 from .base import (
     CommandBuilder,
     DeferredCommand,

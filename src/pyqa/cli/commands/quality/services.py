@@ -9,9 +9,10 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Final
 
+from pyqa.core.config.constants import PY_QA_DIR_NAME
+from pyqa.platform.workspace import is_py_qa_workspace
+
 from ....compliance.quality import QualityChecker, QualityCheckerOptions
-from ....constants import PY_QA_DIR_NAME
-from ....workspace import is_py_qa_workspace
 from ...core._config_loading import load_config_result
 from ...core.shared import CLILogger
 from ...core.utils import filter_py_qa_paths

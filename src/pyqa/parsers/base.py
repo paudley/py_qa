@@ -12,8 +12,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from ..models import RawDiagnostic
-from ..severity import Severity
+from pyqa.core.severity import Severity
+
+from ..core.models import RawDiagnostic
 from ..tools.base import Parser, ToolContext
 
 JsonTransform = Callable[[Any, ToolContext], Sequence[RawDiagnostic]]

@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from ...logging import colorize, emoji, fail, info, ok, section, warn
+from .public import colorize, emoji, fail, info, ok, section, warn
 
 __all__ = [
     "colorize",

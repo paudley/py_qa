@@ -11,12 +11,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Final
 
-from ...constants import PY_QA_DIR_NAME
+from pyqa.core.config.constants import PY_QA_DIR_NAME
+from pyqa.core.environment.tool_env import VersionResolver
+from pyqa.platform.workspace import is_py_qa_workspace
+
+from ...core.runtime.process import run_command
 from ...filesystem.paths import display_relative_path, ensure_absolute_path
-from ...process_utils import run_command
-from ...tool_env import VersionResolver
 from ...tools.base import Tool
-from ...workspace import is_py_qa_workspace
 
 
 class ToolAvailability(str, Enum):

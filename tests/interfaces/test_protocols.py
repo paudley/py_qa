@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, MutableMapping
 from pathlib import Path
-from typing import Iterable, Mapping, MutableMapping
 
 from pyqa.interfaces.analysis import AnnotationProvider, MessageSpan
 from pyqa.interfaces.catalog import CatalogSnapshot, StrategyFactory, ToolDefinition
@@ -22,11 +22,18 @@ class _Span:
     start = 0
     end = 1
     kind = "argument"
+    style = "ansi256:0"
 
 
 class _AnnotationProvider:
+    def annotate_run(self, result):
+        return {}
+
     def message_spans(self, message: str):
         return [_Span()]
+
+    def message_signature(self, message: str):
+        return ()
 
 
 def test_annotation_provider_protocol() -> None:

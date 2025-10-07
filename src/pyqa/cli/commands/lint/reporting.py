@@ -7,6 +7,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pyqa.core.models import Diagnostic, RunResult, ToolOutcome
+from pyqa.core.severity import Severity
+
+from ....analysis.services import resolve_annotation_provider
 from ....compliance.quality import (
     QualityChecker,
     QualityCheckerOptions,
@@ -15,11 +19,15 @@ from ....compliance.quality import (
 )
 from ....config import Config, SensitivityLevel
 from ....filesystem.paths import normalize_path_key
-from ....models import Diagnostic, RunResult, ToolOutcome
+from ....interfaces.analysis import AnnotationProvider
+from ....linting.base import InternalLintReport
+from ....linting.registry import InternalLinterDefinition, iter_internal_linters
 from ....reporting import render, write_json_report, write_pr_summary, write_sarif_report
-from ....severity import Severity
+from ....reporting.output.highlighting import set_annotation_provider as set_highlighting_annotation_provider
+from ....reporting.presenters.emitters import set_annotation_provider as set_emitter_annotation_provider
 from ...core.shared import CLILogger
 from .params import LintOutputArtifacts
+from .preparation import PreparedLintState
 
 
 def handle_reporting(
@@ -28,6 +36,7 @@ def handle_reporting(
     artifacts: LintOutputArtifacts,
     *,
     logger: CLILogger | None = None,
+    annotation_provider: AnnotationProvider | None = None,
 ) -> None:
     """Render console output and emit optional artifacts for ``pyqa lint``.
 
@@ -36,8 +45,12 @@ def handle_reporting(
         config: Effective configuration controlling output modes.
         artifacts: Requested artifact destinations for lint output.
         logger: Optional CLI logger used to report artifact creation.
+        annotation_provider: Annotation provider used for highlighting and advice.
     """
-    render(result, config.output)
+    provider = annotation_provider or resolve_annotation_provider()
+    set_highlighting_annotation_provider(provider)
+    set_emitter_annotation_provider(provider)
+    render(result, config.output, annotation_provider=provider)
     if artifacts.report_json:
         write_json_report(result, artifacts.report_json)
         if logger:
@@ -67,77 +80,76 @@ _QUALITY_SENSITIVITY_THRESHOLD: set[str] = {
 def append_internal_quality_checks(
     *,
     config: Config,
-    root: Path,
+    state: PreparedLintState,
     run_result: RunResult,
     logger: CLILogger | None = None,
 ) -> None:
-    """Run additional quality checks and append results for heightened sensitivity.
+    """Run internal quality and docstring checks, appending their outcomes.
 
     Args:
         config: Effective configuration controlling quality enforcement.
-        root: Repository root used to normalise diagnostic paths.
+        state: Prepared lint state providing discovery context and options.
         run_result: Aggregated run result to extend with quality diagnostics.
         logger: Optional CLI logger used to report appended diagnostics.
     """
-    if not config.quality.enforce_in_lint and config.severity.sensitivity not in _QUALITY_SENSITIVITY_THRESHOLD:
-        return
-    if not run_result.files:
-        return
-
-    checker = QualityChecker(
-        root=root,
-        quality=config.quality,
-        options=QualityCheckerOptions(
-            license_overrides=config.license,
-            files=run_result.files,
-            checks={"license"},
-        ),
-    )
-    quality_result = checker.run(fix=False)
-    if not quality_result.issues:
-        return
-
-    diagnostics: list[Diagnostic] = []
-    stdout_lines: list[str] = []
-    for issue in quality_result.issues:
-        diagnostic = _quality_issue_to_diagnostic(issue, root=root)
-        if diagnostic is None:
-            continue
-        diagnostics.append(diagnostic)
-        location = diagnostic.file
-        if not location and issue.path is not None:
-            location = normalize_path_key(issue.path, base_dir=root)
-        stdout_lines.append(_format_quality_issue_output(diagnostic, location))
-    if not diagnostics:
-        return
-
-    has_error = any(diag.severity is Severity.ERROR for diag in diagnostics)
-    diagnostic_outcome = ToolOutcome(
-        tool="quality",
-        action="license",
-        returncode=1 if has_error else 0,
-        stdout=stdout_lines,
-        stderr=[],
-        diagnostics=diagnostics,
-    )
-    run_result.outcomes.append(diagnostic_outcome)
-    if has_error:
-        run_result.outcomes.append(
-            ToolOutcome(
-                tool="quality",
-                action="enforce",
-                returncode=1,
-                stdout=[],
-                stderr=[],
-                diagnostics=[],
+    root = state.root
+    if run_result.files and (
+        config.quality.enforce_in_lint
+        or config.severity.sensitivity in _QUALITY_SENSITIVITY_THRESHOLD
+    ):
+        checker = QualityChecker(
+            root=root,
+            quality=config.quality,
+            options=QualityCheckerOptions(
+                license_overrides=config.license,
+                files=run_result.files,
+                checks={"license"},
             ),
         )
-    if logger:
-        count = len(diagnostics)
-        plural = "issue" if count == 1 else "issues"
-        logger.warn(
-            f"Appended {count} license {plural} from quality checks due to heightened sensitivity",
-        )
+        quality_result = checker.run(fix=False)
+        if quality_result.issues:
+            diagnostics: list[Diagnostic] = []
+            stdout_lines: list[str] = []
+            for issue in quality_result.issues:
+                diagnostic = _quality_issue_to_diagnostic(issue, root=root)
+                if diagnostic is None:
+                    continue
+                diagnostics.append(diagnostic)
+                location = diagnostic.file
+                if not location and issue.path is not None:
+                    location = normalize_path_key(issue.path, base_dir=root)
+                stdout_lines.append(_format_quality_issue_output(diagnostic, location))
+            if diagnostics:
+                has_error = any(diag.severity is Severity.ERROR for diag in diagnostics)
+                diagnostic_outcome = ToolOutcome(
+                    tool="quality",
+                    action="license",
+                    returncode=1 if has_error else 0,
+                    stdout=stdout_lines,
+                    stderr=[],
+                    diagnostics=diagnostics,
+                )
+                run_result.outcomes.append(diagnostic_outcome)
+                if has_error:
+                    run_result.outcomes.append(
+                        ToolOutcome(
+                            tool="quality",
+                            action="enforce",
+                            returncode=1,
+                            stdout=[],
+                            stderr=[],
+                            diagnostics=[],
+                        ),
+                    )
+                if logger:
+                    count = len(diagnostics)
+                    plural = "issue" if count == 1 else "issues"
+                    logger.warn(
+                        f"Appended {count} license {plural} from quality checks due to heightened sensitivity",
+                    )
+
+    for definition in iter_internal_linters():
+        _run_internal_linter(definition, state=state, run_result=run_result, logger=logger)
 
 
 def _quality_issue_to_diagnostic(issue: QualityIssue, *, root: Path) -> Diagnostic | None:
@@ -184,6 +196,49 @@ def _format_quality_issue_output(diagnostic: Diagnostic, location: str | None) -
     if location:
         return f"[{diagnostic.severity.value}] {location}: {diagnostic.message}"
     return f"[{diagnostic.severity.value}] {diagnostic.message}"
+
+
+def _merge_discovered_files(run_result: RunResult, files: tuple[Path, ...]) -> None:
+    """Extend ``run_result.files`` with files considered by docstring checks."""
+
+    if not files:
+        return
+    existing = set(run_result.files)
+    for file in files:
+        if file not in existing:
+            run_result.files.append(file)
+            existing.add(file)
+
+
+def _run_internal_linter(
+    definition: InternalLinterDefinition,
+    *,
+    state: PreparedLintState,
+    run_result: RunResult,
+    logger: CLILogger | None,
+) -> None:
+    """Run ``definition`` when requested by meta flags or selections."""
+
+    meta_enabled = bool(getattr(state.meta, definition.meta_attribute, False))
+    if not meta_enabled and not _selection_triggers_linter(state, definition.selection_tokens):
+        return
+
+    report: InternalLintReport = definition.runner(state, emit_to_logger=meta_enabled)
+    if report.outcome.stderr and logger is not None and not meta_enabled:
+        for warning in report.outcome.stderr:
+            logger.warn(warning)
+    run_result.outcomes.append(report.outcome)
+    _merge_discovered_files(run_result, report.files)
+
+
+def _selection_triggers_linter(state: PreparedLintState, tokens: tuple[str, ...]) -> bool:
+    if not tokens:
+        return False
+    selection = state.options.selection_options
+    normalized_tokens = {token.lower() for token in tokens}
+    normalized_only = {value.lower() for value in selection.only}
+    normalized_filters = {value.lower() for value in selection.filters}
+    return bool(normalized_tokens & normalized_only) or bool(normalized_tokens & normalized_filters)
 
 
 _QUALITY_SEVERITY_MAP: dict[QualityIssueLevel, Severity] = {

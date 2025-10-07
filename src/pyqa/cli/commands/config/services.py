@@ -11,14 +11,15 @@ from typing import Any, Final, Literal, cast
 
 import typer
 
-from ....config_loader import (
+from pyqa.core.config.loader import (
     ConfigError,
     ConfigLoader,
     ConfigLoadResult,
     FieldUpdate,
     generate_config_schema,
 )
-from ....serialization import JsonValue, jsonify
+from pyqa.core.serialization import JsonValue, jsonify
+
 from ....tools.settings import TOOL_SETTING_SCHEMA, SettingField, tool_setting_schema_as_dict
 from ...core.shared import CLIError, CLILogger
 

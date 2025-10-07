@@ -9,13 +9,20 @@ from .analysis import AnnotationProvider, MessageSpan
 from .catalog import CatalogSnapshot, StrategyFactory, ToolDefinition
 from .cli import CliCommand, CliCommandFactory
 from .compliance import ComplianceCheck, PolicyEvaluator, RemediationService
-from .config import ConfigMutator, ConfigResolver, ConfigSource
-from .core import ConsoleFactory, LoggerFactory, Serializer
+from .config import ConfigLoader, ConfigMutator, ConfigResolver, ConfigSource
+from .core import AnsiFormatter, ConsoleFactory, ConsoleManager, LoggerFactory, Serializer
 from .diagnostics import DiagnosticPipeline
 from .discovery import DiscoveryStrategy, ExcludePolicy, TargetPlanner
-from .environment import EnvironmentPreparer, RuntimeResolver, WorkspaceLocator
+from .environment import (
+    EnvironmentInspector,
+    EnvironmentPreparer,
+    RuntimeResolver,
+    VirtualEnvDetector,
+    WorkspaceLocator,
+)
 from .orchestration import ActionExecutor, ExecutionPipeline, RunHooks
 from .reporting import AdviceProvider, DiagnosticPresenter
+from .tooling import Installer, RuntimeBootstrapper
 
 __all__ = [
     "AnnotationProvider",
@@ -28,17 +35,22 @@ __all__ = [
     "ComplianceCheck",
     "PolicyEvaluator",
     "RemediationService",
+    "ConfigLoader",
     "ConfigMutator",
     "ConfigResolver",
     "ConfigSource",
+    "AnsiFormatter",
     "ConsoleFactory",
+    "ConsoleManager",
     "LoggerFactory",
     "Serializer",
     "DiscoveryStrategy",
     "ExcludePolicy",
     "TargetPlanner",
+    "EnvironmentInspector",
     "EnvironmentPreparer",
     "RuntimeResolver",
+    "VirtualEnvDetector",
     "WorkspaceLocator",
     "ActionExecutor",
     "ExecutionPipeline",
@@ -46,4 +58,6 @@ __all__ = [
     "AdviceProvider",
     "DiagnosticPipeline",
     "DiagnosticPresenter",
+    "Installer",
+    "RuntimeBootstrapper",
 ]

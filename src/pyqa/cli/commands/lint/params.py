@@ -140,6 +140,12 @@ class LintMetaParams:
     fetch_all_tools: bool
     validate_schema: bool
     normal: bool
+    check_docstrings: bool
+    check_suppressions: bool
+    check_types_strict: bool
+    check_closures: bool
+    check_signatures: bool
+    check_cache_usage: bool
 
 
 @dataclass(slots=True)

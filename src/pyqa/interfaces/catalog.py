@@ -3,7 +3,7 @@
 
 """Catalog contracts for tool definitions and strategies."""
 
-# pylint: disable=too-few-public-methods
+# pylint: disable=too-few-public-methods -- Protocol definitions intentionally expose minimal method surfaces.
 
 from __future__ import annotations
 

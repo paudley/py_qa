@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import importlib
+
 import typer
 from typer.testing import CliRunner
 

@@ -3,7 +3,7 @@
 
 """Protocols describing diagnostic processing pipelines."""
 
-# pylint: disable=too-few-public-methods
+# pylint: disable=too-few-public-methods -- Protocol definitions intentionally expose minimal method surfaces.
 
 from __future__ import annotations
 
@@ -12,8 +12,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from ..models import Diagnostic, RawDiagnostic
-from ..severity import SeverityRuleView
+from pyqa.core.severity import SeverityRuleView
+
+from ..core.models import Diagnostic, RawDiagnostic
 
 
 @dataclass(frozen=True, slots=True)

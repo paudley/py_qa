@@ -8,10 +8,11 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from typing import Final
 
+from pyqa.core.severity import Severity
+
 from ...config import OutputConfig
-from ...logging import colorize
-from ...models import Diagnostic
-from ...severity import Severity
+from ...core.logging import colorize
+from ...core.models import Diagnostic
 from .highlighting import (
     LOCATION_SEPARATOR,
     format_code_value,

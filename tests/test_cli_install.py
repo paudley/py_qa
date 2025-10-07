@@ -9,7 +9,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from pyqa.cli.app import app
-from pyqa.installs import InstallSummary
+from pyqa.runtime.installers import InstallSummary
 
 
 def test_install_cli_passes_flags(monkeypatch, tmp_path: Path) -> None:

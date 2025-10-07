@@ -5,14 +5,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from subprocess import CompletedProcess
-from typing import Sequence
-
-import pytest
-
 import sys
 import types
+from collections.abc import Sequence
+from pathlib import Path
+from subprocess import CompletedProcess
+
+import pytest
 
 _stub_spacy = types.ModuleType("spacy")
 _stub_spacy.__version__ = "0.0.0"
@@ -25,7 +24,9 @@ def _stub_load(name: str):  # pragma: no cover - helper for stub module
 _stub_spacy.load = _stub_load  # type: ignore[attr-defined]
 sys.modules.setdefault("spacy", _stub_spacy)
 
+from pyqa.cache.context import CacheContext
 from pyqa.config import Config
+from pyqa.core.models import RawDiagnostic, ToolExitCategory, ToolOutcome
 from pyqa.orchestration.action_executor import (
     ActionExecutor,
     ActionInvocation,
@@ -33,8 +34,6 @@ from pyqa.orchestration.action_executor import (
     ExecutionState,
     OutcomeRecord,
 )
-from pyqa.cache.context import CacheContext
-from pyqa.models import RawDiagnostic, ToolOutcome, ToolExitCategory
 from pyqa.tools.base import ActionExitCodes, DeferredCommand, ToolAction, ToolContext
 
 

@@ -14,15 +14,15 @@ from pyqa.cli.core.options import (
     LintDisplayOptions,
     LintExecutionOptions,
     LintGitOptions,
-    LintOptions,
     LintOptionBundles,
+    LintOptions,
+    LintOutputBundle,
     LintOverrideOptions,
     LintSelectionOptions,
     LintSeverityOptions,
     LintStrictnessOptions,
     LintSummaryOptions,
     LintTargetOptions,
-    LintOutputBundle,
 )
 from pyqa.config import Config
 from pyqa.interfaces.config import ConfigSource

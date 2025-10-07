@@ -64,3 +64,9 @@ config.yaml
 datasets/*
 scripts/pyreadstat_patch/pyreadstat_source
 .lint-cache
+
+# Tool caches
+/.ruff_cache/
+/.mypy_cache/
+/src/**/.ruff_cache/
+/src/**/.mypy_cache/

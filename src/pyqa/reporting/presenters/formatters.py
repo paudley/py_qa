@@ -11,10 +11,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from ...analysis.services import resolve_annotation_provider
 from ...config import OutputConfig
+from ...core.logging import colorize, emoji
+from ...core.models import Diagnostic, RunResult
 from ...filesystem.paths import normalize_path
-from ...logging import colorize, emoji
-from ...models import Diagnostic, RunResult
+from ...interfaces.analysis import AnnotationProvider
 from ..advice.panels import render_advice_panel
 from ..advice.refactor import render_refactor_navigator
 from ..output.diagnostics import (
@@ -22,13 +24,12 @@ from ..output.diagnostics import (
     clean_message,
 )
 from ..output.highlighting import (
-    ANNOTATION_ENGINE,
-    ANNOTATION_SPAN_STYLE,
     LOCATION_SEPARATOR,
     apply_highlighting_text,
     format_code_value,
     highlight_for_output,
     location_function_spans,
+    set_annotation_provider,
 )
 from ..output.modes import (
     render_pretty_mode,
@@ -117,15 +118,25 @@ class ConciseDiagnostic:
 _MERGEABLE_MESSAGE = re.compile(r"^(?P<prefix>.*?)(`(?P<detail>[^`]+)`)(?P<suffix>.*)$")
 
 
-def render(result: RunResult, cfg: OutputConfig) -> None:
+def render(
+    result: RunResult,
+    cfg: OutputConfig,
+    *,
+    annotation_provider: AnnotationProvider | None = None,
+) -> None:
     """Render orchestrator results according to the configured output style.
 
     Args:
         result: Completed orchestrator run result to display.
         cfg: Output configuration describing formatting preferences.
+        annotation_provider: Optional annotation provider used for highlighting
+            and advice generation. When omitted the registered default provider
+            is resolved from analysis services.
     """
 
-    ANNOTATION_ENGINE.annotate_run(result)
+    provider = annotation_provider or resolve_annotation_provider()
+    set_annotation_provider(provider)
+    provider.annotate_run(result)
     if cfg.quiet:
         render_quiet_mode(result, cfg)
         return
@@ -140,10 +151,15 @@ def render(result: RunResult, cfg: OutputConfig) -> None:
         case "raw":
             render_raw_mode(result)
         case "concise" | _:
-            _render_concise(result, cfg)
+            _render_concise(result, cfg, annotation_provider=provider)
 
 
-def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
+def _render_concise(
+    result: RunResult,
+    cfg: OutputConfig,
+    *,
+    annotation_provider: AnnotationProvider,
+) -> None:
     """Render a concise, machine-friendly summary of diagnostics.
 
     Args:
@@ -165,8 +181,11 @@ def _render_concise(result: RunResult, cfg: OutputConfig) -> None:
         render_advice_panel(
             advice_input,
             cfg,
-            annotation_engine=ANNOTATION_ENGINE,
-            highlight=apply_highlighting_text,
+            annotation_engine=annotation_provider,
+            highlight=lambda message: apply_highlighting_text(
+                message,
+                engine=annotation_provider,
+            ),
         )
         render_refactor_navigator(result, cfg)
     emit_stats_panel(result, cfg, diagnostics_count)
@@ -570,17 +589,3 @@ def _relative_path_if_possible(path: Path, root: Path) -> str:
         return str(path.relative_to(root))
     except ValueError:
         return str(path)
-
-
-def _infer_annotation_targets(message: str) -> int:
-    """Return the count of highlighted annotation spans within *message*.
-
-    Args:
-        message: Diagnostic message to inspect for annotation spans.
-
-    Returns:
-        int: Number of annotation spans that match the configured style.
-    """
-
-    spans = ANNOTATION_ENGINE.message_spans(message)
-    return sum(1 for span in spans if span.style == ANNOTATION_SPAN_STYLE)

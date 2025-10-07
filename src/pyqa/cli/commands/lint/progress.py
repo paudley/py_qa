@@ -19,7 +19,8 @@ from rich.progress import (
 )
 from rich.text import Text
 
-from ....console import console_manager
+from pyqa.runtime.console import console_manager
+
 from ...core.runtime import ServiceResolutionError
 from .literals import OUTPUT_MODE_CONCISE
 
@@ -44,7 +45,8 @@ STATUS_ISSUES: Final[ProgressStatusLiteral] = "issues detected"
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from rich.console import Console
 
-    from ....models import RunResult, ToolOutcome
+    from pyqa.core.models import RunResult, ToolOutcome
+
     from ....orchestration.orchestrator import OrchestratorHooks
     from .runtime import LintRuntimeContext
 

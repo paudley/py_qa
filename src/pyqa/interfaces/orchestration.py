@@ -3,7 +3,7 @@
 
 """Execution orchestration contracts."""
 
-# pylint: disable=too-few-public-methods
+# pylint: disable=too-few-public-methods -- Protocol definitions intentionally expose minimal method surfaces.
 
 from __future__ import annotations
 
@@ -12,9 +12,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from pyqa.core.environment.tool_env.models import PreparedCommand
+
     from ..config import Config
-    from ..models import RunResult
-    from ..tool_env.models import PreparedCommand
+    from ..core.models import RunResult
 
 
 @runtime_checkable

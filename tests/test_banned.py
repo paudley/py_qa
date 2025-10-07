@@ -8,8 +8,8 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from pyqa.compliance.banned import BannedWordChecker
 from pyqa.cli.app import app
+from pyqa.compliance.banned import BannedWordChecker
 
 
 def test_checker_detects_terms(tmp_path: Path) -> None:

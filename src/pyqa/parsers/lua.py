@@ -8,8 +8,9 @@ import re
 from collections.abc import Sequence
 from typing import Final
 
-from ..models import RawDiagnostic
-from ..severity import Severity
+from pyqa.core.severity import Severity
+
+from ..core.models import RawDiagnostic
 from ..tools.base import ToolContext
 from .base import (
     DiagnosticDetails,

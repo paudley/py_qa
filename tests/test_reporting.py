@@ -7,9 +7,10 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
-from pyqa.annotations import AnnotationEngine, MessageSpan
+from pyqa.analysis import AnnotationEngine, MessageSpan
 from pyqa.config import OutputConfig
-from pyqa.models import Diagnostic, RunResult, ToolOutcome
+from pyqa.core.models import Diagnostic, RunResult, ToolOutcome
+from pyqa.core.severity import Severity
 from pyqa.reporting import (
     AdviceBuilder,
     AdviceEntry,
@@ -19,7 +20,6 @@ from pyqa.reporting import (
     write_pr_summary,
     write_sarif_report,
 )
-from pyqa.severity import Severity
 
 
 def _run_result(tmp_path: Path) -> RunResult:
@@ -55,6 +55,17 @@ def _run_result(tmp_path: Path) -> RunResult:
         outcomes=[outcome],
         tool_versions={"ruff": "ruff 1.0.0"},
     )
+
+
+def _captured_lines(capsys) -> list[str]:
+    """Return sanitized CLI output lines for assertions."""
+
+    captured = capsys.readouterr().out.splitlines()
+    return [
+        line.strip()
+        for line in captured
+        if line.strip() and not line.strip().startswith("⚠️ spaCy model")
+    ]
 
 
 def test_write_json_report(tmp_path: Path) -> None:
@@ -549,7 +560,7 @@ def test_render_concise_shows_diagnostics_for_failures(tmp_path: Path, capsys) -
     result = _run_result(tmp_path)
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     panel_start = next(
         (idx for idx, line in enumerate(output_lines) if line.startswith("╭")),
         -1,
@@ -574,7 +585,7 @@ def test_render_concise_omits_stats_when_disabled(tmp_path: Path, capsys) -> Non
     result = _run_result(tmp_path)
     config = OutputConfig(color=False, emoji=False, show_stats=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     assert all(not line.startswith("╭") for line in output_lines)
     normalised = [", ".join(part.strip() for part in line.split(",")) for line in output_lines[:2]]
     assert normalised == [
@@ -601,7 +612,7 @@ def test_render_concise_fallbacks_to_stderr(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     panel_lines = [
         line for line in output_lines if line.startswith("╭") or line.startswith("│") or line.startswith("╰")
     ]
@@ -635,7 +646,7 @@ def test_render_concise_trims_code_prefix(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     row = next(line for line in output_lines if line.startswith("pylint"))
     parts = [part.strip() for part in row.split(",")]
     assert parts[0] == "pylint"
@@ -717,7 +728,7 @@ def test_render_concise_trims_code_whitespace(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     row = next(line for line in output_lines if line.startswith("pylint"))
     parts = [part.strip() for part in row.split(",")]
     assert parts == [
@@ -755,7 +766,7 @@ def test_render_pretty_trims_code_whitespace(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False, output="pretty")
     render(result, config)
-    output = capsys.readouterr().out.splitlines()
+    output = _captured_lines(capsys)
     diag_line = next(line for line in output if "Line too long" in line)
     assert diag_line.strip().endswith("Line too long (130/120) [C0301]")
 
@@ -816,7 +827,7 @@ def test_render_concise_sorted_and_deduped(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     panel_start = next(
         (idx for idx, line in enumerate(output_lines) if line.startswith("╭")),
         -1,
@@ -862,7 +873,7 @@ def test_render_concise_normalizes_paths(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     panel_start = next(
         (idx for idx, line in enumerate(output_lines) if line.startswith("╭")),
         -1,
@@ -909,7 +920,7 @@ def test_render_concise_sanitizes_function_field(tmp_path: Path, capsys) -> None
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     assert output_lines[0] == ("pyright, pkg/mod.py:4, reportGeneralTypeIssues, multiline function noise")
     assert output_lines[1] == ("pyright, pkg/mod.py:9:Module.resolve, reportUndefinedVariable, legit")
 
@@ -945,7 +956,7 @@ def test_render_concise_merges_argument_annotations(tmp_path: Path, capsys) -> N
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     assert output_lines[0] == (
         "ruff, tests/test_tool_info.py:21:fake_run_tool_info, ANN001, Missing type annotation for function argument cfg, console, root, tool_name"
     )

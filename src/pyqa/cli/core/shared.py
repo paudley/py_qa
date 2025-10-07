@@ -11,9 +11,9 @@ from typing import Any, ParamSpec, cast, overload
 
 import typer
 
-from ...logging import fail as core_fail
-from ...logging import ok as core_ok
-from ...logging import warn as core_warn
+from ...core.logging import fail as core_fail
+from ...core.logging import ok as core_ok
+from ...core.logging import warn as core_warn
 
 
 class CLIError(RuntimeError):

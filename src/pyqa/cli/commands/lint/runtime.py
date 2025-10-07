@@ -9,6 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from types import SimpleNamespace
 
+from ....analysis.bootstrap import register_analysis_services
 from ....catalog.model_catalog import CatalogSnapshot
 from ....config import Config
 from ....discovery import build_default_discovery
@@ -75,6 +76,7 @@ def _default_orchestrator_factory(
 
 _DEFAULT_SERVICES = ServiceContainer()
 register_default_services(_DEFAULT_SERVICES)
+register_analysis_services(_DEFAULT_SERVICES)
 
 
 DEFAULT_LINT_DEPENDENCIES = LintRuntimeDependencies(

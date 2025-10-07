@@ -20,10 +20,11 @@ from rich.pretty import Pretty
 from rich.rule import Rule
 from rich.table import Table
 
+from pyqa.core.config.loader import ConfigLoader, ConfigLoadResult
+
+from ....analysis.treesitter import TreeSitterContextResolver
 from ....config import Config, ConfigError
-from ....config_loader import ConfigLoader, ConfigLoadResult
-from ....context import TreeSitterContextResolver
-from ....process_utils import run_command
+from ....core.runtime.process import run_command
 from ....tools.builtins import initialize_registry
 from ....tools.registry import DEFAULT_REGISTRY
 from ...core.utils import ToolAvailability, ToolStatus, check_tool_status

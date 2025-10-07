@@ -10,8 +10,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from pyqa.runtime.console import console_manager
+
 from ...cache import ResultCache, build_cache_context
-from ...console import console_manager
 from ...plugins import (
     load_all_plugins,
     load_catalog_plugins,

@@ -11,7 +11,7 @@ from subprocess import CompletedProcess
 from typer.testing import CliRunner
 
 from pyqa.cli.app import app
-from pyqa.update import (
+from pyqa.runtime.installers.update import (
     DEFAULT_STRATEGIES,
     WorkspaceDiscovery,
     WorkspaceKind,

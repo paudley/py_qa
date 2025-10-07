@@ -5,6 +5,7 @@
 
 from pytest_bdd import scenario
 
+
 @scenario("wrapper/features/cli_wrappers.feature", "Local interpreter is used when probe succeeds")
 def test_wrapper_local_interpreter() -> None:
     """Execute scenario via pytest-bdd."""

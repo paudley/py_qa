@@ -12,11 +12,12 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from pyqa.runtime.console import console_manager
+
 from ...config import OutputConfig
-from ...console import console_manager
+from ...core.metrics import SUPPRESSION_LABELS, FileMetrics, compute_file_metrics
+from ...core.models import RunResult
 from ...filesystem.paths import normalize_path_key
-from ...metrics import SUPPRESSION_LABELS, FileMetrics, compute_file_metrics
-from ...models import RunResult
 
 
 @dataclass(slots=True)
@@ -75,9 +76,10 @@ def compute_stats_snapshot(result: RunResult, diagnostics_count: int) -> StatsSn
     }
     warnings_per_loc = diagnostics_count / loc_count if loc_count else 0.0
     outcomes = result.outcomes
+    extra_failures = int(result.analysis.get("aux_tool_failures", 0))
     actions = ActionSummary(
         total=len(outcomes),
-        failed=sum(1 for outcome in outcomes if outcome.indicates_failure()),
+        failed=sum(1 for outcome in outcomes if outcome.indicates_failure()) + extra_failures,
         cached=sum(1 for outcome in outcomes if outcome.cached),
     )
     return StatsSnapshot(

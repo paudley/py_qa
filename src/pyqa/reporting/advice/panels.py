@@ -10,9 +10,10 @@ from collections.abc import Callable, Iterable
 from rich.panel import Panel
 from rich.text import Text
 
-from ...annotations import AnnotationEngine
+from pyqa.runtime.console import console_manager
+
 from ...config import OutputConfig
-from ...console import console_manager
+from ...interfaces.analysis import AnnotationProvider
 from .builder import AdviceEntry, generate_advice
 
 
@@ -38,7 +39,7 @@ def render_advice_panel(
     entries: Iterable[tuple[str, int, str, str, str, str]],
     cfg: OutputConfig,
     *,
-    annotation_engine: AnnotationEngine,
+    annotation_engine: AnnotationProvider,
     highlight: Callable[[str], Text],
 ) -> None:
     """Render SOLID advice guidance when entries are available.

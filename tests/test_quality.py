@@ -12,12 +12,12 @@ from typer.testing import CliRunner
 
 from pyqa.cli.app import app
 from pyqa.cli.core.utils import filter_py_qa_paths
-from pyqa.config_loader import ConfigLoader
 from pyqa.compliance.quality import (
     QualityChecker,
     QualityCheckerOptions,
     check_commit_message,
 )
+from pyqa.core.config.loader import ConfigLoader
 from pyqa.tools.settings import tool_setting_schema_as_dict
 
 

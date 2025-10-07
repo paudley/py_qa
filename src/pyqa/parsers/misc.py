@@ -8,9 +8,10 @@ import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from typing import Any, Final
 
-from ..models import RawDiagnostic
-from ..serialization import coerce_optional_int
-from ..severity import Severity
+from pyqa.core.severity import Severity
+
+from ..core.models import RawDiagnostic
+from ..core.serialization import coerce_optional_int
 from ..tools.base import ToolContext
 from .base import (
     DiagnosticDetails,

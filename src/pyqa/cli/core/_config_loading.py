@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...config_loader import ConfigError, ConfigLoader, ConfigLoadResult
+from pyqa.core.config.loader import ConfigError, ConfigLoader, ConfigLoadResult
+
 from .shared import CLIError, CLILogger
 
 

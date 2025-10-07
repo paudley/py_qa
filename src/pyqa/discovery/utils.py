@@ -9,7 +9,7 @@ import os
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
-from ..constants import ALWAYS_EXCLUDE_DIRS
+from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS
 
 
 def iter_paths(

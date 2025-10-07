@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 
 """Regression tests for the standalone tooling specification package."""
 
@@ -56,11 +57,15 @@ def test_tooling_spec_loader_builds_snapshot(tmp_path: Path) -> None:
     schema_root = tmp_path / "schema"
     schema_root.mkdir()
     (schema_root / "tool_definition.schema.json").write_text(
-        (Path(__file__).resolve().parents[1] / "tooling" / "schema" / "tool_definition.schema.json").read_text(encoding="utf-8"),
+        (Path(__file__).resolve().parents[1] / "tooling" / "schema" / "tool_definition.schema.json").read_text(
+            encoding="utf-8"
+        ),
         encoding="utf-8",
     )
     (schema_root / "strategy_definition.schema.json").write_text(
-        (Path(__file__).resolve().parents[1] / "tooling" / "schema" / "strategy_definition.schema.json").read_text(encoding="utf-8"),
+        (Path(__file__).resolve().parents[1] / "tooling" / "schema" / "strategy_definition.schema.json").read_text(
+            encoding="utf-8"
+        ),
         encoding="utf-8",
     )
 

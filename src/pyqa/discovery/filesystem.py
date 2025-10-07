@@ -10,9 +10,10 @@ from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS, PY_QA_DIR_NAME
+from pyqa.platform.workspace import is_py_qa_workspace
+
 from ..config import FileDiscoveryConfig
-from ..constants import ALWAYS_EXCLUDE_DIRS, PY_QA_DIR_NAME
-from ..workspace import is_py_qa_workspace
 from .base import DiscoveryStrategy, is_within_limits, resolve_limit_paths
 
 

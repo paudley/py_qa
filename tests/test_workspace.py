@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pyqa.workspace import is_py_qa_workspace
+from pyqa.platform.workspace import is_py_qa_workspace
 
 
 def test_is_py_qa_workspace_true(tmp_path: Path) -> None:

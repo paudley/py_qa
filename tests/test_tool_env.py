@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -11,16 +10,16 @@ from typing import TYPE_CHECKING, Literal
 
 import pytest
 
-from pyqa.tool_env import CommandPreparer, PreparedCommand, cache_layout, desired_version
-from pyqa.tool_env.runtimes import go as go_runtime
-from pyqa.tool_env.runtimes import lua as lua_runtime
-from pyqa.tool_env.runtimes import npm as npm_runtime
-from pyqa.tool_env.runtimes import perl as perl_runtime
-from pyqa.tool_env.runtimes import rust as rust_runtime
+from pyqa.core.environment.tool_env import CommandPreparer, PreparedCommand, cache_layout, desired_version
+from pyqa.core.environment.tool_env.runtimes import go as go_runtime
+from pyqa.core.environment.tool_env.runtimes import lua as lua_runtime
+from pyqa.core.environment.tool_env.runtimes import npm as npm_runtime
+from pyqa.core.environment.tool_env.runtimes import perl as perl_runtime
+from pyqa.core.environment.tool_env.runtimes import rust as rust_runtime
 from pyqa.tools.base import Tool
 
 if TYPE_CHECKING:
-    from pyqa.tool_env import GoRuntime, LuaRuntime, NpmRuntime, PerlRuntime, RustRuntime
+    pass
 
 ToolRuntime = Literal["python", "npm", "binary", "go", "lua", "perl", "rust"]
 

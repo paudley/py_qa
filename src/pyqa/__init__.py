@@ -22,7 +22,7 @@ class ExportTarget:
 _EXPORT_NAME_TO_TARGET: Final[dict[str, ExportTarget]] = {
     "Config": ExportTarget("pyqa.config", "Config"),
     "ConfigError": ExportTarget("pyqa.config", "ConfigError"),
-    "ConfigLoader": ExportTarget("pyqa.config_loader", "ConfigLoader"),
+    "ConfigLoader": ExportTarget("pyqa.core.config.loader", "ConfigLoader"),
     "DedupeConfig": ExportTarget("pyqa.config", "DedupeConfig"),
     "ExecutionConfig": ExportTarget("pyqa.config", "ExecutionConfig"),
     "FileDiscoveryConfig": ExportTarget("pyqa.config", "FileDiscoveryConfig"),
@@ -31,8 +31,8 @@ _EXPORT_NAME_TO_TARGET: Final[dict[str, ExportTarget]] = {
     "OutputConfig": ExportTarget("pyqa.config", "OutputConfig"),
     "SecurityScanner": ExportTarget("pyqa.compliance.security", "SecurityScanner"),
     "build_default_discovery": ExportTarget("pyqa.discovery", "build_default_discovery"),
-    "generate_config_schema": ExportTarget("pyqa.config_loader", "generate_config_schema"),
-    "load_config": ExportTarget("pyqa.config_loader", "load_config"),
+    "generate_config_schema": ExportTarget("pyqa.core.config.loader", "generate_config_schema"),
+    "load_config": ExportTarget("pyqa.core.config.loader", "load_config"),
 }
 
 _VERSION_ATTRIBUTE: Final[str] = "__version__"
@@ -63,7 +63,7 @@ if TYPE_CHECKING:  # pragma: no cover - import hints for static analysis only
         FileDiscoveryConfig,
         OutputConfig,
     )
-    from pyqa.config_loader import ConfigLoader, generate_config_schema, load_config
+    from pyqa.core.config.loader import ConfigLoader, generate_config_schema, load_config
     from pyqa.discovery import build_default_discovery
     from pyqa.orchestration.orchestrator import Orchestrator, OrchestratorHooks
 

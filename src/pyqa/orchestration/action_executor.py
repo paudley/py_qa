@@ -15,21 +15,22 @@ from subprocess import CompletedProcess
 from textwrap import shorten
 from typing import Final, Protocol, runtime_checkable
 
+from pyqa.core.severity import SeverityRuleView
+
+from ..analysis.treesitter import CONTEXT_RESOLVER
 from ..cache.context import CacheContext
 from ..cache.result_store import CacheRequest
 from ..config import Config
-from ..context import CONTEXT_RESOLVER
+from ..core.logging import warn
+from ..core.metrics import FileMetrics, compute_file_metrics
+from ..core.models import Diagnostic, RawDiagnostic, ToolExitCategory, ToolOutcome
+from ..core.runtime.process import CommandOptions
 from ..diagnostics.pipeline import DiagnosticPipeline as DiagnosticPipelineImpl
 from ..filesystem.paths import normalize_path_key
 from ..interfaces.diagnostics import DiagnosticPipeline as DiagnosticPipelineProtocol
 from ..interfaces.diagnostics import (
     DiagnosticPipelineRequest,
 )
-from ..logging import warn
-from ..metrics import FileMetrics, compute_file_metrics
-from ..models import Diagnostic, RawDiagnostic, ToolExitCategory, ToolOutcome
-from ..process_utils import CommandOptions
-from ..severity import SeverityRuleView
 from ..tools import ToolAction, ToolContext
 
 _DIAGNOSTIC_PIPELINE: Final[DiagnosticPipelineProtocol] = DiagnosticPipelineImpl()

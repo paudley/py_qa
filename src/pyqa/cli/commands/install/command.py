@@ -8,9 +8,10 @@ from typing import Annotated
 
 import typer
 
-from ....installs import InstallSummary, install_dev_environment
-from ....logging import fail, info, ok
-from ....process_utils import SubprocessExecutionError
+from pyqa.runtime.installers import InstallSummary, install_dev_environment
+
+from ....core.logging import fail, info, ok
+from ....core.runtime.process import SubprocessExecutionError
 from ...core.shared import Depends
 from .models import InstallCLIOptions, build_install_options
 

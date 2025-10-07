@@ -12,10 +12,8 @@ from typing import Annotated, Any, Final, Literal, cast
 import click
 import typer
 
-from ....config_loader import ConfigError, ConfigLoader, ConfigLoadResult
-from ....logging import fail, ok, warn
-from ....process_utils import run_command
-from ....update import (
+from pyqa.core.config.loader import ConfigError, ConfigLoader, ConfigLoadResult
+from pyqa.runtime.installers.update import (
     DEFAULT_STRATEGIES,
     CommandRunner,
     UpdateResult,
@@ -25,6 +23,9 @@ from ....update import (
     WorkspaceUpdater,
     ensure_lint_install,
 )
+
+from ....core.logging import fail, ok, warn
+from ....core.runtime.process import run_command
 from ...core.shared import Depends
 from ...core.typer_ext import create_typer
 from .models import UpdateOptions, build_update_options

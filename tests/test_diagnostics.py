@@ -5,13 +5,13 @@
 from pathlib import Path
 
 from pyqa.config import DedupeConfig
+from pyqa.core.models import Diagnostic, RawDiagnostic, RunResult, ToolOutcome
+from pyqa.core.severity import Severity
 from pyqa.diagnostics import (
     build_severity_rules,
     dedupe_outcomes,
     normalize_diagnostics,
 )
-from pyqa.models import Diagnostic, RawDiagnostic, RunResult, ToolOutcome
-from pyqa.severity import Severity
 
 
 def test_normalize_diagnostics_applies_rules() -> None:

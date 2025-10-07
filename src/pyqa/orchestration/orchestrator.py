@@ -13,17 +13,26 @@ from subprocess import CompletedProcess
 from types import MappingProxyType
 from typing import Final, Literal, cast
 
-from ..analysis import apply_change_impact, apply_suppression_hints, build_refactor_navigator
-from ..annotations import AnnotationEngine
+from pyqa.core.environment.tool_env import CommandPreparationRequest, CommandPreparer, PreparedCommand
+
+from ..analysis.bootstrap import register_analysis_services
+from ..analysis.change_impact import apply_change_impact
+from ..analysis.navigator import build_refactor_navigator
+from ..analysis.services import (
+    resolve_annotation_provider,
+    resolve_context_resolver,
+    resolve_function_scale_estimator,
+)
+from ..analysis.suppression import apply_suppression_hints
 from ..cache.context import build_cache_context, load_cached_outcome, save_versions, update_tool_version
 from ..config import Config
-from ..core.runtime import ServiceContainer, ServiceResolutionError
+from ..core.logging import warn
+from ..core.models import RunResult, ToolOutcome
+from ..core.runtime import ServiceContainer, ServiceResolutionError, register_default_services
+from ..core.runtime.process import CommandOptions
 from ..diagnostics import build_severity_rules, dedupe_outcomes
 from ..discovery.base import SupportsDiscovery
-from ..logging import warn
-from ..models import RunResult, ToolOutcome
-from ..process_utils import CommandOptions
-from ..tool_env import CommandPreparationRequest, CommandPreparer, PreparedCommand
+from ..interfaces.analysis import AnnotationProvider
 from ..tools import Tool, ToolAction, ToolContext
 from ..tools.registry import ToolRegistry
 from .action_executor import (
@@ -49,7 +58,6 @@ _FETCH_EVENT_START: Final[FetchEvent] = "start"
 _FETCH_EVENT_COMPLETED: Final[FetchEvent] = "completed"
 _FETCH_EVENT_ERROR: Final[FetchEvent] = "error"
 
-_ANALYSIS_ENGINE: Final[AnnotationEngine] = AnnotationEngine()
 FetchCallback = Callable[[FetchEvent, str, str, int, int, str | None], None]
 CommandPreparationFn = Callable[[CommandPreparationRequest], PreparedCommand]
 
@@ -145,11 +153,16 @@ class Orchestrator:
         if registry is None or discovery is None:
             raise TypeError("Orchestrator requires 'registry' and 'discovery' dependencies")
 
+        if services is None:
+            services = ServiceContainer()
+            register_default_services(services)
+            register_analysis_services(services)
+
         self._context = _RuntimeContext(registry=registry, discovery=discovery)
         base_runner = final_runner or _build_default_runner()
         self._runner = base_runner if isinstance(base_runner, RunnerCallable) else wrap_runner(base_runner)
         self._hooks = final_hooks or OrchestratorHooks()
-        self._services: ServiceContainer | None = services
+        self._services: ServiceContainer = services
         preparer = final_preparer
         if preparer is None:
             default_preparer = CommandPreparer()
@@ -158,6 +171,15 @@ class Orchestrator:
         self._prepare_command = self._coerce_preparer(prepare_callable)
         self._selector = ToolSelector(self._context.registry)
         self._executor = ActionExecutor(self._runner, self._hooks.after_tool)
+        self._annotation_provider: AnnotationProvider = self._resolve_annotation_provider()
+        try:
+            self._function_scale = resolve_function_scale_estimator(self._services)
+        except ServiceResolutionError:
+            self._function_scale = resolve_function_scale_estimator()
+        try:
+            self._context_resolver = resolve_context_resolver(self._services)
+        except ServiceResolutionError:
+            self._context_resolver = resolve_context_resolver()
 
     def run(self, cfg: Config, *, root: Path | None = None) -> RunResult:
         """Execute configured tools and aggregate their outcomes."""
@@ -189,11 +211,19 @@ class Orchestrator:
             tool_versions=environment.cache.versions,
             file_metrics=dict(state.file_metrics),
         )
-        dedupe_outcomes(result, cfg.dedupe)
-        _ANALYSIS_ENGINE.annotate_run(result)
-        apply_suppression_hints(result, _ANALYSIS_ENGINE)
-        apply_change_impact(result)
-        build_refactor_navigator(result, _ANALYSIS_ENGINE)
+        dedupe_outcomes(
+            result,
+            cfg.dedupe,
+            annotation_provider=self._annotation_provider,
+        )
+        self._annotation_provider.annotate_run(result)
+        apply_suppression_hints(result, self._annotation_provider)
+        apply_change_impact(result, context_resolver=self._context_resolver)
+        build_refactor_navigator(
+            result,
+            self._annotation_provider,
+            function_scale=self._function_scale,
+        )
         if environment.cache.cache and environment.cache.versions_dirty:
             save_versions(environment.cache.cache_dir, environment.cache.versions)
         if self._hooks.after_execution:
@@ -289,6 +319,14 @@ class Orchestrator:
                 continue
             total_actions += sum(1 for action in tool.actions if self._should_run_action(cfg, action))
         self._hooks.after_plan(total_actions)
+
+    def _resolve_annotation_provider(self) -> AnnotationProvider:
+        """Return the annotation provider sourced from the service container."""
+
+        try:
+            return resolve_annotation_provider(self._services)
+        except ServiceResolutionError as error:
+            raise ServiceResolutionError("annotation_provider") from error
 
     def _process_tool(
         self,

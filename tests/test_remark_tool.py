@@ -6,10 +6,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import subprocess
 import sys
 import types
+from pathlib import Path
 from unittest.mock import Mock
 
 _stub_spacy = types.ModuleType("spacy")
@@ -23,15 +23,15 @@ def _stub_load(name: str):  # pragma: no cover - helper for stub module
 _stub_spacy.load = _stub_load  # type: ignore[attr-defined]
 sys.modules.setdefault("spacy", _stub_spacy)
 
+from pyqa.cache.context import CacheContext
+from pyqa.catalog import ToolCatalogLoader
+from pyqa.catalog.strategies import command_option_map
 from pyqa.config import Config
 from pyqa.orchestration.action_executor import (
     ActionExecutor,
     ActionInvocation,
     ExecutionEnvironment,
 )
-from pyqa.cache.context import CacheContext
-from pyqa.catalog import ToolCatalogLoader
-from pyqa.catalog.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PYQA_ROOT = Path(__file__).resolve().parents[1]

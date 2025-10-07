@@ -39,7 +39,10 @@ def handle_initial_meta_actions(state: PreparedLintState) -> MetaActionOutcome:
         which exit code should be used.
     """
 
-    for handler in (_handle_doctor_action, _handle_validate_schema_action):
+    for handler in (
+        _handle_doctor_action,
+        _handle_validate_schema_action,
+    ):
         outcome = handler(state)
         if outcome.handled:
             return outcome

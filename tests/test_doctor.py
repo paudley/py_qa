@@ -20,7 +20,7 @@ from pyqa.cli.core.utils import (
     ToolVersionStatus,
 )
 from pyqa.config import Config
-from pyqa.config_loader import ConfigLoadResult
+from pyqa.core.config.loader import ConfigLoadResult
 from pyqa.tools.base import DeferredCommand, Tool, ToolAction
 from pyqa.tools.registry import DEFAULT_REGISTRY
 

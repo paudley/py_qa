@@ -12,8 +12,8 @@ from typing import Any, Final
 from pydantic import BaseModel
 
 from ..config import Config, ConfigError
+from ..core.serialization import jsonify
 from ..filesystem.paths import normalize_path
-from ..serialization import jsonify
 from ..tools.settings import tool_setting_schema_as_dict
 
 _KNOWN_SECTIONS: set[str] = {

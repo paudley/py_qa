@@ -6,8 +6,10 @@ from pathlib import Path
 
 import pytest
 
+from pyqa.catalog.strategies import parser_json_diagnostics
 from pyqa.config import Config
-from pyqa.models import RawDiagnostic
+from pyqa.core.models import RawDiagnostic
+from pyqa.core.severity import Severity
 from pyqa.parsers import (
     JsonParser,
     TextParser,
@@ -38,8 +40,6 @@ from pyqa.parsers import (
     parse_tsc,
     parse_yamllint,
 )
-from pyqa.severity import Severity
-from pyqa.catalog.strategies import parser_json_diagnostics
 from pyqa.tools.base import ToolContext
 
 

@@ -14,9 +14,10 @@ from rich.panel import Panel
 from rich.pretty import Pretty
 from rich.table import Table
 
+from pyqa.core.config.loader import FieldUpdate
+
 from ....catalog.model_tool import ToolDefinition
 from ....config import Config
-from ....config_loader import FieldUpdate
 from ....tools.base import Tool, ToolContext
 from ...core.utils import ToolStatus
 

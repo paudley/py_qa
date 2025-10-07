@@ -8,7 +8,6 @@ from .builder import (
     AdviceCategory,
     AdviceEntry,
     DiagnosticRecord,
-    _estimate_function_scale,
     generate_advice,
 )
 from .panels import render_advice_panel
@@ -19,7 +18,6 @@ __all__ = (
     "AdviceCategory",
     "AdviceEntry",
     "DiagnosticRecord",
-    "_estimate_function_scale",
     "generate_advice",
     "render_advice_panel",
     "render_refactor_navigator",

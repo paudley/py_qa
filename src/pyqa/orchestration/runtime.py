@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Final
 
 from ..config import Config
+from ..core.environment import inject_node_defaults, prepend_venv_to_path
+from ..core.logging import info
 from ..discovery.base import SupportsDiscovery
-from ..environments import inject_node_defaults, prepend_venv_to_path
-from ..logging import info
 
 _RUNTIME_LOG_TEMPLATE: Final[str] = "Discovered %s file(s) to lint"
 

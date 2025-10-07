@@ -13,7 +13,8 @@ from typing import Any
 import typer
 from pydantic import BaseModel, ConfigDict
 
-from ....config_loader import ConfigLoadResult, FieldUpdate
+from pyqa.core.config.loader import ConfigLoadResult, FieldUpdate
+
 from ...core.shared import CLIError, build_cli_logger, register_command
 from ...core.typer_ext import create_typer
 from .services import (
