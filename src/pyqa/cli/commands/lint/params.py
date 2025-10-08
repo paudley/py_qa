@@ -52,6 +52,7 @@ class LintOutputParams(LintDisplayToggles):
             "quiet": self.quiet,
             "no_color": self.no_color,
             "no_emoji": self.no_emoji,
+            "debug": self.debug,
             "output_mode": self.output_mode,
         }
 
@@ -71,6 +72,7 @@ class LintOutputParams(LintDisplayToggles):
             quiet=self.quiet,
             no_color=self.no_color,
             no_emoji=self.no_emoji,
+            debug=self.debug,
             output_mode=output_mode,
         )
 
@@ -159,6 +161,7 @@ class MetaRuntimeChecks:
     check_signatures: bool
     check_cache_usage: bool
     check_value_types: bool
+    pyqa_rules: bool
 
 
 @dataclass(slots=True)
@@ -240,6 +243,12 @@ class LintMetaParams:
         """Return whether value-type ergonomics should be validated."""
 
         return self.runtime.check_value_types
+
+    @property
+    def pyqa_rules(self) -> bool:
+        """Return whether pyqa-scoped lint rules are enabled."""
+
+        return self.runtime.pyqa_rules
 
 
 @dataclass(slots=True)

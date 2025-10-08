@@ -5,11 +5,14 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, ParamSpec, cast, overload
 
 import typer
+from rich.console import Console
+from rich.text import Text
 
 from ...core.logging import fail as core_fail
 from ...core.logging import ok as core_ok
@@ -28,7 +31,10 @@ class CLIError(RuntimeError):
 class CLILogger:
     """Adapter around project logging helpers respecting CLI emoji settings."""
 
+    console: Console
     use_emoji: bool
+    debug_enabled: bool = False
+    _key_value_re: re.Pattern[str] = re.compile(r"([\w-]+)=(\".*?\"|\S+)")
 
     def fail(self, message: str) -> None:
         """Log a failure message honouring emoji preferences."""
@@ -50,11 +56,34 @@ class CLILogger:
 
         typer.echo(message)
 
+    def debug(self, message: str) -> None:
+        """Emit a debug message when debug logging is enabled."""
 
-def build_cli_logger(*, emoji: bool) -> CLILogger:
+        if self.debug_enabled:
+            text = Text("[debug] ", style="bold cyan")
+            cursor = 0
+            for match in self._key_value_re.finditer(message):
+                start, end = match.span()
+                if start > cursor:
+                    text.append(message[cursor:start], style="dim")
+                key, raw_value = match.group(1), match.group(2)
+                text.append(key, style="bold magenta")
+                text.append("=", style="dim")
+                value_style = "bold green"
+                if key in {"command", "cmd"}:
+                    value_style = "bold blue"
+                text.append(raw_value, style=value_style)
+                cursor = end
+            if cursor < len(message):
+                text.append(message[cursor:], style="dim")
+            self.console.print(text)
+
+
+def build_cli_logger(*, emoji: bool, debug: bool = False, no_color: bool = False) -> CLILogger:
     """Return a ``CLILogger`` configured for the provided emoji preference."""
 
-    return CLILogger(use_emoji=emoji)
+    console = Console(no_color=no_color, highlight=False)
+    return CLILogger(console=console, use_emoji=emoji, debug_enabled=debug)
 
 
 @dataclass(slots=True)

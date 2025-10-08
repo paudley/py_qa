@@ -45,6 +45,7 @@ class InternalLinterDefinition:
     runner: Callable[..., InternalLintReport]
     description: str
     options: InternalLinterOptions = field(default_factory=InternalLinterOptions)
+    pyqa_scoped: bool = False
 
 
 INTERNAL_LINTERS: tuple[InternalLinterDefinition, ...] = (

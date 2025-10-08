@@ -43,7 +43,10 @@ class LintRuntimeDependencies:
 
     registry: ToolRegistry
     discovery_factory: Callable[[], SupportsDiscovery]
-    orchestrator_factory: Callable[[ToolRegistry, SupportsDiscovery, OrchestratorHooks], ExecutionPipeline]
+    orchestrator_factory: Callable[
+        [ToolRegistry, SupportsDiscovery, OrchestratorHooks, Callable[[str], None] | None],
+        ExecutionPipeline,
+    ]
     catalog_initializer: Callable[[ToolRegistry], CatalogSnapshot]
     services: ServiceContainer | None = None
 
@@ -54,6 +57,7 @@ def _default_orchestrator_factory(
     hooks: OrchestratorHooks,
     *,
     services: ServiceContainer | None = None,
+    debug_logger: Callable[[str], None] | None = None,
 ) -> ExecutionPipeline:
     """Return an execution pipeline backed by the default orchestrator.
 
@@ -72,6 +76,7 @@ def _default_orchestrator_factory(
         discovery=discovery,
         hooks=hooks,
         services=services,
+        debug_logger=debug_logger,
     )
 
 
@@ -83,11 +88,12 @@ register_analysis_services(_DEFAULT_SERVICES)
 DEFAULT_LINT_DEPENDENCIES = LintRuntimeDependencies(
     registry=DEFAULT_REGISTRY,
     discovery_factory=build_default_discovery,
-    orchestrator_factory=lambda registry, discovery, hooks: _default_orchestrator_factory(
+    orchestrator_factory=lambda registry, discovery, hooks, debug_logger=None: _default_orchestrator_factory(
         registry,
         discovery,
         hooks,
         services=_DEFAULT_SERVICES,
+        debug_logger=debug_logger,
     ),
     catalog_initializer=lambda registry: initialize_registry(registry=registry),
     services=_DEFAULT_SERVICES,
@@ -119,7 +125,12 @@ def build_lint_runtime_context(
     configure_internal_tool_defaults(registry=deps.registry, state=state)
     hooks = OrchestratorHooks()
     discovery = deps.discovery_factory()
-    orchestrator = deps.orchestrator_factory(deps.registry, discovery, hooks)
+    orchestrator = deps.orchestrator_factory(
+        deps.registry,
+        discovery,
+        hooks,
+        state.logger.debug,
+    )
     services = deps.services
     plugins: SimpleNamespace | None = None
     if services is not None:

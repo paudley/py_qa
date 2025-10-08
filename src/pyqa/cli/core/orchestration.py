@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from pyqa.config import Config
@@ -75,6 +76,7 @@ def build_orchestrator_pipeline(
     hooks: OrchestratorHooks,
     *,
     services: ServiceContainer | None = None,
+    debug_logger: Callable[[str], None] | None = None,
 ) -> ExecutionPipeline:
     """Return an execution pipeline backed by :class:`Orchestrator`.
 
@@ -89,7 +91,11 @@ def build_orchestrator_pipeline(
         the interface consumed by CLI modules.
     """
 
-    overrides = OrchestratorOverrides(hooks=hooks, services=services)
+    overrides = OrchestratorOverrides(
+        hooks=hooks,
+        services=services,
+        debug_logger=debug_logger,
+    )
     orchestrator = Orchestrator(registry=registry, discovery=discovery, overrides=overrides)
     return OrchestratorExecutionPipeline(orchestrator)
 

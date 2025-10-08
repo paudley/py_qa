@@ -102,6 +102,7 @@ def _build_options(
         no_color=no_color,
         no_emoji=no_emoji,
         output_mode=output_mode,
+        debug=False,
         advice=advice,
     )
     summary = LintSummaryOptions(

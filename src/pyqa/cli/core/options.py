@@ -60,6 +60,7 @@ class LintDisplayToggles:
     no_color: bool
     no_emoji: bool
     output_mode: OutputModeLiteral
+    debug: bool
 
 
 @dataclass(slots=True)

@@ -56,7 +56,6 @@ _debug(f"Loaded CLI launcher from {CLI_LAUNCHER_PATH}")
 
 launch = _cli_launcher.launch
 
-
 def main() -> None:
     """Launch the lint command or its install shim."""
 

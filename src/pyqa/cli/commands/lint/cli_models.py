@@ -61,6 +61,7 @@ TYPING_HELP: Final[str] = "Run the strict typing checker and exit."
 CLOSURES_HELP: Final[str] = "Run the closure/partial usage checker and exit."
 SIGNATURES_HELP: Final[str] = "Run the function signature width checker and exit."
 CACHE_HELP: Final[str] = "Run the functools cache usage checker and exit."
+PYQA_RULES_HELP: Final[str] = "Enable pyqa-specific lint rules even when running outside the pyqa repository."
 FILTER_HELP: Final[str] = "Filter stdout/stderr from TOOL using regex (TOOL:pattern)."
 OUTPUT_MODE_HELP: Final[str] = "Output mode: concise, pretty, or raw."
 REPORT_JSON_HELP: Final[str] = "Write JSON report to the provided path."
@@ -95,6 +96,7 @@ class LintDisplayOptions:
     no_emoji: bool
     quiet: bool
     verbose: bool
+    debug: bool
 
 
 PathArgument = Annotated[
@@ -429,6 +431,7 @@ def _output_params_dependency(
     quiet: Annotated[bool, typer.Option(False, "--quiet", "-q", help="Minimal output.")],
     no_color: Annotated[bool, typer.Option(False, help="Disable ANSI colour output.")],
     no_emoji: Annotated[bool, typer.Option(False, help="Disable emoji output.")],
+    debug: Annotated[bool, typer.Option(False, "--debug", help="Emit detailed execution diagnostics.")],
     output_mode: Annotated[
         str,
         typer.Option(OUTPUT_MODE_CONCISE, "--output", help=OUTPUT_MODE_HELP),
@@ -452,6 +455,7 @@ def _output_params_dependency(
         quiet=quiet,
         no_color=no_color,
         no_emoji=no_emoji,
+        debug=debug,
         output_mode=_coerce_output_mode(output_mode),
     )
 
@@ -761,6 +765,10 @@ def _meta_runtime_checks_dependency(
         bool,
         typer.Option(False, "--check-value-types", help="Verify value-type helpers expose ergonomic dunder methods."),
     ],
+    pyqa_rules: Annotated[
+        bool,
+        typer.Option(False, "--pyqa-rules", help=PYQA_RULES_HELP),
+    ],
 ) -> MetaRuntimeChecks:
     """Return runtime-focused meta-check toggles."""
 
@@ -769,6 +777,7 @@ def _meta_runtime_checks_dependency(
         check_signatures=check_signatures,
         check_cache_usage=check_cache_usage,
         check_value_types=check_value_types,
+        pyqa_rules=pyqa_rules,
     )
 
 
@@ -790,6 +799,7 @@ def _meta_params_dependency(
             check_signatures=True,
             check_cache_usage=True,
             check_value_types=True,
+            pyqa_rules=True,
         )
     else:
         analysis = analysis_checks

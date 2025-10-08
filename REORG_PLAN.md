@@ -351,7 +351,6 @@ Deliverable: Completion of Phase 8 means every coding-rule exception is justifie
 2. Extend architectural tests to enforce module-level SOLID boundaries and DI composition rules.
 3. Backfill package-level documentation (`{MODULE}.md`) capturing usage patterns, DI seams, and extension points across the repository.
 
-
 ## Risk Mitigation & QA
 
 * **CI gating:** Block merges unless type checks, unit tests, and architectural

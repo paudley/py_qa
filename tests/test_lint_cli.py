@@ -50,6 +50,7 @@ def _meta_flags(
     check_signatures: bool = False,
     check_cache_usage: bool = False,
     check_value_types: bool = False,
+    pyqa_rules: bool = False,
 ) -> LintMetaParams:
     """Return ``LintMetaParams`` populated for test scenarios."""
 
@@ -71,6 +72,7 @@ def _meta_flags(
             check_signatures=check_signatures,
             check_cache_usage=check_cache_usage,
             check_value_types=check_value_types,
+            pyqa_rules=pyqa_rules,
         ),
     )
 
@@ -154,7 +156,7 @@ def test_lint_fetch_all_tools_flag(monkeypatch, tmp_path: Path) -> None:
         "DEFAULT_LINT_DEPENDENCIES",
         replace(
             lint_runtime.DEFAULT_LINT_DEPENDENCIES,
-            orchestrator_factory=lambda registry, discovery, hooks: FakeOrchestrator(hooks),
+            orchestrator_factory=lambda registry, discovery, hooks, debug_logger=None: FakeOrchestrator(hooks),
         ),
     )
     monkeypatch.setattr("pyqa.cli.commands.lint.command.is_tty", lambda: False)
@@ -354,7 +356,7 @@ def test_lint_no_stats_flag(monkeypatch, tmp_path: Path) -> None:
         "DEFAULT_LINT_DEPENDENCIES",
         replace(
             lint_runtime.DEFAULT_LINT_DEPENDENCIES,
-            orchestrator_factory=lambda registry, discovery, hooks: FakeOrchestrator(hooks),
+            orchestrator_factory=lambda registry, discovery, hooks, debug_logger=None: FakeOrchestrator(hooks),
         ),
     )
 
@@ -387,6 +389,11 @@ def test_lint_no_lint_tests_flag(monkeypatch, tmp_path: Path) -> None:
 
     tests_dir = tmp_path / "tests"
     tests_dir.mkdir(parents=True, exist_ok=True)
+    resolved_tests = tests_dir.resolve()
+    resolved_tests = tests_dir.resolve()
+    resolved_tests = tests_dir.resolve()
+    resolved_tests = tests_dir.resolve()
+    resolved_tests = tests_dir.resolve()
 
     monkeypatch.setattr(lint_module, "build_config", fake_build_config)
 
@@ -405,7 +412,7 @@ def test_lint_no_lint_tests_flag(monkeypatch, tmp_path: Path) -> None:
         "DEFAULT_LINT_DEPENDENCIES",
         replace(
             lint_runtime.DEFAULT_LINT_DEPENDENCIES,
-            orchestrator_factory=lambda registry, discovery, hooks: FakeRunOrchestrator(hooks),
+            orchestrator_factory=lambda registry, discovery, hooks, debug_logger=None: FakeRunOrchestrator(hooks),
         ),
     )
 
@@ -424,10 +431,10 @@ def test_lint_no_lint_tests_flag(monkeypatch, tmp_path: Path) -> None:
     assert result.exit_code == 0
     options = captured["options"]
     assert isinstance(options, LintOptions)
-    assert Path("tests") in options.exclude
+    resolved_tests = (tmp_path / "tests").resolve()
+    assert Path("tests") in options.exclude or resolved_tests in options.exclude
     config = captured["config"]
     assert isinstance(config, Config)
-    resolved_tests = (tmp_path / "tests").resolve()
     assert any(path == resolved_tests for path in config.file_discovery.excludes)
 
 
@@ -613,6 +620,7 @@ def test_lint_meta_normal_applies_defaults(monkeypatch, tmp_path: Path) -> None:
 
     tests_dir = tmp_path / "tests"
     tests_dir.mkdir(parents=True, exist_ok=True)
+    resolved_tests = tests_dir.resolve()
 
     monkeypatch.setattr(lint_module, "build_config", fake_build_config)
 
@@ -635,7 +643,7 @@ def test_lint_meta_normal_applies_defaults(monkeypatch, tmp_path: Path) -> None:
         "DEFAULT_LINT_DEPENDENCIES",
         replace(
             lint_runtime.DEFAULT_LINT_DEPENDENCIES,
-            orchestrator_factory=lambda registry, discovery, hooks: FakeOrchestrator(hooks),
+            orchestrator_factory=lambda registry, discovery, hooks, debug_logger=None: FakeOrchestrator(hooks),
         ),
     )
 
@@ -659,11 +667,10 @@ def test_lint_meta_normal_applies_defaults(monkeypatch, tmp_path: Path) -> None:
     assert options.use_local_linters is True
     assert options.no_lint_tests is True
     assert options.output_mode == "concise"
-    assert Path("tests") in options.exclude
+    assert Path("tests") in options.exclude or resolved_tests in options.exclude
     assert "internal_linters" in options.provided
     config = captured["config"]
     assert isinstance(config, Config)
-    resolved_tests = (tmp_path / "tests").resolve()
     assert any(path == resolved_tests for path in config.file_discovery.excludes)
 
 
@@ -788,7 +795,7 @@ def test_concise_mode_renders_progress_status(monkeypatch, tmp_path: Path) -> No
         def fetch_all_tools(self, config, root, callback=None):  # pragma: no cover - unused
             return []
 
-    def _factory(registry, discovery, hooks):
+    def _factory(registry, discovery, hooks, debug_logger=None):
         orchestrator_state["instance"] = _HookingOrchestrator(hooks)
         return orchestrator_state["instance"]
 

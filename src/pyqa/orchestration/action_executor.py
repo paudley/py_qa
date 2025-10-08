@@ -204,12 +204,17 @@ class ActionExecutor:
     runner: RunnerCallable
     after_tool_hook: Callable[[ToolOutcome], None] | None
     context_resolver: ContextResolver
+    debug_logger: Callable[[str], None] | None = None
 
     @property
     def executor_name(self) -> str:
         """Return the human-readable name for this executor."""
 
         return "action-executor"
+
+    def _debug(self, message: str) -> None:
+        if self.debug_logger:
+            self.debug_logger(message)
 
     def execute_scheduled(self, environment: ExecutionEnvironment, state: ExecutionState) -> None:
         """Run all queued actions honouring concurrency constraints.
@@ -220,14 +225,19 @@ class ActionExecutor:
         """
 
         if not state.scheduled:
+            self._debug("no scheduled actions to execute")
             return
         if environment.config.execution.bail and state.bail_triggered:
+            self._debug("skipping scheduled actions because bail condition was triggered")
             state.scheduled.clear()
             return
         if environment.config.execution.jobs > 1:
+            self._debug(f"executing {len(state.scheduled)} scheduled actions in parallel")
             self._execute_in_parallel(environment, state)
         else:
+            self._debug(f"executing {len(state.scheduled)} scheduled actions serially")
             self._execute_serial(environment, state)
+        self._debug("completed scheduled action execution")
 
     def populate_missing_metrics(self, state: ExecutionState, files: Sequence[Path]) -> None:
         """Ensure every discovered file has an associated metrics entry.
@@ -278,6 +288,7 @@ class ActionExecutor:
             environment: Execution environment containing severity rules.
         """
 
+        self._debug(f"refreshing cached outcome for {record.invocation.tool_name}:{record.invocation.action.name}")
         filters = tuple(record.invocation.context.cfg.output.tool_filters.get(record.invocation.tool_name, []))
         pipeline_request = DiagnosticPipelineRequest(
             tool_name=record.invocation.tool_name,
@@ -323,6 +334,7 @@ class ActionExecutor:
             token=token,
         )
         cache.store(request, outcome=record.outcome, file_metrics=metrics_map)
+        self._debug(f"stored cache entry for {record.invocation.tool_name}:{record.invocation.action.name}")
 
     def record_outcome(
         self,
@@ -368,6 +380,10 @@ class ActionExecutor:
                 from_cache=True,
             )
         self._store_outcome_in_cache(record=record, environment=environment, metrics_map=metrics_map)
+        self._debug(
+            f"recorded outcome for {invocation.tool_name}:{invocation.action.name} "
+            f"returncode={outcome.returncode} cached={record.from_cache}"
+        )
         if self.after_tool_hook:
             self.after_tool_hook(outcome)
 
@@ -382,6 +398,11 @@ class ActionExecutor:
             ToolOutcome: Normalized tool output with diagnostics populated.
         """
 
+        command_str = " ".join(invocation.command).replace('"', '\\"')
+        self._debug(
+            f"running {invocation.tool_name}:{invocation.action.name} "
+            f'command="{command_str}" internal={invocation.internal_runner is not None}'
+        )
         filters = tuple(invocation.context.cfg.output.tool_filters.get(invocation.tool_name, []))
 
         completed: CompletedProcess[str] | None = None
@@ -436,6 +457,13 @@ class ActionExecutor:
                 root=environment.root,
                 from_cache=False,
             )
+            self._debug(
+                f"{invocation.tool_name}:{invocation.action.name} returned failure returncode={evaluation.returncode}"
+            )
+
+        self._debug(
+            f"completed {invocation.tool_name}:{invocation.action.name} returncode={evaluation.returncode} diagnostics={len(diagnostics)}"
+        )
 
         return ToolOutcome(
             tool=invocation.tool_name,

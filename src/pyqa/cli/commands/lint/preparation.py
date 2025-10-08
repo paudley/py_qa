@@ -222,6 +222,9 @@ def prepare_lint_state(
         ),
     )
 
+    if is_py_qa_workspace(normalized_targets.root):
+        inputs.advanced.meta.runtime.pyqa_rules = True
+
     return PreparedLintState(
         options=options,
         meta=inputs.advanced.meta,
@@ -325,6 +328,7 @@ def _build_output_bundle(
             no_color=output.rendering.no_color,
             no_emoji=output.rendering.no_emoji,
             output_mode=preset.output_mode,
+            debug=output.rendering.debug,
             advice=preset.advice,
         ),
         summary=LintSummaryOptions(
@@ -573,6 +577,7 @@ def _build_display_options(rendering: LintOutputParams) -> CLIDisplayOptions:
         no_emoji=rendering.no_emoji,
         quiet=rendering.quiet,
         verbose=rendering.verbose,
+        debug=rendering.debug,
     )
 
 
@@ -728,6 +733,7 @@ def _collect_provided_flags(
         "check_signatures",
         "check_cache_usage",
         "check_value_types",
+        "pyqa_rules",
         "fix_only",
         "check_only",
         "verbose",

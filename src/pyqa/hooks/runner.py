@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-from collections.abc import Iterable
 
 from pyqa.core.logging import info, ok, warn
 

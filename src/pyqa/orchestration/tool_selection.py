@@ -41,17 +41,11 @@ class ToolSelector:
         exec_cfg = cfg.execution
         if exec_cfg.only:
             return self.order_tools(dict.fromkeys(exec_cfg.only))
-        languages = list(dict.fromkeys(exec_cfg.languages)) if exec_cfg.languages else []
-        if not languages:
-            languages = sorted(detect_languages(root, files))
-        if languages:
-            tool_names: list[str] = []
-            for lang in languages:
-                tool_names.extend(tool.name for tool in self.registry.tools_for_language(lang))
-            if tool_names:
-                return self.order_tools(dict.fromkeys(tool_names))
-        default_tools = [tool.name for tool in self.registry.tools() if tool.default_enabled]
-        return self.order_tools(dict.fromkeys(default_tools))
+
+        # Determine the full eligible set: all tools from the registry will run
+        # unless explicitly disabled or filtered by future configuration knobs.
+        eligible_names = [tool.name for tool in self.registry.tools()]
+        return self.order_tools(dict.fromkeys(eligible_names))
 
     def order_tools(self, tool_names: Mapping[str, None] | Sequence[str]) -> list[str]:
         """Order tools based on phase metadata and declared dependencies.

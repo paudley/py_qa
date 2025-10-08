@@ -12,6 +12,11 @@ from pyqa.platform.workspace import is_py_qa_workspace
 def test_is_py_qa_workspace_true(tmp_path: Path) -> None:
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text('[project]\nname = "py_qa"\n', encoding="utf-8")
+    (tmp_path / "src" / "pyqa").mkdir(parents=True)
+    (tmp_path / "src" / "pyqa" / "__init__.py").write_text("""""""\n", encoding="utf-8")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "tooling").mkdir()
+    (tmp_path / "REORG_PLAN.md").write_text("# plan\n", encoding="utf-8")
 
     assert is_py_qa_workspace(tmp_path) is True
 
@@ -19,6 +24,11 @@ def test_is_py_qa_workspace_true(tmp_path: Path) -> None:
 def test_is_py_qa_workspace_accepts_variant(tmp_path: Path) -> None:
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text('[project]\nname = "pyqa"\n', encoding="utf-8")
+    (tmp_path / "src" / "pyqa").mkdir(parents=True)
+    (tmp_path / "src" / "pyqa" / "__init__.py").write_text("""""""\n", encoding="utf-8")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "tooling").mkdir()
+    (tmp_path / "REORG_PLAN.md").write_text("# plan\n", encoding="utf-8")
 
     assert is_py_qa_workspace(tmp_path) is True
 

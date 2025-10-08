@@ -29,6 +29,7 @@ TYPING_HELP: str
 CLOSURES_HELP: str
 SIGNATURES_HELP: str
 CACHE_HELP: str
+PYQA_RULES_HELP: str
 FETCH_ALL_TOOLS_HELP: str
 FILTER_HELP: str
 JOBS_HELP: str
@@ -56,8 +57,9 @@ class LintDisplayOptions:
     no_emoji: bool
     quiet: bool
     verbose: bool
+    debug: bool
 
-    def __init__(self, *, no_emoji: bool, quiet: bool, verbose: bool) -> None: ...
+    def __init__(self, *, no_emoji: bool, quiet: bool, verbose: bool, debug: bool) -> None: ...
 
 def _build_lint_cli_inputs(
     targets: LintTargetGroup,

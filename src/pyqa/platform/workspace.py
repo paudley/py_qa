@@ -36,7 +36,9 @@ def _is_py_qa_workspace_cached(root_str: str) -> bool:
     except (OSError, tomllib.TOMLDecodeError):
         return False
     name = _extract_project_name(data)
-    return name in _PY_QA_NAME_VARIANTS
+    if name not in _PY_QA_NAME_VARIANTS:
+        return False
+    return _has_required_entries(root)
 
 
 def _extract_project_name(payload: dict[str, Any]) -> str | None:
@@ -56,6 +58,21 @@ def _extract_project_name(payload: dict[str, Any]) -> str | None:
 
 
 _PY_QA_NAME_VARIANTS = {PY_QA_DIR_NAME, PY_QA_DIR_NAME.replace("_", "")}
+_SENTINEL_DIRECTORIES = ("src/pyqa", "docs", "tooling")
+_SENTINEL_FILES = ("REORG_PLAN.md",)
+
+
+def _has_required_entries(root: Path) -> bool:
+    for relative in _SENTINEL_DIRECTORIES:
+        candidate = root / relative
+        if not candidate.is_dir():
+            return False
+    for relative in _SENTINEL_FILES:
+        candidate = root / relative
+        if not candidate.is_file():
+            return False
+    init_file = root / "src" / "pyqa" / "__init__.py"
+    return init_file.is_file()
 
 
 __all__ = ["is_py_qa_workspace"]

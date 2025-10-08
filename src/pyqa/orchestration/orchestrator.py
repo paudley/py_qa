@@ -89,6 +89,7 @@ class OrchestratorDeps:
     hooks: OrchestratorHooks | None = None
     cmd_preparer: CommandPreparationFn | None = None
     services: ServiceContainer | None = None
+    debug_logger: Callable[[str], None] | None = None
 
 
 @dataclass(frozen=True)
@@ -99,6 +100,7 @@ class OrchestratorOverrides:
     hooks: OrchestratorHooks | None = None
     cmd_preparer: CommandPreparationFn | None = None
     services: ServiceContainer | None = None
+    debug_logger: Callable[[str], None] | None = None
 
 
 @dataclass(slots=True)
@@ -160,6 +162,7 @@ class Orchestrator:
                     overrides.hooks,
                     overrides.cmd_preparer,
                     overrides.services,
+                    overrides.debug_logger,
                 )
             ):
                 raise TypeError("Pass either 'deps' or explicit overrides, not both")
@@ -169,11 +172,13 @@ class Orchestrator:
             final_hooks = deps.hooks or overrides.hooks
             final_preparer = deps.cmd_preparer or overrides.cmd_preparer
             services = deps.services
+            debug_logger = overrides.debug_logger or deps.debug_logger
         else:
             final_runner = overrides.runner
             final_hooks = overrides.hooks
             final_preparer = overrides.cmd_preparer
             services = overrides.services
+            debug_logger = overrides.debug_logger
         if registry is None or discovery is None:
             raise TypeError("Orchestrator requires 'registry' and 'discovery' dependencies")
 
@@ -187,8 +192,13 @@ class Orchestrator:
         self._runner = base_runner if isinstance(base_runner, RunnerCallable) else wrap_runner(base_runner)
         self._hooks = final_hooks or OrchestratorHooks()
         self._services: ServiceContainer = services
+        self._debug_logger: Callable[[str], None] | None = debug_logger
         self._analysis = self._create_analysis_providers()
         self._pipeline = self._create_pipeline(final_preparer)
+
+    def _debug(self, message: str) -> None:
+        if self._debug_logger:
+            self._debug_logger(message)
 
     def _create_pipeline(
         self,
@@ -211,9 +221,10 @@ class Orchestrator:
         prepare_fn = self._coerce_preparer(prepare_callable)
         selector = ToolSelector(self._context.registry)
         executor = ActionExecutor(
-            self._runner,
-            self._hooks.after_tool,
-            self._analysis.context_resolver,
+            runner=self._runner,
+            after_tool_hook=self._hooks.after_tool,
+            context_resolver=self._analysis.context_resolver,
+            debug_logger=self._debug_logger,
         )
         return _ToolingPipeline(selector=selector, executor=executor, prepare_command=prepare_fn)
 
@@ -241,10 +252,19 @@ class Orchestrator:
         environment, matched_files = self._build_environment(cfg, root)
         state = ExecutionState()
         self._pipeline.executor.after_tool_hook = self._hooks.after_tool
+        self._debug(f"execution root={environment.root} matched_files={len(matched_files)}")
         self._notify_discovery(len(matched_files))
 
         tool_names = self._pipeline.selector.select_tools(cfg, matched_files, environment.root)
         self._notify_plan(tool_names, cfg)
+        self._debug(f"selected tools: {tool_names}")
+        available_tools = [tool.name for tool in self._context.registry.tools()]
+        skipped_tools = [name for name in available_tools if name not in tool_names]
+        if skipped_tools:
+            self._debug(
+                f"skipped tools (filtered out): {skipped_tools} -- "
+                f"only={cfg.execution.only} languages={cfg.execution.languages}"
+            )
 
         for name in tool_names:
             if self._process_tool(
@@ -406,9 +426,16 @@ class Orchestrator:
         tool = self._context.registry.try_get(tool_name)
         if tool is None:
             warn(f"Unknown tool '{tool_name}'", use_emoji=cfg.output.emoji)
+            self._debug(f"skipping unknown tool '{tool_name}'")
             return False
 
         context = self._build_tool_context(cfg, environment, tool, matched_files)
+        settings_snapshot = dict(context.settings)
+        self._debug(
+            f"tool {tool.name}: files={len(context.files)} "
+            f"fix_only={cfg.execution.fix_only} check_only={cfg.execution.check_only} "
+            f"settings={settings_snapshot}"
+        )
         self._apply_installers(tool, context, state.installed_tools)
         if self._hooks.before_tool:
             self._hooks.before_tool(tool.name)
@@ -420,7 +447,15 @@ class Orchestrator:
         )
 
         for action in tool.actions:
-            if not self._should_run_action(cfg, action):
+            should_run = self._should_run_action(cfg, action)
+            if not should_run:
+                reasons: list[str] = []
+                if cfg.execution.fix_only and not action.is_fix:
+                    reasons.append("fix_only active")
+                if cfg.execution.check_only and action.is_fix:
+                    reasons.append("check_only active")
+                reason_text = ", ".join(reasons) or "action filtered"
+                self._debug(f"skipping {tool.name}:{action.name} ({reason_text})")
                 continue
 
             preparation = self._prepare_action(
@@ -434,6 +469,11 @@ class Orchestrator:
 
             prepared_command = preparation.prepared
             invocation = self._build_invocation(tool.name, action, context, prepared_command)
+            command_str = " ".join(invocation.command).replace('"', '\\"')
+            self._debug(
+                f'prepared {tool.name}:{action.name} command="{command_str}" '
+                f"internal={invocation.internal_runner is not None}"
+            )
             update_tool_version(environment.cache, tool.name, prepared_command.version)
 
             cache_decision = self._handle_cached_outcome(
@@ -443,11 +483,17 @@ class Orchestrator:
                 invocation=invocation,
             )
             if cache_decision == _DECISION_BAIL:
+                self._debug(f"bailing after cached outcome for {tool.name}:{action.name}")
                 return True
             if cache_decision == _DECISION_SKIP:
+                self._debug(f"skipping {tool.name}:{action.name} due to cache hit")
                 continue
 
             if self._requires_immediate_execution(cfg, action):
+                self._debug(
+                    f"executing {tool.name}:{action.name} immediately "
+                    f"(is_fix={action.is_fix}, bail={cfg.execution.bail})"
+                )
                 if self._execute_immediate_action(
                     invocation=invocation,
                     environment=environment,
@@ -458,6 +504,8 @@ class Orchestrator:
                 continue
 
             self._queue_scheduled_action(state, invocation)
+            queued_cmd = " ".join(invocation.command).replace('"', '\\"')
+            self._debug(f'queued {tool.name}:{action.name} command="{queued_cmd}"')
         return False
 
     def _should_run_action(self, cfg: Config, action: ToolAction) -> bool:
@@ -556,6 +604,7 @@ class Orchestrator:
             files=files,
         )
         if cached_entry is None:
+            self._debug(f"no cache entry for {invocation.tool_name}:{invocation.action.name}")
             return _DECISION_EXECUTE
 
         record = OutcomeRecord(
@@ -569,7 +618,15 @@ class Orchestrator:
         state.order += 1
         if cfg.execution.bail and cached_entry.outcome.returncode != 0:
             state.bail_triggered = True
+            self._debug(
+                f"cached failure triggers bail for {invocation.tool_name}:{invocation.action.name} "
+                f"returncode={cached_entry.outcome.returncode}"
+            )
             return _DECISION_BAIL
+        self._debug(
+            f"cache hit for {invocation.tool_name}:{invocation.action.name} "
+            f"returncode={cached_entry.outcome.returncode}"
+        )
         return _DECISION_SKIP
 
     @staticmethod
@@ -611,7 +668,13 @@ class Orchestrator:
         bail_enabled = environment.config.execution.bail
         if bail_enabled and outcome.returncode != 0 and not action.ignore_exit:
             state.bail_triggered = True
+            self._debug(
+                f"{invocation.tool_name}:{invocation.action.name} immediate execution failed with returncode={outcome.returncode}; bail active"
+            )
             return True
+        self._debug(
+            f"completed {invocation.tool_name}:{invocation.action.name} immediate execution returncode={outcome.returncode} diagnostics={len(outcome.diagnostics)}"
+        )
         return False
 
     def _queue_scheduled_action(self, state: ExecutionState, invocation: ActionInvocation) -> None:
@@ -715,8 +778,10 @@ class Orchestrator:
         if not tool.installers or tool.name in installed:
             return
         for installer in tool.installers:
+            self._debug(f"running installer for {tool.name}")
             installer(context)
         installed.add(tool.name)
+        self._debug(f"completed installers for {tool.name}")
 
     def _invoke_preparer(self, request: CommandPreparationRequest) -> PreparedCommand:
         """Invoke the configured command preparer for ``request``.

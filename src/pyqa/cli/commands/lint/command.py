@@ -14,6 +14,7 @@ from pyqa.runtime.console import is_tty
 from ....config import ConfigError
 from ....linting.registry import iter_internal_linters
 from ....orchestration.tool_selection import PHASE_ORDER, PhaseLiteral
+from ....platform.workspace import is_py_qa_workspace
 from ...core.config_builder import build_config
 from ...core.runtime import ServiceResolutionError
 from ...core.shared import CLILogger, Depends, build_cli_logger
@@ -44,7 +45,11 @@ def lint_command(
         ctx: Typer context for the current command invocation.
         inputs: Structured CLI inputs produced by dependency factories.
     """
-    logger = build_cli_logger(emoji=not inputs.output.rendering.no_emoji)
+    logger = build_cli_logger(
+        emoji=not inputs.output.rendering.no_emoji,
+        debug=inputs.output.rendering.debug,
+        no_color=inputs.output.rendering.no_color,
+    )
     _execute_lint(ctx, inputs, logger=logger)
 
 
@@ -241,7 +246,10 @@ def _activate_internal_linters(state: PreparedLintState) -> None:
 
     existing = {name.lower() for name in selection.only}
     added = False
+    pyqa_enabled = meta.pyqa_rules or is_py_qa_workspace(state.root)
     for definition in iter_internal_linters():
+        if definition.pyqa_scoped and not pyqa_enabled:
+            continue
         attribute = definition.meta_attribute
         if attribute and getattr(meta, attribute, False):
             if definition.name.lower() not in existing:
