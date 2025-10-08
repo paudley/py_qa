@@ -46,7 +46,7 @@ from .action_executor import (
     wrap_runner,
 )
 from .runtime import discover_files, filter_files_for_tool, prepare_runtime
-from .tool_selection import ToolSelector
+from .tool_selection import SelectionResult, ToolSelector
 from .worker import run_command
 
 FetchEvent = Literal["start", "completed", "error"]
@@ -255,16 +255,9 @@ class Orchestrator:
         self._debug(f"execution root={environment.root} matched_files={len(matched_files)}")
         self._notify_discovery(len(matched_files))
 
-        tool_names = self._pipeline.selector.select_tools(cfg, matched_files, environment.root)
+        selection = self._plan_from_environment(cfg, environment, matched_files)
+        tool_names = list(selection.run_names)
         self._notify_plan(tool_names, cfg)
-        self._debug(f"selected tools: {tool_names}")
-        available_tools = [tool.name for tool in self._context.registry.tools()]
-        skipped_tools = [name for name in available_tools if name not in tool_names]
-        if skipped_tools:
-            self._debug(
-                f"skipped tools (filtered out): {skipped_tools} -- "
-                f"only={cfg.execution.only} languages={cfg.execution.languages}"
-            )
 
         for name in tool_names:
             if self._process_tool(
@@ -303,6 +296,18 @@ class Orchestrator:
         if self._hooks.after_execution:
             self._hooks.after_execution(result)
         return result
+
+    def plan_tools(
+        self,
+        cfg: Config,
+        *,
+        root: Path | None = None,
+    ) -> SelectionResult:
+        """Return the tool selection result without executing actions."""
+
+        environment, matched_files = self._build_environment(cfg, root)
+        self._debug(f"execution root={environment.root} matched_files={len(matched_files)}")
+        return self._plan_from_environment(cfg, environment, matched_files)
 
     def fetch_all_tools(
         self,
@@ -365,6 +370,59 @@ class Orchestrator:
             cache=cache_ctx,
         )
         return environment, matched_files
+
+    def _plan_from_environment(
+        self,
+        cfg: Config,
+        environment: ExecutionEnvironment,
+        matched_files: Sequence[Path],
+    ) -> SelectionResult:
+        selection = self._pipeline.selector.plan_selection(cfg, matched_files, environment.root)
+        self._debug_selection(selection, cfg)
+        return selection
+
+    def _debug_selection(self, selection: SelectionResult, cfg: Config) -> None:
+        if not self._debug_logger:
+            return
+        run_names = list(selection.run_names)
+        self._debug(f"selected tools: {run_names}")
+        skipped = [
+            decision.name
+            for decision in selection.decisions
+            if decision.action == "skip" and decision.eligibility.available
+        ]
+        if skipped:
+            self._debug(f"skipped tools: {skipped} -- only={cfg.execution.only} languages={cfg.execution.languages}")
+        for decision in selection.decisions:
+            self._debug(self._format_decision_debug(decision))
+
+    def _format_decision_debug(self, decision: ToolDecision) -> str:
+        parts: list[str] = [
+            "[plan]",
+            f"tool={decision.name}",
+            f"action={decision.action}",
+            f"family={decision.family}",
+        ]
+        reasons = ",".join(decision.reasons)
+        parts.append(f'reasons="{reasons}"')
+        elig = decision.eligibility
+        if elig.requested_via_only:
+            parts.append("requested=only")
+        if elig.language_match is not None:
+            parts.append(f"lang={elig.language_match}")
+        if elig.extension_match is not None:
+            parts.append(f"ext={elig.extension_match}")
+        if elig.config_match is not None:
+            parts.append(f"config={elig.config_match}")
+        if elig.sensitivity_ok is not None:
+            parts.append(f"sensitivity={elig.sensitivity_ok}")
+        if elig.pyqa_scope is not None:
+            parts.append(f"pyqa={elig.pyqa_scope}")
+        if elig.default_enabled:
+            parts.append("default_enabled=True")
+        if not elig.available:
+            parts.append("available=False")
+        return " ".join(parts)
 
     def _notify_discovery(self, file_count: int) -> None:
         """Invoke discovery hook when configured.

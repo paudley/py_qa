@@ -242,6 +242,7 @@ class ExecutionConfig(BaseModel):
     only: list[str] = Field(default_factory=list)
     languages: list[str] = Field(default_factory=list)
     enable: list[str] = Field(default_factory=list)
+    pyqa_rules: bool = False
     strict: bool = False
     jobs: int = Field(default_factory=default_parallel_jobs)
     fix_only: bool = False

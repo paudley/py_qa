@@ -13,6 +13,7 @@ from ....tools.builtin_registry import initialize_registry
 from ....tools.registry import DEFAULT_REGISTRY
 from ..doctor.command import run_doctor
 from ..tool_info.command import run_tool_info
+from .explain import render_explain_tools
 from .fetch import render_fetch_all_tools
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
@@ -65,11 +66,32 @@ def handle_runtime_meta_actions(
         which exit code should be used.
     """
 
+    outcome = _handle_explain_tools_action(runtime)
+    if outcome.handled:
+        return outcome
     outcome = _handle_tool_info_action(runtime)
     if outcome.handled:
         return outcome
     outcome = _handle_fetch_all_tools_action(runtime, phase_order=phase_order)
     return outcome if outcome.handled else MetaActionOutcome()
+
+
+def _handle_explain_tools_action(runtime: LintRuntimeContext) -> MetaActionOutcome:
+    """Render tool-selection diagnostics when requested by the CLI state."""
+
+    meta = runtime.state.meta
+    if not meta.explain_tools:
+        return MetaActionOutcome()
+
+    orchestrator = runtime.orchestrator
+    plan_method = getattr(orchestrator, "plan_tools", None)
+    if plan_method is None:
+        runtime.state.logger.fail("Current execution pipeline does not support --explain-tools")
+        return MetaActionOutcome(exit_code=1, handled=True)
+
+    selection = plan_method(runtime.config, root=runtime.state.root)
+    render_explain_tools(runtime, selection)
+    return MetaActionOutcome(exit_code=0, handled=True)
 
 
 def _handle_doctor_action(state: PreparedLintState) -> MetaActionOutcome:

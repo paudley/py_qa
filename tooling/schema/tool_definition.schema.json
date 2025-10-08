@@ -312,7 +312,7 @@
       "items": {
         "type": "integer"
       },
-      "description": "Collection of integer exit codes." 
+      "description": "Collection of integer exit codes."
     },
     "CommandDefinition": {
       "type": "object",

@@ -142,6 +142,7 @@ class MetaActionParams:
     fetch_all_tools: bool
     validate_schema: bool
     normal: bool
+    explain_tools: bool
 
 
 @dataclass(slots=True)
@@ -201,6 +202,12 @@ class LintMetaParams:
         """Return whether the normal preset flag was supplied."""
 
         return self.actions.normal
+
+    @property
+    def explain_tools(self) -> bool:
+        """Return whether the explain-tools meta action was supplied."""
+
+        return self.actions.explain_tools
 
     @property
     def check_docstrings(self) -> bool:

@@ -22,6 +22,7 @@ class ExecutionOverrides(TypedDict):
     languages: tuple[str, ...]
     fix_only: bool
     check_only: bool
+    pyqa_rules: bool
     bail: bool
     jobs: int | None
     cache_enabled: bool
@@ -44,6 +45,7 @@ def apply_execution_overrides(
             "languages": list(overrides["languages"]),
             "fix_only": overrides["fix_only"],
             "check_only": overrides["check_only"],
+            "pyqa_rules": overrides["pyqa_rules"],
             "bail": overrides["bail"],
             "jobs": overrides["jobs"],
             "cache_enabled": overrides["cache_enabled"],
@@ -107,6 +109,7 @@ def collect_execution_overrides(
             LintOptionKey.CHECK_ONLY,
             provided,
         ),
+        "pyqa_rules": current.pyqa_rules,
         "bail": bail_value,
         "jobs": jobs_value,
         "cache_enabled": select_flag(

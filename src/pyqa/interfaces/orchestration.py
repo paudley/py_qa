@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
     from ..config import Config
     from ..core.models import RunResult
+    from ..orchestration.tool_selection import SelectionResult
 
 
 @runtime_checkable
@@ -79,6 +80,11 @@ class ExecutionPipeline(Protocol):
         Returns:
             RunResult: Aggregated result describing execution outcomes.
         """
+        raise NotImplementedError
+
+    def plan_tools(self, config: Config, *, root: Path) -> SelectionResult:
+        """Return the planned tool execution order without running them."""
+
         raise NotImplementedError
 
     def fetch_all_tools(

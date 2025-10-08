@@ -230,53 +230,17 @@
       "pyqa.discovery",
       "pyqa.orchestration.orchestrator"
     ],
-    "pyqa.analysis": [
-      "pyqa.change_impact",
-      "pyqa.navigator",
-      "pyqa.suppression"
-    ],
-    "pyqa.analysis.change_impact": [
-      "pyqa.context",
-      "pyqa.models"
-    ],
-    "pyqa.analysis.navigator": [
-      "pyqa.annotations",
-      "pyqa.models",
-      "pyqa.reporting.advice"
-    ],
-    "pyqa.analysis.suppression": [
-      "pyqa.annotations",
-      "pyqa.models"
-    ],
-    "pyqa.annotations": [
-      "pyqa.context",
-      "pyqa.models"
-    ],
-    "pyqa.cache": [
-      "pyqa.context",
-      "pyqa.in_memory",
-      "pyqa.result_store",
-      "pyqa.tool_versions"
-    ],
-    "pyqa.cache.context": [
-      "pyqa.cache.result_store",
-      "pyqa.cache.tool_versions",
-      "pyqa.config"
-    ],
+    "pyqa.analysis": ["pyqa.change_impact", "pyqa.navigator", "pyqa.suppression"],
+    "pyqa.analysis.change_impact": ["pyqa.context", "pyqa.models"],
+    "pyqa.analysis.navigator": ["pyqa.annotations", "pyqa.models", "pyqa.reporting.advice"],
+    "pyqa.analysis.suppression": ["pyqa.annotations", "pyqa.models"],
+    "pyqa.annotations": ["pyqa.context", "pyqa.models"],
+    "pyqa.cache": ["pyqa.context", "pyqa.in_memory", "pyqa.result_store", "pyqa.tool_versions"],
+    "pyqa.cache.context": ["pyqa.cache.result_store", "pyqa.cache.tool_versions", "pyqa.config"],
     "pyqa.cache.in_memory": [],
-    "pyqa.cache.result_store": [
-      "pyqa.metrics",
-      "pyqa.models",
-      "pyqa.serialization"
-    ],
+    "pyqa.cache.result_store": ["pyqa.metrics", "pyqa.models", "pyqa.serialization"],
     "pyqa.cache.tool_versions": [],
-    "pyqa.catalog": [
-      "pyqa.errors",
-      "pyqa.loader",
-      "pyqa.metadata",
-      "pyqa.model_catalog",
-      "pyqa.model_tool"
-    ],
+    "pyqa.catalog": ["pyqa.errors", "pyqa.loader", "pyqa.metadata", "pyqa.model_catalog", "pyqa.model_tool"],
     "pyqa.catalog.checksum": [],
     "pyqa.catalog.command_options": [
       "pyqa.catalog.loader",
@@ -287,15 +251,8 @@
     ],
     "pyqa.catalog.errors": [],
     "pyqa.catalog.io": [],
-    "pyqa.catalog.loader": [
-      "pyqa.catalog.plugins"
-    ],
-    "pyqa.catalog.metadata": [
-      "pyqa.catalog.errors",
-      "pyqa.catalog.loader",
-      "pyqa.catalog.model_catalog",
-      "pyqa.paths"
-    ],
+    "pyqa.catalog.loader": ["pyqa.catalog.plugins"],
+    "pyqa.catalog.metadata": ["pyqa.catalog.errors", "pyqa.catalog.loader", "pyqa.catalog.model_catalog", "pyqa.paths"],
     "pyqa.catalog.model_actions": [],
     "pyqa.catalog.model_catalog": [],
     "pyqa.catalog.model_diagnostics": [],
@@ -306,9 +263,7 @@
     "pyqa.catalog.model_strategy": [],
     "pyqa.catalog.model_tool": [],
     "pyqa.catalog.models": [],
-    "pyqa.catalog.plugins": [
-      "pyqa.plugins"
-    ],
+    "pyqa.catalog.plugins": ["pyqa.plugins"],
     "pyqa.catalog.resolver": [],
     "pyqa.catalog.scanner": [],
     "pyqa.catalog.schema": [],
@@ -325,29 +280,11 @@
     ],
     "pyqa.catalog.types": [],
     "pyqa.catalog.utils": [],
-    "pyqa.clean": [
-      "pyqa.config",
-      "pyqa.constants",
-      "pyqa.discovery.utils",
-      "pyqa.logging",
-      "pyqa.workspace"
-    ],
-    "pyqa.cli": [
-      "pyqa.app",
-      "pyqa.core.config_builder",
-      "pyqa.core.options"
-    ],
-    "pyqa.cli.app": [
-      "pyqa.cli.commands",
-      "pyqa.cli.core.typer_ext"
-    ],
-    "pyqa.cli.commands": [
-      "pyqa.cli"
-    ],
-    "pyqa.cli.commands.banned": [
-      "pyqa.cli.commands.command",
-      "pyqa.core.shared"
-    ],
+    "pyqa.clean": ["pyqa.config", "pyqa.constants", "pyqa.discovery.utils", "pyqa.logging", "pyqa.workspace"],
+    "pyqa.cli": ["pyqa.app", "pyqa.core.config_builder", "pyqa.core.options"],
+    "pyqa.cli.app": ["pyqa.cli.commands", "pyqa.cli.core.typer_ext"],
+    "pyqa.cli.commands": ["pyqa.cli"],
+    "pyqa.cli.commands.banned": ["pyqa.cli.commands.command", "pyqa.core.shared"],
     "pyqa.cli.commands.banned.command": [
       "pyqa.cli.commands.banned.models",
       "pyqa.cli.core.shared",
@@ -355,9 +292,7 @@
       "pyqa.compliance.banned"
     ],
     "pyqa.cli.commands.banned.models": [],
-    "pyqa.cli.commands.clean": [
-      "pyqa.cli.commands.command"
-    ],
+    "pyqa.cli.commands.clean": ["pyqa.cli.commands.command"],
     "pyqa.cli.commands.clean.command": [
       "pyqa.clean",
       "pyqa.cli.commands.clean.models",
@@ -365,9 +300,7 @@
       "pyqa.cli.core.shared",
       "pyqa.cli.core.typer_ext"
     ],
-    "pyqa.cli.commands.clean.models": [
-      "pyqa.cli.core.shared"
-    ],
+    "pyqa.cli.commands.clean.models": ["pyqa.cli.core.shared"],
     "pyqa.cli.commands.clean.services": [
       "pyqa.clean",
       "pyqa.cli.core._config_loading",
@@ -376,9 +309,7 @@
       "pyqa.constants",
       "pyqa.filesystem.paths"
     ],
-    "pyqa.cli.commands.config": [
-      "pyqa.cli.commands.command"
-    ],
+    "pyqa.cli.commands.config": ["pyqa.cli.commands.command"],
     "pyqa.cli.commands.config.command": [
       "pyqa.cli.commands.config.services",
       "pyqa.cli.core.shared",
@@ -391,10 +322,7 @@
       "pyqa.serialization",
       "pyqa.tools.settings"
     ],
-    "pyqa.cli.commands.doctor": [
-      "pyqa.cli.commands.command",
-      "pyqa.core.shared"
-    ],
+    "pyqa.cli.commands.doctor": ["pyqa.cli.commands.command", "pyqa.core.shared"],
     "pyqa.cli.commands.doctor.command": [
       "pyqa.cli.core.utils",
       "pyqa.config",
@@ -404,27 +332,16 @@
       "pyqa.tools.builtins",
       "pyqa.tools.registry"
     ],
-    "pyqa.cli.commands.hooks": [
-      "pyqa.cli.commands.command"
-    ],
+    "pyqa.cli.commands.hooks": ["pyqa.cli.commands.command"],
     "pyqa.cli.commands.hooks.command": [
       "pyqa.cli.commands.hooks.models",
       "pyqa.cli.commands.hooks.services",
       "pyqa.cli.core.shared",
       "pyqa.cli.core.typer_ext"
     ],
-    "pyqa.cli.commands.hooks.models": [
-      "pyqa.cli.core.shared"
-    ],
-    "pyqa.cli.commands.hooks.services": [
-      "pyqa.cli.commands.hooks.models",
-      "pyqa.cli.core.shared",
-      "pyqa.hooks"
-    ],
-    "pyqa.cli.commands.install": [
-      "pyqa.cli.commands.command",
-      "pyqa.core.shared"
-    ],
+    "pyqa.cli.commands.hooks.models": ["pyqa.cli.core.shared"],
+    "pyqa.cli.commands.hooks.services": ["pyqa.cli.commands.hooks.models", "pyqa.cli.core.shared", "pyqa.hooks"],
+    "pyqa.cli.commands.install": ["pyqa.cli.commands.command", "pyqa.core.shared"],
     "pyqa.cli.commands.install.command": [
       "pyqa.cli.commands.install.models",
       "pyqa.cli.core.shared",
@@ -432,13 +349,8 @@
       "pyqa.logging",
       "pyqa.process_utils"
     ],
-    "pyqa.cli.commands.install.models": [
-      "pyqa.cli.core.options"
-    ],
-    "pyqa.cli.commands.lint": [
-      "pyqa.cli.commands.command",
-      "pyqa.core.shared"
-    ],
+    "pyqa.cli.commands.install.models": ["pyqa.cli.core.options"],
+    "pyqa.cli.commands.lint": ["pyqa.cli.commands.command", "pyqa.core.shared"],
     "pyqa.cli.commands.lint.cli_models": [
       "pyqa.cli.commands.lint.literals",
       "pyqa.cli.commands.lint.params",
@@ -469,9 +381,7 @@
       "pyqa.tools.base",
       "pyqa.tools.registry"
     ],
-    "pyqa.cli.commands.lint.literals": [
-      "pyqa.cli.core"
-    ],
+    "pyqa.cli.commands.lint.literals": ["pyqa.cli.core"],
     "pyqa.cli.commands.lint.meta": [
       "pyqa.catalog.errors",
       "pyqa.cli.commands.doctor.command",
@@ -482,10 +392,7 @@
       "pyqa.tools.builtin_registry",
       "pyqa.tools.registry"
     ],
-    "pyqa.cli.commands.lint.params": [
-      "pyqa.cli.core.lint_literals",
-      "pyqa.cli.core.options"
-    ],
+    "pyqa.cli.commands.lint.params": ["pyqa.cli.core.lint_literals", "pyqa.cli.core.options"],
     "pyqa.cli.commands.lint.preparation": [
       "pyqa.cli.commands.lint.cli_models",
       "pyqa.cli.commands.lint.literals",
@@ -529,9 +436,7 @@
       "pyqa.tools.builtin_registry",
       "pyqa.tools.registry"
     ],
-    "pyqa.cli.commands.quality": [
-      "pyqa.cli.commands.command"
-    ],
+    "pyqa.cli.commands.quality": ["pyqa.cli.commands.command"],
     "pyqa.cli.commands.quality.command": [
       "pyqa.cli.commands.quality.models",
       "pyqa.cli.commands.quality.rendering",
@@ -541,15 +446,8 @@
       "pyqa.compliance.quality",
       "pyqa.config"
     ],
-    "pyqa.cli.commands.quality.models": [
-      "pyqa.cli.core.shared",
-      "pyqa.config"
-    ],
-    "pyqa.cli.commands.quality.rendering": [
-      "pyqa.cli.core.shared",
-      "pyqa.compliance.quality",
-      "pyqa.constants"
-    ],
+    "pyqa.cli.commands.quality.models": ["pyqa.cli.core.shared", "pyqa.config"],
+    "pyqa.cli.commands.quality.rendering": ["pyqa.cli.core.shared", "pyqa.compliance.quality", "pyqa.constants"],
     "pyqa.cli.commands.quality.services": [
       "pyqa.cli.commands.quality.models",
       "pyqa.cli.core._config_loading",
@@ -559,10 +457,7 @@
       "pyqa.constants",
       "pyqa.workspace"
     ],
-    "pyqa.cli.commands.security": [
-      "pyqa.cli.commands.command",
-      "pyqa.core.shared"
-    ],
+    "pyqa.cli.commands.security": ["pyqa.cli.commands.command", "pyqa.core.shared"],
     "pyqa.cli.commands.security.command": [
       "pyqa.cli.commands.security.models",
       "pyqa.cli.core.shared",
@@ -572,10 +467,7 @@
       "pyqa.logging"
     ],
     "pyqa.cli.commands.security.models": [],
-    "pyqa.cli.commands.tool_info": [
-      "pyqa.cli.commands.command",
-      "pyqa.core.shared"
-    ],
+    "pyqa.cli.commands.tool_info": ["pyqa.cli.commands.command", "pyqa.core.shared"],
     "pyqa.cli.commands.tool_info.command": [
       "pyqa.catalog.model_catalog",
       "pyqa.cli.commands.tool_info.models",
@@ -611,9 +503,7 @@
       "pyqa.tools.builtins",
       "pyqa.tools.registry"
     ],
-    "pyqa.cli.commands.update": [
-      "pyqa.cli.commands.command"
-    ],
+    "pyqa.cli.commands.update": ["pyqa.cli.commands.command"],
     "pyqa.cli.commands.update.command": [
       "pyqa.cli.commands.update.models",
       "pyqa.cli.core.shared",
@@ -625,10 +515,7 @@
     ],
     "pyqa.cli.commands.update.models": [],
     "pyqa.cli.core": [],
-    "pyqa.cli.core._config_builder_constants": [
-      "pyqa.catalog.metadata",
-      "pyqa.testing.suppressions"
-    ],
+    "pyqa.cli.core._config_builder_constants": ["pyqa.catalog.metadata", "pyqa.testing.suppressions"],
     "pyqa.cli.core._config_builder_execution": [
       "pyqa.cli.core._config_builder_constants",
       "pyqa.cli.core._config_builder_shared",
@@ -648,17 +535,9 @@
       "pyqa.cli.core.options",
       "pyqa.config"
     ],
-    "pyqa.cli.core._config_builder_overrides": [
-      "pyqa.config"
-    ],
-    "pyqa.cli.core._config_builder_shared": [
-      "pyqa.cli.core._config_builder_constants",
-      "pyqa.filesystem.paths"
-    ],
-    "pyqa.cli.core._config_loading": [
-      "pyqa.cli.core.shared",
-      "pyqa.config_loader"
-    ],
+    "pyqa.cli.core._config_builder_overrides": ["pyqa.config"],
+    "pyqa.cli.core._config_builder_shared": ["pyqa.cli.core._config_builder_constants", "pyqa.filesystem.paths"],
+    "pyqa.cli.core._config_loading": ["pyqa.cli.core.shared", "pyqa.config_loader"],
     "pyqa.cli.core.config_builder": [
       "pyqa.cli.core._config_builder_constants",
       "pyqa.cli.core._config_builder_execution",
@@ -672,9 +551,7 @@
       "pyqa.interfaces.config"
     ],
     "pyqa.cli.core.lint_literals": [],
-    "pyqa.cli.core.options": [
-      "pyqa.cli.core.lint_literals"
-    ],
+    "pyqa.cli.core.options": ["pyqa.cli.core.lint_literals"],
     "pyqa.cli.core.orchestration": [
       "pyqa.config",
       "pyqa.core.runtime.di",
@@ -685,18 +562,10 @@
       "pyqa.tool_env.models",
       "pyqa.tools.registry"
     ],
-    "pyqa.cli.core.python_version_resolver": [
-      "pyqa.config"
-    ],
-    "pyqa.cli.core.runtime": [
-      "pyqa.core.runtime.di"
-    ],
-    "pyqa.cli.core.shared": [
-      "pyqa.logging"
-    ],
-    "pyqa.cli.core.typer_ext": [
-      "pyqa.cli.core.shared"
-    ],
+    "pyqa.cli.core.python_version_resolver": ["pyqa.config"],
+    "pyqa.cli.core.runtime": ["pyqa.core.runtime.di"],
+    "pyqa.cli.core.shared": ["pyqa.logging"],
+    "pyqa.cli.core.typer_ext": ["pyqa.cli.core.shared"],
     "pyqa.cli.core.utils": [
       "pyqa.constants",
       "pyqa.filesystem.paths",
@@ -705,14 +574,8 @@
       "pyqa.tools.base",
       "pyqa.workspace"
     ],
-    "pyqa.cli.launcher": [
-      "pyqa.cli.app"
-    ],
-    "pyqa.compliance": [
-      "pyqa.banned",
-      "pyqa.quality",
-      "pyqa.security"
-    ],
+    "pyqa.cli.launcher": ["pyqa.cli.app"],
+    "pyqa.compliance": ["pyqa.banned", "pyqa.quality", "pyqa.security"],
     "pyqa.compliance.banned": [],
     "pyqa.compliance.checks.license_fixer": [],
     "pyqa.compliance.checks.licenses": [],
@@ -728,41 +591,20 @@
       "pyqa.process_utils",
       "pyqa.tools.settings"
     ],
-    "pyqa.compliance.security": [
-      "pyqa.logging",
-      "pyqa.process_utils"
-    ],
-    "pyqa.config": [
-      "pyqa.models"
-    ],
-    "pyqa.config.defaults": [
-      "pyqa.models"
-    ],
-    "pyqa.config.loaders": [
-      "pyqa.config.sources"
-    ],
+    "pyqa.compliance.security": ["pyqa.logging", "pyqa.process_utils"],
+    "pyqa.config": ["pyqa.models"],
+    "pyqa.config.defaults": ["pyqa.models"],
+    "pyqa.config.loaders": ["pyqa.config.sources"],
     "pyqa.config.loaders.sources": [
       "pyqa.config.defaults",
       "pyqa.config.models",
       "pyqa.config.utils",
       "pyqa.interfaces.config"
     ],
-    "pyqa.config.models": [
-      "pyqa.catalog.metadata"
-    ],
-    "pyqa.config.sections": [
-      "pyqa.config.mergers"
-    ],
-    "pyqa.config.sections.mergers": [
-      "pyqa.config.models",
-      "pyqa.config.utils"
-    ],
-    "pyqa.config.utils": [
-      "pyqa.config",
-      "pyqa.filesystem.paths",
-      "pyqa.serialization",
-      "pyqa.tools.settings"
-    ],
+    "pyqa.config.models": ["pyqa.catalog.metadata"],
+    "pyqa.config.sections": ["pyqa.config.mergers"],
+    "pyqa.config.sections.mergers": ["pyqa.config.models", "pyqa.config.utils"],
+    "pyqa.config.utils": ["pyqa.config", "pyqa.filesystem.paths", "pyqa.serialization", "pyqa.tools.settings"],
     "pyqa.config_loader": [
       "pyqa.config",
       "pyqa.config.loaders",
@@ -773,39 +615,15 @@
     ],
     "pyqa.console": [],
     "pyqa.constants": [],
-    "pyqa.context": [
-      "pyqa.models"
-    ],
+    "pyqa.context": ["pyqa.models"],
     "pyqa.core": [],
     "pyqa.core.logging": [],
-    "pyqa.core.runtime": [
-      "pyqa.core.di"
-    ],
-    "pyqa.core.runtime.di": [
-      "pyqa.cache",
-      "pyqa.console",
-      "pyqa.plugins"
-    ],
-    "pyqa.diagnostics": [
-      "pyqa.core",
-      "pyqa.filtering",
-      "pyqa.json_import",
-      "pyqa.pipeline"
-    ],
-    "pyqa.diagnostics.core": [
-      "pyqa.annotations",
-      "pyqa.config",
-      "pyqa.models",
-      "pyqa.severity"
-    ],
-    "pyqa.diagnostics.filtering": [
-      "pyqa.filesystem.paths",
-      "pyqa.models"
-    ],
-    "pyqa.diagnostics.json_import": [
-      "pyqa.models",
-      "pyqa.tools.base"
-    ],
+    "pyqa.core.runtime": ["pyqa.core.di"],
+    "pyqa.core.runtime.di": ["pyqa.cache", "pyqa.console", "pyqa.plugins"],
+    "pyqa.diagnostics": ["pyqa.core", "pyqa.filtering", "pyqa.json_import", "pyqa.pipeline"],
+    "pyqa.diagnostics.core": ["pyqa.annotations", "pyqa.config", "pyqa.models", "pyqa.severity"],
+    "pyqa.diagnostics.filtering": ["pyqa.filesystem.paths", "pyqa.models"],
+    "pyqa.diagnostics.json_import": ["pyqa.models", "pyqa.tools.base"],
     "pyqa.diagnostics.pipeline": [
       "pyqa.diagnostics.core",
       "pyqa.diagnostics.filtering",
@@ -813,28 +631,10 @@
       "pyqa.models",
       "pyqa.severity"
     ],
-    "pyqa.discovery": [
-      "pyqa.base",
-      "pyqa.filesystem",
-      "pyqa.git",
-      "pyqa.planners",
-      "pyqa.rules"
-    ],
-    "pyqa.discovery.base": [
-      "pyqa.config",
-      "pyqa.interfaces.discovery"
-    ],
-    "pyqa.discovery.filesystem": [
-      "pyqa.config",
-      "pyqa.constants",
-      "pyqa.discovery.base",
-      "pyqa.workspace"
-    ],
-    "pyqa.discovery.git": [
-      "pyqa.config",
-      "pyqa.discovery.base",
-      "pyqa.orchestration.worker"
-    ],
+    "pyqa.discovery": ["pyqa.base", "pyqa.filesystem", "pyqa.git", "pyqa.planners", "pyqa.rules"],
+    "pyqa.discovery.base": ["pyqa.config", "pyqa.interfaces.discovery"],
+    "pyqa.discovery.filesystem": ["pyqa.config", "pyqa.constants", "pyqa.discovery.base", "pyqa.workspace"],
+    "pyqa.discovery.git": ["pyqa.config", "pyqa.discovery.base", "pyqa.orchestration.worker"],
     "pyqa.discovery.planners": [
       "pyqa.catalog.command_options",
       "pyqa.catalog.loader",
@@ -844,23 +644,13 @@
       "pyqa.tools.builtin_helpers"
     ],
     "pyqa.discovery.rules": [],
-    "pyqa.discovery.utils": [
-      "pyqa.constants"
-    ],
+    "pyqa.discovery.utils": ["pyqa.constants"],
     "pyqa.environments": [],
     "pyqa.execution": [],
-    "pyqa.filesystem": [
-      "pyqa.paths"
-    ],
+    "pyqa.filesystem": ["pyqa.paths"],
     "pyqa.filesystem.paths": [],
-    "pyqa.hooks": [
-      "pyqa.logging"
-    ],
-    "pyqa.installs": [
-      "pyqa.environments",
-      "pyqa.process_utils",
-      "pyqa.tool_env.constants"
-    ],
+    "pyqa.hooks": ["pyqa.logging"],
+    "pyqa.installs": ["pyqa.environments", "pyqa.process_utils", "pyqa.tool_env.constants"],
     "pyqa.interfaces": [
       "pyqa.analysis",
       "pyqa.catalog",
@@ -880,34 +670,15 @@
     "pyqa.interfaces.compliance": [],
     "pyqa.interfaces.config": [],
     "pyqa.interfaces.core": [],
-    "pyqa.interfaces.diagnostics": [
-      "pyqa.models",
-      "pyqa.severity"
-    ],
-    "pyqa.interfaces.discovery": [
-      "pyqa.config"
-    ],
+    "pyqa.interfaces.diagnostics": ["pyqa.models", "pyqa.severity"],
+    "pyqa.interfaces.discovery": ["pyqa.config"],
     "pyqa.interfaces.environment": [],
-    "pyqa.interfaces.orchestration": [
-      "pyqa.config",
-      "pyqa.models",
-      "pyqa.tool_env.models"
-    ],
+    "pyqa.interfaces.orchestration": ["pyqa.config", "pyqa.models", "pyqa.tool_env.models"],
     "pyqa.interfaces.reporting": [],
-    "pyqa.languages": [
-      "pyqa.constants"
-    ],
-    "pyqa.logging": [
-      "pyqa.console"
-    ],
-    "pyqa.metrics": [
-      "pyqa.filesystem.paths"
-    ],
-    "pyqa.models": [
-      "pyqa.filesystem.paths",
-      "pyqa.metrics",
-      "pyqa.severity"
-    ],
+    "pyqa.languages": ["pyqa.constants"],
+    "pyqa.logging": ["pyqa.console"],
+    "pyqa.metrics": ["pyqa.filesystem.paths"],
+    "pyqa.models": ["pyqa.filesystem.paths", "pyqa.metrics", "pyqa.severity"],
     "pyqa.orchestration": [
       "pyqa.action_executor",
       "pyqa.orchestrator",
@@ -949,75 +720,18 @@
       "pyqa.tools",
       "pyqa.tools.registry"
     ],
-    "pyqa.orchestration.runtime": [
-      "pyqa.config",
-      "pyqa.discovery.base",
-      "pyqa.environments",
-      "pyqa.logging"
-    ],
-    "pyqa.orchestration.tool_selection": [
-      "pyqa.config",
-      "pyqa.languages",
-      "pyqa.tools.base",
-      "pyqa.tools.registry"
-    ],
-    "pyqa.orchestration.worker": [
-      "pyqa.process_utils"
-    ],
-    "pyqa.parsers": [
-      "pyqa.base",
-      "pyqa.config",
-      "pyqa.javascript",
-      "pyqa.lua",
-      "pyqa.misc",
-      "pyqa.ops",
-      "pyqa.python"
-    ],
-    "pyqa.parsers.base": [
-      "pyqa.models",
-      "pyqa.severity",
-      "pyqa.tools.base"
-    ],
-    "pyqa.parsers.config": [
-      "pyqa.models",
-      "pyqa.parsers.base",
-      "pyqa.severity",
-      "pyqa.tools.base"
-    ],
-    "pyqa.parsers.javascript": [
-      "pyqa.models",
-      "pyqa.severity",
-      "pyqa.tools.base"
-    ],
-    "pyqa.parsers.lua": [
-      "pyqa.models",
-      "pyqa.parsers.base",
-      "pyqa.severity",
-      "pyqa.tools.base"
-    ],
-    "pyqa.parsers.misc": [
-      "pyqa.models",
-      "pyqa.parsers.base",
-      "pyqa.serialization",
-      "pyqa.severity",
-      "pyqa.tools.base"
-    ],
-    "pyqa.parsers.ops": [
-      "pyqa.models",
-      "pyqa.parsers.base",
-      "pyqa.severity",
-      "pyqa.tools.base"
-    ],
-    "pyqa.parsers.python": [
-      "pyqa.models",
-      "pyqa.parsers.base",
-      "pyqa.severity",
-      "pyqa.tools.base"
-    ],
-    "pyqa.paths": [
-      "pyqa.logging",
-      "pyqa.workspace"
-    ],
+    "pyqa.orchestration.runtime": ["pyqa.config", "pyqa.discovery.base", "pyqa.environments", "pyqa.logging"],
+    "pyqa.orchestration.tool_selection": ["pyqa.config", "pyqa.languages", "pyqa.tools.base", "pyqa.tools.registry"],
+    "pyqa.orchestration.worker": ["pyqa.process_utils"],
+    "pyqa.parsers": ["pyqa.base", "pyqa.config", "pyqa.javascript", "pyqa.lua", "pyqa.misc", "pyqa.ops", "pyqa.python"],
+    "pyqa.parsers.base": ["pyqa.models", "pyqa.severity", "pyqa.tools.base"],
+    "pyqa.parsers.config": ["pyqa.models", "pyqa.parsers.base", "pyqa.severity", "pyqa.tools.base"],
+    "pyqa.parsers.javascript": ["pyqa.models", "pyqa.severity", "pyqa.tools.base"],
+    "pyqa.parsers.lua": ["pyqa.models", "pyqa.parsers.base", "pyqa.severity", "pyqa.tools.base"],
+    "pyqa.parsers.misc": ["pyqa.models", "pyqa.parsers.base", "pyqa.serialization", "pyqa.severity", "pyqa.tools.base"],
+    "pyqa.parsers.ops": ["pyqa.models", "pyqa.parsers.base", "pyqa.severity", "pyqa.tools.base"],
+    "pyqa.parsers.python": ["pyqa.models", "pyqa.parsers.base", "pyqa.severity", "pyqa.tools.base"],
+    "pyqa.paths": ["pyqa.logging", "pyqa.workspace"],
     "pyqa.plugins": [],
     "pyqa.process_utils": [],
     "pyqa.reporting": [
@@ -1031,32 +745,16 @@
       "pyqa.presenters.formatters",
       "pyqa.presenters.stats"
     ],
-    "pyqa.reporting.advice": [
-      "pyqa.reporting.builder",
-      "pyqa.reporting.panels",
-      "pyqa.reporting.refactor"
-    ],
-    "pyqa.reporting.advice.builder": [
-      "pyqa.annotations",
-      "pyqa.catalog.metadata",
-      "pyqa.filesystem.paths"
-    ],
+    "pyqa.reporting.advice": ["pyqa.reporting.builder", "pyqa.reporting.panels", "pyqa.reporting.refactor"],
+    "pyqa.reporting.advice.builder": ["pyqa.annotations", "pyqa.catalog.metadata", "pyqa.filesystem.paths"],
     "pyqa.reporting.advice.panels": [
       "pyqa.annotations",
       "pyqa.config",
       "pyqa.console",
       "pyqa.reporting.advice.builder"
     ],
-    "pyqa.reporting.advice.refactor": [
-      "pyqa.config",
-      "pyqa.console",
-      "pyqa.models"
-    ],
-    "pyqa.reporting.output": [
-      "pyqa.reporting.diagnostics",
-      "pyqa.reporting.highlighting",
-      "pyqa.reporting.modes"
-    ],
+    "pyqa.reporting.advice.refactor": ["pyqa.config", "pyqa.console", "pyqa.models"],
+    "pyqa.reporting.output": ["pyqa.reporting.diagnostics", "pyqa.reporting.highlighting", "pyqa.reporting.modes"],
     "pyqa.reporting.output.diagnostics": [
       "pyqa.config",
       "pyqa.logging",
@@ -1064,21 +762,9 @@
       "pyqa.reporting.output.highlighting",
       "pyqa.severity"
     ],
-    "pyqa.reporting.output.highlighting": [
-      "pyqa.annotations",
-      "pyqa.logging"
-    ],
-    "pyqa.reporting.output.modes": [
-      "pyqa.config",
-      "pyqa.logging",
-      "pyqa.models",
-      "pyqa.reporting.output.diagnostics"
-    ],
-    "pyqa.reporting.presenters": [
-      "pyqa.reporting.emitters",
-      "pyqa.reporting.formatters",
-      "pyqa.reporting.stats"
-    ],
+    "pyqa.reporting.output.highlighting": ["pyqa.annotations", "pyqa.logging"],
+    "pyqa.reporting.output.modes": ["pyqa.config", "pyqa.logging", "pyqa.models", "pyqa.reporting.output.diagnostics"],
+    "pyqa.reporting.presenters": ["pyqa.reporting.emitters", "pyqa.reporting.formatters", "pyqa.reporting.stats"],
     "pyqa.reporting.presenters.emitters": [
       "pyqa.annotations",
       "pyqa.models",
@@ -1106,17 +792,10 @@
       "pyqa.metrics",
       "pyqa.models"
     ],
-    "pyqa.serialization": [
-      "pyqa.models",
-      "pyqa.severity"
-    ],
+    "pyqa.serialization": ["pyqa.models", "pyqa.severity"],
     "pyqa.severity": [],
-    "pyqa.testing": [
-      "pyqa.suppressions"
-    ],
-    "pyqa.testing.suppressions": [
-      "pyqa.catalog.metadata"
-    ],
+    "pyqa.testing": ["pyqa.suppressions"],
+    "pyqa.testing.suppressions": ["pyqa.catalog.metadata"],
     "pyqa.tool_env": [
       "pyqa.constants",
       "pyqa.models",
@@ -1164,10 +843,7 @@
       "pyqa.tool_env.versioning",
       "pyqa.tools.base"
     ],
-    "pyqa.tool_env.runtimes.binary": [
-      "pyqa.tool_env.models",
-      "pyqa.tool_env.runtimes.base"
-    ],
+    "pyqa.tool_env.runtimes.binary": ["pyqa.tool_env.models", "pyqa.tool_env.runtimes.base"],
     "pyqa.tool_env.runtimes.go": [
       "pyqa.process_utils",
       "pyqa.tool_env.models",
@@ -1197,10 +873,7 @@
       "pyqa.tool_env.runtimes.base",
       "pyqa.tool_env.utils"
     ],
-    "pyqa.tool_env.runtimes.python": [
-      "pyqa.tool_env.models",
-      "pyqa.tool_env.runtimes.base"
-    ],
+    "pyqa.tool_env.runtimes.python": ["pyqa.tool_env.models", "pyqa.tool_env.runtimes.base"],
     "pyqa.tool_env.runtimes.rust": [
       "pyqa.process_utils",
       "pyqa.tool_env.constants",
@@ -1209,24 +882,12 @@
       "pyqa.tool_env.utils",
       "pyqa.tools.base"
     ],
-    "pyqa.tool_env.utils": [
-      "pyqa.tools.base"
-    ],
-    "pyqa.tool_env.versioning": [
-      "pyqa.process_utils"
-    ],
-    "pyqa.tools": [
-      "pyqa.base",
-      "pyqa.registry"
-    ],
-    "pyqa.tools.base": [
-      "pyqa.config",
-      "pyqa.models"
-    ],
+    "pyqa.tool_env.utils": ["pyqa.tools.base"],
+    "pyqa.tool_env.versioning": ["pyqa.process_utils"],
+    "pyqa.tools": ["pyqa.base", "pyqa.registry"],
+    "pyqa.tools.base": ["pyqa.config", "pyqa.models"],
     "pyqa.tools.builtin_commands": [],
-    "pyqa.tools.builtin_commands_python": [
-      "pyqa.tools.base"
-    ],
+    "pyqa.tools.builtin_commands_python": ["pyqa.tools.base"],
     "pyqa.tools.builtin_helpers": [
       "pyqa.filesystem.paths",
       "pyqa.models",
@@ -1245,28 +906,13 @@
       "pyqa.tools.builtin_helpers",
       "pyqa.tools.registry"
     ],
-    "pyqa.tools.builtins": [
-      "pyqa.tools.builtin_registry"
-    ],
-    "pyqa.tools.registry": [
-      "pyqa.tools.base"
-    ],
-    "pyqa.tools.settings": [
-      "pyqa.catalog.metadata"
-    ],
-    "pyqa.update": [
-      "pyqa.constants",
-      "pyqa.logging",
-      "pyqa.process_utils",
-      "pyqa.workspace"
-    ],
-    "pyqa.utils": [
-      "pyqa.bool_utils"
-    ],
+    "pyqa.tools.builtins": ["pyqa.tools.builtin_registry"],
+    "pyqa.tools.registry": ["pyqa.tools.base"],
+    "pyqa.tools.settings": ["pyqa.catalog.metadata"],
+    "pyqa.update": ["pyqa.constants", "pyqa.logging", "pyqa.process_utils", "pyqa.workspace"],
+    "pyqa.utils": ["pyqa.bool_utils"],
     "pyqa.utils.bool_utils": [],
-    "pyqa.workspace": [
-      "pyqa.constants"
-    ]
+    "pyqa.workspace": ["pyqa.constants"]
   },
   "module_count": 221,
   "package_root": "/home/paudley/Active/py_qa/src/pyqa"

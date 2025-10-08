@@ -116,6 +116,22 @@ def _validate_cli_combinations(inputs: LintCLIInputs) -> None:
             "--validate-schema and --fetch-all-tools cannot be combined",
         ),
         (
+            meta.explain_tools and meta.doctor,
+            "--explain-tools and --doctor cannot be combined",
+        ),
+        (
+            meta.explain_tools and meta.tool_info is not None,
+            "--explain-tools and --tool-info cannot be combined",
+        ),
+        (
+            meta.explain_tools and meta.fetch_all_tools,
+            "--explain-tools and --fetch-all-tools cannot be combined",
+        ),
+        (
+            meta.explain_tools and meta.validate_schema,
+            "--explain-tools and --validate-schema cannot be combined",
+        ),
+        (
             selection.fix_only and selection.check_only,
             "--fix-only and --check-only are mutually exclusive",
         ),
@@ -167,6 +183,10 @@ def _build_runtime_context(state: PreparedLintState) -> LintRuntimeContext:
 
     if state.meta.normal:
         config.quality.enforce_in_lint = True
+
+    pyqa_explicit = state.meta.pyqa_rules or state.meta.normal
+    if pyqa_explicit and not config.execution.pyqa_rules:
+        config.execution = config.execution.model_copy(update={"pyqa_rules": True})
 
     return build_lint_runtime_context(state, config=config)
 

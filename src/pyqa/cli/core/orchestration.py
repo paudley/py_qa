@@ -20,6 +20,7 @@ from pyqa.orchestration.orchestrator import (
     OrchestratorHooks,
     OrchestratorOverrides,
 )
+from pyqa.orchestration.tool_selection import SelectionResult
 from pyqa.tools.registry import ToolRegistry
 
 
@@ -68,6 +69,11 @@ class OrchestratorExecutionPipeline(ExecutionPipeline):
         """
 
         return self._orchestrator.fetch_all_tools(config, root=root, callback=callback)
+
+    def plan_tools(self, config: Config, *, root: Path) -> SelectionResult:
+        """Return the planned tool execution order without running the orchestrator."""
+
+        return self._orchestrator.plan_tools(config, root=root)
 
 
 def build_orchestrator_pipeline(

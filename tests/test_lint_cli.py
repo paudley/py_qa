@@ -43,6 +43,7 @@ from pyqa.tools.registry import ToolRegistry
 def _meta_flags(
     *,
     normal: bool = False,
+    explain_tools: bool = False,
     check_docstrings: bool = False,
     check_suppressions: bool = False,
     check_types_strict: bool = False,
@@ -61,6 +62,7 @@ def _meta_flags(
             fetch_all_tools=False,
             validate_schema=False,
             normal=normal,
+            explain_tools=explain_tools,
         ),
         analysis=MetaAnalysisChecks(
             check_docstrings=check_docstrings,
@@ -150,6 +152,9 @@ def test_lint_fetch_all_tools_flag(monkeypatch, tmp_path: Path) -> None:
 
         def run(self, config, root):  # pragma: no cover - not used in this test
             raise AssertionError("unexpected orchestrator.run call")
+
+        def plan_tools(self, config, *, root):  # pragma: no cover - not used in this test
+            raise NotImplementedError
 
     monkeypatch.setattr(
         lint_runtime,
@@ -325,6 +330,51 @@ def command() -> None:
     assert "missing a docstring" in combined
 
 
+def test_explain_tools_outputs_table(tmp_path: Path, monkeypatch) -> None:
+    runner = CliRunner()
+
+    target = tmp_path / "module.py"
+    target.write_text("print('hi')\n", encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "lint",
+            "--explain-tools",
+            "--root",
+            str(tmp_path),
+            "--no-color",
+            "--no-emoji",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Tool Selection Plan" in result.stdout
+    assert "Planned" in result.stdout
+
+
+def test_explain_tools_conflicts_with_tool_info(tmp_path: Path) -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        [
+            "lint",
+            "--explain-tools",
+            "--tool-info",
+            "ruff",
+            "--root",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    combined_output = result.stdout + result.stderr
+    assert "cannot be combined" in combined_output
+
+
 def test_lint_no_stats_flag(monkeypatch, tmp_path: Path) -> None:
     runner = CliRunner()
     captured: dict[str, Any] = {}
@@ -350,6 +400,12 @@ def test_lint_no_stats_flag(monkeypatch, tmp_path: Path) -> None:
 
         def fetch_all_tools(self, config, root, callback=None):  # pragma: no cover - unused
             return []
+
+        def plan_tools(self, config, *, root):  # pragma: no cover - unused
+            raise NotImplementedError
+
+        def plan_tools(self, config, *, root):  # pragma: no cover - unused
+            raise NotImplementedError
 
     monkeypatch.setattr(
         lint_runtime,
@@ -406,6 +462,9 @@ def test_lint_no_lint_tests_flag(monkeypatch, tmp_path: Path) -> None:
 
         def fetch_all_tools(self, config, root, callback=None):  # pragma: no cover - unused
             return []
+
+        def plan_tools(self, config, *, root):  # pragma: no cover - unused
+            raise NotImplementedError
 
     monkeypatch.setattr(
         lint_runtime,

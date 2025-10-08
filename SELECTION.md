@@ -18,22 +18,22 @@ We divide tools into three broad families:
 
 ## Vocabulary
 
-- Tools:  A tool can be an external executable ("ruff") or an internal block of
-  python logic ("docstrings").   Tools my lint (produce diagnostics), format or
-  autofix code, or even generate artifacts for downstream tools.  Critically,
-  all tools act on files in the workspace.  Tools must have a short name ("ruff",
-  "docstrings", etc.), a description, targetted languages or file patterns and a
+* Tools: A tool can be an external executable ("ruff") or an internal block of
+  python logic ("docstrings"). Tools may lint (produce diagnostics), format or
+  autofix code, or even generate artifacts for downstream tools. Critically,
+  all tools act on files in the workspace. Tools must have a short name ("ruff",
+  "docstrings", etc.), a description, targeted languages or file patterns and a
   set of actions (fix, format, etc.).
 
-- Workspace:  A set of files that is grouped together by a shared language or
-  structure.  PyQa supports many different types of workspace configurations
+* Workspace: A set of files that is grouped together by a shared language or
+  structure. pyqa supports many different types of workspace configurations
   including:
-    - mono repo with a single language
-	- mono repo with multiple languages in dedicated subdirs
-	- a mix of both the above
-	- a random directory with a single file in it
-	- etc.
 
+  * mono repo with a single language
+  * mono repo with multiple languages in dedicated subdirs
+  * a mix of both the above
+  * a random directory with a single file in it
+  * etc.
 
 ## Canonical selection algorithm
 
@@ -42,64 +42,70 @@ Given a prepared lint state, tool selection proceeds as follows:
 1. Build the registry – external tools from the catalog plus internal tool
    adapters. All the tools should be present in the registry.
 2. Determine modifiers from the CLI:
-   - Exclusive options (these tell pyqa exactly what to do and only what to do):
-      - `--only`/`--select` style filters (currently `execution.only`). `--only`
-        is absolute: it defines the exact tool IDs to execute, regardless of
-        category or workspace detection. Anything not named is excluded.
-   - Additive options (these options potentially add additional tools to the
-     selection):
-      - `--languages` or inferred languages from the workspace (used for ordering).
-      - `--check-*` meta flags and `--pyqa-rules`.
+   * Exclusive options (these tell pyqa exactly what to do and only what to do):
 
-   - Scaling options (these modify the arguments to some tools and activate some
+     * `--only`/`--select` style filters (currently `execution.only`). `--only`
+       is absolute: it defines the exact tool IDs to execute, regardless of
+       category or workspace detection. Anything not named is excluded.
+
+   * Additive options (these options potentially add additional tools to the
+     selection):
+
+     * `--languages` or inferred languages from the workspace (used for ordering).
+     * `--check-*` meta flags and `--pyqa-rules`.
+
+   * Scaling options (these modify the arguments to some tools and activate some
      others that might be deselected by default):
-	  - `--sensitivity` which takes a level and will, in general, produce less
-	    diagnostics at lower settings and more diagnostics at higher ones.
-   - Profile options (these enable other flags and settings to create a profile
+
+     * `--sensitivity` which takes a level and will, in general, produce less
+       diagnostics at lower settings and more diagnostics at higher ones.
+
+   * Profile options (these enable other flags and settings to create a profile
      of preselected options):
-	  - `-n/--normal` preset (implies ``check_*`` toggles, sets
-        `sensitivity=maximum`, and flips `pyqa_rules=True`).
+
+     * `-n/--normal` preset (implies `check_*` toggles, sets
+       `sensitivity=maximum`, and flips `pyqa_rules=True`).
 3. Internal linter activation
-   - Internal linters (docstrings/suppressions/…) are activated by default at
+   * Internal linters (docstrings/suppressions/…) are activated by default at
      `sensitivity >= strict`. The normal preset (`-n`) bumps sensitivity to
      `maximum`, which is why those linters appear automatically when you run
      `./lint -n`.
-   - When sensitivity is below `strict` the internal set stays disabled unless
+   * When sensitivity is below `strict` the internal set stays disabled unless
      the user opts in via `--check-*` flags.
-   - Internal pyqa linters activate automatically when the workspace is the
+   * Internal pyqa linters activate automatically when the workspace is the
      pyqa repo or the user supplies `--pyqa-rules`.
-   - After activation, the `--only` filter (if present) still prunes the final
+   * After activation, the `--only` filter (if present) still prunes the final
      list back to the explicitly named tools.
 4. External tool activation
-   - When `--only` is present, skip eligibility heuristics entirely and honour
+   * When `--only` is present, skip eligibility heuristics entirely and honour
      exactly the requested tool IDs.
-   - Otherwise include every tool in the registry that matches the current
+   * Otherwise include every tool in the registry that matches the current
      workspace:
-       * The registry knows each tool’s `languages`, `file_extensions`, and
-         `config_files`. We consider a tool eligible when any of the following
-         is true:
-           - the workspace contains files with matching extensions,
-           - the workspace declares matching languages (via CLI or detection),
-           - required config files exist.
-       * Tools tagged `auto_install=False` still run; that tag controls installer
-         behaviour, not selection.
-   - Configuration overrides (`execution.enable`, `execution.disable`) can add or
+     * The registry knows each tool’s `languages`, `file_extensions`, and
+       `config_files`. We consider a tool eligible when any of the following
+       is true:
+       * the workspace contains files with matching extensions,
+       * the workspace declares matching languages (via CLI or detection),
+       * required config files exist.
+     * Tools tagged `auto_install=False` still run; that tag controls installer
+       behaviour, not selection.
+   * Configuration overrides (`execution.enable`, `execution.disable`) can add or
      drop tools in the future (future work once Phase 9 linters land).
 5. Ordering
-   - After the eligible set is determined, `ToolSelector.order_tools` arranges
+   * After the eligible set is determined, `ToolSelector.order_tools` arranges
      tools by phase and declared dependencies.
 
 ### Tool catalogue snapshot
 
-- **External** (catalog-sourced): black, isort, prettier, ruff-format, shfmt,
+* **External** (catalog-sourced): black, isort, prettier, ruff-format, shfmt,
   actionlint, bandit, cargo-clippy, cargo-fmt, checkmake, cpplint,
   dockerfilelint, dotenv-linter, eslint, gofmt, golangci-lint, gts, hadolint,
   luacheck, lualint, mdformat, perlcritic, perltidy, phplint, pylint,
   pyupgrade, remark-lint, ruff, selene, speccy, sqlfluff, stylelint, tombi,
   tsc, yamllint, kube-linter, mypy, pyright (38 tools in total).
-- **Internal** (phase‑8, repo-agnostic): docstrings, suppressions, types,
+* **Internal** (phase‑8, repo-agnostic): docstrings, suppressions, types,
   closures, signatures, cache, value-types, quality.
-- **Internal pyqa** (phase‑9, repo-aware): interface enforcement, DI
+* **Internal pyqa** (phase‑9, repo-aware): interface enforcement, DI
   construction guards, module documentation linter, etc. (coming online during
   Phase 9 execution).
 
@@ -108,18 +114,18 @@ Given a prepared lint state, tool selection proceeds as follows:
 These carry `pyqa_scoped = True` in their metadata so the launcher can toggle
 them based on workspace detection or the `--pyqa-rules` flag.
 
-- `pyqa_interface_linter` – enforces imports through `pyqa.interfaces.*`,
+* `pyqa_interface_linter` – enforces imports through `pyqa.interfaces.*`,
   flags concrete dependencies outside approved composition roots, validates
   module size/complexity guardrails, and checks value-object conventions.
-- `pyqa_di_factory_linter` – guards service construction, ensuring DI wiring
+* `pyqa_di_factory_linter` – guards service construction, ensuring DI wiring
   happens only in sanctioned factories/bootstrap modules and that procedural
   dispatch patterns stay inside the strategy layer.
-- `pyqa_module_doc_linter` – requires each package directory to ship an
+* `pyqa_module_doc_linter` – requires each package directory to ship an
   uppercase `{MODULE}.md` guide describing patterns, DI seams, and
   extension points.
-- `pyqa_composition_root_audit` – verifies registration boundaries and
+* `pyqa_composition_root_audit` – verifies registration boundaries and
   cross-package imports against the architectural dependency graph.
-- `pyqa_constructor_ban_linter` – detects direct instantiation of banned
+* `pyqa_constructor_ban_linter` – detects direct instantiation of banned
   implementations (e.g., analysis engines, context resolvers) outside their
   owning modules.
 
@@ -127,61 +133,92 @@ them based on workspace detection or the `--pyqa-rules` flag.
 
 ### 1. `./lint -n` in the pyqa repository
 
-- Normal preset forces `sensitivity=maximum` (>= `strict`) and enables internal
+* Normal preset forces `sensitivity=maximum` (>= `strict`) and enables internal
   pyqa rules.
-- External tools: every catalog tool whose files/configs are present (black,
+* External tools: every catalog tool whose files/configs are present (black,
   ruff, pylint, mypy, pyright, etc.).
-- Internal linters: docstrings, suppressions, types, closures, signatures,
+* Internal linters: docstrings, suppressions, types, closures, signatures,
   cache, value-types, quality.
-- Internal pyqa linters: Phase 9 suite (interfaces, DI, module docs, …).
+* Internal pyqa linters: Phase 9 suite (interfaces, DI, module docs, …).
 
 ### 2. `./lint` in a customer repo with only Python files
 
-- External tools: all Python-eligible catalog tools.
-- Internal linters: run because the default sensitivity is `strict`; if the
+* External tools: all Python-eligible catalog tools.
+* Internal linters: run because the default sensitivity is `strict`; if the
   project config lowers sensitivity they need explicit `--check-*` opt-ins.
-- Internal pyqa linters: skipped unless `--pyqa-rules` is supplied.
+* Internal pyqa linters: skipped unless `--pyqa-rules` is supplied.
 
 ### 3. `./lint --check-closures --pyqa-rules` in a mixed JS/Python repo
 
-- External tools: Python + JavaScript toolchain (black, ruff, eslint,
+* External tools: Python + JavaScript toolchain (black, ruff, eslint,
   prettier, …).
-- Internal linters: closures (explicit flag) plus the remaining phase‑8 linters
+* Internal linters: closures (explicit flag) plus the remaining phase‑8 linters
   while sensitivity stays at `strict` or above.
-- Internal pyqa linters: enabled because `--pyqa-rules` was requested.
+* Internal pyqa linters: enabled because `--pyqa-rules` was requested.
 
 ### 4. `./lint --only ruff --only mypy`
 
-- External tools: ruff + mypy (explicit filter).
-- Internal linters: excluded unless they are also named via `--only`.
-- Internal pyqa linters: excluded unless `--only` lists them explicitly.
+* External tools: ruff + mypy (explicit filter).
+* Internal linters: excluded unless they are also named via `--only`.
+* Internal pyqa linters: excluded unless `--only` lists them explicitly.
 
 ### 5. `./lint --sensitivity permissive`
 
-- External tools: all catalog tools matching the workspace (permissive affects
+* External tools: all catalog tools matching the workspace (permissive affects
   diagnostics, not the set of external tools).
-- Internal linters: disabled by default because `permissive < strict`. Enable
+* Internal linters: disabled by default because `permissive < strict`. Enable
   them explicitly via `--check-docstrings`, `--check-types`, etc., if needed.
-- Internal pyqa linters: run only when `--pyqa-rules` is supplied or the
+* Internal pyqa linters: run only when `--pyqa-rules` is supplied or the
   workspace is pyqa.
 
 ### 6. `./lint --pyqa-rules` in a non-pyqa repo
 
-- External tools: full catalog for the detected languages.
-- Internal linters: enabled when the chosen sensitivity is `strict` or higher.
-- Internal pyqa linters: forced on because the CLI flag was passed, even though
+* External tools: full catalog for the detected languages.
+* Internal linters: enabled when the chosen sensitivity is `strict` or higher.
+* Internal pyqa linters: forced on because the CLI flag was passed, even though
   we are outside the pyqa repo.
 
 ### 7. `./lint -n --only pylint`
 
-- External tools: only pylint (filtered via `--only`).
-- Internal linters: excluded because `--only` limits execution to `pylint`.
-- Internal pyqa linters: excluded unless `pylint` is joined by their IDs in the
+* External tools: only pylint (filtered via `--only`).
+* Internal linters: excluded because `--only` limits execution to `pylint`.
+* Internal pyqa linters: excluded unless `pylint` is joined by their IDs in the
   `--only` list.
+
+### 8. `./lint --explain-tools`
+
+* External tools: no execution occurs; instead, the selector renders a table
+  summarising which tools would run and why.
+* Internal linters: evaluated using the current sensitivity, so the table shows
+  whether they would have run.
+* Internal pyqa linters: evaluated using the same rules (pyqa detection or
+  `--pyqa-rules`) so the diagnostics reflect the real plan.
 
 ## Future work
 
-- Replace `default_enabled` usage with the eligibility logic above.
-- Wire in config toggles (`execution.enable`, `execution.disable`) to adjust the
+* Replace `default_enabled` usage with the eligibility logic above.
+* Wire in config toggles (`execution.enable`, `execution.disable`) to adjust the
   eligible set without repeating `--only` on the CLI.
-- Expose the categorisation in `pyqa tool-info` so users can inspect families.
+* Expose the categorisation in `pyqa tool-info` so users can inspect families.
+
+## Implementation roadmap
+
+* **Clarify goals** – align behaviour with the rules in this document; guarantee
+  transparent diagnostics and SOLID-compliant layering.
+* **Domain modelling** – add immutable dataclasses (`ToolEligibility`,
+  `ToolDecision`, `SelectionContext`) and extend the registry with helper
+  capabilities (`supports_languages`, `pyqa_scoped`).
+* **Pipeline refactor** – restructure `ToolSelector` into explicit stages for
+  context building, catalogue enumeration, activation, filtering, and ordering.
+* **CLI & configuration** – thread an `--explain-tools` flag through the lint
+  CLI, keep `--only` supremacy, and validate tool identifiers early.
+* **Logging & explainability** – enhance rich debug output and render the same
+  decision data via a table when `--explain-tools` is requested.
+* **pyqa scope handling** – rely on hardened repo detection, tag phase‑9 tools
+  with `pyqa_scoped=True`, and honour sensitivity gates for internal linters.
+* **Integration work** – remove `default_enabled`, expose a
+  `SelectionService` façade, and ensure registry population stays deterministic.
+* **Testing** – add unit/golden tests for activation predicates, scenario
+  coverage mirroring this document, and CLI snapshot tests for the new output.
+* **Documentation** – update CLI help and developer docs to match the new
+  behaviour and reference the explain mode.

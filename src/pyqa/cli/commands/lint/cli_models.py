@@ -55,6 +55,7 @@ from .params import (
 NORMAL_PRESET_HELP: Final[str] = (
     "Apply the built-in 'normal' lint preset (concise output, advice, no tests, local linters)."
 )
+EXPLAIN_TOOLS_HELP: Final[str] = "Show the tool selection plan with reasons and exit."
 DOCSTRINGS_HELP: Final[str] = "Run the internal docstring quality linter and exit."
 SUPPRESSIONS_HELP: Final[str] = "Run the internal suppression checker and exit."
 TYPING_HELP: Final[str] = "Run the strict typing checker and exit."
@@ -713,6 +714,10 @@ def _meta_action_dependency(
         bool,
         typer.Option(False, "-n", "--normal", help=NORMAL_PRESET_HELP),
     ],
+    explain_tools: Annotated[
+        bool,
+        typer.Option(False, "--explain-tools", help=EXPLAIN_TOOLS_HELP),
+    ],
 ) -> MetaActionParams:
     """Return meta-action toggles captured from CLI options."""
 
@@ -722,6 +727,7 @@ def _meta_action_dependency(
         fetch_all_tools=fetch_all_tools,
         validate_schema=validate_schema,
         normal=normal,
+        explain_tools=explain_tools,
     )
 
 

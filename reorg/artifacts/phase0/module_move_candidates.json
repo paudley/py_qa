@@ -6,22 +6,10 @@
     "pyqa.config_loader",
     "pyqa.config_loader_sections"
   ],
-  "analysis.spacy": [
-    "pyqa.annotations"
-  ],
-  "analysis.treesitter": [
-    "pyqa.context"
-  ],
-  "diagnostics": [
-    "pyqa.diagnostics",
-    "pyqa.execution.diagnostic_filter",
-    "pyqa.tooling.json_diagnostics"
-  ],
-  "interfaces": [
-    "pyqa.tooling.command_options",
-    "pyqa.tools.base",
-    "pyqa.config_loader"
-  ],
+  "analysis.spacy": ["pyqa.annotations"],
+  "analysis.treesitter": ["pyqa.context"],
+  "diagnostics": ["pyqa.diagnostics", "pyqa.execution.diagnostic_filter", "pyqa.tooling.json_diagnostics"],
+  "interfaces": ["pyqa.tooling.command_options", "pyqa.tools.base", "pyqa.config_loader"],
   "cli.commands": [
     "pyqa.cli.lint",
     "pyqa.cli.quality",
@@ -37,30 +25,15 @@
     "pyqa.tools.catalog_metadata",
     "pyqa.tools.builtin_registry"
   ],
-  "reporting": [
-    "pyqa.reporting.advice",
-    "pyqa.reporting.diagnostic_output",
-    "pyqa.reporting.formatters"
-  ],
-  "environments": [
-    "pyqa.tool_env.preparer",
-    "pyqa.tool_env.utils",
-    "pyqa.installs",
-    "pyqa.workspace"
-  ],
+  "reporting": ["pyqa.reporting.advice", "pyqa.reporting.diagnostic_output", "pyqa.reporting.formatters"],
+  "environments": ["pyqa.tool_env.preparer", "pyqa.tool_env.utils", "pyqa.installs", "pyqa.workspace"],
   "discovery": [
     "pyqa.discovery.base",
     "pyqa.discovery.filesystem",
     "pyqa.discovery.git",
     "pyqa.tooling.project_scanner"
   ],
-  "compliance": [
-    "pyqa.quality",
-    "pyqa.security",
-    "pyqa.banned",
-    "pyqa.checks.licenses",
-    "pyqa.checks.license_fixer"
-  ],
+  "compliance": ["pyqa.quality", "pyqa.security", "pyqa.banned", "pyqa.checks.licenses", "pyqa.checks.license_fixer"],
   "core": [
     "pyqa.models",
     "pyqa.metrics",
