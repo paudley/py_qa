@@ -18,7 +18,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
-from ...analysis.services import resolve_annotation_provider, resolve_function_scale_estimator
+from ...analysis.providers import NullAnnotationProvider
+from ...analysis.services import resolve_function_scale_estimator
 from ...catalog.metadata import catalog_duplicate_hint_codes
 from ...filesystem.paths import normalize_path
 from ...interfaces.analysis import AnnotationProvider, FunctionScaleEstimator
@@ -663,4 +664,4 @@ def _create_default_annotation_provider() -> AnnotationProvider:
     Returns:
         AnnotationProvider: Default annotation provider used for advice generation.
     """
-    return resolve_annotation_provider()
+    return NullAnnotationProvider()

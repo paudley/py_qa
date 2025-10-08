@@ -12,7 +12,7 @@ from typing import Any, Final
 from rich.text import Text
 
 from ...analysis import MessageSpan as AnalysisMessageSpan
-from ...analysis.services import resolve_annotation_provider
+from ...analysis.providers import NullAnnotationProvider
 from ...core.logging import colorize
 from ...interfaces.analysis import AnnotationProvider
 from ...interfaces.analysis import MessageSpan as MessageSpanProtocol
@@ -70,7 +70,7 @@ class _AnnotationRouter(AnnotationProvider):
         return self._provider.message_signature(message)
 
 
-_ANNOTATION_ROUTER = _AnnotationRouter(resolve_annotation_provider())
+_ANNOTATION_ROUTER = _AnnotationRouter(NullAnnotationProvider())
 ANNOTATION_ENGINE: AnnotationProvider = _ANNOTATION_ROUTER
 
 

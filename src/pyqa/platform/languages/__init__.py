@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
-from .constants import LANGUAGE_EXTENSIONS, LANGUAGE_FILENAMES, LANGUAGE_MARKERS
+from ..constants import LANGUAGE_EXTENSIONS, LANGUAGE_FILENAMES, LANGUAGE_MARKERS
 
 
 def detect_languages(root: Path, files: Iterable[Path]) -> set[str]:

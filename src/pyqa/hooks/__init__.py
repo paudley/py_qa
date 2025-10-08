@@ -4,10 +4,16 @@
 
 from __future__ import annotations
 
-from .installer import HOOK_NAMES, install_hooks
 from .models import InstallResult
+from .registry import available_hooks, is_supported, normalise_hook_order
+from .runner import install_hooks
+
+HOOK_NAMES: tuple[str, ...] = available_hooks()
 
 __all__ = [
+    "available_hooks",
+    "is_supported",
+    "normalise_hook_order",
     "HOOK_NAMES",
     "InstallResult",
     "install_hooks",

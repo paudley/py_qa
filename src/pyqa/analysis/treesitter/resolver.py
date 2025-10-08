@@ -804,6 +804,4 @@ def _nearest_python_generic_node(node: Any, line: int) -> Any | None:
     return best_node
 
 
-CONTEXT_RESOLVER = TreeSitterContextResolver()
-
-__all__ = ["CONTEXT_RESOLVER", "TreeSitterContextResolver"]
+__all__ = ["TreeSitterContextResolver"]

@@ -13,6 +13,7 @@ from typing import Final, cast
 from pyqa.core.severity import Severity, severity_to_sarif
 
 from ...analysis.annotations import HighlightKind
+from ...analysis.providers import NullAnnotationProvider
 from ...core.models import Diagnostic, RunResult
 from ...core.serialization import serialize_outcome
 from ...interfaces.analysis import AnnotationProvider
@@ -45,7 +46,7 @@ class _AdviceProviderContext:
         self.builder = AdviceBuilder(annotation_engine=provider)
 
 
-_ADVICE_PROVIDER_CONTEXT = _AdviceProviderContext(builder=AdviceBuilder())
+_ADVICE_PROVIDER_CONTEXT = _AdviceProviderContext(builder=AdviceBuilder(annotation_engine=NullAnnotationProvider()))
 SEVERITY_ORDER: Final[dict[Severity, int]] = {
     Severity.ERROR: 0,
     Severity.WARNING: 1,

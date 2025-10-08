@@ -8,10 +8,9 @@ from __future__ import annotations
 from functools import cache
 from typing import cast
 
-from ..core.runtime import ServiceContainer, ServiceResolutionError, register_default_services
+from ..core.runtime import ServiceContainer, register_default_services
 from ..interfaces.analysis import AnnotationProvider, ContextResolver, FunctionScaleEstimator
 from .bootstrap import register_analysis_services
-from .treesitter import TreeSitterContextResolver
 
 
 @cache
@@ -48,10 +47,7 @@ def resolve_function_scale_estimator(
 def resolve_context_resolver(container: ServiceContainer | None = None) -> ContextResolver:
     """Return the registered Tree-sitter context resolver implementation."""
 
-    try:
-        resolver = _resolve(container, "context_resolver")
-    except ServiceResolutionError:
-        return TreeSitterContextResolver()
+    resolver = _resolve(container, "context_resolver")
     return cast(ContextResolver, resolver)
 
 

@@ -343,6 +343,15 @@ Following the SOLID-focused refactors, we must bring the codebase into alignment
 
 Deliverable: Completion of Phase 8 means every coding-rule exception is justified, doc coverage is high, type annotations are strict, callable composition prefers the standard toolbox, and high-arity signatures are encapsulated.
 
+### Phase 9 – DI & Interface Enforcement
+
+*See `docs/reorg/PHASE9.md` for the detailed execution plan.*
+
+1. Integrate pyqa-scoped internal linters (`pyqa_interface_linter`, `pyqa_di_factory_linter`, `pyqa_module_doc_linter`, etc.) and wire them into the lint pipeline with the `--pyqa-rules` opt-in.
+2. Extend architectural tests to enforce module-level SOLID boundaries and DI composition rules.
+3. Backfill package-level documentation (`{MODULE}.md`) capturing usage patterns, DI seams, and extension points across the repository.
+
+
 ## Risk Mitigation & QA
 
 * **CI gating:** Block merges unless type checks, unit tests, and architectural

@@ -19,7 +19,7 @@ from pyqa.core.severity import (
     apply_severity_rules,
 )
 
-from ..analysis.services import resolve_annotation_provider
+from ..analysis.providers import NullAnnotationProvider
 from ..config import DedupeConfig
 from ..core.models import Diagnostic, RawDiagnostic, RunResult
 from ..interfaces.analysis import AnnotationProvider
@@ -209,7 +209,7 @@ def dedupe_outcomes(
     if not cfg.dedupe:
         return
 
-    engine = annotation_provider or resolve_annotation_provider()
+    engine = annotation_provider or NullAnnotationProvider()
     engine.annotate_run(result)
 
     kept: list[_DedupEntry] = []

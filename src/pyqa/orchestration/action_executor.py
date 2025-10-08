@@ -17,7 +17,6 @@ from typing import Final, Protocol, runtime_checkable
 
 from pyqa.core.severity import SeverityRuleView
 
-from ..analysis.treesitter import CONTEXT_RESOLVER
 from ..cache.context import CacheContext
 from ..cache.result_store import CacheRequest
 from ..config import Config
@@ -27,10 +26,9 @@ from ..core.models import Diagnostic, RawDiagnostic, ToolExitCategory, ToolOutco
 from ..core.runtime.process import CommandOptions
 from ..diagnostics.pipeline import DiagnosticPipeline as DiagnosticPipelineImpl
 from ..filesystem.paths import normalize_path_key
+from ..interfaces.analysis import ContextResolver
 from ..interfaces.diagnostics import DiagnosticPipeline as DiagnosticPipelineProtocol
-from ..interfaces.diagnostics import (
-    DiagnosticPipelineRequest,
-)
+from ..interfaces.diagnostics import DiagnosticPipelineRequest
 from ..tools import InternalActionRunner, ToolAction, ToolContext
 
 _DIAGNOSTIC_PIPELINE: Final[DiagnosticPipelineProtocol] = DiagnosticPipelineImpl()
@@ -205,6 +203,7 @@ class ActionExecutor:
 
     runner: RunnerCallable
     after_tool_hook: Callable[[ToolOutcome], None] | None
+    context_resolver: ContextResolver
 
     @property
     def executor_name(self) -> str:
@@ -425,7 +424,7 @@ class ActionExecutor:
         evaluation = self._evaluate_exit_status(invocation, base_returncode, diagnostics)
 
         if diagnostics:
-            CONTEXT_RESOLVER.annotate(diagnostics, root=environment.root)
+            self.context_resolver.annotate(diagnostics, root=environment.root)
         should_log_failure = evaluation.category == ToolExitCategory.TOOL_FAILURE or (
             evaluation.returncode != 0 and not invocation.action.ignore_exit and not diagnostics
         )

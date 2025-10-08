@@ -19,7 +19,6 @@ from ...interfaces.analysis import AnnotationProvider, ContextResolver
 from ...interfaces.analysis import MessageSpan as MessageSpanProtocol
 from ..spacy.loader import SpacyLanguage, load_language
 from ..spacy.message_spans import build_spacy_spans, iter_signature_tokens
-from ..treesitter import TreeSitterContextResolver
 from ..warnings import record_tool_warning
 
 HighlightKind = Literal[
@@ -110,7 +109,9 @@ class AnnotationEngine(AnnotationProvider):
         self._loader = loader
         self._nlp: SpacyLanguage | None = None
         self._nlp_lock = threading.Lock()
-        self._resolver = context_resolver or TreeSitterContextResolver()
+        if context_resolver is None:
+            raise ValueError("AnnotationEngine requires a context_resolver instance")
+        self._resolver = context_resolver
         self._download_attempted = False
         self._nlp_missing = False
 

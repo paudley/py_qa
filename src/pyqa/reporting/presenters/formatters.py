@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from ...analysis.services import resolve_annotation_provider
+from ...analysis.providers import NullAnnotationProvider
 from ...config import OutputConfig
 from ...core.logging import colorize, emoji
 from ...core.models import Diagnostic, RunResult
@@ -134,7 +134,7 @@ def render(
             is resolved from analysis services.
     """
 
-    provider = annotation_provider or resolve_annotation_provider()
+    provider = annotation_provider or NullAnnotationProvider()
     set_annotation_provider(provider)
     provider.annotate_run(result)
     if cfg.quiet:

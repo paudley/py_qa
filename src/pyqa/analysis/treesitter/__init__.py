@@ -4,6 +4,6 @@
 
 from __future__ import annotations
 
-from .resolver import CONTEXT_RESOLVER, TreeSitterContextResolver
+from .resolver import TreeSitterContextResolver
 
-__all__ = ["CONTEXT_RESOLVER", "TreeSitterContextResolver"]
+__all__ = ["TreeSitterContextResolver"]

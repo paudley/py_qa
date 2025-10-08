@@ -187,8 +187,8 @@ class Orchestrator:
         self._runner = base_runner if isinstance(base_runner, RunnerCallable) else wrap_runner(base_runner)
         self._hooks = final_hooks or OrchestratorHooks()
         self._services: ServiceContainer = services
-        self._pipeline = self._create_pipeline(final_preparer)
         self._analysis = self._create_analysis_providers()
+        self._pipeline = self._create_pipeline(final_preparer)
 
     def _create_pipeline(
         self,
@@ -210,21 +210,19 @@ class Orchestrator:
         prepare_callable = self._resolve_preparer(preparer)
         prepare_fn = self._coerce_preparer(prepare_callable)
         selector = ToolSelector(self._context.registry)
-        executor = ActionExecutor(self._runner, self._hooks.after_tool)
+        executor = ActionExecutor(
+            self._runner,
+            self._hooks.after_tool,
+            self._analysis.context_resolver,
+        )
         return _ToolingPipeline(selector=selector, executor=executor, prepare_command=prepare_fn)
 
     def _create_analysis_providers(self) -> _AnalysisProviders:
         """Return annotation and analysis providers for the orchestrator."""
 
         annotation_provider = self._resolve_annotation_provider()
-        try:
-            function_scale = resolve_function_scale_estimator(self._services)
-        except ServiceResolutionError:
-            function_scale = resolve_function_scale_estimator()
-        try:
-            context_resolver = resolve_context_resolver(self._services)
-        except ServiceResolutionError:
-            context_resolver = resolve_context_resolver()
+        function_scale = resolve_function_scale_estimator(self._services)
+        context_resolver = resolve_context_resolver(self._services)
         return _AnalysisProviders(
             annotation=annotation_provider,
             function_scale=function_scale,

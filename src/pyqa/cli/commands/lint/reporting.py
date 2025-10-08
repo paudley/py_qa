@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pyqa.core.models import RunResult
 
-from ....analysis.services import resolve_annotation_provider
+from ....analysis.providers import NullAnnotationProvider
 from ....config import Config
 from ....interfaces.analysis import AnnotationProvider
 from ....reporting import render, write_json_report, write_pr_summary, write_sarif_report
@@ -27,7 +27,7 @@ def handle_reporting(
 ) -> None:
     """Render console output and emit optional artifacts for ``pyqa lint``."""
 
-    provider = annotation_provider or resolve_annotation_provider()
+    provider = annotation_provider or NullAnnotationProvider()
     set_highlighting_annotation_provider(provider)
     set_emitter_annotation_provider(provider)
     render(result, config.output, annotation_provider=provider)

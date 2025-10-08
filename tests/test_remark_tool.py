@@ -23,6 +23,7 @@ def _stub_load(name: str):  # pragma: no cover - helper for stub module
 _stub_spacy.load = _stub_load  # type: ignore[attr-defined]
 sys.modules.setdefault("spacy", _stub_spacy)
 
+from pyqa.analysis.providers import NullContextResolver
 from pyqa.cache.context import CacheContext
 from pyqa.catalog import ToolCatalogLoader
 from pyqa.catalog.strategies import command_option_map
@@ -143,7 +144,7 @@ def test_remark_fix_rewrites_file_in_place(tmp_path: Path) -> None:
 
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
 
-    executor = ActionExecutor(runner=fake_runner, after_tool_hook=None)
+    executor = ActionExecutor(runner=fake_runner, after_tool_hook=None, context_resolver=NullContextResolver())
     outcome = executor.run_action(invocation, environment)
 
     assert outcome.returncode == 0
