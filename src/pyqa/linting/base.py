@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Shared primitives for internal linters shipped with pyqa."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from pyqa.core.models import ToolOutcome
+from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome
 
 
 @dataclass(slots=True)
@@ -82,3 +83,28 @@ def as_internal_runner(
 
 
 __all__.append("as_internal_runner")
+
+
+def build_internal_report(
+    *,
+    tool: str,
+    stdout: Sequence[str],
+    diagnostics: Sequence[Diagnostic],
+    files: Sequence[Path],
+) -> InternalLintReport:
+    """Return an internal lint report with a normalised outcome."""
+
+    exit_category = ToolExitCategory.DIAGNOSTIC if diagnostics else ToolExitCategory.SUCCESS
+    outcome = ToolOutcome(
+        tool=tool,
+        action="check",
+        returncode=1 if diagnostics else 0,
+        stdout=list(stdout),
+        stderr=[],
+        diagnostics=list(diagnostics),
+        exit_category=exit_category,
+    )
+    return InternalLintReport(outcome=outcome, files=tuple(files))
+
+
+__all__.append("build_internal_report")

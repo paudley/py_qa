@@ -63,8 +63,8 @@ def memoize(maxsize: int | None = None) -> Callable[[Callable[P, R]], Callable[P
         # Expose cache management helpers to mirror functools exposed attributes;
         # ``Callable`` stubs do not declare these members, so we attach them with
         # a targeted ignore after mutation.
-        wrapper.cache_clear = cache_clear  # type: ignore[attr-defined]
-        wrapper.cache_info = cache_info  # type: ignore[attr-defined]
+        wrapper.cache_clear = cache_clear  # type: ignore[attr-defined]  # lint: allow-cache-mutator
+        wrapper.cache_info = cache_info  # type: ignore[attr-defined]  # lint: allow-cache-mutator
         return wrapper
 
     return decorator

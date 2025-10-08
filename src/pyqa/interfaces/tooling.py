@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Interfaces describing tooling installation and bootstrap flows."""
 
 from __future__ import annotations

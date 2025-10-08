@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Shared AST visitor utilities for internal linters."""
 
 from __future__ import annotations
@@ -10,11 +11,11 @@ from pathlib import Path
 from typing import Final
 
 from pyqa.cli.commands.lint.preparation import PreparedLintState
-from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome
+from pyqa.core.models import Diagnostic
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path_key
 
-from .base import InternalLintReport
+from .base import InternalLintReport, build_internal_report
 from .utils import collect_python_files
 
 
@@ -140,16 +141,13 @@ def run_ast_linter(
         diagnostics.extend(visitor.diagnostics)
         stdout_lines.extend(visitor.stdout)
 
-    outcome = ToolOutcome(
+    report = build_internal_report(
         tool=metadata.tool,
-        action="check",
-        returncode=1 if diagnostics else 0,
         stdout=stdout_lines,
-        stderr=[],
         diagnostics=diagnostics,
-        exit_category=ToolExitCategory.DIAGNOSTIC if diagnostics else ToolExitCategory.SUCCESS,
+        files=files,
     )
-    return InternalLintReport(outcome=outcome, files=tuple(files))
+    return report
 
 
 __all__ = [

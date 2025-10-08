@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Enforce docstring quality using Tree-sitter structure and spaCy NLP."""
 
 from __future__ import annotations

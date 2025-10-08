@@ -51,3 +51,13 @@ def test_register_default_services() -> None:
     assert callable(container.resolve("cli_plugins"))
     assert callable(container.resolve("diagnostics_plugins"))
     assert callable(container.resolve("all_plugins"))
+
+
+def test_service_container_dunder_helpers() -> None:
+    container = ServiceContainer()
+    container.register("alpha", lambda _: "one")
+    container.register("beta", lambda _: "two")
+
+    assert len(container) == 2
+    assert "alpha" in container
+    assert "missing" not in container

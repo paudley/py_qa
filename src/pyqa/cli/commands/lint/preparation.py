@@ -461,23 +461,14 @@ def _normalize_targets(
     dirs = _normalize_path_iter(params.dirs, invocation_cwd)
     exclude = _normalize_path_iter(params.exclude, invocation_cwd)
 
-    root_source = _parameter_source_name(ctx, "root")
-    root = normalize_path(params.root, base_dir=invocation_cwd)
-    if root_source in {"DEFAULT", "DEFAULT_MAP"} and paths:
-        derived_root = _derive_default_root(paths)
-        if derived_root is not None:
-            root = derived_root
+    root = _select_root(
+        ctx,
+        params.root,
+        paths,
+        invocation_cwd=invocation_cwd,
+    )
 
-    ignored_py_qa: list[str] = []
-    if not is_py_qa_workspace(root) and paths:
-        paths, ignored_py_qa = filter_py_qa_paths(paths, root)
-        if ignored_py_qa:
-            unique = ", ".join(dict.fromkeys(ignored_py_qa))
-            warning_message = (
-                f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
-                "unless lint runs inside the py_qa workspace."
-            )
-            logger.warn(warning_message)
+    paths, ignored_py_qa = _apply_py_qa_filter(paths, root, logger)
 
     return NormalizedTargets(
         root=root,
@@ -513,6 +504,59 @@ def _resolve_artifacts(
         sarif_out=_normalize(reporting.sarif_out),
         pr_summary_out=_normalize(reporting.pr_summary_out),
     )
+
+
+def _select_root(
+    ctx: typer.Context,
+    root_option: Path,
+    paths: list[Path],
+    *,
+    invocation_cwd: Path,
+) -> Path:
+    """Return the effective lint root considering CLI defaults and paths.
+
+    Args:
+        ctx: Typer context describing how parameters were provided.
+        root_option: Root option supplied via CLI dependency.
+        paths: Normalised positional paths supplied to the command.
+        invocation_cwd: Working directory used to resolve relative inputs.
+
+    Returns:
+        Path: Effective lint root.
+    """
+
+    root_source = _parameter_source_name(ctx, "root")
+    root = normalize_path(root_option, base_dir=invocation_cwd)
+    if root_source not in {"DEFAULT", "DEFAULT_MAP"} or not paths:
+        return root
+
+    derived_root = _derive_default_root(paths)
+    if derived_root is None:
+        return root
+    if is_py_qa_workspace(derived_root) or not is_py_qa_workspace(root):
+        return derived_root
+    return root
+
+
+def _apply_py_qa_filter(
+    paths: list[Path],
+    root: Path,
+    logger: CLILogger,
+) -> tuple[list[Path], list[str]]:
+    """Return filtered paths and ignored py_qa entries when required."""
+
+    if is_py_qa_workspace(root) or not paths:
+        return paths, []
+
+    filtered, ignored = filter_py_qa_paths(paths, root)
+    if ignored:
+        unique = ", ".join(dict.fromkeys(ignored))
+        message = (
+            f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
+            "unless lint runs inside the py_qa workspace."
+        )
+        logger.warn(message)
+    return filtered, ignored
 
 
 def _build_display_options(rendering: LintOutputParams) -> CLIDisplayOptions:
@@ -683,6 +727,7 @@ def _collect_provided_flags(
         "check_closures",
         "check_signatures",
         "check_cache_usage",
+        "check_value_types",
         "fix_only",
         "check_only",
         "verbose",

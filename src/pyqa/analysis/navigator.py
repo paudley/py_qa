@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -87,6 +88,24 @@ class NavigatorBucket:
     size: int | None = None
     complexity: int | None = None
     diagnostics: list[NavigatorDiagnosticEntry] = field(default_factory=list)
+
+    def __len__(self) -> int:
+        """Return the number of diagnostics aggregated within the bucket.
+
+        Returns:
+            int: Count of aggregated diagnostics.
+        """
+
+        return len(self.diagnostics)
+
+    def __iter__(self) -> Iterator[NavigatorDiagnosticEntry]:
+        """Yield diagnostics contained in the bucket.
+
+        Returns:
+            Iterator[NavigatorDiagnosticEntry]: Iterator across stored diagnostics.
+        """
+
+        return iter(self.diagnostics)
 
     def add_diagnostic(self, diag: Diagnostic, tag: IssueTag | None) -> None:
         """Record ``diag`` in the bucket and increment the associated tag."""

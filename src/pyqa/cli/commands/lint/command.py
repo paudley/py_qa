@@ -130,6 +130,7 @@ def _validate_cli_combinations(inputs: LintCLIInputs) -> None:
         meta.check_closures,
         meta.check_signatures,
         meta.check_cache_usage,
+        meta.check_value_types,
     )
     if any(check_flags) and any(
         (

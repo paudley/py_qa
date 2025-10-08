@@ -83,6 +83,27 @@ class ServiceContainer:
 
         return _provider
 
+    def __contains__(self, key: object) -> bool:
+        """Return ``True`` when ``key`` corresponds to a registered service.
+
+        Args:
+            key: Potential service identifier.
+
+        Returns:
+            bool: ``True`` if ``key`` matches a known service name.
+        """
+
+        return isinstance(key, str) and key in self._factories
+
+    def __len__(self) -> int:
+        """Return the number of services registered with the container.
+
+        Returns:
+            int: Count of registered services.
+        """
+
+        return len(self._factories)
+
 
 def register_default_services(container: ServiceContainer) -> None:
     """Populate ``container`` with built-in service factories.

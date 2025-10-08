@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Warn when ``functools.lru_cache`` is used directly."""
 
 from __future__ import annotations

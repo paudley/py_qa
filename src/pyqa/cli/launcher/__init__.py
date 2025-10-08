@@ -276,7 +276,7 @@ def _run_with_python(
             # Import lazily so optional CLI extras are only required when the
             # current interpreter actually hosts the application; this allows us
             # to fall back to ``uv`` gracefully when dependencies are absent.
-            from pyqa.cli.app import app  # pylint: disable=import-outside-toplevel
+            from pyqa.cli.app import app  # pylint: disable=import-outside-toplevel  # lint: allow-cli-import
         except ModuleNotFoundError as exc:
             _debug(f"Local interpreter missing dependencies; falling back to uv: {exc.__class__.__name__}: {exc}")
             uv_path = _ensure_uv()

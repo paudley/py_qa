@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Helpers for recording analysis-layer warnings in run results."""
 
 from __future__ import annotations

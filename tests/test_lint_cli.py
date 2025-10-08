@@ -49,6 +49,7 @@ def _meta_flags(
     check_closures: bool = False,
     check_signatures: bool = False,
     check_cache_usage: bool = False,
+    check_value_types: bool = False,
 ) -> LintMetaParams:
     """Return ``LintMetaParams`` populated for test scenarios."""
 
@@ -69,6 +70,7 @@ def _meta_flags(
             check_closures=check_closures,
             check_signatures=check_signatures,
             check_cache_usage=check_cache_usage,
+            check_value_types=check_value_types,
         ),
     )
 

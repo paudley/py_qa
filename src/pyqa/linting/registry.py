@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Registry describing the internal linters available to the CLI."""
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from .quality import run_quality_linter
 from .signatures import run_signature_linter
 from .suppressions import run_suppression_linter
 from .typing_strict import run_typing_linter
+from .value_types import run_value_type_linter
 
 
 @dataclass(slots=True)
@@ -87,6 +89,13 @@ INTERNAL_LINTERS: tuple[InternalLinterDefinition, ...] = (
         selection_tokens=("cache", "lru_cache", "functools"),
         runner=run_cache_linter,
         description="Reject direct functools.lru_cache usage in favour of pyqa.cache utilities.",
+    ),
+    InternalLinterDefinition(
+        name="value-types",
+        meta_attribute="check_value_types",
+        selection_tokens=("value-types", "dunder"),
+        runner=run_value_type_linter,
+        description="Ensure NavigatorBucket, CleanResult, and ServiceContainer expose ergonomic dunder methods.",
     ),
     InternalLinterDefinition(
         name="quality",

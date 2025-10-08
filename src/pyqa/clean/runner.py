@@ -40,6 +40,15 @@ class CleanResult:
 
         self.skipped.append(path)
 
+    def __bool__(self) -> bool:
+        """Return ``True`` when the cleanup produced any effect.
+
+        Returns:
+            bool: ``True`` if paths were removed or skipped, ``False`` otherwise.
+        """
+
+        return bool(self.removed or self.skipped)
+
 
 def sparkly_clean(
     root: Path,

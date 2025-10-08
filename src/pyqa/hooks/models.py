@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Dataclasses describing hook installation outcomes."""
 
 from __future__ import annotations

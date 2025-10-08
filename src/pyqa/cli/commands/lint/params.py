@@ -158,6 +158,7 @@ class MetaRuntimeChecks:
     check_closures: bool
     check_signatures: bool
     check_cache_usage: bool
+    check_value_types: bool
 
 
 @dataclass(slots=True)
@@ -233,6 +234,12 @@ class LintMetaParams:
         """Return whether cache usage analysis should execute."""
 
         return self.runtime.check_cache_usage
+
+    @property
+    def check_value_types(self) -> bool:
+        """Return whether value-type ergonomics should be validated."""
+
+        return self.runtime.check_value_types
 
 
 @dataclass(slots=True)

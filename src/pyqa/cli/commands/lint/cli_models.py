@@ -757,6 +757,10 @@ def _meta_runtime_checks_dependency(
         bool,
         typer.Option(False, "--check-cache-usage", help=CACHE_HELP),
     ],
+    check_value_types: Annotated[
+        bool,
+        typer.Option(False, "--check-value-types", help="Verify value-type helpers expose ergonomic dunder methods."),
+    ],
 ) -> MetaRuntimeChecks:
     """Return runtime-focused meta-check toggles."""
 
@@ -764,6 +768,7 @@ def _meta_runtime_checks_dependency(
         check_closures=check_closures,
         check_signatures=check_signatures,
         check_cache_usage=check_cache_usage,
+        check_value_types=check_value_types,
     )
 
 
@@ -784,6 +789,7 @@ def _meta_params_dependency(
             check_closures=True,
             check_signatures=True,
             check_cache_usage=True,
+            check_value_types=True,
         )
     else:
         analysis = analysis_checks

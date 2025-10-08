@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Resolve Tree-sitter grammars without depending on ``tree-sitter-languages``."""
 
 from __future__ import annotations

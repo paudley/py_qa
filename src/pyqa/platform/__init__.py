@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Platform-specific heuristics (paths, languages, etc.)."""
 
 from __future__ import annotations
