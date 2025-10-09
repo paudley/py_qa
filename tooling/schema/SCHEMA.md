@@ -26,8 +26,9 @@ Tool definitions describe a single linter/formatter/utility and are grouped by
 language (or utility class) inside `tooling/catalog/languages`. The schema
 captures the following high level areas:
 
-* **Metadata** – tool name, description, language tags, default enablement, and
-  phase ordering (`phase`, `before`, `after`).
+* **Metadata** – tool name, description, language tags, default enablement,
+  automatic fix behaviour (`automatically_fix`), and phase ordering (`phase`,
+  `before`, `after`).
 * **Runtime** – describes how the tool is executed. This can represent Python
   packages, npm packages, Go modules, standalone binaries, etc. Runtime
   sections optionally include an `install` block that references an installer

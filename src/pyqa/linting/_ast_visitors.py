@@ -8,9 +8,13 @@ import ast
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
-from pyqa.cli.commands.lint.preparation import PreparedLintState
+if TYPE_CHECKING:  # pragma: no cover
+    from pyqa.cli.commands.lint.preparation import PreparedLintState
+else:  # pragma: no cover
+    PreparedLintState = object
+
 from pyqa.core.models import Diagnostic
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path_key
@@ -108,6 +112,7 @@ def run_ast_linter(
     metadata: VisitorMetadata,
     visitor_factory: Callable[[Path, PreparedLintState, VisitorMetadata], BaseAstLintVisitor],
     parse_error_handler: Callable[[Path, SyntaxError], str] | None = None,
+    file_filter: Callable[[Path], bool] | None = None,
 ) -> InternalLintReport:
     """Execute an AST-based internal linter.
 
@@ -125,6 +130,8 @@ def run_ast_linter(
     """
 
     files = collect_python_files(state)
+    if file_filter is not None:
+        files = [path for path in files if file_filter(path)]
     diagnostics: list[Diagnostic] = []
     stdout_lines: list[str] = []
 

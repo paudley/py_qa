@@ -4,6 +4,7 @@
   "description": "Go formatter.",
   "languages": ["go"],
   "phase": "lint",
+  "automatically_fix": true,
   "runtime": {
     "type": "binary",
     "versionCommand": ["go", "version"]

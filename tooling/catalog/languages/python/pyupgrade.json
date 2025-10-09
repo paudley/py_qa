@@ -4,6 +4,7 @@
   "description": "Automated Python syntax upgrades via pyupgrade.",
   "languages": ["python"],
   "phase": "lint",
+  "automatically_fix": true,
   "runtime": {
     "type": "python",
     "package": "pyupgrade",

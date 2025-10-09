@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import replace
+from io import StringIO
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
@@ -13,6 +14,7 @@ from types import SimpleNamespace
 
 import click
 import pytest
+from rich.console import Console
 from typer.main import get_group
 from typer.testing import CliRunner
 
@@ -34,8 +36,15 @@ from pyqa.core.environment.tool_env.models import PreparedCommand
 from pyqa.core.models import Diagnostic, RunResult, ToolOutcome, ToolExitCategory
 from pyqa.core.severity import Severity
 from pyqa.linting.base import InternalLintReport
-from pyqa.linting.quality import run_quality_linter
+from pyqa.linting.interfaces import run_pyqa_interface_linter
+from pyqa.linting.quality import (
+    run_file_size_linter,
+    run_license_header_linter,
+    run_python_hygiene_linter,
+)
+from pyqa.linting.suppressions import run_suppression_linter
 from pyqa.linting.registry import ensure_internal_tools_registered
+from pyqa.orchestration.tool_selection import SelectionResult, ToolDecision, ToolEligibility
 from pyqa.tools.base import ToolContext
 from pyqa.tools.registry import ToolRegistry
 
@@ -54,6 +63,13 @@ def _meta_flags(
     check_interfaces: bool = False,
     check_di: bool = False,
     check_module_docs: bool = False,
+    check_pyqa_python_hygiene: bool = False,
+    show_valid_suppressions: bool = False,
+    check_license_header: bool = False,
+    check_copyright: bool = False,
+    check_python_hygiene: bool = False,
+    check_file_size: bool = False,
+    check_schema_sync: bool = False,
     pyqa_rules: bool = False,
 ) -> LintMetaParams:
     """Return ``LintMetaParams`` populated for test scenarios."""
@@ -80,6 +96,13 @@ def _meta_flags(
             check_interfaces=check_interfaces,
             check_di=check_di,
             check_module_docs=check_module_docs,
+            check_pyqa_python_hygiene=check_pyqa_python_hygiene,
+            show_valid_suppressions=show_valid_suppressions,
+            check_license_header=check_license_header,
+            check_copyright=check_copyright,
+            check_python_hygiene=check_python_hygiene,
+            check_file_size=check_file_size,
+            check_schema_sync=check_schema_sync,
             pyqa_rules=pyqa_rules,
         ),
     )
@@ -170,7 +193,7 @@ def test_lint_fetch_all_tools_flag(monkeypatch, tmp_path: Path) -> None:
             orchestrator_factory=lambda registry, discovery, hooks, debug_logger=None: FakeOrchestrator(hooks),
         ),
     )
-    monkeypatch.setattr("pyqa.cli.commands.lint.command.is_tty", lambda: False)
+    monkeypatch.setattr("pyqa.cli.commands.lint.command.detect_tty", lambda: False)
 
     result = runner.invoke(
         app,
@@ -334,6 +357,28 @@ def command() -> None:
     assert result.exit_code != 0
     combined = (result.stdout + result.stderr).lower()
     assert "missing a docstring" in combined
+
+
+def test_only_unknown_tool_fails_fast(tmp_path: Path, monkeypatch) -> None:
+    """Ensure ``lint`` exits with an error when ``--only`` cites an unknown tool."""
+
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "lint",
+            "--only",
+            "unknown-tool",
+            "--root",
+            str(tmp_path),
+            "--no-emoji",
+        ],
+    )
+
+    assert result.exit_code == 1
+    combined = (result.stdout + result.stderr).lower()
+    assert "unknown tool(s) requested via --only: unknown-tool" in combined
 
 
 def test_explain_tools_outputs_table(tmp_path: Path, monkeypatch) -> None:
@@ -506,7 +551,7 @@ def test_lint_no_lint_tests_flag(monkeypatch, tmp_path: Path) -> None:
     assert any(path == resolved_tests for path in config.file_discovery.excludes)
 
 
-def test_quality_linter_reports_issues(tmp_path: Path) -> None:
+def test_license_header_linter_reports_issue(tmp_path: Path) -> None:
     target = tmp_path / "module.py"
     target.write_text("print('hello')\n", encoding="utf-8")
 
@@ -555,9 +600,277 @@ copyright = "Blackcat"
         logger=_StubLogger(),
     )
 
-    report = run_quality_linter(state, emit_to_logger=False, config=config)
+    report = run_license_header_linter(state, emit_to_logger=False, config=config)
     assert report.outcome.returncode != 0
-    assert any("license" in line.lower() for line in report.outcome.stdout)
+    assert report.outcome.diagnostics
+    first = report.outcome.diagnostics[0]
+    assert first.tool == "license-header"
+    assert first.code.startswith("license-header:")
+
+
+def test_suppression_linter_ignores_valid_marker(tmp_path: Path) -> None:
+    target = tmp_path / "module.py"
+    target.write_text(
+        "import os  # noqa: F401 suppression_valid: Import preserves eager plugin registration order\n",
+        encoding="utf-8",
+    )
+
+    state = _build_stub_state(
+        root=tmp_path,
+        only=[],
+        filters=[],
+        check_docstrings=False,
+        check_suppressions=True,
+        logger=_CapturingLogger(),
+        target_paths=[target],
+    )
+
+    report = run_suppression_linter(state, emit_to_logger=False)
+    assert report.outcome.diagnostics == []
+
+
+def test_suppression_linter_reports_valid_marker_when_requested(tmp_path: Path) -> None:
+    target = tmp_path / "module.py"
+    reason = "Import keeps plugin namespace ready before dynamic registration"
+    target.write_text(
+        f"import os  # noqa: F401 suppression_valid: {reason}\n",
+        encoding="utf-8",
+    )
+
+    state = _build_stub_state(
+        root=tmp_path,
+        only=[],
+        filters=[],
+        check_docstrings=False,
+        check_suppressions=True,
+        show_valid_suppressions=True,
+        logger=_CapturingLogger(),
+        target_paths=[target],
+    )
+
+    report = run_suppression_linter(state, emit_to_logger=False)
+    diagnostics = report.outcome.diagnostics
+    assert len(diagnostics) == 1
+    diagnostic = diagnostics[0]
+    assert diagnostic.severity is Severity.NOTICE
+    assert "suppression" in diagnostic.code
+    assert reason in diagnostic.message
+
+
+def test_suppression_linter_requires_sufficient_reason(tmp_path: Path) -> None:
+    target = tmp_path / "module.py"
+    target.write_text(
+        "import os  # noqa: F401 suppression_valid: context matters\n",
+        encoding="utf-8",
+    )
+
+    state = _build_stub_state(
+        root=tmp_path,
+        only=[],
+        filters=[],
+        check_docstrings=False,
+        check_suppressions=True,
+        logger=_CapturingLogger(),
+        target_paths=[target],
+    )
+
+    report = run_suppression_linter(state, emit_to_logger=False)
+    diagnostics = report.outcome.diagnostics
+    assert len(diagnostics) == 1
+    assert diagnostics[0].severity is Severity.WARNING
+    assert "suppression_valid" in diagnostics[0].message
+
+
+def test_pyqa_interface_linter_skips_tests(tmp_path: Path) -> None:
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    test_module = tests_dir / "example.py"
+    test_module.write_text("import pyqa.reporting\n", encoding="utf-8")
+
+    state = _build_stub_state(
+        root=tmp_path,
+        only=[],
+        filters=[],
+        check_docstrings=False,
+        logger=_CapturingLogger(),
+        target_paths=[test_module],
+    )
+    state.meta = _meta_flags(pyqa_rules=True)
+    report = run_pyqa_interface_linter(state, emit_to_logger=False)
+    assert report.outcome.diagnostics == []
+
+
+def test_pyqa_interface_linter_reports_production_imports(tmp_path: Path) -> None:
+    module_path = tmp_path / "service.py"
+    module_path.write_text("import pyqa.reporting\n", encoding="utf-8")
+
+    state = _build_stub_state(
+        root=tmp_path,
+        only=[],
+        filters=[],
+        check_docstrings=False,
+        logger=_CapturingLogger(),
+        target_paths=[module_path],
+    )
+    state.meta = _meta_flags(pyqa_rules=True)
+    report = run_pyqa_interface_linter(state, emit_to_logger=False)
+    assert report.outcome.diagnostics
+
+
+def test_python_hygiene_linter_reports_breakpoint(tmp_path: Path) -> None:
+    target = tmp_path / "module.py"
+    target.write_text("breakpoint()\n", encoding="utf-8")
+
+    config_path = tmp_path / "pyproject.toml"
+    config_path.write_text("[tool.pyqa]\n", encoding="utf-8")
+    loader = ConfigLoader.for_root(tmp_path)
+    config = loader.load_with_trace().config
+    config.severity.sensitivity = "maximum"
+
+    state = SimpleNamespace(
+        root=tmp_path,
+        options=SimpleNamespace(
+            target_options=SimpleNamespace(
+                root=tmp_path,
+                paths=[target],
+                dirs=[],
+                exclude=[],
+                paths_from_stdin=False,
+            ),
+        ),
+        meta=_meta_flags(),
+        logger=None,
+    )
+
+    report = run_python_hygiene_linter(state, emit_to_logger=False, config=config)
+    assert report.outcome.returncode == 1
+    assert any("breakpoint" in diagnostic.message.lower() for diagnostic in report.outcome.diagnostics)
+
+
+def test_file_size_linter_reports_large_file(tmp_path: Path) -> None:
+    target = tmp_path / "large.bin"
+    target.write_bytes(b"x" * 2048)
+
+    config_path = tmp_path / "pyproject.toml"
+    config_path.write_text(
+        """
+[tool.pyqa.quality]
+max_file_size = 1024
+warn_file_size = 512
+checks = ["file-size"]
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    loader = ConfigLoader.for_root(tmp_path)
+    config = loader.load_with_trace().config
+    config.severity.sensitivity = "maximum"
+
+    state = SimpleNamespace(
+        root=tmp_path,
+        options=SimpleNamespace(
+            target_options=SimpleNamespace(
+                root=tmp_path,
+                paths=[target],
+                dirs=[],
+                exclude=[],
+                paths_from_stdin=False,
+            ),
+        ),
+        meta=_meta_flags(),
+        logger=None,
+    )
+
+    report = run_file_size_linter(state, emit_to_logger=False, config=config)
+    assert report.outcome.returncode == 1
+    assert any("size" in diagnostic.message.lower() for diagnostic in report.outcome.diagnostics)
+
+
+def test_render_explain_tools_includes_order_and_description() -> None:
+    from pyqa.cli.commands.lint.explain import render_explain_tools
+
+    console_stream = StringIO()
+    console = Console(file=console_stream, force_terminal=False, color_system=None)
+
+    class _ExplainLogger:
+        def __init__(self) -> None:
+            self.console = console
+            self.ok_messages: list[str] = []
+
+        def ok(self, message: str) -> None:
+            self.ok_messages.append(message)
+
+        def warn(self, message: str) -> None:  # pragma: no cover - stub
+            self.ok_messages.append(message)
+
+        def fail(self, message: str) -> None:  # pragma: no cover - stub
+            self.ok_messages.append(message)
+
+    class _Registry:
+        def __init__(self) -> None:
+            self._tools = {
+                "alpha": SimpleNamespace(description="Alpha internal linter"),
+                "beta": SimpleNamespace(description="Beta formatter"),
+            }
+
+        def try_get(self, name: str):
+            return self._tools.get(name)
+
+    runtime = SimpleNamespace(state=SimpleNamespace(logger=_ExplainLogger()), registry=_Registry())
+
+    selection = SelectionResult(
+        ordered=("alpha",),
+        decisions=(
+            ToolDecision(
+                name="alpha",
+                family="internal",
+                phase="lint",
+                action="run",
+                reasons=("workspace-match",),
+                eligibility=ToolEligibility(
+                    name="alpha",
+                    family="internal",
+                    phase="lint",
+                    available=True,
+                    requested_via_only=False,
+                    language_match=True,
+                    extension_match=True,
+                    config_match=None,
+                    sensitivity_ok=True,
+                    pyqa_scope=None,
+                    default_enabled=True,
+                ),
+            ),
+            ToolDecision(
+                name="beta",
+                family="external",
+                phase="lint",
+                action="skip",
+                reasons=("no-language-match",),
+                eligibility=ToolEligibility(
+                    name="beta",
+                    family="external",
+                    phase="lint",
+                    available=True,
+                    requested_via_only=False,
+                    language_match=False,
+                    extension_match=False,
+                    config_match=False,
+                    sensitivity_ok=None,
+                    pyqa_scope=None,
+                    default_enabled=False,
+                ),
+            ),
+        ),
+        context=SimpleNamespace(),
+    )
+
+    render_explain_tools(runtime, selection)
+    output = console_stream.getvalue()
+    assert "Order" in output and "Description" in output
+    assert "Alpha internal linter" in output
+    assert "1" in output
 
 
 def _build_stub_state(
@@ -568,6 +881,9 @@ def _build_stub_state(
     check_docstrings: bool,
     logger,
     target_paths: list[Path] | None = None,
+    check_suppressions: bool = False,
+    show_valid_suppressions: bool = False,
+    check_pyqa_python_hygiene: bool = False,
 ):
     class _StubOptions:
         def __init__(self, root: Path, only: list[str], filters: list[str], target_paths: list[Path] | None) -> None:
@@ -593,7 +909,12 @@ def _build_stub_state(
     return SimpleNamespace(
         root=root,
         options=_StubOptions(root, only, filters, target_paths),
-        meta=_meta_flags(check_docstrings=check_docstrings),
+        meta=_meta_flags(
+            check_docstrings=check_docstrings,
+            check_suppressions=check_suppressions,
+            show_valid_suppressions=show_valid_suppressions,
+            check_pyqa_python_hygiene=check_pyqa_python_hygiene,
+        ),
         logger=logger,
     )
 
@@ -812,7 +1133,7 @@ def test_concise_mode_renders_progress_status(monkeypatch, tmp_path: Path) -> No
             )
 
     monkeypatch.setattr(lint_module, "Progress", _FakeProgress)
-    monkeypatch.setattr(lint_module, "is_tty", lambda: True)
+    monkeypatch.setattr(lint_module, "detect_tty", lambda: True)
 
     orchestrator_state: dict[str, _HookingOrchestrator | None] = {"instance": None}
 

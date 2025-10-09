@@ -109,7 +109,7 @@ def ttl_cache(ttl_seconds: float) -> Callable[[Callable[P, R]], Callable[P, R]]:
                 store.clear()
 
         # TTL wrappers mirror functools' cache API; annotate the dynamic attribute.
-        wrapper.cache_clear = cache_clear  # type: ignore[attr-defined]
+        wrapper.cache_clear = cache_clear  # type: ignore[attr-defined] suppression_valid: TTL cache wrappers expose cache_clear so callers retain the functools-compatible API contract.
         return wrapper
 
     return decorator

@@ -111,6 +111,7 @@ def test_loader_reads_tool_and_strategy_catalog(tmp_path: Path, schema_root: Pat
     assert len(tool_defs) == 1
     assert tool_defs[0].name == "sample-tool"
     assert tool_defs[0].actions[0].command.reference.strategy == "sample_command"
+    assert tool_defs[0].automatically_fix is False
     suppressions = tool_defs[0].diagnostics_bundle.suppressions
     assert suppressions is not None
     assert suppressions.tests == ("tests/**",)

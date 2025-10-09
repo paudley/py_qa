@@ -138,6 +138,7 @@ def _materialize_tool(
         description=getattr(definition, "description", ""),
         auto_install=getattr(definition, "auto_install", False),
         default_enabled=getattr(definition, "default_enabled", True),
+        automatically_fix=getattr(definition, "automatically_fix", True),
         runtime=runtime_config.kind,
         package=runtime_config.package,
         min_version=runtime_config.min_version,

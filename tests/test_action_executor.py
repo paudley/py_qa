@@ -24,7 +24,7 @@ def _stub_load(name: str):  # pragma: no cover - helper for stub module
 _stub_spacy.load = _stub_load  # type: ignore[attr-defined]
 sys.modules.setdefault("spacy", _stub_spacy)
 
-from pyqa.analysis.providers import NullContextResolver
+from pyqa.interfaces.analysis import NullContextResolver
 from pyqa.cache.context import CacheContext
 from pyqa.config import Config
 from pyqa.core.models import RawDiagnostic, ToolExitCategory, ToolOutcome

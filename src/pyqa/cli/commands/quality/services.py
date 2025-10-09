@@ -12,7 +12,8 @@ from typing import Final
 from pyqa.core.config.constants import PY_QA_DIR_NAME
 from pyqa.platform.workspace import is_py_qa_workspace
 
-from ....compliance.quality import QualityChecker, QualityCheckerOptions
+from ....compliance.quality import QualityCheckResult
+from ....linting.quality import evaluate_quality_checks
 from ...core._config_loading import load_config_result
 from ...core.shared import CLILogger
 from ...core.utils import filter_py_qa_paths
@@ -119,13 +120,13 @@ def resolve_target_files(
     )
 
 
-def build_quality_checker(
+def run_quality_checks(
     context: QualityConfigContext,
     *,
     files: list[Path] | None,
     checks: frozenset[str],
-) -> QualityChecker:
-    """Construct the quality checker for execution.
+) -> QualityCheckResult:
+    """Execute quality checks using the shared linting helpers.
 
     Args:
         context: Loaded configuration context describing the project state.
@@ -133,18 +134,16 @@ def build_quality_checker(
         checks: Set of checks selected for the run.
 
     Returns:
-        QualityChecker: Prepared checker instance ready for execution.
+        QualityCheckResult: Aggregated findings produced by the quality checks.
     """
 
-    return QualityChecker(
+    return evaluate_quality_checks(
         root=context.root,
-        quality=context.config.quality,
-        options=QualityCheckerOptions(
-            license_overrides=context.config.license,
-            files=files,
-            checks=checks,
-            staged=context.options.staged,
-        ),
+        config=context.config,
+        checks=checks,
+        files=files,
+        fix=context.options.fix,
+        staged=context.options.staged,
     )
 
 
@@ -170,7 +169,7 @@ def _apply_workspace_protections(context: QualityConfigContext) -> None:
 
 
 __all__ = [
-    "build_quality_checker",
+    "run_quality_checks",
     "determine_checks",
     "load_quality_context",
     "render_config_warnings",

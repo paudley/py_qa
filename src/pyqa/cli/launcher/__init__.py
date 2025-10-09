@@ -401,7 +401,10 @@ def _download_uv_archive() -> Path:
     # generated URL never uses file or custom schemes, so this network fetch is
     # a deliberate and safe dependency bootstrap.
     # ``urllib`` fetch is limited to the trusted upgrade URL constructed above.
-    with urllib.request.urlopen(url) as response, open(archive_path, "wb") as handle:  # nosec B310
+    with (
+        urllib.request.urlopen(url) as response,
+        open(archive_path, "wb") as handle,
+    ):  # nosec B310 suppression_valid: HTTPS download target is pinned to an official GitHub release artifact and never incorporates user input.
         shutil.copyfileobj(response, handle)
     return archive_path
 

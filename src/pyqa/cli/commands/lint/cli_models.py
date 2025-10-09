@@ -66,6 +66,13 @@ PYQA_RULES_HELP: Final[str] = "Enable pyqa-specific lint rules even when running
 CHECK_INTERFACES_HELP: Final[str] = "Run the pyqa interface enforcement linter and exit."
 CHECK_DI_HELP: Final[str] = "Run the dependency-injection guardrails linter and exit."
 CHECK_MODULE_DOCS_HELP: Final[str] = "Validate required MODULE.md documentation files and exit."
+PYQA_PYTHON_HYGIENE_HELP: Final[str] = "Run the pyqa-specific hygiene checks (SystemExit and print guards) and exit."
+SHOW_VALID_SUPPRESSIONS_HELP: Final[str] = "Display validated suppressions with their justifications."
+LICENSE_HEADER_HELP: Final[str] = "Run the license header compliance checker and exit."
+COPYRIGHT_HELP: Final[str] = "Run the copyright notice consistency checker and exit."
+PYTHON_HYGIENE_HELP: Final[str] = "Run the Python hygiene checker (debug breakpoints, bare excepts) and exit."
+FILE_SIZE_HELP: Final[str] = "Run the file size threshold checker and exit."
+SCHEMA_SYNC_HELP: Final[str] = "Run the pyqa schema synchronisation checker and exit."
 FILTER_HELP: Final[str] = "Filter stdout/stderr from TOOL using regex (TOOL:pattern)."
 OUTPUT_MODE_HELP: Final[str] = "Output mode: concise, pretty, or raw."
 REPORT_JSON_HELP: Final[str] = "Write JSON report to the provided path."
@@ -786,6 +793,34 @@ def _meta_runtime_checks_dependency(
         bool,
         typer.Option(False, "--check-module-docs", help=CHECK_MODULE_DOCS_HELP),
     ],
+    check_pyqa_python_hygiene: Annotated[
+        bool,
+        typer.Option(False, "--check-pyqa-python-hygiene", help=PYQA_PYTHON_HYGIENE_HELP),
+    ],
+    show_valid_suppressions: Annotated[
+        bool,
+        typer.Option(False, "--show-valid-suppressions", help=SHOW_VALID_SUPPRESSIONS_HELP),
+    ],
+    check_license_header: Annotated[
+        bool,
+        typer.Option(False, "--check-license-header", help=LICENSE_HEADER_HELP),
+    ],
+    check_copyright: Annotated[
+        bool,
+        typer.Option(False, "--check-copyright", help=COPYRIGHT_HELP),
+    ],
+    check_python_hygiene: Annotated[
+        bool,
+        typer.Option(False, "--check-python-hygiene", help=PYTHON_HYGIENE_HELP),
+    ],
+    check_file_size: Annotated[
+        bool,
+        typer.Option(False, "--check-file-size", help=FILE_SIZE_HELP),
+    ],
+    check_schema_sync: Annotated[
+        bool,
+        typer.Option(False, "--check-schema-sync", help=SCHEMA_SYNC_HELP),
+    ],
     pyqa_rules: Annotated[
         bool,
         typer.Option(False, "--pyqa-rules", help=PYQA_RULES_HELP),
@@ -801,6 +836,13 @@ def _meta_runtime_checks_dependency(
         check_interfaces=check_interfaces,
         check_di=check_di,
         check_module_docs=check_module_docs,
+        check_pyqa_python_hygiene=check_pyqa_python_hygiene,
+        show_valid_suppressions=show_valid_suppressions,
+        check_license_header=check_license_header,
+        check_copyright=check_copyright,
+        check_python_hygiene=check_python_hygiene,
+        check_file_size=check_file_size,
+        check_schema_sync=check_schema_sync,
         pyqa_rules=pyqa_rules,
     )
 
@@ -826,6 +868,13 @@ def _meta_params_dependency(
             check_interfaces=True,
             check_di=True,
             check_module_docs=True,
+            check_pyqa_python_hygiene=True,
+            show_valid_suppressions=False,
+            check_license_header=True,
+            check_copyright=True,
+            check_python_hygiene=True,
+            check_file_size=True,
+            check_schema_sync=True,
             pyqa_rules=True,
         )
     else:
@@ -953,11 +1002,17 @@ __all__ = (
     "CLOSURES_HELP",
     "SIGNATURES_HELP",
     "CACHE_HELP",
+    "CHECK_DI_HELP",
+    "CHECK_INTERFACES_HELP",
+    "CHECK_MODULE_DOCS_HELP",
+    "COPYRIGHT_HELP",
     "FETCH_ALL_TOOLS_HELP",
     "FILTER_HELP",
+    "FILE_SIZE_HELP",
     "JOBS_HELP",
     "LINE_LENGTH_HELP",
     "LintDisplayOptions",
+    "LICENSE_HEADER_HELP",
     "NORMAL_PRESET_HELP",
     "OUTPUT_MODE_CHOICES",
     "OUTPUT_MODE_CONCISE",
@@ -967,11 +1022,15 @@ __all__ = (
     "PR_SUMMARY_SEVERITIES",
     "PR_SUMMARY_TEMPLATE_HELP",
     "PYLINT_FAIL_UNDER_HELP",
+    "PYTHON_HYGIENE_HELP",
+    "PYQA_PYTHON_HYGIENE_HELP",
     "REPORT_JSON_HELP",
     "SENSITIVITY_CHOICES",
     "SENSITIVITY_HELP",
     "STRICTNESS_CHOICES",
     "STRICT_CONFIG_HELP",
+    "SCHEMA_SYNC_HELP",
+    "SHOW_VALID_SUPPRESSIONS_HELP",
     "TOOL_INFO_HELP",
     "TYPE_CHECKING_HELP",
     "USE_LOCAL_LINTERS_HELP",

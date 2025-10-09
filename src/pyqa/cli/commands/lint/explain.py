@@ -6,7 +6,8 @@ from __future__ import annotations
 
 from rich.table import Table
 
-from ....orchestration.tool_selection import SelectionResult, ToolDecision
+from pyqa.interfaces.orchestration_selection import SelectionResult, ToolDecision
+
 from .runtime import LintRuntimeContext
 
 _CHECKMARK = "✓"
@@ -18,21 +19,33 @@ def render_explain_tools(runtime: LintRuntimeContext, selection: SelectionResult
 
     logger = runtime.state.logger
     table = Table(title="Tool Selection Plan", show_lines=False, box=None)
+    table.add_column("Order", justify="right", style="bold")
     table.add_column("Tool", style="bold")
     table.add_column("Family", style="dim")
     table.add_column("Action", style="bold")
     table.add_column("Reasons", overflow="fold")
     table.add_column("Indicators", overflow="fold", style="dim")
+    table.add_column("Description", overflow="fold")
 
-    for decision in selection.decisions:
+    run_index = {name: index + 1 for index, name in enumerate(selection.run_names)}
+    registry = runtime.registry
+
+    sorted_decisions = sorted(selection.decisions, key=lambda decision: decision.name.lower())
+
+    for decision in sorted_decisions:
         reasons = ", ".join(decision.reasons) if decision.reasons else ""
         indicators = _format_indicators(decision)
+        order_value = run_index.get(decision.name)
+        order_display = str(order_value) if order_value is not None else "—"
+        description = _lookup_description(registry, decision.name)
         table.add_row(
+            order_display,
             decision.name,
             decision.family,
             decision.action,
             reasons,
             indicators,
+            description,
         )
 
     logger.console.print(table)
@@ -67,6 +80,13 @@ def _format_indicators(decision: ToolDecision) -> str:
 
 def _format_toggle(label: str, value: bool) -> str:
     return f"{label}={_CHECKMARK if value else _CROSS}"
+
+
+def _lookup_description(registry, tool_name: str) -> str:
+    tool = registry.try_get(tool_name)
+    if tool is None:
+        return ""
+    return tool.description or ""
 
 
 __all__ = ["render_explain_tools"]

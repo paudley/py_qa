@@ -9,11 +9,11 @@ from typing import Annotated, Final
 import typer
 from rich.progress import Progress
 
-from pyqa.runtime.console import is_tty
+from pyqa.interfaces.core import detect_tty
+from pyqa.interfaces.orchestration_selection import PHASE_ORDER, PhaseLiteral, UnknownToolRequestedError
 
 from ....config import ConfigError
 from ....linting.registry import iter_internal_linters
-from ....orchestration.tool_selection import PHASE_ORDER, PhaseLiteral
 from ....platform.workspace import is_py_qa_workspace
 from ...core.config_builder import build_config
 from ...core.runtime import ServiceResolutionError
@@ -152,6 +152,11 @@ def _validate_cli_combinations(inputs: LintCLIInputs) -> None:
         meta.check_signatures,
         meta.check_cache_usage,
         meta.check_value_types,
+        meta.check_license_header,
+        meta.check_copyright,
+        meta.check_python_hygiene,
+        meta.check_file_size,
+        meta.check_schema_sync,
     )
     if any(check_flags) and any(
         (
@@ -203,12 +208,17 @@ def _run_lint_pipeline(runtime: LintRuntimeContext) -> None:
     config = runtime.config
     controller = ExecutionProgressController(
         runtime,
-        is_terminal=is_tty(),
+        is_terminal=detect_tty(),
         progress_factory=Progress,
     )
     controller.install(runtime.hooks)
 
-    result = runtime.orchestrator.run(config, root=runtime.state.root)
+    try:
+        result = runtime.orchestrator.run(config, root=runtime.state.root)
+    except UnknownToolRequestedError as exc:
+        _handle_unknown_only_error(runtime.state.logger, exc)
+        controller.stop()
+        raise typer.Exit(code=1) from exc
 
     controller.advance_rendering_phase()
 
@@ -233,6 +243,17 @@ def _run_lint_pipeline(runtime: LintRuntimeContext) -> None:
         annotation_provider=annotation_provider,
     )
     raise typer.Exit(code=1 if issues_present else 0)
+
+
+def _handle_unknown_only_error(logger: CLILogger, exc: UnknownToolRequestedError) -> None:
+    """Log a fatal error when ``--only`` references unknown tools.
+
+    Args:
+        logger: CLI logger used to render the fatal message.
+        exc: Exception containing the missing tool identifiers.
+    """
+
+    logger.fail(str(exc))
 
 
 def _exit_if_handled(outcome: MetaActionOutcome) -> None:

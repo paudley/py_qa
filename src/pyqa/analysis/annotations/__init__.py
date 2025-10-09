@@ -4,13 +4,8 @@
 
 from __future__ import annotations
 
-from .engine import (
-    AnnotationEngine,
-    DiagnosticAnnotation,
-    HighlightKind,
-    MessageAnalysis,
-    MessageSpan,
-)
+from ...interfaces.analysis import SimpleMessageSpan as MessageSpan
+from .engine import AnnotationEngine, DiagnosticAnnotation, HighlightKind, MessageAnalysis
 
 __all__ = [
     "AnnotationEngine",

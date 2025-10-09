@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from pyqa.runtime.console import console_manager
+from pyqa.interfaces.core import get_console_manager
 
 from ...cache import ResultCache, build_cache_context
 from ...plugins import (
@@ -115,7 +115,7 @@ def register_default_services(container: ServiceContainer) -> None:
 
     container.register(
         "console_factory",
-        lambda _: console_manager.get,
+        lambda _: get_console_manager().get,
     )
 
     container.register(

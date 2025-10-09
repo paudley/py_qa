@@ -12,7 +12,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from pyqa.runtime.console import console_manager
+from pyqa.interfaces.core import get_console_manager
 
 from ...config import OutputConfig
 from ...core.metrics import SUPPRESSION_LABELS, FileMetrics, compute_file_metrics
@@ -53,7 +53,7 @@ def emit_stats_panel(result: RunResult, cfg: OutputConfig, diagnostics_count: in
     if not cfg.show_stats:
         return
     snapshot = compute_stats_snapshot(result, diagnostics_count)
-    console = console_manager.get(color=cfg.color, emoji=cfg.emoji)
+    console = get_console_manager().get(color=cfg.color, emoji=cfg.emoji)
     panel = create_stats_panel(snapshot, cfg)
     console.print(panel)
 

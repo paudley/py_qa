@@ -19,10 +19,9 @@ from pyqa.core.severity import (
     apply_severity_rules,
 )
 
-from ..analysis.providers import NullAnnotationProvider
 from ..config import DedupeConfig
 from ..core.models import Diagnostic, RawDiagnostic, RunResult
-from ..interfaces.analysis import AnnotationProvider
+from ..interfaces.analysis import AnnotationProvider, NullAnnotationProvider
 
 _SEVERITY_RANK: MutableMapping[Severity, int] = {
     Severity.ERROR: 3,

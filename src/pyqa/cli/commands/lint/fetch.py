@@ -21,7 +21,7 @@ from rich.progress import (
 from rich.table import Table
 
 from pyqa.core.environment.tool_env.models import PreparedCommand
-from pyqa.runtime.console import console_manager, is_tty
+from pyqa.interfaces.core import detect_tty, get_console_manager
 
 from ....config import Config
 from ....tools.base import Tool
@@ -70,8 +70,8 @@ def render_fetch_all_tools(
     config = runtime.config
     state = runtime.state
     total_actions = sum(len(tool.actions) for tool in DEFAULT_REGISTRY.tools())
-    progress_enabled = total_actions > 0 and not state.display.quiet and config.output.color and is_tty()
-    console = console_manager.get(color=config.output.color, emoji=config.output.emoji)
+    progress_enabled = total_actions > 0 and not state.display.quiet and not config.output.quiet and detect_tty()
+    console = get_console_manager().get(color=config.output.color, emoji=config.output.emoji)
     verbose = state.display.verbose
 
     results = (

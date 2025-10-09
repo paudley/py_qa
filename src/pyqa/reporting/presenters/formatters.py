@@ -11,12 +11,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from ...analysis.providers import NullAnnotationProvider
 from ...config import OutputConfig
 from ...core.logging import colorize, emoji
 from ...core.models import Diagnostic, RunResult
 from ...filesystem.paths import normalize_path
-from ...interfaces.analysis import AnnotationProvider
+from ...interfaces.analysis import AnnotationProvider, NullAnnotationProvider
 from ..advice.panels import render_advice_panel
 from ..advice.refactor import render_refactor_navigator
 from ..output.diagnostics import (
@@ -212,10 +211,11 @@ def _render_concise_summary(
     files_count = len(result.files)
     cached_actions = sum(1 for outcome in result.outcomes if outcome.cached)
 
-    label_text = "Failed" if failed_actions else "Passed"
-    summary_symbol = emoji("❌" if failed_actions else "✅", cfg.emoji)
+    issues_present = failed_actions > 0 or diagnostics_count > 0
+    label_text = "Failed" if issues_present else "Passed"
+    summary_symbol = emoji("❌" if issues_present else "✅", cfg.emoji)
     summary_label = f"{summary_symbol} {label_text}" if summary_symbol else label_text
-    summary_color = "red" if failed_actions else "green"
+    summary_color = "red" if issues_present else "green"
 
     stats_parts = [
         f"{diagnostics_count} diagnostic(s) across {files_count} file(s)",

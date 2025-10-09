@@ -7,7 +7,7 @@ from __future__ import annotations
 from rich.rule import Rule
 from rich.text import Text
 
-from pyqa.runtime.console import console_manager, is_tty
+from pyqa.interfaces.core import detect_tty, get_console_manager
 
 ANSI = {
     "reset": "\033[0m",
@@ -24,7 +24,7 @@ ANSI = {
 
 def colorize(text: str, code: str, enable: bool) -> str:
     """Wrap ``text`` in ANSI colour codes when *enable* is truthy."""
-    if not enable or not is_tty():
+    if not enable or not detect_tty():
         return text
     if code.startswith("ansi256:"):
         try:
@@ -47,8 +47,8 @@ def _print_line(
     use_emoji: bool,
     use_color: bool | None = None,
 ) -> None:
-    color_enabled = is_tty() if use_color is None else use_color
-    console = console_manager.get(color=color_enabled, emoji=use_emoji)
+    color_enabled = detect_tty() if use_color is None else use_color
+    console = get_console_manager().get(color=color_enabled, emoji=use_emoji)
     text = Text(msg)
     if style and color_enabled:
         text.stylize(style)
@@ -57,7 +57,7 @@ def _print_line(
 
 def section(title: str, *, use_color: bool) -> None:
     """Print a section header."""
-    console = console_manager.get(color=use_color, emoji=True)
+    console = get_console_manager().get(color=use_color, emoji=True)
     if use_color:
         console.print()
         console.print(Rule(title))

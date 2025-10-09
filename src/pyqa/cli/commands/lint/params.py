@@ -165,6 +165,13 @@ class MetaRuntimeChecks:
     check_interfaces: bool
     check_di: bool
     check_module_docs: bool
+    check_pyqa_python_hygiene: bool
+    show_valid_suppressions: bool
+    check_license_header: bool
+    check_copyright: bool
+    check_python_hygiene: bool
+    check_file_size: bool
+    check_schema_sync: bool
     pyqa_rules: bool
 
 
@@ -273,22 +280,46 @@ class LintMetaParams:
         return self.runtime.check_module_docs
 
     @property
-    def check_interfaces(self) -> bool:
-        """Return whether interface enforcement should run."""
+    def check_pyqa_python_hygiene(self) -> bool:
+        """Return whether the pyqa-specific hygiene linter should run."""
 
-        return self.runtime.check_interfaces
-
-    @property
-    def check_di(self) -> bool:
-        """Return whether DI guardrails should run."""
-
-        return self.runtime.check_di
+        return self.runtime.check_pyqa_python_hygiene
 
     @property
-    def check_module_docs(self) -> bool:
-        """Return whether module documentation validation should run."""
+    def show_valid_suppressions(self) -> bool:
+        """Return whether validated suppressions should be surfaced."""
 
-        return self.runtime.check_module_docs
+        return self.runtime.show_valid_suppressions
+
+    @property
+    def check_license_header(self) -> bool:
+        """Return whether license header enforcement should run."""
+
+        return self.runtime.check_license_header
+
+    @property
+    def check_copyright(self) -> bool:
+        """Return whether copyright notice enforcement should run."""
+
+        return self.runtime.check_copyright
+
+    @property
+    def check_python_hygiene(self) -> bool:
+        """Return whether Python hygiene enforcement should run."""
+
+        return self.runtime.check_python_hygiene
+
+    @property
+    def check_file_size(self) -> bool:
+        """Return whether file size enforcement should run."""
+
+        return self.runtime.check_file_size
+
+    @property
+    def check_schema_sync(self) -> bool:
+        """Return whether schema documentation synchronisation should run."""
+
+        return self.runtime.check_schema_sync
 
     @property
     def pyqa_rules(self) -> bool:

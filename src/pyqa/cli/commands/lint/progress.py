@@ -9,17 +9,10 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import TYPE_CHECKING, Final, Literal
 
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TaskID,
-    TextColumn,
-    TimeElapsedColumn,
-)
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
 from rich.text import Text
 
-from pyqa.runtime.console import console_manager
+from pyqa.interfaces.core import get_console_manager
 
 from ...core.runtime import ServiceResolutionError
 from .literals import OUTPUT_MODE_CONCISE
@@ -46,8 +39,8 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only
     from rich.console import Console
 
     from pyqa.core.models import RunResult, ToolOutcome
+    from pyqa.interfaces.orchestration import OrchestratorHooks
 
-    from ....orchestration.orchestrator import OrchestratorHooks
     from .runtime import LintRuntimeContext
 
 
@@ -87,24 +80,19 @@ class ExecutionProgressController:
 
         config = self.runtime.config
         state = self.runtime.state
-        self.enabled = (
-            config.output.output == OUTPUT_MODE_CONCISE
-            and not state.display.quiet
-            and not config.output.quiet
-            and config.output.color
-            and self.is_terminal
-        )
+        self.enabled = self.is_terminal and not state.display.quiet and not config.output.quiet
         if not self.enabled:
             return
 
-        console_factory = console_manager.get
+        console_factory = get_console_manager().get
         services = getattr(self.runtime, "services", None)
         if services is not None:
             try:
                 console_factory = services.resolve("console_factory")
             except ServiceResolutionError:
-                console_factory = console_manager.get
-        console = console_factory(color=config.output.color, emoji=config.output.emoji)
+                console_factory = get_console_manager().get
+        color_enabled = config.output.color and self.is_terminal
+        console = console_factory(color=color_enabled, emoji=config.output.emoji)
         progress = self.progress_factory(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -167,9 +155,9 @@ class ExecutionProgressController:
         lock = self.context.lock
         with lock:
             self._advance(1)
-            color_enabled = self.runtime.config.output.color
-            status_value = "[cyan]rendering output[/]" if color_enabled else STATUS_RENDERING
-            progress.update(task_id, current_status=status_value)
+        color_enabled = self.runtime.config.output.color and self.is_terminal
+        status_value = "[cyan]rendering output[/]" if color_enabled else STATUS_RENDERING
+        progress.update(task_id, current_status=status_value)
 
     def finalize(self, success: bool) -> Text | None:
         """Finalize the progress display and return a summary message.
@@ -187,9 +175,9 @@ class ExecutionProgressController:
         progress = self.context.progress
         task_id = self.context.task_id
         lock = self.context.lock
+        color_enabled = self.runtime.config.output.color and self.is_terminal
         with lock:
             status_literal = STATUS_DONE if success else STATUS_ISSUES
-            color_enabled = self.runtime.config.output.color
             status_value = (
                 ("[green]done[/]" if success else "[red]issues detected[/]") if color_enabled else status_literal
             )

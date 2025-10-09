@@ -375,3 +375,78 @@ Deliverable: Completion of Phase 8 means every coding-rule exception is justifie
 
 Total: roughly 14–15 sprints (~6.5 months) assuming two-week iterations and
 parallel work streams where feasible.
+
+### Phase 10 – Quality Tool Decomposition
+
+*Elevate repository quality checks into first-class lint tools aligned with the
+internal tooling model.*
+
+1. **Schema enhancement** – extend the tool metadata schema with an optional
+   `automatically_fix` flag and set it to `true` for all existing fix/format
+   tools so behaviour remains declarative. ✅
+2. **Retire monolithic quality linter** – remove `run_quality_linter` and the
+   single "quality" entry from the internal registry. ✅
+3. **Introduce dedicated internal tools** – surface the following checks with
+   standalone `--check-*` toggles and `automatically_fix=false` ✅:
+   * `license-header`
+   * `copyright`
+   * `python-hygiene`
+   * `file-size`
+   * `pyqa-schema-sync` (pyqa-scoped only)
+4. **Pipeline integration** – register the new tools, expose them via
+   `--explain-tools`, and ensure they activate at `sensitivity >= strict`
+   without attempting automatic fixes during lint runs. ✅
+5. **Quality CLI alignment** – refactor `check-quality` to dispatch through the
+   new tool implementations while keeping `--fix` semantics for license and
+   copyright remediation. ⬜️
+6. **Documentation refresh** – update developer docs, Phase 9–10 narrative, and
+   selection guidance to reflect the new tooling and the `automatically_fix`
+   metadata. ✅
+
+### Phase 11 – Suppression Justifications & Hygiene Hardening
+
+1. **Suppression annotations** – extend the internal suppressions linter with
+   a `suppression_valid:` marker, add CLI support for
+   `--show-valid-suppressions`, and retrofit existing suppressions with
+   full-sentence justifications.
+2. **Hygiene upgrades** – expand the base `python-hygiene` tool to catch
+   `__main__` blocks, blanket `except Exception:` handlers lacking inline
+   rationale, and debugging imports (pdb/ipdb).
+3. **PyQA hygiene overlay** – introduce a pyqa-scoped hygiene companion that
+   flags `SystemExit`/`os._exit` usage outside entry points and stray
+   `print`/`pprint` calls.
+4. **Validation** – add targeted tests covering the new suppressions pathway
+   and hygiene rules to prevent regressions.
+
+### Phase 12 – Interface Realignment & SOLID Enforcement
+
+1. **Audit & admit missteps (SRP)** – export `pyqa-interfaces` diagnostics,
+   explicitly record current violations (direct concrete imports, accidental
+   re-exports, interface modules containing implementation code) and assign
+   ownership per domain so remediation tasks stay single-purpose.
+2. **Purge concrete code from interfaces (DIP)** – remove interface modules that
+   currently wrap or re-export implementations (`analysis_bootstrap`,
+   `analysis_services`, `reporting`, `installers_dev`, `installers_update`,
+   orchestrator hooks). Reinstate pure protocols/dataclasses inside
+   `pyqa.interfaces.*` and relocate concrete helpers back to their runtime
+   packages.
+3. **Rebuild abstractions (ISP/LSP)** – create focused protocols for console
+   access, orchestration selection, installers, and reporting adapters without
+   embedding logic. Ensure interfaces expose only contracts while concrete
+   modules register implementations via DI or factories.
+4. **Refactor consumers (OCP)** – update CLI, orchestration, reporting, and
+   runtime modules to depend on the rebuilt abstractions, add adapters where
+   needed, reintroduce Google-style docstrings, and tighten typing using
+   `Final`, `Literal`, and Protocol-based design.
+5. **Documentation & validation (SOLID governance)** – refresh module docs and
+   reorg narratives to describe the final interface boundaries, expand lint and
+   pytest coverage, and run `./lint -n --only pyqa-interfaces` plus strict lint
+   presets to guarantee the DIP-aligned architecture remains clean.
+
+> **Backwards compatibility constraint:** The reorg does not preserve legacy
+> import paths. Introducing backwards-compatibility shims or re-exports defeats
+> the SOLID goals and is explicitly banned; all modules must consume the new
+> interface seams directly.
+> **Wrapper ban:** Interface modules may define protocols, data classes, and
+> pure helper utilities only; wrapping or forwarding to concrete implementations
+> (re-exports, adapter modules that call runtime code) is prohibited.

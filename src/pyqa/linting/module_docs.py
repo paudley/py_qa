@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Phase-9 linter ensuring package documentation files are present."""
 
 from __future__ import annotations

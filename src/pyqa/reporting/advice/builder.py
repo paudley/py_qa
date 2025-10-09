@@ -18,11 +18,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
-from ...analysis.providers import NullAnnotationProvider
 from ...analysis.services import resolve_function_scale_estimator
 from ...catalog.metadata import catalog_duplicate_hint_codes
 from ...filesystem.paths import normalize_path
-from ...interfaces.analysis import AnnotationProvider, FunctionScaleEstimator
+from ...interfaces.analysis import AnnotationProvider, FunctionScaleEstimator, NullAnnotationProvider
 
 if TYPE_CHECKING:  # pragma: no cover - types only
     pass

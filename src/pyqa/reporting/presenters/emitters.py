@@ -12,11 +12,9 @@ from typing import Final, cast
 
 from pyqa.core.severity import Severity, severity_to_sarif
 
-from ...analysis.annotations import HighlightKind
-from ...analysis.providers import NullAnnotationProvider
 from ...core.models import Diagnostic, RunResult
 from ...core.serialization import serialize_outcome
-from ...interfaces.analysis import AnnotationProvider
+from ...interfaces.analysis import AnnotationProvider, HighlightKind, NullAnnotationProvider
 from ...utils.bool_utils import interpret_optional_bool
 from ..advice.builder import AdviceBuilder, AdviceEntry
 

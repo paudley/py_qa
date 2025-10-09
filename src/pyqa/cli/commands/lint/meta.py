@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from pyqa.interfaces.orchestration_selection import SelectionResult, UnknownToolRequestedError
+
 from ....catalog.errors import CatalogIntegrityError, CatalogValidationError
 from ....tools.builtin_registry import initialize_registry
 from ....tools.registry import DEFAULT_REGISTRY
@@ -89,7 +91,11 @@ def _handle_explain_tools_action(runtime: LintRuntimeContext) -> MetaActionOutco
         runtime.state.logger.fail("Current execution pipeline does not support --explain-tools")
         return MetaActionOutcome(exit_code=1, handled=True)
 
-    selection = plan_method(runtime.config, root=runtime.state.root)
+    try:
+        selection: SelectionResult = plan_method(runtime.config, root=runtime.state.root)
+    except UnknownToolRequestedError as exc:
+        runtime.state.logger.fail(str(exc))
+        return MetaActionOutcome(exit_code=1, handled=True)
     render_explain_tools(runtime, selection)
     return MetaActionOutcome(exit_code=0, handled=True)
 

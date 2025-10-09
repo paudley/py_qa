@@ -17,54 +17,71 @@ if TYPE_CHECKING:  # pragma: no cover - type checking import
 _PYTHON_EXTENSIONS: Final[tuple[str, ...]] = (".py", ".pyi")
 
 
-def collect_python_files(state: PreparedLintState) -> list[Path]:
-    """Return Python source files addressed by the current lint invocation.
+def collect_target_files(
+    state: PreparedLintState,
+    *,
+    extensions: Iterable[str] | None = None,
+) -> list[Path]:
+    """Return lint target files filtered by optional extensions.
 
     Args:
-        state: Prepared lint state exposing discovery options and root paths.
+        state: Prepared lint state exposing user-supplied targets.
+        extensions: Optional iterable of lowercase extensions that should be
+            included. When ``None`` all discovered files are returned.
 
     Returns:
-        Sorted list of Python files targeted for internal lint passes.
+        Sorted list of resolved file paths matching the requested filters.
     """
 
     options = state.options.target_options
     candidates: set[Path] = set()
     root = options.root.resolve()
+    extension_filter = {ext.lower() for ext in extensions} if extensions is not None else None
     paths = [path.resolve() for path in options.paths]
     if not paths and not options.dirs:
         paths.append(root)
+
+    def _maybe_add(file_path: Path) -> None:
+        if extension_filter is None or file_path.suffix.lower() in extension_filter:
+            candidates.add(file_path)
+
     for path in paths:
         if _is_excluded(path, options.exclude, root):
             continue
-        if path.is_file() and path.suffix in _PYTHON_EXTENSIONS:
-            candidates.add(path)
+        if path.is_file():
+            _maybe_add(path)
         elif path.is_dir():
-            candidates.update(_walk_python_files(path, options.exclude, root))
+            candidates.update(_walk_files(path, options.exclude, root, extension_filter))
     for directory in options.dirs:
         dir_path = directory.resolve()
-        candidates.update(_walk_python_files(dir_path, options.exclude, root))
+        candidates.update(_walk_files(dir_path, options.exclude, root, extension_filter))
     return sorted(candidates)
 
 
-def _walk_python_files(directory: Path, exclude: Iterable[Path], root: Path) -> set[Path]:
-    """Return Python files beneath ``directory`` after applying exclusions.
+def collect_python_files(state: PreparedLintState) -> list[Path]:
+    """Return Python source files addressed by the current lint invocation."""
 
-    Args:
-        directory: Directory to scan recursively.
-        exclude: Iterable of paths that should be excluded from scanning.
-        root: Repository root used for relative exclusion matching.
+    return collect_target_files(state, extensions=_PYTHON_EXTENSIONS)
 
-    Returns:
-        Set of resolved Python file paths.
-    """
+
+def _walk_files(
+    directory: Path,
+    exclude: Iterable[Path],
+    root: Path,
+    extension_filter: set[str] | None,
+) -> set[Path]:
+    """Return files beneath ``directory`` while applying exclusions."""
 
     excluded = [path.resolve() for path in exclude]
     results: set[Path] = set()
-    for extension in _PYTHON_EXTENSIONS:
-        for candidate in directory.rglob(f"*{extension}"):
-            if _is_excluded(candidate, excluded, root):
-                continue
-            results.add(candidate)
+    for candidate in directory.rglob("*"):
+        if not candidate.is_file():
+            continue
+        if _is_excluded(candidate, excluded, root):
+            continue
+        if extension_filter and candidate.suffix.lower() not in extension_filter:
+            continue
+        results.add(candidate.resolve())
     return results
 
 
@@ -96,4 +113,4 @@ def _is_excluded(path: Path, excluded: Iterable[Path], root: Path) -> bool:
     return False
 
 
-__all__ = ["collect_python_files"]
+__all__ = ["collect_target_files", "collect_python_files"]

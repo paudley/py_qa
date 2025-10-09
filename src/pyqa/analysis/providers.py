@@ -8,7 +8,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
-from pyqa.interfaces.analysis import AnnotationProvider, ContextResolver, MessageSpan
+from pyqa.interfaces.analysis import AnnotationProvider, ContextResolver, SimpleMessageSpan
 
 
 class NullAnnotationProvider(AnnotationProvider):
@@ -18,7 +18,7 @@ class NullAnnotationProvider(AnnotationProvider):
         return {}
 
     def message_spans(self, message: str) -> Sequence[MessageSpan]:
-        return ()
+        return (SimpleMessageSpan(start=0, end=0, style=""),)
 
     def message_signature(self, message: str) -> Sequence[str]:
         return ()

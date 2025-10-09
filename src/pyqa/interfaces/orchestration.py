@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -13,8 +14,8 @@ if TYPE_CHECKING:
     from pyqa.core.environment.tool_env.models import PreparedCommand
 
     from ..config import Config
-    from ..core.models import RunResult
-    from ..orchestration.tool_selection import SelectionResult
+    from ..core.models import RunResult, ToolOutcome
+    from .orchestration_selection import SelectionResult
 
 
 @runtime_checkable
@@ -94,16 +95,23 @@ class ExecutionPipeline(Protocol):
         root: Path,
         callback: Callable[..., None] | None = None,
     ) -> Sequence[tuple[str, str, PreparedCommand | None, str | None]]:
-        """Prepare all tools without executing them.
+        """Prepare all tools without executing them."""
 
-        Args:
-            config: Configuration object controlling preparation behaviour.
-            root: Filesystem root used for resolution of project paths.
-            callback: Optional callback invoked for progress notifications.
-
-        Returns:
-            Sequence[tuple[str, str, PreparedCommand | None, str | None]]:
-            Preparation results for each tool action (tool name, action name,
-            prepared command metadata, optional error message).
-        """
         raise NotImplementedError
+
+
+@dataclass(slots=True)
+class OrchestratorHooks:
+    """Lifecycle callbacks invoked around orchestration phases."""
+
+    before_tool: Callable[[str], None] | None = None
+    after_tool: Callable[[ToolOutcome], None] | None = None
+    after_discovery: Callable[[int], None] | None = None
+    after_execution: Callable[[RunResult], None] | None = None
+    after_plan: Callable[[int], None] | None = None
+
+    @property
+    def supported_phases(self) -> Sequence[str]:
+        """Return lifecycle phases that may trigger hooks."""
+
+        return ("plan", "discovery", "tool", "execution")

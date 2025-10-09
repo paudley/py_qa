@@ -15,8 +15,7 @@ from pyqa.cache.in_memory import memoize
 
 from ...core.logging import warn
 from ...core.models import RunResult
-from ...interfaces.analysis import AnnotationProvider, ContextResolver
-from ...interfaces.analysis import MessageSpan as MessageSpanProtocol
+from ...interfaces.analysis import AnnotationProvider, ContextResolver, SimpleMessageSpan
 from ..spacy.loader import SpacyLanguage, load_language
 from ..spacy.message_spans import build_spacy_spans, iter_signature_tokens
 from ..warnings import record_tool_warning
@@ -29,6 +28,7 @@ HighlightKind = Literal[
     "variable",
     "attribute",
 ]
+
 _PATH_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+(?:\.[A-Za-z0-9_]+)?)",
 )
@@ -60,21 +60,11 @@ _MIN_CAMEL_LENGTH: Final[int] = 2
 _UNDERSCORE_CHAR: Final[str] = "_"
 
 
-@dataclass(frozen=True, slots=True)
-class MessageSpan:
-    """Represents a highlighted segment within a message string."""
-
-    start: int
-    end: int
-    style: str
-    kind: HighlightKind | None = None
-
-
 @dataclass(frozen=True)
 class MessageAnalysis:
     """Cached NLP artefacts for a diagnostic message."""
 
-    spans: tuple[MessageSpan, ...]
+    spans: tuple[SimpleMessageSpan, ...]
     signature: tuple[str, ...]
 
 
@@ -84,7 +74,7 @@ class DiagnosticAnnotation:
 
     function: str | None
     class_name: str | None
-    message_spans: tuple[MessageSpan, ...]
+    message_spans: tuple[SimpleMessageSpan, ...]
 
 
 class AnnotationEngine(AnnotationProvider):
@@ -148,19 +138,19 @@ class AnnotationEngine(AnnotationProvider):
             record_tool_warning(result, message)
         return annotations
 
-    def message_spans(self, message: str) -> Sequence[MessageSpanProtocol]:
+    def message_spans(self, message: str) -> Sequence[MessageSpan]:
         """Return cached highlight spans for ``message``.
 
         Args:
             message: Diagnostic text to analyse.
 
         Returns:
-            Sequence[MessageSpanProtocol]: Span metadata describing highlighted
+            Sequence[MessageSpan]: Span metadata describing highlighted
             regions detected within ``message``.
         """
 
         analysis = self._analyse_message(message)
-        return cast(Sequence[MessageSpanProtocol], analysis.spans)
+        return analysis.spans
 
     def message_signature(self, message: str) -> Sequence[str]:
         """Return a semantic signature extracted from ``message``.
@@ -268,7 +258,7 @@ def _build_span(start: int, end: int, style: str, kind: str | None) -> MessageSp
     """
 
     highlight_kind = cast(HighlightKind | None, kind)
-    return MessageSpan(start=start, end=end, style=style, kind=highlight_kind)
+    return SimpleMessageSpan(start=start, end=end, style=style, kind=highlight_kind)
 
 
 def _heuristic_spans(message: str) -> tuple[list[MessageSpan], list[str]]:
@@ -385,7 +375,7 @@ class _SpanCollector:
         if 0 <= start < end <= len(self.message):
             self.tokens.append(value.lower())
             self.spans.append(
-                MessageSpan(start=start, end=end, style=spec.style, kind=spec.kind),
+                SimpleMessageSpan(start=start, end=end, style=spec.style, kind=spec.kind),
             )
 
 

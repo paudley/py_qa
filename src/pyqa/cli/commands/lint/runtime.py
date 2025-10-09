@@ -7,19 +7,29 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from types import SimpleNamespace
 
 from ....analysis.bootstrap import register_analysis_services
 from ....catalog.model_catalog import CatalogSnapshot
 from ....config import Config
+from ....core.environment.tool_env.models import PreparedCommand
+from ....core.models import RunResult
 from ....discovery import build_default_discovery
 from ....discovery.base import SupportsDiscovery
-from ....interfaces.orchestration import ExecutionPipeline
+from ....interfaces.orchestration import ExecutionPipeline, OrchestratorHooks
+from ....interfaces.orchestration_selection import SelectionResult
 from ....linting.registry import configure_internal_tool_defaults, ensure_internal_tools_registered
-from ....orchestration.orchestrator import OrchestratorHooks
+from ....orchestration.orchestrator import (
+    FetchCallback,
+    Orchestrator,
+)
+from ....orchestration.orchestrator import OrchestratorHooks as ConcreteOrchestratorHooks
+from ....orchestration.orchestrator import (
+    OrchestratorOverrides,
+)
 from ....tools.builtin_registry import initialize_registry
 from ....tools.registry import DEFAULT_REGISTRY, ToolRegistry
-from ...core.orchestration import build_orchestrator_pipeline
 from ...core.runtime import ServiceContainer, ServiceResolutionError, register_default_services
 from .preparation import PreparedLintState
 
@@ -30,6 +40,7 @@ class LintRuntimeContext:
 
     state: PreparedLintState
     config: Config
+    registry: ToolRegistry
     orchestrator: ExecutionPipeline
     hooks: OrchestratorHooks
     catalog_snapshot: CatalogSnapshot
@@ -59,25 +70,70 @@ def _default_orchestrator_factory(
     services: ServiceContainer | None = None,
     debug_logger: Callable[[str], None] | None = None,
 ) -> ExecutionPipeline:
-    """Return an execution pipeline backed by the default orchestrator.
+    """Return an execution pipeline backed by the default orchestrator."""
 
-    Args:
-        registry: Tool registry used to resolve available tools.
-        discovery: Discovery strategy responsible for locating project files.
-        hooks: Hook container receiving lifecycle callbacks.
-        services: Optional service container supplying shared factories.
-
-    Returns:
-        ExecutionPipeline: Pipeline adapter wrapping the orchestrator instance.
-    """
-
-    return build_orchestrator_pipeline(
-        registry=registry,
-        discovery=discovery,
-        hooks=hooks,
+    overrides = OrchestratorOverrides(
+        hooks=_coerce_hooks(hooks),
         services=services,
         debug_logger=debug_logger,
     )
+    orchestrator = Orchestrator(registry=registry, discovery=discovery, overrides=overrides)
+    return _OrchestratorExecutionPipeline(orchestrator)
+
+
+def _coerce_hooks(hooks: OrchestratorHooks) -> ConcreteOrchestratorHooks:
+    """Return a concrete orchestrator hooks instance that proxies callbacks."""
+
+    concrete = ConcreteOrchestratorHooks()
+
+    def _proxy(name: str):
+        def _call(*args, **kwargs):
+            callback = getattr(hooks, name)
+            if callback:
+                callback(*args, **kwargs)
+
+        return _call
+
+    concrete.before_tool = _proxy("before_tool")
+    concrete.after_tool = _proxy("after_tool")
+    concrete.after_discovery = _proxy("after_discovery")
+    concrete.after_execution = _proxy("after_execution")
+    concrete.after_plan = _proxy("after_plan")
+    return concrete
+
+
+class _OrchestratorExecutionPipeline(ExecutionPipeline):
+    """Execution pipeline backed by the core orchestrator implementation."""
+
+    def __init__(self, orchestrator: Orchestrator) -> None:
+        self._orchestrator = orchestrator
+
+    @property
+    def pipeline_name(self) -> str:
+        """Return the descriptive pipeline name."""
+
+        return "orchestrator"
+
+    def run(self, config: Config, *, root: Path) -> RunResult:
+        """Execute the orchestrator for ``config`` rooted at ``root``."""
+
+        return self._orchestrator.run(config, root=root)
+
+    def fetch_all_tools(
+        self,
+        config: Config,
+        *,
+        root: Path,
+        callback: FetchCallback | None = None,
+    ) -> list[tuple[str, str, PreparedCommand | None, str | None]]:
+        """Prepare tool executions without running them."""
+
+        return self._orchestrator.fetch_all_tools(config, root=root, callback=callback)
+
+    def plan_tools(self, config: Config, *, root: Path) -> SelectionResult:
+        """Return the orchestrator plan without executing actions."""
+
+        return self._orchestrator.plan_tools(config, root=root)
 
 
 _DEFAULT_SERVICES = ServiceContainer()
@@ -143,6 +199,7 @@ def build_lint_runtime_context(
     return LintRuntimeContext(
         state=state,
         config=config,
+        registry=deps.registry,
         orchestrator=orchestrator,
         hooks=hooks,
         catalog_snapshot=catalog_snapshot,

@@ -9,96 +9,27 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
-from typing import Final, Literal, cast
+from typing import Final
 
 from pyqa.platform.languages import detect_languages
 
 from ..config import Config, SensitivityLevel
-from ..platform.workspace import is_py_qa_workspace
-from ..tools.base import PHASE_NAMES, PhaseLiteral, Tool
+from ..interfaces.orchestration_selection import (
+    DEFAULT_PHASE,
+    PHASE_ORDER,
+    PhaseLiteral,
+    SelectionContext,
+    SelectionResult,
+    ToolDecision,
+    ToolEligibility,
+    ToolFamilyLiteral,
+    UnknownToolRequestedError,
+    build_selection_context,
+)
+from ..tools.base import Tool
 from ..tools.registry import ToolRegistry
 
-_DEFAULT_PHASE: Final[PhaseLiteral] = "lint"
-PHASE_ORDER: Final[tuple[PhaseLiteral, ...]] = cast(tuple[PhaseLiteral, ...], PHASE_NAMES)
-
-ToolFamilyLiteral = Literal["external", "internal", "internal-pyqa", "unknown"]
-
-
-@dataclass(frozen=True, slots=True)
-class SelectionContext:
-    """Derived inputs used to evaluate tool eligibility."""
-
-    config: Config
-    root: Path
-    files: tuple[Path, ...]
-    requested_only: tuple[str, ...]
-    requested_languages: tuple[str, ...]
-    detected_languages: tuple[str, ...]
-    file_extensions: frozenset[str]
-    sensitivity: SensitivityLevel
-    pyqa_workspace: bool
-    pyqa_rules: bool
-
-    @property
-    def language_scope(self) -> frozenset[str]:
-        """Return the languages that should guide selection heuristics."""
-
-        if self.requested_languages:
-            return frozenset(self.requested_languages)
-        return frozenset(self.detected_languages)
-
-
-@dataclass(frozen=True, slots=True)
-class ToolEligibility:
-    """Per-tool predicate evaluation used to explain selection decisions."""
-
-    name: str
-    family: ToolFamilyLiteral
-    phase: str
-    available: bool = True
-    requested_via_only: bool = False
-    language_match: bool | None = None
-    extension_match: bool | None = None
-    config_match: bool | None = None
-    sensitivity_ok: bool | None = None
-    pyqa_scope: bool | None = None
-    default_enabled: bool | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class ToolDecision:
-    """Final verdict for an individual tool."""
-
-    name: str
-    family: ToolFamilyLiteral
-    phase: str
-    action: Literal["run", "skip"]
-    reasons: tuple[str, ...]
-    eligibility: ToolEligibility
-
-
-@dataclass(frozen=True, slots=True)
-class SelectionResult:
-    """Outcome of planning a lint run given current configuration."""
-
-    ordered: tuple[str, ...]
-    decisions: tuple[ToolDecision, ...]
-    context: SelectionContext
-
-    @property
-    def run_names(self) -> tuple[str, ...]:
-        """Return tool names scheduled for execution."""
-
-        return self.ordered
-
-    @property
-    def run_decisions(self) -> tuple[ToolDecision, ...]:
-        """Return decisions corresponding to scheduled tools in run order."""
-
-        sequence = {name: index for index, name in enumerate(self.ordered)}
-        filtered = [decision for decision in self.decisions if decision.action == "run" and decision.name in sequence]
-        filtered.sort(key=lambda decision: sequence[decision.name])
-        return tuple(filtered)
+_DEFAULT_PHASE: Final[PhaseLiteral] = DEFAULT_PHASE
 
 
 @dataclass(slots=True)
@@ -119,6 +50,14 @@ class ToolSelector:
 
         context = self._build_context(cfg, files, root)
         decisions = self._evaluate_with_only(context) if context.requested_only else self._evaluate_standard(context)
+        if context.requested_only:
+            unknown_requested = [
+                decision.name
+                for decision in decisions
+                if decision.eligibility.requested_via_only and not decision.eligibility.available
+            ]
+            if unknown_requested:
+                raise UnknownToolRequestedError(self._deduplicate(unknown_requested))
         run_candidates = [
             decision.name for decision in decisions if decision.action == "run" and decision.eligibility.available
         ]
@@ -158,20 +97,11 @@ class ToolSelector:
     # Context & evaluation helpers
 
     def _build_context(self, cfg: Config, files: Sequence[Path], root: Path) -> SelectionContext:
-        file_tuple = tuple(files)
-        detected_languages = tuple(sorted(detect_languages(root, file_tuple)))
-        extensions = frozenset(path.suffix.lower() for path in file_tuple if path.suffix)
-        return SelectionContext(
-            config=cfg,
+        return build_selection_context(
+            cfg,
+            files,
+            detected_languages=detect_languages(root, files),
             root=root,
-            files=file_tuple,
-            requested_only=tuple(cfg.execution.only),
-            requested_languages=tuple(cfg.execution.languages),
-            detected_languages=detected_languages,
-            file_extensions=extensions,
-            sensitivity=cfg.severity.sensitivity,
-            pyqa_workspace=is_py_qa_workspace(root),
-            pyqa_rules=cfg.execution.pyqa_rules,
         )
 
     def _evaluate_with_only(self, context: SelectionContext) -> list[ToolDecision]:
@@ -532,4 +462,5 @@ __all__ = [
     "SelectionResult",
     "ToolDecision",
     "ToolEligibility",
+    "UnknownToolRequestedError",
 ]

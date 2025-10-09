@@ -8,7 +8,7 @@ import shutil
 
 # Bandit: subprocess usage is intentional—we provide a controlled wrapper around
 # external tool execution, normalising arguments and disabling ``shell=True``.
-import subprocess  # nosec B404 - standard library use, safe despite Bandit heuristic
+import subprocess  # nosec B404 suppression_valid: The subprocess module is standard library code and the wrapper enforces safe, shell-free invocation semantics.
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -16,7 +16,9 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     # Bandit: type-only import of subprocess metadata is part of the safe wrapper.
-    from subprocess import CompletedProcess as _CompletedProcess  # nosec B404 - standard library aliasing
+    from subprocess import (
+        CompletedProcess as _CompletedProcess,  # nosec B404 suppression_valid: Type-checking requires the CompletedProcess alias even though it is never executed at runtime.
+    )
 
 
 @dataclass(slots=True)

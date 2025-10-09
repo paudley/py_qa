@@ -1,7 +1,5 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2025 Blackcat Informatics® Inc.
-
-"""Interfaces for diagnostics presentation and advice generation."""
+"""Reporting interfaces (protocols only)."""
 
 from __future__ import annotations
 
@@ -16,10 +14,10 @@ class DiagnosticPresenter(Protocol):
     @property
     def format_name(self) -> str:
         """Return the name of the format produced by the presenter."""
-        raise NotImplementedError("DiagnosticPresenter.format_name must be implemented")
+        raise NotImplementedError
 
     def render(self, diagnostics: Iterable[object]) -> str:
-        """Return the rendered representation for ``diagnostics``."""
+        """Return rendered output for ``diagnostics``."""
         raise NotImplementedError
 
 
@@ -29,9 +27,12 @@ class AdviceProvider(Protocol):
 
     @property
     def provider_name(self) -> str:
-        """Return the human-readable name of the advice provider."""
-        raise NotImplementedError("AdviceProvider.provider_name must be implemented")
+        """Return the identifier of the advice provider."""
+        raise NotImplementedError
 
     def advise(self, diagnostics: Iterable[object]) -> Iterable[str]:
         """Return textual advice for the supplied diagnostics."""
         raise NotImplementedError
+
+
+__all__ = ["AdviceProvider", "DiagnosticPresenter"]

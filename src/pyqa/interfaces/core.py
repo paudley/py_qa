@@ -5,7 +5,10 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Any, Protocol, runtime_checkable
+
+from rich.console import Console
 
 
 @runtime_checkable
@@ -15,9 +18,10 @@ class ConsoleFactory(Protocol):
     @property
     def default_color(self) -> bool:
         """Return whether colour output is enabled by default."""
+
         raise NotImplementedError("ConsoleFactory.default_color must be implemented")
 
-    def __call__(self, *, color: bool, emoji: bool) -> Any:
+    def __call__(self, *, color: bool, emoji: bool) -> Console:
         """Return a console-like object supporting ``print``."""
 
         raise NotImplementedError
@@ -32,7 +36,7 @@ class ConsoleManager(Protocol):
         """Return the default ``(color, emoji)`` tuple managed by the service."""
         raise NotImplementedError("ConsoleManager.managed_presets must be implemented")
 
-    def get(self, *, color: bool, emoji: bool) -> Any:
+    def get(self, *, color: bool, emoji: bool) -> Console:
         """Return a console configured according to the requested options."""
 
         raise NotImplementedError
@@ -98,5 +102,64 @@ __all__ = [
     "ConsoleFactory",
     "ConsoleManager",
     "LoggerFactory",
+    "RichConsoleManager",
     "Serializer",
+    "detect_tty",
+    "get_console_manager",
 ]
+
+
+def detect_tty() -> bool:
+    """Return ``True`` when stdout appears to be backed by a TTY.
+
+    This helper centralises the check so callers can rely on an interface entry
+    point rather than importing the concrete runtime console utilities.
+    """
+
+    try:
+        return sys.stdout.isatty()
+    except (AttributeError, ValueError):
+        return False
+
+
+class RichConsoleManager(ConsoleManager):
+    """Console manager that provisions Rich ``Console`` instances on demand."""
+
+    def __init__(self) -> None:
+        self._cache: dict[tuple[bool, bool], Console] = {}
+
+    @property
+    def managed_presets(self) -> tuple[bool, bool]:
+        """Return the default ``(color, emoji)`` tuple managed by the service."""
+
+        return True, True
+
+    def get(self, *, color: bool, emoji: bool) -> Console:
+        """Return a Rich console configured for the requested options."""
+
+        tty = detect_tty()
+        key = (color, emoji, tty)
+        if key not in self._cache:
+            color_system: str | None = "auto" if color and tty else None
+            self._cache[key] = Console(
+                color_system=color_system,
+                force_terminal=tty,
+                no_color=not (color and tty),
+                emoji=emoji,
+                soft_wrap=True,
+            )
+        return self._cache[key]
+
+    def __call__(self, *, color: bool, emoji: bool) -> Console:
+        """Provide call-friendly access to :meth:`get`."""
+
+        return self.get(color=color, emoji=emoji)
+
+
+_GLOBAL_CONSOLE_MANAGER = RichConsoleManager()
+
+
+def get_console_manager() -> ConsoleManager:
+    """Return the shared console manager instance."""
+
+    return _GLOBAL_CONSOLE_MANAGER

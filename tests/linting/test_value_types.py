@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Tests for the value-type ergonomics linter."""
 
 from __future__ import annotations

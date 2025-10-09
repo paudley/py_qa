@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
 
 from ..config import FileDiscoveryConfig
-from ..orchestration.worker import run_command
+from ..core.runtime.process import CommandOptions, run_command
 from .base import DiscoveryStrategy, is_within_limits, resolve_limit_paths
 
 GitRunner = Callable[[Sequence[str], Path], list[str]]
@@ -148,10 +148,10 @@ class GitDiscovery(DiscoveryStrategy):
             list[str]: Raw stdout lines produced by subprocess execution.
         """
 
-        cp = run_command(cmd, cwd=root)
+        cp = run_command(cmd, options=CommandOptions(cwd=root, capture_output=True, text=True, check=False))
         if cp.returncode != 0:
             return []
-        return cp.stdout.splitlines()
+        return (cp.stdout or "").splitlines()
 
 
 def list_tracked_files(root: Path) -> list[Path]:
@@ -163,7 +163,7 @@ def list_tracked_files(root: Path) -> list[Path]:
     Returns:
         list[Path]: Resolved, tracked file paths.
     """
-    cp = run_command(["git", "ls-files"], cwd=root)
+    cp = run_command(["git", "ls-files"], options=CommandOptions(cwd=root, capture_output=True, text=True, check=False))
     if cp.returncode != 0:
         return []
     files: list[Path] = []

@@ -6,8 +6,18 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
+
+HighlightKind = Literal[
+    "file",
+    "function",
+    "class",
+    "argument",
+    "variable",
+    "attribute",
+]
 
 
 @runtime_checkable
@@ -17,22 +27,26 @@ class MessageSpan(Protocol):
     @property
     def start(self) -> int:
         """Return the inclusive start offset of the span."""
-        raise NotImplementedError("MessageSpan.start must be implemented")
+
+        raise NotImplementedError
 
     @property
     def end(self) -> int:
         """Return the exclusive end offset of the span."""
-        raise NotImplementedError("MessageSpan.end must be implemented")
 
-    @property
-    def kind(self) -> str:
-        """Return the semantic kind associated with the span."""
-        raise NotImplementedError("MessageSpan.kind must be implemented")
+        raise NotImplementedError
 
     @property
     def style(self) -> str:
         """Return the presentation style hint for the span."""
-        raise NotImplementedError("MessageSpan.style must be implemented")
+
+        raise NotImplementedError
+
+    @property
+    def kind(self) -> str | None:
+        """Return the semantic kind associated with the span."""
+
+        raise NotImplementedError
 
 
 @runtime_checkable
@@ -96,3 +110,55 @@ class FunctionScaleEstimator(Protocol):
 
 
 __all__ = ["AnnotationProvider", "ContextResolver", "FunctionScaleEstimator", "MessageSpan"]
+
+
+class NullAnnotationProvider(AnnotationProvider):
+    """Annotation provider that returns empty structures for all requests."""
+
+    def annotate_run(self, result: Any) -> dict[int, Any]:
+        return {}
+
+    def message_spans(self, message: str) -> Sequence[MessageSpan]:
+        return (SimpleMessageSpan(start=0, end=0, style=""),)
+
+    def message_signature(self, message: str) -> Sequence[str]:
+        return ()
+
+
+class NullContextResolver(ContextResolver):
+    """Context resolver that performs no augmentation."""
+
+    def annotate(self, diagnostics: Iterable[Any], *, root: Path) -> None:
+        del diagnostics, root
+
+    def resolve_context_for_lines(
+        self,
+        file_path: str,
+        *,
+        root: Path,
+        lines: Iterable[int],
+    ) -> dict[int, str]:
+        del file_path, root, lines
+        return {}
+
+
+@dataclass(frozen=True, slots=True)
+class SimpleMessageSpan(MessageSpan):
+    """Concrete message span dataclass implementing the protocol."""
+
+    start: int
+    end: int
+    style: str
+    kind: str | None = None
+
+
+__all__ = [
+    "AnnotationProvider",
+    "ContextResolver",
+    "FunctionScaleEstimator",
+    "HighlightKind",
+    "MessageSpan",
+    "SimpleMessageSpan",
+    "NullAnnotationProvider",
+    "NullContextResolver",
+]

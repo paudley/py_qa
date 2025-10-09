@@ -44,6 +44,8 @@ class ToolBehaviour:
 
     default_enabled: bool
     auto_install: bool
+    automatically_fix: bool
+    automatically_fix: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,7 +134,14 @@ class ToolDefinition:
     @property
     def auto_install(self) -> bool:
         """Return ``True`` when the tool supports automatic runtime installation."""
+
         return self.metadata.behaviour.auto_install
+
+    @property
+    def automatically_fix(self) -> bool:
+        """Return ``True`` when fix actions should run automatically."""
+
+        return self.metadata.behaviour.automatically_fix
 
     @property
     def phase(self) -> str:
@@ -301,6 +310,12 @@ def parse_tool_metadata(
         auto_install=optional_bool(
             data.get("autoInstall"),
             key="autoInstall",
+            context=context,
+            default=False,
+        ),
+        automatically_fix=optional_bool(
+            data.get("automatically_fix"),
+            key="automatically_fix",
             context=context,
             default=False,
         ),

@@ -5,6 +5,7 @@
   "extends": ["npm_runtime"],
   "languages": ["javascript", "typescript", "json", "css"],
   "phase": "format",
+  "automatically_fix": true,
   "fileExtensions": [".js", ".jsx", ".ts", ".tsx", ".json", ".css"],
   "configFiles": [".prettierrc", ".prettierrc.json", ".prettierrc.js", "prettier.config.js"],
   "runtime": {

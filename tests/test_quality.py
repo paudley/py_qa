@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
@@ -18,6 +19,7 @@ from pyqa.compliance.quality import (
     check_commit_message,
 )
 from pyqa.core.config.loader import ConfigLoader
+from pyqa.linting.quality import evaluate_quality_checks, run_pyqa_python_hygiene_linter, run_python_hygiene_linter
 from pyqa.tools.settings import tool_setting_schema_as_dict
 
 
@@ -60,6 +62,40 @@ in the Software without restriction, including without limitation the rights
 def _load_quality_config(root: Path):
     loader = ConfigLoader.for_root(root)
     return loader.load()
+
+
+def _build_hygiene_state(root: Path, files: list[Path]) -> SimpleNamespace:
+    return SimpleNamespace(
+        root=root,
+        options=SimpleNamespace(
+            target_options=SimpleNamespace(
+                root=root,
+                paths=list(files),
+                dirs=[],
+                exclude=[],
+                paths_from_stdin=False,
+            ),
+        ),
+        meta=SimpleNamespace(show_valid_suppressions=False),
+        logger=None,
+    )
+
+
+def _build_hygiene_state(root: Path, files: list[Path]) -> SimpleNamespace:
+    return SimpleNamespace(
+        root=root,
+        options=SimpleNamespace(
+            target_options=SimpleNamespace(
+                root=root,
+                paths=list(files),
+                dirs=[],
+                exclude=[],
+                paths_from_stdin=False,
+            ),
+        ),
+        meta=SimpleNamespace(show_valid_suppressions=False),
+        logger=None,
+    )
 
 
 def test_quality_checker_missing_spdx(tmp_path: Path) -> None:
@@ -187,6 +223,152 @@ def test_schema_check_reports_outdated_file(tmp_path: Path) -> None:
 
     assert result.errors
     assert any("Schema documentation out of date" in issue.message for issue in result.errors)
+
+
+def test_python_hygiene_warns_on_main_guard(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    target = tmp_path / "pkg" / "module.py"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        "if __name__ == '__main__':\n    print('debug')\n",
+        encoding="utf-8",
+    )
+
+    config = _load_quality_config(tmp_path)
+    config.severity.sensitivity = "maximum"
+    config.quality.enforce_in_lint = True
+    state = _build_hygiene_state(tmp_path, [target])
+    report = run_python_hygiene_linter(state, emit_to_logger=False, config=config)
+
+    messages = "\n".join(d.message for d in report.outcome.diagnostics)
+    assert "__main__" in messages
+
+
+def test_python_hygiene_warns_on_debug_import(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    target = tmp_path / "package" / "util.py"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("import pdb\n", encoding="utf-8")
+
+    config = _load_quality_config(tmp_path)
+    config.severity.sensitivity = "maximum"
+    state = _build_hygiene_state(tmp_path, [target])
+    report = run_python_hygiene_linter(state, emit_to_logger=False, config=config)
+
+    assert any("Debug import" in diagnostic.message for diagnostic in report.outcome.diagnostics)
+
+
+def test_python_hygiene_broad_exception_requires_comment(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    target = tmp_path / "module.py"
+    target.write_text(
+        "try:\n    pass\nexcept Exception:\n    handle()\n",
+        encoding="utf-8",
+    )
+
+    config = _load_quality_config(tmp_path)
+    config.severity.sensitivity = "maximum"
+    config.quality.enforce_in_lint = True
+    state = _build_hygiene_state(tmp_path, [target])
+    report = run_python_hygiene_linter(state, emit_to_logger=False, config=config)
+
+    assert any("Exception" in diagnostic.message for diagnostic in report.outcome.diagnostics)
+
+
+def test_python_hygiene_allows_justified_broad_exception(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    target = tmp_path / "module.py"
+    target.write_text(
+        "try:\n    pass\nexcept Exception:  # handled centrally for transactional rollback safety\n    rollback()\n",
+        encoding="utf-8",
+    )
+
+    config = _load_quality_config(tmp_path)
+    state = _build_hygiene_state(tmp_path, [target])
+    report = run_python_hygiene_linter(state, emit_to_logger=False, config=config)
+
+    assert not any("Exception" in diagnostic.message for diagnostic in report.outcome.diagnostics)
+
+
+def test_pyqa_python_hygiene_flags_system_exit(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    target = tmp_path / "module.py"
+    target.write_text("raise SystemExit(1)\n", encoding="utf-8")
+
+    config = _load_quality_config(tmp_path)
+    config.severity.sensitivity = "maximum"
+    config.quality.enforce_in_lint = True
+    state = _build_hygiene_state(tmp_path, [target])
+    report = run_pyqa_python_hygiene_linter(state, emit_to_logger=False, config=config)
+
+    assert any("system-exit" in diagnostic.code for diagnostic in report.outcome.diagnostics)
+
+
+def test_pyqa_python_hygiene_skips_cli_system_exit(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    target = tmp_path / "cli" / "commands" / "tool.py"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("raise SystemExit(0)\n", encoding="utf-8")
+
+    config = _load_quality_config(tmp_path)
+    config.severity.sensitivity = "maximum"
+    config.quality.enforce_in_lint = True
+    state = _build_hygiene_state(tmp_path, [target])
+    report = run_pyqa_python_hygiene_linter(state, emit_to_logger=False, config=config)
+
+    assert report.outcome.diagnostics == []
+
+
+def test_pyqa_python_hygiene_flags_print(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    target = tmp_path / "library.py"
+    target.write_text("print('debug')\n", encoding="utf-8")
+
+    config = _load_quality_config(tmp_path)
+    config.severity.sensitivity = "maximum"
+    config.quality.enforce_in_lint = True
+    state = _build_hygiene_state(tmp_path, [target])
+    report = run_pyqa_python_hygiene_linter(state, emit_to_logger=False, config=config)
+
+    assert any("print" in diagnostic.message for diagnostic in report.outcome.diagnostics)
+
+
+def test_evaluate_quality_checks_pyqa_overrides(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    target = tmp_path / "module.py"
+    target.write_text("raise SystemExit(1)\nprint('debug')\n", encoding="utf-8")
+
+    config = _load_quality_config(tmp_path)
+    config.severity.sensitivity = "maximum"
+    config.quality.enforce_in_lint = True
+    result = evaluate_quality_checks(
+        root=tmp_path,
+        config=config,
+        checks=("python",),
+        files=[target],
+        fix=False,
+    )
+    codes = {issue.check for issue in result.issues}
+    assert "python-hygiene:system-exit" in codes
+    assert "python-hygiene:print" in codes
+
+
+def test_evaluate_quality_checks_pyqa_overrides(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    target = tmp_path / "module.py"
+    target.write_text("raise SystemExit(1)\nprint('debug')\n", encoding="utf-8")
+
+    config = _load_quality_config(tmp_path)
+    config.severity.sensitivity = "maximum"
+    config.quality.enforce_in_lint = True
+    result = run_pyqa_python_hygiene_linter(
+        _build_hygiene_state(tmp_path, [target]),
+        emit_to_logger=False,
+        config=config,
+    )
+    codes = {diagnostic.code for diagnostic in result.outcome.diagnostics}
+    assert "pyqa-python-hygiene:python-hygiene:system-exit" in codes
+    assert any("print" in diagnostic.message for diagnostic in result.outcome.diagnostics)
 
 
 def test_commit_message_validation(tmp_path: Path) -> None:

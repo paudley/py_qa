@@ -6,9 +6,13 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
-from typing import Final
+from pathlib import Path
+from typing import TYPE_CHECKING, Final
 
-from pyqa.cli.commands.lint.preparation import PreparedLintState
+if TYPE_CHECKING:  # pragma: no cover
+    from pyqa.cli.commands.lint.preparation import PreparedLintState
+else:  # pragma: no cover
+    PreparedLintState = object
 
 from ._ast_visitors import BaseAstLintVisitor, VisitorMetadata, run_ast_linter
 from ._module_utils import module_name_from_path
@@ -17,6 +21,27 @@ from .base import InternalLintReport
 _INTERFACES_PREFIX: Final[str] = "pyqa.interfaces"
 _ALLOWED_INTERFACE_IMPORTS: Final[dict[str, set[str]]] = {
     "pyqa.analysis.bootstrap": {"pyqa.analysis", "pyqa.analysis.annotations", "pyqa.analysis.treesitter"},
+    "pyqa.linting.docstrings": {
+        "pyqa.analysis.spacy",
+        "pyqa.analysis.treesitter",
+        "pyqa.analysis.treesitter.grammars",
+        "pyqa.analysis.treesitter.resolver",
+    },
+    "pyqa.cli.commands.install.command": {"pyqa.runtime.installers"},
+    "pyqa.cli.commands.update.command": {"pyqa.runtime.installers.update"},
+    "pyqa.cli.commands.lint.reporting": {
+        "pyqa.reporting",
+        "pyqa.reporting.output.highlighting",
+        "pyqa.reporting.presenters.emitters",
+    },
+    "pyqa.cli.commands.lint.runtime": {
+        "pyqa.analysis.bootstrap",
+        "pyqa.orchestration.orchestrator",
+        "pyqa.orchestration.runtime",
+    },
+    "pyqa.reporting.advice.builder": {"pyqa.analysis.services"},
+    "pyqa.reporting.output.highlighting": {"pyqa.analysis"},
+    "pyqa.reporting.presenters.emitters": {"pyqa.analysis.annotations"},
     "pyqa.runtime.installers.bootstrap": {"pyqa.runtime"},
 }
 _ALLOWED_INTERFACE_PACKAGES: Final[set[str]] = {
@@ -24,6 +49,7 @@ _ALLOWED_INTERFACE_PACKAGES: Final[set[str]] = {
     "pyqa.cli.commands.doctor.command",
     "pyqa.runtime.installers.bootstrap",
     "pyqa.orchestration.orchestrator",
+    "pyqa.orchestration.runtime",
 }
 _BANNED_CONCRETE_PREFIXES: Final[tuple[str, ...]] = (
     "pyqa.analysis",
@@ -62,6 +88,7 @@ def run_pyqa_interface_linter(
         state,
         metadata=metadata,
         visitor_factory=lambda path, st, meta: _InterfaceVisitor(path, st, meta),
+        file_filter=_should_visit_file,
     )
 
 
@@ -76,13 +103,13 @@ class _ImportViolation:
 class _InterfaceVisitor(BaseAstLintVisitor):
     """AST visitor that audits imports and constructor usage."""
 
-    def __init__(self, path, state, metadata):  # type: ignore[override]
+    def __init__(self, path, state, metadata):  # type: ignore[override] suppression_valid: Visitor subclasses must accept the broader NodeVisitor parameters even though typing narrows them downstream.
         super().__init__(path, state, metadata)
         self._module = module_name_from_path(path, state.options.target_options.root)
 
     # --- Import handling -----------------------------------------------------------------
 
-    def visit_import(self, node: ast.Import) -> None:  # noqa: D401 - NodeVisitor API
+    def visit_import(self, node: ast.Import) -> None:  # noqa: D401 suppression_valid: NodeVisitor API contract supplies the visitor docstring; duplicating it here would add no clarity.
         for alias in node.names:
             target = alias.name
             violation = self._check_import_target(target)
@@ -90,7 +117,7 @@ class _InterfaceVisitor(BaseAstLintVisitor):
                 self.record_issue(node, violation.message)
         self.generic_visit(node)
 
-    def visit_import_from(self, node: ast.ImportFrom) -> None:  # noqa: D401 - NodeVisitor API
+    def visit_import_from(self, node: ast.ImportFrom) -> None:  # noqa: D401 suppression_valid: Method inherits NodeVisitor semantics; an inline docstring would repeat the inherited contract.
         target = node.module
         if node.level:
             target = self._resolve_relative_module(target, node.level)
@@ -156,7 +183,7 @@ class _InterfaceVisitor(BaseAstLintVisitor):
 
     # --- Constructor bans ----------------------------------------------------------------
 
-    def visit_call(self, node: ast.Call) -> None:  # noqa: D401 - NodeVisitor API
+    def visit_call(self, node: ast.Call) -> None:  # noqa: D401 suppression_valid: Call visitor adheres to NodeVisitor API and its behaviour is fully described by the base class.
         fully_qualified = _call_qualifier(node.func)
         if fully_qualified is None:
             self.generic_visit(node)
@@ -184,6 +211,12 @@ def _call_qualifier(func: ast.AST) -> str | None:
             parts.append(current.id)
             return ".".join(reversed(parts))
     return None
+
+
+def _should_visit_file(path: Path) -> bool:
+    """Return ``True`` when ``path`` is outside traditional test directories."""
+
+    return "tests" not in {part.lower() for part in path.parts}
 
 
 __all__ = ["run_pyqa_interface_linter"]

@@ -10,7 +10,7 @@ from collections.abc import Callable, Iterable
 from rich.panel import Panel
 from rich.text import Text
 
-from pyqa.runtime.console import console_manager
+from pyqa.interfaces.core import get_console_manager
 
 from ...config import OutputConfig
 from ...interfaces.analysis import AnnotationProvider
@@ -59,7 +59,7 @@ def render_advice_panel(
     if not advice_entries:
         return
 
-    console = console_manager.get(color=cfg.color, emoji=cfg.emoji)
+    console = get_console_manager().get(color=cfg.color, emoji=cfg.emoji)
 
     def stylise(entry: AdviceEntry) -> Text:
         """Return a Rich text representation of an advice entry."""

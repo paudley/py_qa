@@ -5,6 +5,7 @@
   "extends": ["npm_runtime"],
   "languages": ["markdown"],
   "phase": "lint",
+  "automatically_fix": true,
   "fileExtensions": [".md", ".mdx", ".markdown"],
   "runtime": {
     "type": "npm",

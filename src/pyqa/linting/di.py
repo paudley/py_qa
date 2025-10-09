@@ -1,12 +1,17 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
 """Phase-9 linter enforcing dependency injection composition rules."""
 
 from __future__ import annotations
 
 import ast
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
-from pyqa.cli.commands.lint.preparation import PreparedLintState
+if TYPE_CHECKING:  # pragma: no cover - import for typing only
+    from pyqa.cli.commands.lint.preparation import PreparedLintState
+else:  # pragma: no cover - runtime hinting only
+    PreparedLintState = object
 
 from ._ast_visitors import BaseAstLintVisitor, VisitorMetadata, run_ast_linter
 from ._module_utils import module_name_from_path
@@ -47,11 +52,11 @@ def run_pyqa_di_linter(
 class _DiVisitor(BaseAstLintVisitor):
     """Visitor detecting DI rule violations."""
 
-    def __init__(self, path, state, metadata):  # type: ignore[override]
+    def __init__(self, path, state, metadata):  # type: ignore[override] suppression_valid: Visitor signature must match NodeVisitor even when typing narrows parameters.
         super().__init__(path, state, metadata)
         self._module = module_name_from_path(path, state.options.target_options.root)
 
-    def visit_call(self, node: ast.Call) -> None:  # noqa: D401 - NodeVisitor API
+    def visit_call(self, node: ast.Call) -> None:  # noqa: D401 suppression_valid: NodeVisitor API requires this signature; additional docstring would duplicate inherited documentation.
         if self._is_service_registration(node):
             if self._module not in _ALLOWED_SERVICE_REGISTERERS:
                 self.record_issue(

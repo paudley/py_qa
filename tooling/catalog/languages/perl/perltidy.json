@@ -4,6 +4,7 @@
   "description": "Perl formatter using perltidy.",
   "languages": ["perl"],
   "phase": "lint",
+  "automatically_fix": true,
   "runtime": {
     "type": "perl",
     "package": "Perl::Tidy",

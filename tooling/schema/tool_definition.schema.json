@@ -43,6 +43,11 @@
       "description": "Whether PyQA may attempt to install the runtime automatically.",
       "default": false
     },
+    "automatically_fix": {
+      "type": "boolean",
+      "description": "Indicates whether fix-capable actions should run without explicit opt-in.",
+      "default": false
+    },
     "phase": {
       "type": "string",
       "description": "Execution phase used to order this tool among others.",

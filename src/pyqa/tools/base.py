@@ -302,6 +302,7 @@ class Tool(BaseModel):
     tags: tuple[str, ...] = Field(default_factory=tuple)
     auto_install: bool = False
     default_enabled: bool = True
+    automatically_fix: bool = True
     runtime: Literal["python", "npm", "binary", "go", "lua", "perl", "rust"] = "python"
     package: str | None = None
     min_version: str | None = None

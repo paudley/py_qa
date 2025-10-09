@@ -7,12 +7,12 @@ from __future__ import annotations
 
 from pyqa.core.models import RunResult
 
-from ....analysis.providers import NullAnnotationProvider
 from ....config import Config
-from ....interfaces.analysis import AnnotationProvider
-from ....reporting import render, write_json_report, write_pr_summary, write_sarif_report
+from ....interfaces.analysis import AnnotationProvider, NullAnnotationProvider
+from ....reporting import render
 from ....reporting.output.highlighting import set_annotation_provider as set_highlighting_annotation_provider
 from ....reporting.presenters.emitters import set_annotation_provider as set_emitter_annotation_provider
+from ....reporting.presenters.emitters import write_json_report, write_pr_summary, write_sarif_report
 from ...core.shared import CLILogger
 from .params import LintOutputArtifacts
 

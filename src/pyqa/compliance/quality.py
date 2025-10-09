@@ -45,6 +45,19 @@ class QualityIssueLevel(str, Enum):
     WARNING = "warning"
 
 
+LICENSE_HEADER_CATEGORY: Final[str] = "license-header"
+COPYRIGHT_CATEGORY: Final[str] = "copyright"
+PYTHON_HYGIENE_CATEGORY: Final[str] = "python-hygiene"
+SCHEMA_SYNC_CATEGORY: Final[str] = "schema"
+PYTHON_HYGIENE_BREAKPOINT: Final[str] = f"{PYTHON_HYGIENE_CATEGORY}:debug-breakpoint"
+PYTHON_HYGIENE_BARE_EXCEPT: Final[str] = f"{PYTHON_HYGIENE_CATEGORY}:bare-except"
+PYTHON_HYGIENE_MAIN_GUARD: Final[str] = f"{PYTHON_HYGIENE_CATEGORY}:module-main"
+PYTHON_HYGIENE_BROAD_EXCEPTION: Final[str] = f"{PYTHON_HYGIENE_CATEGORY}:broad-exception"
+PYTHON_HYGIENE_DEBUG_IMPORT: Final[str] = f"{PYTHON_HYGIENE_CATEGORY}:debug-import"
+PYTHON_HYGIENE_SYSTEM_EXIT: Final[str] = f"{PYTHON_HYGIENE_CATEGORY}:system-exit"
+PYTHON_HYGIENE_PRINT: Final[str] = f"{PYTHON_HYGIENE_CATEGORY}:print"
+
+
 class QualityIssue(BaseModel):
     """Concrete issue discovered by a quality check."""
 
@@ -53,6 +66,7 @@ class QualityIssue(BaseModel):
     level: QualityIssueLevel
     message: str
     path: Path | None = None
+    check: str | None = None
 
 
 class QualityCheckResult(BaseModel):
@@ -62,28 +76,46 @@ class QualityCheckResult(BaseModel):
 
     issues: list[QualityIssue] = Field(default_factory=list)
 
-    def add_error(self, message: str, path: Path | None = None) -> None:
+    def add_error(self, message: str, path: Path | None = None, *, check: str | None = None) -> None:
         """Record an error-level issue identified by a quality check.
 
         Args:
             message: Description of the issue.
             path: Optional file location associated with the issue.
+            check: Optional identifier describing the originating check or
+                sub-check.
         """
 
         issues = list(self.issues)
-        issues.append(QualityIssue(level=QualityIssueLevel.ERROR, message=message, path=path))
+        issues.append(
+            QualityIssue(
+                level=QualityIssueLevel.ERROR,
+                message=message,
+                path=path,
+                check=check,
+            ),
+        )
         self.issues = issues
 
-    def add_warning(self, message: str, path: Path | None = None) -> None:
+    def add_warning(self, message: str, path: Path | None = None, *, check: str | None = None) -> None:
         """Record a warning-level issue identified by a quality check.
 
         Args:
             message: Description of the warning.
             path: Optional file location associated with the warning.
+            check: Optional identifier describing the originating check or
+                sub-check.
         """
 
         issues = list(self.issues)
-        issues.append(QualityIssue(level=QualityIssueLevel.WARNING, message=message, path=path))
+        issues.append(
+            QualityIssue(
+                level=QualityIssueLevel.WARNING,
+                message=message,
+                path=path,
+                check=check,
+            ),
+        )
         self.issues = issues
 
     @property
@@ -142,17 +174,19 @@ class FileSizeCheck:
             try:
                 size = path.stat().st_size
             except OSError as exc:
-                result.add_warning(f"Could not stat file {path}: {exc}", path)
+                result.add_warning(f"Could not stat file {path}: {exc}", path, check=self.name)
                 continue
             if size > ctx.quality.max_file_size:
                 result.add_error(
                     f"File exceeds maximum size ({size} bytes > {ctx.quality.max_file_size} bytes)",
                     path,
+                    check=self.name,
                 )
             elif size > ctx.quality.warn_file_size:
                 result.add_warning(
                     f"File close to size limit ({size} bytes)",
                     path,
+                    check=self.name,
                 )
 
     def supports_fix(self) -> bool:
@@ -207,7 +241,8 @@ class LicenseCheck:
 
             issues, final_content = self._evaluate_license(path, content, options)
             for issue in issues:
-                result.add_error(issue, path)
+                category = self._classify_issue(issue)
+                result.add_error(issue, path, check=category)
 
             notice = policy.match_notice(final_content)
             if notice:
@@ -216,6 +251,7 @@ class LicenseCheck:
         if policy.canonical_notice and len(observed_notices) > 1:
             result.add_warning(
                 "Multiple copyright notices detected across files; ensure headers use a consistent notice.",
+                check=COPYRIGHT_CATEGORY,
             )
 
     def supports_fix(self) -> bool:
@@ -229,7 +265,11 @@ class LicenseCheck:
         try:
             return path.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
-            result.add_warning(f"Unable to read file for license check: {exc}", path)
+            result.add_warning(
+                f"Unable to read file for license check: {exc}",
+                path,
+                check=LICENSE_HEADER_CATEGORY,
+            )
             return None
 
     def _evaluate_license(
@@ -275,16 +315,32 @@ class LicenseCheck:
         try:
             updated = fixer.apply(path, content)
         except LicenseFixError as exc:
-            result.add_warning(f"Automatic license fix skipped: {exc}", path)
+            result.add_warning(
+                f"Automatic license fix skipped: {exc}",
+                path,
+                check=LICENSE_HEADER_CATEGORY,
+            )
             return None
         if not updated:
             return None
         try:
             path.write_text(updated, encoding="utf-8")
         except OSError as exc:
-            result.add_error(f"Failed to update license header: {exc}", path)
+            result.add_error(
+                f"Failed to update license header: {exc}",
+                path,
+                check=LICENSE_HEADER_CATEGORY,
+            )
             return None
         return updated
+
+    def _classify_issue(self, issue: str) -> str:
+        """Return the derived category for a license-related issue."""
+
+        lowered = issue.lower()
+        if "copyright" in lowered or "notice" in lowered:
+            return COPYRIGHT_CATEGORY
+        return LICENSE_HEADER_CATEGORY
 
 
 @dataclass(slots=True)
@@ -301,15 +357,92 @@ class PythonHygieneCheck:
             try:
                 content = path.read_text(encoding="utf-8", errors="replace")
             except OSError as exc:
-                result.add_warning(f"Unable to read Python file: {exc}", path)
+                result.add_warning(
+                    f"Unable to read Python file: {exc}",
+                    path,
+                    check=PYTHON_HYGIENE_CATEGORY,
+                )
                 continue
-            if re.search(r"(?<!['\"])pdb\.set_trace\(", content) or re.search(
-                r"(?<!['\"])breakpoint\(",
-                content,
-            ):
-                result.add_error("Debug breakpoint detected", path)
-            if re.search(r"except\s*:\s*(?:#.*)?$", content, re.MULTILINE):
-                result.add_warning("Bare except detected", path)
+            try:
+                relative_parts = path.relative_to(ctx.root).parts
+            except ValueError:
+                relative_parts = path.parts
+            if "tests" in relative_parts:
+                continue
+
+            is_cli_module = "cli" in relative_parts and "commands" in relative_parts
+            found_main_guard = False
+
+            for line_number, line in enumerate(content.splitlines(), start=1):
+                stripped = line.strip()
+                lower_stripped = stripped.lower()
+
+                if not found_main_guard and re.match(r"if __name__ == ['\"]__main__['\"]\s*:", stripped):
+                    found_main_guard = True
+                    result.add_warning(
+                        f"Line {line_number}: Module defines a __main__ execution block; move the entry point to a dedicated script.",
+                        path,
+                        check=PYTHON_HYGIENE_MAIN_GUARD,
+                    )
+
+                if re.search(r"(?<!['\"])breakpoint\(", stripped) or re.search(
+                    r"(?<!['\"])(?:pdb|ipdb)\.set_trace\(",
+                    stripped,
+                ):
+                    result.add_error(
+                        f"Line {line_number}: Debug breakpoint detected",
+                        path,
+                        check=PYTHON_HYGIENE_BREAKPOINT,
+                    )
+
+                if re.search(r"except\s*:\s*(?:#.*)?$", stripped):
+                    result.add_warning(
+                        f"Line {line_number}: Bare except detected",
+                        path,
+                        check=PYTHON_HYGIENE_BARE_EXCEPT,
+                    )
+
+                if re.search(r"except\s+Exception\b", stripped):
+                    justification = ""
+                    if "#" in stripped:
+                        justification = stripped.split("#", 1)[1].strip()
+                    if len(justification.split()) < 3:
+                        result.add_warning(
+                            f"Line {line_number}: 'except Exception' requires an inline justification explaining why a broad catch is safe.",
+                            path,
+                            check=PYTHON_HYGIENE_BROAD_EXCEPTION,
+                        )
+
+                if (
+                    stripped.startswith("import pdb")
+                    or stripped.startswith("import ipdb")
+                    or stripped.startswith("from pdb import")
+                ):
+                    result.add_warning(
+                        f"Line {line_number}: Debug import '{stripped.split()[1]}' should be removed before committing.",
+                        path,
+                        check=PYTHON_HYGIENE_DEBUG_IMPORT,
+                    )
+
+                if not is_cli_module and (
+                    "raise systemexit" in lower_stripped
+                    or "systemexit(" in lower_stripped
+                    or "os._exit" in lower_stripped
+                ):
+                    result.add_warning(
+                        f"Line {line_number}: Direct process termination bypasses orchestrator safeguards; use structured exit helpers.",
+                        path,
+                        check=PYTHON_HYGIENE_SYSTEM_EXIT,
+                    )
+
+                if not is_cli_module and re.search(r"\b(pprint|print)\s*\(", stripped):
+                    if "logger" in lower_stripped or "logging." in lower_stripped:
+                        continue
+                    result.add_warning(
+                        f"Line {line_number}: Replace print-style output with structured logging.",
+                        path,
+                        check=PYTHON_HYGIENE_PRINT,
+                    )
 
     def supports_fix(self) -> bool:
         """Return ``False`` because hygiene issues require manual review."""
@@ -336,6 +469,7 @@ class SchemaCheck:
                 result.add_error(
                     "Schema documentation missing. Run 'pyqa config export-tools' to regenerate.",
                     target_path,
+                    check=SCHEMA_SYNC_CATEGORY,
                 )
                 continue
             actual_text = target_path.read_text(encoding="utf-8")
@@ -348,6 +482,7 @@ class SchemaCheck:
                 result.add_error(
                     f"Schema documentation out of date. Run 'pyqa config export-tools {relative}' to refresh.",
                     target_path,
+                    check=SCHEMA_SYNC_CATEGORY,
                 )
                 continue
             parsed_actual.pop("_license", None)
@@ -357,6 +492,7 @@ class SchemaCheck:
                 result.add_error(
                     f"Schema documentation out of date. Run 'pyqa config export-tools {relative}' to refresh.",
                     target_path,
+                    check=SCHEMA_SYNC_CATEGORY,
                 )
 
     def supports_fix(self) -> bool:

@@ -23,11 +23,11 @@ from .models import (
 )
 from .rendering import render_py_qa_skip_warning, render_quality_result
 from .services import (
-    build_quality_checker,
     determine_checks,
     load_quality_context,
     render_config_warnings,
     resolve_target_files,
+    run_quality_checks,
 )
 
 quality_app = create_typer(
@@ -72,8 +72,7 @@ def main(
     if targets.had_explicit_paths and targets.files is None:
         raise typer.Exit(code=0)
 
-    checker = build_quality_checker(context, files=targets.files, checks=checks)
-    result = checker.run(fix=context.options.fix)
+    result = run_quality_checks(context, files=targets.files, checks=checks)
     render_quality_result(result, root=context.root, logger=logger)
     raise typer.Exit(code=result.exit_code())
 

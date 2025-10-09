@@ -11,11 +11,8 @@ from typing import Any, Final
 
 from rich.text import Text
 
-from ...analysis import MessageSpan as AnalysisMessageSpan
-from ...analysis.providers import NullAnnotationProvider
 from ...core.logging import colorize
-from ...interfaces.analysis import AnnotationProvider
-from ...interfaces.analysis import MessageSpan as MessageSpanProtocol
+from ...interfaces.analysis import AnnotationProvider, NullAnnotationProvider, SimpleMessageSpan
 
 
 class _AnnotationRouter(AnnotationProvider):
@@ -45,7 +42,7 @@ class _AnnotationRouter(AnnotationProvider):
 
         return self._provider.annotate_run(result)
 
-    def message_spans(self, message: str) -> Sequence[MessageSpanProtocol]:
+    def message_spans(self, message: str) -> Sequence[MessageSpan]:
         """Return spans detected in ``message`` using the active provider.
 
         Args:
@@ -100,10 +97,10 @@ def collect_highlight_spans(
     """Return annotation spans present in *text* using the provided engine."""
 
     target_engine = engine or _ANNOTATION_ROUTER
-    spans: list[AnalysisMessageSpan] = []
+    spans: list[MessageSpan] = []
     for span in target_engine.message_spans(text):
         spans.append(
-            AnalysisMessageSpan(
+            SimpleMessageSpan(
                 start=span.start,
                 end=span.end,
                 style=getattr(span, "style", ""),
@@ -117,7 +114,7 @@ def strip_literal_quotes(text: str) -> tuple[str, list[AnalysisMessageSpan]]:
     """Return text with ``''literal''`` markers removed while tracking spans."""
 
     segments: list[str] = []
-    spans: list[AnalysisMessageSpan] = []
+    spans: list[MessageSpan] = []
     cursor = 0
     output_length = 0
 
@@ -130,7 +127,7 @@ def strip_literal_quotes(text: str) -> tuple[str, list[AnalysisMessageSpan]]:
         literal_length = len(literal)
         if literal_length:
             spans.append(
-                AnalysisMessageSpan(
+                SimpleMessageSpan(
                     start=output_length,
                     end=output_length + literal_length,
                     style=LITERAL_TINT,
@@ -168,7 +165,7 @@ def location_function_spans(
     location: str,
     *,
     separator: str = LOCATION_SEPARATOR,
-) -> list[AnalysisMessageSpan]:
+) -> list[MessageSpan]:
     """Return highlight spans for function suffixes in location strings."""
 
     if separator not in location:
@@ -179,14 +176,14 @@ def location_function_spans(
     start = location.rfind(candidate)
     if start == -1:
         return []
-    return [AnalysisMessageSpan(start=start, end=start + len(candidate), style="ansi256:208")]
+    return [SimpleMessageSpan(start=start, end=start + len(candidate), style="ansi256:208")]
 
 
 def highlight_for_output(
     message: str,
     *,
     color: bool,
-    extra_spans: Sequence[AnalysisMessageSpan] | None = None,
+    extra_spans: Sequence[MessageSpan] | None = None,
     engine: AnnotationProvider | None = None,
 ) -> str:
     """Return a string with inline highlighting suitable for terminal output."""
@@ -203,7 +200,7 @@ def highlight_for_output(
     if not spans:
         return clean
     spans.sort(key=lambda span: (span.start, span.end - span.start))
-    merged: list[AnalysisMessageSpan] = []
+    merged: list[MessageSpan] = []
     for span in spans:
         if merged and span.start < merged[-1].end:
             continue

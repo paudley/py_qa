@@ -5,6 +5,7 @@
   "extends": ["npm_runtime"],
   "languages": ["javascript", "typescript"],
   "phase": "lint",
+  "automatically_fix": true,
   "fileExtensions": [".js", ".jsx", ".ts", ".tsx"],
   "configFiles": [".eslintrc.js", ".eslintrc.cjs", ".eslintrc.json", ".eslintrc"],
   "runtime": {

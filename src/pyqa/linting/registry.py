@@ -21,7 +21,14 @@ from .di import run_pyqa_di_linter
 from .docstrings import run_docstring_linter
 from .interfaces import run_pyqa_interface_linter
 from .module_docs import run_pyqa_module_doc_linter
-from .quality import run_quality_linter
+from .quality import (
+    run_copyright_linter,
+    run_file_size_linter,
+    run_license_header_linter,
+    run_pyqa_python_hygiene_linter,
+    run_pyqa_schema_sync_linter,
+    run_python_hygiene_linter,
+)
 from .signatures import run_signature_linter
 from .suppressions import run_suppression_linter
 from .typing_strict import run_typing_linter
@@ -87,6 +94,15 @@ INTERNAL_LINTERS: tuple[InternalLinterDefinition, ...] = (
         pyqa_scoped=True,
     ),
     InternalLinterDefinition(
+        name="pyqa-python-hygiene",
+        meta_attribute="check_pyqa_python_hygiene",
+        selection_tokens=("pyqa-python-hygiene", "python-hygiene-pyqa"),
+        runner=run_pyqa_python_hygiene_linter,
+        description="Detect SystemExit and print leaks outside sanctioned pyqa entry points.",
+        options=InternalLinterOptions(tags=("internal-linter", "internal-pyqa"), requires_config=True),
+        pyqa_scoped=True,
+    ),
+    InternalLinterDefinition(
         name="suppressions",
         meta_attribute="check_suppressions",
         selection_tokens=("suppressions", "lint-suppressions"),
@@ -129,17 +145,65 @@ INTERNAL_LINTERS: tuple[InternalLinterDefinition, ...] = (
         description="Ensure NavigatorBucket, CleanResult, and ServiceContainer expose ergonomic dunder methods.",
     ),
     InternalLinterDefinition(
-        name="quality",
-        meta_attribute=None,
-        selection_tokens=("quality", "license"),
-        runner=run_quality_linter,
-        description="Enforce license compliance and structural quality checks.",
+        name="license-header",
+        meta_attribute="check_license_header",
+        selection_tokens=("license-header", "license-headers"),
+        runner=run_license_header_linter,
+        description="Validate SPDX license headers across targeted files.",
         options=InternalLinterOptions(
             phase="utility",
             tags=("internal-linter", "quality"),
-            default_enabled=True,
             requires_config=True,
         ),
+    ),
+    InternalLinterDefinition(
+        name="copyright",
+        meta_attribute="check_copyright",
+        selection_tokens=("copyright", "copyrights"),
+        runner=run_copyright_linter,
+        description="Ensure copyright notices stay consistent with repository policy.",
+        options=InternalLinterOptions(
+            phase="utility",
+            tags=("internal-linter", "quality"),
+            requires_config=True,
+        ),
+    ),
+    InternalLinterDefinition(
+        name="python-hygiene",
+        meta_attribute="check_python_hygiene",
+        selection_tokens=("python-hygiene", "py-hygiene"),
+        runner=run_python_hygiene_linter,
+        description="Detect debug breakpoints and bare except clauses in Python code.",
+        options=InternalLinterOptions(
+            phase="utility",
+            tags=("internal-linter", "quality"),
+            requires_config=True,
+        ),
+    ),
+    InternalLinterDefinition(
+        name="file-size",
+        meta_attribute="check_file_size",
+        selection_tokens=("file-size", "size"),
+        runner=run_file_size_linter,
+        description="Flag files that exceed configured size thresholds.",
+        options=InternalLinterOptions(
+            phase="utility",
+            tags=("internal-linter", "quality"),
+            requires_config=True,
+        ),
+    ),
+    InternalLinterDefinition(
+        name="pyqa-schema-sync",
+        meta_attribute="check_schema_sync",
+        selection_tokens=("schema-sync", "pyqa-schema"),
+        runner=run_pyqa_schema_sync_linter,
+        description="Verify pyqa schema documentation matches generated artefacts.",
+        options=InternalLinterOptions(
+            phase="utility",
+            tags=("internal-linter", "internal-pyqa", "quality"),
+            requires_config=True,
+        ),
+        pyqa_scoped=True,
     ),
 )
 

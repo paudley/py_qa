@@ -9,7 +9,7 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 
-from pyqa.runtime.console import console_manager
+from pyqa.interfaces.core import get_console_manager
 
 from ...config import OutputConfig
 from ...core.models import RunResult
@@ -27,7 +27,7 @@ def render_refactor_navigator(result: RunResult, cfg: OutputConfig) -> None:
     if not navigator:
         return
 
-    console = console_manager.get(color=cfg.color, emoji=cfg.emoji)
+    console = get_console_manager().get(color=cfg.color, emoji=cfg.emoji)
     table = Table(box=box.SIMPLE_HEAVY if cfg.color else box.SIMPLE)
     table.add_column("Function", overflow="fold")
     table.add_column("Issues", justify="right")

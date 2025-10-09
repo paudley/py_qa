@@ -1,3 +1,7 @@
+<!-- SPDX-License-Identifier: MIT -->
+
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # Tool Selection Strategy
 
 This document explains how the lint launcher decides which tools run during a
@@ -8,13 +12,14 @@ We divide tools into three broad families:
 
 1. **External tools** – everything materialised from the catalog
    (black, ruff, pylint, mypy, …).
-2. **Internal linters** – phase‑8 implementations that live inside
+2. **Internal linters** – phase‑8 and phase‑10 implementations that live inside
    `pyqa.linting` (docstrings, suppressions, types, closures, signatures,
-   cache, value-types, quality). They are repo-agnostic and can run anywhere.
+   cache, value-types, license-header, copyright, python-hygiene, file-size).
+   They are repo-agnostic and can run anywhere.
 3. **Internal pyqa linters** – phase‑9 checks (interface enforcement, DI
-   validation, module docs, etc.). They rely on pyqa’s layout, so we only run
-   them automatically inside the pyqa repo or when the user passes
-   `--pyqa-rules` explicitly.
+   validation, module docs, schema synchronisation, etc.). They rely on pyqa’s
+   layout, so we only run them automatically inside the pyqa repo or when the
+   user passes `--pyqa-rules` explicitly.
 
 ## Vocabulary
 
@@ -41,6 +46,11 @@ Given a prepared lint state, tool selection proceeds as follows:
 
 1. Build the registry – external tools from the catalog plus internal tool
    adapters. All the tools should be present in the registry.
+   * Catalog-backed definitions now carry an `automatically_fix` flag. The
+     current orchestrator still runs fix-capable actions for all catalog tools,
+     but the flag records the intended behaviour so future updates can disable
+     automatic fixes for tools that should remain diagnostics-only (e.g. the
+     upcoming license and copyright split).
 2. Determine modifiers from the CLI:
    * Exclusive options (these tell pyqa exactly what to do and only what to do):
 
@@ -76,9 +86,13 @@ Given a prepared lint state, tool selection proceeds as follows:
      pyqa repo or the user supplies `--pyqa-rules`.
    * After activation, the `--only` filter (if present) still prunes the final
      list back to the explicitly named tools.
+   * When `--only` names a tool that the registry does not provide (after
+     applying aliases/selection tokens), selection aborts immediately and the
+     CLI exits with a fatal error that lists the unknown identifiers.
 4. External tool activation
    * When `--only` is present, skip eligibility heuristics entirely and honour
-     exactly the requested tool IDs.
+     exactly the requested tool IDs (failing fast if any identifier is
+     unknown).
    * Otherwise include every tool in the registry that matches the current
      workspace:
      * The registry knows each tool’s `languages`, `file_extensions`, and
@@ -103,11 +117,12 @@ Given a prepared lint state, tool selection proceeds as follows:
   luacheck, lualint, mdformat, perlcritic, perltidy, phplint, pylint,
   pyupgrade, remark-lint, ruff, selene, speccy, sqlfluff, stylelint, tombi,
   tsc, yamllint, kube-linter, mypy, pyright (38 tools in total).
-* **Internal** (phase‑8, repo-agnostic): docstrings, suppressions, types,
-  closures, signatures, cache, value-types, quality.
+* **Internal** (phase‑8/10, repo-agnostic): docstrings, suppressions, types,
+  closures, signatures, cache, value-types, license-header, copyright,
+  python-hygiene, file-size.
 * **Internal pyqa** (phase‑9, repo-aware): interface enforcement, DI
-  construction guards, module documentation linter, etc. (coming online during
-  Phase 9 execution).
+  construction guards, module documentation linter, schema synchronisation,
+  etc. (coming online during Phase 9 execution).
 
 ### Internal-pyqa linter catalogue
 
@@ -122,6 +137,11 @@ them based on workspace detection or the `--pyqa-rules` flag.
   stay inside the strategy layer.
 * `pyqa-module-docs` – requires each package directory to ship an uppercase
   `{MODULE}.md` guide describing patterns, DI seams, and extension points.
+* `pyqa-python-hygiene` – audits pyqa modules for `SystemExit`/`os._exit`
+  shortcuts and stray `print`/`pprint` calls that should be routed through the
+  logging layer.
+* `pyqa-schema-sync` – verifies generated schema artefacts (e.g.
+  `ref_docs/tool-schema.json`) match the active tooling metadata.
 
 ## Example scenarios
 
@@ -132,7 +152,9 @@ them based on workspace detection or the `--pyqa-rules` flag.
 * External tools: every catalog tool whose files/configs are present (black,
   ruff, pylint, mypy, pyright, etc.).
 * Internal linters: docstrings, suppressions, types, closures, signatures,
-  cache, value-types, quality.
+  cache, value-types, license-header, copyright, python-hygiene, file-size.
+  Use `--show-valid-suppressions` when you need to surface approved
+  justifications alongside standard suppression violations.
 * Internal pyqa linters: Phase 9 suite (interfaces, DI, module docs, …).
 
 ### 2. `./lint` in a customer repo with only Python files
@@ -156,7 +178,14 @@ them based on workspace detection or the `--pyqa-rules` flag.
 * Internal linters: excluded unless they are also named via `--only`.
 * Internal pyqa linters: excluded unless `--only` lists them explicitly.
 
-### 5. `./lint --sensitivity permissive`
+### 5. `./lint --only missing-tool`
+
+* External tools: none; the selector raises an error before execution.
+* Internal linters: none; the command fails fast due to the unknown tool.
+* Internal pyqa linters: none; same fatal error path as above.
+* Outcome: CLI exits with status `1` and prints the unknown tool list.
+
+### 6. `./lint --sensitivity permissive`
 
 * External tools: all catalog tools matching the workspace (permissive affects
   diagnostics, not the set of external tools).
@@ -165,21 +194,21 @@ them based on workspace detection or the `--pyqa-rules` flag.
 * Internal pyqa linters: run only when `--pyqa-rules` is supplied or the
   workspace is pyqa.
 
-### 6. `./lint --pyqa-rules` in a non-pyqa repo
+### 7. `./lint --pyqa-rules` in a non-pyqa repo
 
 * External tools: full catalog for the detected languages.
 * Internal linters: enabled when the chosen sensitivity is `strict` or higher.
 * Internal pyqa linters: forced on because the CLI flag was passed, even though
   we are outside the pyqa repo.
 
-### 7. `./lint -n --only pylint`
+### 8. `./lint -n --only pylint`
 
 * External tools: only pylint (filtered via `--only`).
 * Internal linters: excluded because `--only` limits execution to `pylint`.
 * Internal pyqa linters: excluded unless `pylint` is joined by their IDs in the
   `--only` list.
 
-### 8. `./lint --explain-tools`
+### 9. `./lint --explain-tools`
 
 * External tools: no execution occurs; instead, the selector renders a table
   summarising which tools would run and why.
@@ -187,6 +216,23 @@ them based on workspace detection or the `--pyqa-rules` flag.
   whether they would have run.
 * Internal pyqa linters: evaluated using the same rules (pyqa detection or
   `--pyqa-rules`) so the diagnostics reflect the real plan.
+
+### 10. `./lint --check-license-header`
+
+* External tools: all catalog tools eligible for the workspace continue to run.
+* Internal linters: license-header joins whichever phase‑8 tools sensitivity
+  already enabled. This opt-in works even when sensitivity is below `strict`.
+* Internal pyqa linters: unchanged unless other flags (e.g. `--pyqa-rules`) are
+  present.
+
+### 11. `./lint --check-schema-sync` outside the pyqa repository
+
+* External tools: unchanged (driven by workspace files).
+* Internal linters: run according to sensitivity; schema-sync stays disabled
+  because it is pyqa-scoped.
+* Internal pyqa linters: `check-schema-sync` forces `pyqa-schema-sync` into the
+  selection even though the workspace is not pyqa. Other phase‑9 tools remain
+  disabled unless explicitly requested.
 
 ## Future work
 
