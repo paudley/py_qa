@@ -18,7 +18,7 @@ from ._ast_visitors import BaseAstLintVisitor, VisitorMetadata, run_ast_linter
 from ._module_utils import module_name_from_path
 from .base import InternalLintReport
 
-_INTERFACES_PREFIX: Final[str] = "pyqa.interfaces"
+_INTERFACES_KEYWORD: Final[str] = "interfaces"
 _ALLOWED_INTERFACE_IMPORTS: Final[dict[str, set[str]]] = {
     "pyqa.analysis.bootstrap": {"pyqa.analysis", "pyqa.analysis.annotations", "pyqa.analysis.treesitter"},
     "pyqa.linting.docstrings": {
@@ -51,12 +51,26 @@ _ALLOWED_INTERFACE_PACKAGES: Final[set[str]] = {
     "pyqa.orchestration.orchestrator",
     "pyqa.orchestration.runtime",
 }
-_BANNED_CONCRETE_PREFIXES: Final[tuple[str, ...]] = (
-    "pyqa.analysis",
-    "pyqa.reporting",
-    "pyqa.runtime",
-    "pyqa.orchestration",
+_BANNED_DOMAIN_SUFFIXES: Final[tuple[str, ...]] = (
+    "analysis",
+    "reporting",
+    "runtime",
+    "orchestration",
 )
+_ALLOWED_ABSTRACT_CLASS_SUFFIXES: Final[tuple[str, ...]] = (
+    "Protocol",
+    "ABC",
+    "ABCMeta",
+    "TypedDict",
+    "Enum",
+    "StrEnum",
+)
+_ALLOWED_CLASS_DECORATORS: Final[frozenset[str]] = frozenset({
+    "dataclass",
+    "runtime_checkable",
+    "unique",
+    "final",
+})
 _BANNED_CONSTRUCTORS: Final[tuple[str, ...]] = (
     "TreeSitterContextResolver",
     "AnnotationEngine",
@@ -106,6 +120,44 @@ class _InterfaceVisitor(BaseAstLintVisitor):
     def __init__(self, path, state, metadata):  # type: ignore[override] suppression_valid: Visitor subclasses must accept the broader NodeVisitor parameters even though typing narrows them downstream.
         super().__init__(path, state, metadata)
         self._module = module_name_from_path(path, state.options.target_options.root)
+        parts = self._module.split(".") if self._module else []
+        self._namespace_root = parts[0] if parts else ""
+        self._namespace_prefix = f"{self._namespace_root}." if self._namespace_root else ""
+        self._banned_concrete_prefixes = tuple(
+            f"{self._namespace_root}.{suffix}" for suffix in _BANNED_DOMAIN_SUFFIXES
+        )
+        self._is_interface_module = _is_interface_module_name(self._module)
+        self._class_stack: list[str] = []
+
+    # --- Interface concretion detection --------------------------------------------------
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:  # noqa: D401 suppression_valid
+        if self._is_interface_module and not self._class_stack:
+            self._record_concrete_symbol(node, "function")
+        self.generic_visit(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:  # noqa: D401 suppression_valid
+        if self._is_interface_module and not self._class_stack:
+            self._record_concrete_symbol(node, "async function")
+        self.generic_visit(node)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:  # noqa: D401 suppression_valid
+        is_interface = self._is_interface_module and not _is_allowed_interface_class(node)
+        self._class_stack.append(node.name)
+        if is_interface:
+            self._record_concrete_symbol(node, "class")
+        self.generic_visit(node)
+        self._class_stack.pop()
+
+    def visit_Assign(self, node: ast.Assign) -> None:  # noqa: D401 suppression_valid
+        if self._is_interface_module and _is_concrete_expression(node.value):
+            self._record_concrete_symbol(node, "assignment")
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:  # noqa: D401 suppression_valid
+        if self._is_interface_module and _is_concrete_expression(node.value):
+            self._record_concrete_symbol(node, "assignment")
+        self.generic_visit(node)
 
     # --- Import handling -----------------------------------------------------------------
 
@@ -142,19 +194,19 @@ class _InterfaceVisitor(BaseAstLintVisitor):
     def _check_import_target(self, target: str) -> _ImportViolation | None:
         """Return a violation when ``target`` imports a concrete implementation."""
 
-        if target.startswith(_INTERFACES_PREFIX):
+        if _is_interface_module_name(target):
             return None
-        if not target.startswith("pyqa."):
+        if not self._namespace_prefix or not target.startswith(self._namespace_prefix):
             return None
         if self._shares_domain(target):
             return None
         if self._is_allowed_concrete_import(target):
             return None
-        if target.startswith(_BANNED_CONCRETE_PREFIXES):
+        if target.startswith(self._banned_concrete_prefixes):
             return _ImportViolation(
                 imported=target,
                 message=(
-                    f"Import '{target}' must use the matching pyqa.interfaces module instead of the"
+                    f"Import '{target}' must use the matching interfaces module instead of the"
                     " concrete implementation"
                 ),
             )
@@ -195,6 +247,28 @@ class _InterfaceVisitor(BaseAstLintVisitor):
             )
         self.generic_visit(node)
 
+    def _record_concrete_symbol(self, node: ast.AST, symbol_kind: str) -> None:
+        symbol = getattr(node, "name", None)
+        name_part = f" '{symbol}'" if symbol else ""
+        message = (
+            f"Interfaces module '{self._module}' must not define concrete {symbol_kind}{name_part}"
+        )
+        hints = (
+            "Limit interfaces packages to Protocols, TypedDicts, dataclasses, and literals.",
+            "Move concrete logic into the owning runtime/orchestration module and expose Protocols here only.",
+        )
+        self.record_issue(
+            node,
+            message,
+            hints=hints,
+            meta={
+                "module": self._module,
+                "symbol": symbol,
+                "violation": "concrete-interface",
+                "symbol_kind": symbol_kind,
+            },
+        )
+
 
 def _call_qualifier(func: ast.AST) -> str | None:
     """Return dotted name for ``func`` if it can be resolved statically."""
@@ -213,10 +287,58 @@ def _call_qualifier(func: ast.AST) -> str | None:
     return None
 
 
+def _is_interface_module_name(name: str | None) -> bool:
+    """Return ``True`` when ``name`` denotes a module within an interfaces package."""
+
+    if not name:
+        return False
+    return _INTERFACES_KEYWORD in name.split(".")
+
+
 def _should_visit_file(path: Path) -> bool:
     """Return ``True`` when ``path`` is outside traditional test directories."""
 
     return "tests" not in {part.lower() for part in path.parts}
+
+
+def _is_allowed_interface_class(node: ast.ClassDef) -> bool:
+    base_names = {_qualify_expr(base) for base in node.bases}
+    if any(name.endswith(_ALLOWED_ABSTRACT_CLASS_SUFFIXES) for name in base_names if name):
+        return True
+    decorator_names = {_qualify_expr(deco) for deco in node.decorator_list}
+    if any(name and name.split(".")[-1] in _ALLOWED_CLASS_DECORATORS for name in decorator_names):
+        return True
+    return False
+
+
+def _is_concrete_expression(expr: ast.AST | None) -> bool:
+    if expr is None:
+        return False
+    if isinstance(expr, (ast.Call, ast.Attribute, ast.Lambda, ast.Subscript)):
+        return True
+    if isinstance(expr, ast.Name):
+        return expr.id not in {"None", "True", "False"}
+    if isinstance(expr, (ast.Dict, ast.List, ast.Tuple, ast.Set, ast.JoinedStr)):
+        return True
+    return False
+
+
+def _qualify_expr(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parts: list[str] = []
+        current: ast.AST | None = node
+        while isinstance(current, ast.Attribute):
+            parts.append(current.attr)
+            current = current.value
+        if isinstance(current, ast.Name):
+            parts.append(current.id)
+            return ".".join(reversed(parts))
+    try:
+        return ast.unparse(node)
+    except Exception:  # pragma: no cover - resilience for Python AST edge cases.
+        return ""
 
 
 __all__ = ["run_pyqa_interface_linter"]

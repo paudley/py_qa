@@ -1254,6 +1254,66 @@ def test_render_advice_panel_covers_runtime_and_tests(tmp_path: Path, capsys) ->
     assert "Refactor Navigator" in output
 
 
+def test_generate_advice_includes_di_guidance() -> None:
+    diag = _advice_diag(
+        file="src/pyqa/core/runtime/di.py",
+        tool="pyqa-di",
+        code="pyqa:di",
+        message=(
+            "Service 'console_factory' registered from 'pyqa.core.runtime.di' "
+            "must move into an approved composition root."
+        ),
+    )
+    builder = AdviceBuilder()
+    advice_entries = generate_advice(
+        [
+            (
+                diag.file or "",
+                diag.line if diag.line is not None else -1,
+                diag.function or "",
+                diag.tool,
+                diag.code or "-",
+                diag.message,
+            )
+        ],
+        builder.annotation_engine,
+    )
+
+    di_entry = next(entry for entry in advice_entries if "CompositionRegistry" in entry.body)
+    assert di_entry.category == "Structure"
+    assert "pyqa.core.runtime.di" in di_entry.body
+    assert "pyqa.analysis.bootstrap" in di_entry.body
+    assert "*.bootstrap" in di_entry.body
+    assert "pyqa.app.di.configure_services" in di_entry.body
+    assert "test fixtures" in di_entry.body
+
+
+def test_generate_advice_includes_interface_guidance() -> None:
+    diag = _advice_diag(
+        file="src/pyqa/interfaces/core.py",
+        tool="pyqa-interfaces",
+        code="pyqa:interfaces",
+        message="Interfaces module 'pyqa.interfaces.core' must not define concrete function 'detect_tty'",
+    )
+    builder = AdviceBuilder()
+    advice_entries = generate_advice(
+        [
+            (
+                diag.file or "",
+                diag.line if diag.line is not None else -1,
+                diag.function or "",
+                diag.tool,
+                diag.code or "-",
+                diag.message,
+            )
+        ],
+        builder.annotation_engine,
+    )
+
+    interface_entry = next(entry for entry in advice_entries if entry.category == "Interface")
+    assert "interfaces packages limited" in interface_entry.body
+
+
 def test_advice_builder_delegates_to_generate_advice() -> None:
     entries = [
         (

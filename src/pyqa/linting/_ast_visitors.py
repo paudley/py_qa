@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import ast
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
@@ -83,12 +83,22 @@ class BaseAstLintVisitor(ast.NodeVisitor):
         self.diagnostics: list[Diagnostic] = []
         self.stdout: list[str] = []
 
-    def record_issue(self, node: ast.AST, message: str) -> None:
+    def record_issue(
+        self,
+        node: ast.AST,
+        message: str,
+        *,
+        hints: Sequence[str] | None = None,
+        meta: dict[str, object] | None = None,
+    ) -> None:
         """Append a diagnostic and stdout entry anchored to ``node``.
 
         Args:
             node: AST node responsible for triggering the diagnostic.
             message: Human-readable description of the lint failure.
+            hints: Optional sequence of guidance strings to attach to the
+                diagnostic for downstream advice renderers.
+            meta: Optional metadata dictionary augmenting the diagnostic.
         """
 
         normalized = normalize_path_key(self._path, base_dir=self._state.root)
@@ -101,6 +111,8 @@ class BaseAstLintVisitor(ast.NodeVisitor):
             message=message,
             tool=self._metadata.tool,
             code=self._metadata.code,
+            hints=tuple(hints) if hints else tuple(),
+            meta=meta or {},
         )
         self.diagnostics.append(diagnostic)
         self.stdout.append(f"{normalized}:{line}: {message}")

@@ -7,6 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+from pyqa.linting import di as di_linter
 from pyqa.linting.di import run_pyqa_di_linter
 from pyqa.linting.interfaces import run_pyqa_interface_linter
 
@@ -41,13 +42,54 @@ def test_pyqa_interface_linter_skips_test_directory(tmp_path: Path) -> None:
 
 
 def test_pyqa_interface_linter_flags_production_import(tmp_path: Path) -> None:
-    module = tmp_path / "module.py"
+    pkg_dir = tmp_path / "pyqa"
+    pkg_dir.mkdir()
+    (pkg_dir / "__init__.py").write_text("", encoding="utf-8")
+    module = pkg_dir / "module.py"
     module.write_text("import pyqa.reporting\n", encoding="utf-8")
 
     state = _stub_state(tmp_path, module)
     report = run_pyqa_interface_linter(state, emit_to_logger=False)
 
     assert any("interfaces" in diagnostic.message for diagnostic in report.outcome.diagnostics)
+
+
+def test_pyqa_interface_linter_treats_generic_interfaces_modules_as_abstract(tmp_path: Path) -> None:
+    pkg_dir = tmp_path / "pkg"
+    interfaces_dir = pkg_dir / "interfaces"
+    interfaces_dir.mkdir(parents=True)
+    (pkg_dir / "__init__.py").write_text("", encoding="utf-8")
+    (interfaces_dir / "contracts.py").write_text("class Marker: ...\n", encoding="utf-8")
+    module = pkg_dir / "module.py"
+    module.write_text("import pkg.interfaces.contracts\n", encoding="utf-8")
+
+    state = _stub_state(tmp_path, module)
+    report = run_pyqa_interface_linter(state, emit_to_logger=False)
+
+    assert report.outcome.diagnostics == []
+
+
+def test_pyqa_interface_linter_flags_concrete_symbols_in_interfaces(tmp_path: Path) -> None:
+    pyqa_dir = tmp_path / "pyqa"
+    interfaces_dir = pyqa_dir / "interfaces"
+    interfaces_dir.mkdir(parents=True)
+    (pyqa_dir / "__init__.py").write_text("", encoding="utf-8")
+    (interfaces_dir / "__init__.py").write_text("", encoding="utf-8")
+    module = interfaces_dir / "core.py"
+    module.write_text(
+        """def detect_tty():\n    return True\n""",
+        encoding="utf-8",
+    )
+
+    state = _stub_state(tmp_path, module)
+    report = run_pyqa_interface_linter(state, emit_to_logger=False)
+    diagnostics = report.outcome.diagnostics
+
+    assert diagnostics
+    diagnostic = diagnostics[0]
+    assert "must not define concrete function" in diagnostic.message
+    assert diagnostic.meta["violation"] == "concrete-interface"
+    assert "interfaces packages" in " ".join(diagnostic.hints)
 
 
 def test_pyqa_di_linter_reports_registration_outside_allowlist(tmp_path: Path) -> None:
@@ -59,6 +101,18 @@ def test_pyqa_di_linter_reports_registration_outside_allowlist(tmp_path: Path) -
 
     state = _stub_state(tmp_path, module)
     report = run_pyqa_di_linter(state, emit_to_logger=False)
+    diagnostics = report.outcome.diagnostics
 
-    assert report.outcome.diagnostics
-
+    assert diagnostics
+    diagnostic = diagnostics[0]
+    assert "tool" in diagnostic.message
+    for module_name in di_linter._ALLOWED_SERVICE_REGISTERERS:
+        assert module_name in diagnostic.message
+    assert "bootstrap" in diagnostic.message
+    assert diagnostic.hints
+    hint_text = " ".join(diagnostic.hints)
+    assert "CompositionRegistry" in hint_text
+    assert "pyqa.core.runtime.di" in hint_text
+    assert "test DI fixtures" in hint_text
+    assert diagnostic.meta.get("service") == "tool"
+    assert diagnostic.meta.get("allowed_suffixes") == di_linter._ALLOWED_SERVICE_SUFFIXES

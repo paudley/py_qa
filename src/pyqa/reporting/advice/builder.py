@@ -112,6 +112,15 @@ PYLINT_TOOL: Final[str] = "pylint"
 INHERITANCE_OVERRIDE_CODE: Final[str] = "REPORTMETHODOVERRIDESIGNATURE"
 STUB_OVERRIDE_LABEL: Final[str] = "override"
 IMP_NAMESPACE_CODE: Final[str] = "INP001"
+PYQA_DI_TOOL: Final[str] = "pyqa-di"
+PYQA_DI_CODE: Final[str] = "PYQA:DI"
+PYQA_DI_ALLOWED_ROOTS: Final[tuple[str, ...]] = (
+    "pyqa.core.runtime.di",
+    "pyqa.analysis.bootstrap",
+)
+PYQA_DI_ALLOWED_SUFFIX: Final[str] = ".bootstrap"
+PYQA_INTERFACES_TOOL: Final[str] = "pyqa-interfaces"
+PYQA_INTERFACES_CODE: Final[str] = "PYQA:INTERFACES"
 
 
 @dataclass(frozen=True)
@@ -195,6 +204,8 @@ def generate_advice(
     _append_runtime_assertion_guidance(accumulator, diagnostics)
     _append_test_guidance(accumulator, diagnostics)
     _append_duplicate_guidance(accumulator, diagnostics)
+    _append_di_guidance(accumulator, diagnostics)
+    _append_interfaces_guidance(accumulator, diagnostics)
     _append_interface_guidance(accumulator, diagnostics)
     _append_focus_guidance(accumulator, diagnostics)
 
@@ -561,6 +572,50 @@ def _append_duplicate_guidance(
                 ),
             )
             return
+
+
+def _append_di_guidance(
+    accumulator: _AdviceAccumulator,
+    diagnostics: Sequence[DiagnosticRecord],
+) -> None:
+    """Encourage DI wiring to remain inside approved composition roots."""
+
+    includes_di = any(
+        record.tool == PYQA_DI_TOOL or record.code == PYQA_DI_CODE for record in diagnostics
+    )
+    if not includes_di:
+        return
+    allowed = ", ".join((*PYQA_DI_ALLOWED_ROOTS, f"*{PYQA_DI_ALLOWED_SUFFIX}"))
+    accumulator.add(
+        AdviceCategory.STRUCTURE,
+        (
+            "Keep dependency injection registration inside the approved composition roots "
+            f"({allowed}) to preserve SOLID boundaries; relocate container wiring into those modules, "
+            "use `pyqa.app.di.configure_services` or update `pyqa.di.CompositionRegistry` when a new root is "
+            "justified, and rely on the DI test fixtures instead of ad-hoc registrations when exercising services."
+        ),
+    )
+
+
+def _append_interfaces_guidance(
+    accumulator: _AdviceAccumulator,
+    diagnostics: Sequence[DiagnosticRecord],
+) -> None:
+    """Promote clean interfaces-only modules when pyqa-interface finds concrete code."""
+
+    includes_interfaces = any(
+        record.tool == PYQA_INTERFACES_TOOL or record.code == PYQA_INTERFACES_CODE for record in diagnostics
+    )
+    if not includes_interfaces:
+        return
+    accumulator.add(
+        AdviceCategory.INTERFACE,
+        (
+            "Keep interfaces packages limited to Protocols, TypedDicts, dataclasses, and typed literals;"
+            " move concrete helpers (functions, managers, service factories) into their runtime modules"
+            " and depend on them via DI to maintain SOLID boundaries."
+        ),
+    )
 
 
 def _append_interface_guidance(

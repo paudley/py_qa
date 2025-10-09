@@ -17,11 +17,14 @@ from ._ast_visitors import BaseAstLintVisitor, VisitorMetadata, run_ast_linter
 from ._module_utils import module_name_from_path
 from .base import InternalLintReport
 
-_ALLOWED_SERVICE_REGISTERERS: Final[set[str]] = {
+_ALLOWED_SERVICE_REGISTERERS: Final[frozenset[str]] = frozenset({
+    "pyqa.core.runtime.di",
     "pyqa.analysis.bootstrap",
-    "pyqa.runtime.installers.bootstrap",
-    "pyqa.runtime.console.bootstrap",
-}
+})
+_ALLOWED_SERVICE_SUFFIXES: Final[tuple[str, ...]] = (".bootstrap",)
+_ALLOWED_SERVICE_REGISTERERS_DISPLAY: Final[str] = ", ".join(
+    (*sorted(_ALLOWED_SERVICE_REGISTERERS), "*bootstrap modules"),
+)
 _SERVICE_CONTAINER_NAMES: Final[frozenset[str]] = frozenset({"ServiceContainer", "container"})
 
 
@@ -58,10 +61,23 @@ class _DiVisitor(BaseAstLintVisitor):
 
     def visit_call(self, node: ast.Call) -> None:  # noqa: D401 suppression_valid: NodeVisitor API requires this signature; additional docstring would duplicate inherited documentation.
         if self._is_service_registration(node):
-            if self._module not in _ALLOWED_SERVICE_REGISTERERS:
+            if not self._is_allowed_module():
+                service_label = self._describe_service(node)
+                message = (
+                    f"Service '{service_label}' registered from '{self._module}' "
+                    f"must move into an approved composition root ({_ALLOWED_SERVICE_REGISTERERS_DISPLAY})."
+                )
+                hints = self._service_hints(service_label)
                 self.record_issue(
                     node,
-                    "Service registration must occur in approved composition roots",
+                    message,
+                    hints=hints,
+                    meta={
+                        "service": service_label,
+                        "module": self._module,
+                        "allowed_roots": sorted(_ALLOWED_SERVICE_REGISTERERS),
+                        "allowed_suffixes": _ALLOWED_SERVICE_SUFFIXES,
+                    },
                 )
         self.generic_visit(node)
 
@@ -73,6 +89,49 @@ class _DiVisitor(BaseAstLintVisitor):
             if isinstance(owner, ast.Name) and owner.id in _SERVICE_CONTAINER_NAMES:
                 return True
         return False
+
+    def _is_allowed_module(self) -> bool:
+        """Return ``True`` when the current module is an approved root."""
+
+        if self._module in _ALLOWED_SERVICE_REGISTERERS:
+            return True
+        return any(self._module.endswith(suffix) for suffix in _ALLOWED_SERVICE_SUFFIXES)
+
+    def _describe_service(self, node: ast.Call) -> str:
+        """Return a human-friendly representation of the registered service."""
+
+        if node.args:
+            label = self._render_argument(node.args[0])
+            if label:
+                return label
+        for keyword in node.keywords:
+            if keyword.arg in {"name", "service", "interface"}:
+                label = self._render_argument(keyword.value)
+                if label:
+                    return label
+        return "unknown service"
+
+    def _render_argument(self, arg: ast.AST) -> str:
+        """Render ``arg`` as a readable literal or expression string."""
+
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            return arg.value
+        if isinstance(arg, ast.Name):
+            return arg.id
+        try:
+            return ast.unparse(arg)
+        except Exception:  # pragma: no cover - ast.unparse best-effort fall back.
+            return ast.dump(arg, annotate_fields=False)
+
+    def _service_hints(self, service_label: str) -> tuple[str, ...]:
+        """Return actionable hints encouraging proper DI configuration."""
+
+        suffix_text = " or a module ending with '.bootstrap'" if _ALLOWED_SERVICE_SUFFIXES else ""
+        return (
+            f"Move '{service_label}' registration into pyqa.core.runtime.di{suffix_text}.",
+            "Extend pyqa.di.CompositionRegistry or add a dedicated package bootstrap when a new root is justified.",
+            "Use pyqa.app.di.configure_services or test DI fixtures instead of ad-hoc container wiring.",
+        )
 
 
 __all__ = ["run_pyqa_di_linter"]
