@@ -71,7 +71,7 @@ class FilesystemDiscovery(DiscoveryStrategy):
             return
 
         excludes = frozenset(root.joinpath(path).resolve() for path in config.excludes)
-        allow_root_py_qa = is_py_qa_workspace(root)
+        allow_root_py_qa = is_py_qa_workspace(root) or root.resolve().name == PY_QA_DIR_NAME
         for base in self._iter_root_candidates(config, root, limits):
             if base.is_file():
                 resolved = base.resolve()

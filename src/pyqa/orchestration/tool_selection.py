@@ -349,7 +349,7 @@ class ToolSelector:
         default_enabled = bool(tool.default_enabled)
         sensitivity_ok = internal_enabled or pyqa_rules
         scope_ok = pyqa_scope_active
-        should_run = scope_ok and (sensitivity_ok or default_enabled)
+        should_run = scope_ok
         reasons: list[str] = []
         if should_run:
             reasons.append("pyqa-scope")

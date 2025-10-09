@@ -61,7 +61,7 @@ cleanly.
 
 ### 9B – Static Analysis Hooks
 
-* Build an AST-based linter (`pyqa_interface_linter`) that detects module-level
+* Build an AST-based linter (`pyqa-interfaces`) that detects module-level
   violations:
   * Imports from feature modules (`pyqa.analysis`, `pyqa.reporting`, etc.) when
     the corresponding abstraction lives under `pyqa.interfaces.*`, excluding the
@@ -79,13 +79,13 @@ cleanly.
     allowlist entry, supporting Single Responsibility Principle monitoring.
 * Integrate each visitor with `lint` via new internal linter registrations and
   expose targeted meta flags (e.g., `--check-interfaces`, `--check-docstrings`).
-* Introduce a `pyqa_module_doc_linter` that enforces the presence of module
+* Introduce a `pyqa-module-docs` linter that enforces the presence of module
   documentation files (`{MODULE}.md`) and validates required sections (overview,
   DI seams, extension points) for each package directory.
 
 ### 9C – Constructor & DI Enforcement
 
-* Implement a `pyqa_di_factory_linter` that evaluates modules for DI
+* Implement a `pyqa-di` linter that evaluates modules for DI
   compliance:
   * Only DI composition modules (`core/runtime/di.py`, package `bootstrap.py`)
     may instantiate service implementations or call `ServiceContainer.register`.

@@ -162,6 +162,9 @@ class MetaRuntimeChecks:
     check_signatures: bool
     check_cache_usage: bool
     check_value_types: bool
+    check_interfaces: bool
+    check_di: bool
+    check_module_docs: bool
     pyqa_rules: bool
 
 
@@ -250,6 +253,42 @@ class LintMetaParams:
         """Return whether value-type ergonomics should be validated."""
 
         return self.runtime.check_value_types
+
+    @property
+    def check_interfaces(self) -> bool:
+        """Return whether interface enforcement should execute."""
+
+        return self.runtime.check_interfaces
+
+    @property
+    def check_di(self) -> bool:
+        """Return whether DI guardrails should execute."""
+
+        return self.runtime.check_di
+
+    @property
+    def check_module_docs(self) -> bool:
+        """Return whether module documentation verification should execute."""
+
+        return self.runtime.check_module_docs
+
+    @property
+    def check_interfaces(self) -> bool:
+        """Return whether interface enforcement should run."""
+
+        return self.runtime.check_interfaces
+
+    @property
+    def check_di(self) -> bool:
+        """Return whether DI guardrails should run."""
+
+        return self.runtime.check_di
+
+    @property
+    def check_module_docs(self) -> bool:
+        """Return whether module documentation validation should run."""
+
+        return self.runtime.check_module_docs
 
     @property
     def pyqa_rules(self) -> bool:

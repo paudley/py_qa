@@ -648,7 +648,14 @@ def _infer_annotation_targets(message: str, engine: AnnotationProvider) -> int:
     """Return the number of highlighted annotation spans within *message*."""
 
     spans = engine.message_spans(message)
-    return sum(1 for span in spans if span.style == ANNOTATION_SPAN_STYLE)
+    highlighted = sum(1 for span in spans if span.style == ANNOTATION_SPAN_STYLE)
+    if highlighted:
+        return highlighted
+    if "argument" in message:
+        tail = message.split("argument", 1)[1]
+        candidates = [token.strip(" `.,") for token in tail.split(",") if token.strip(" `.,")]
+        return len(candidates)
+    return 0
 
 
 __all__ = [

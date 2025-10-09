@@ -17,7 +17,10 @@ from pyqa.tools.registry import ToolRegistry
 from .base import InternalLintReport, InternalLintRunner, as_internal_runner
 from .cache_usage import run_cache_linter
 from .closures import run_closure_linter
+from .di import run_pyqa_di_linter
 from .docstrings import run_docstring_linter
+from .interfaces import run_pyqa_interface_linter
+from .module_docs import run_pyqa_module_doc_linter
 from .quality import run_quality_linter
 from .signatures import run_signature_linter
 from .suppressions import run_suppression_linter
@@ -55,6 +58,33 @@ INTERNAL_LINTERS: tuple[InternalLinterDefinition, ...] = (
         selection_tokens=("docstring", "docstrings"),
         runner=run_docstring_linter,
         description="Validate Google-style docstrings using Tree-sitter and spaCy.",
+    ),
+    InternalLinterDefinition(
+        name="pyqa-interfaces",
+        meta_attribute="check_interfaces",
+        selection_tokens=("pyqa-interfaces", "interfaces", "pyqa-interface"),
+        runner=run_pyqa_interface_linter,
+        description="Ensure imports target pyqa.interfaces.* and ban concrete DI construction.",
+        options=InternalLinterOptions(tags=("internal-linter", "internal-pyqa")),
+        pyqa_scoped=True,
+    ),
+    InternalLinterDefinition(
+        name="pyqa-di",
+        meta_attribute="check_di",
+        selection_tokens=("pyqa-di", "di", "pyqa-composition"),
+        runner=run_pyqa_di_linter,
+        description="Flag service registration outside approved composition roots.",
+        options=InternalLinterOptions(tags=("internal-linter", "internal-pyqa")),
+        pyqa_scoped=True,
+    ),
+    InternalLinterDefinition(
+        name="pyqa-module-docs",
+        meta_attribute="check_module_docs",
+        selection_tokens=("pyqa-module-docs", "module-docs"),
+        runner=run_pyqa_module_doc_linter,
+        description="Require package-level MODULE.md documentation with standard sections.",
+        options=InternalLinterOptions(tags=("internal-linter", "internal-pyqa")),
+        pyqa_scoped=True,
     ),
     InternalLinterDefinition(
         name="suppressions",

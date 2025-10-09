@@ -63,6 +63,9 @@ CLOSURES_HELP: Final[str] = "Run the closure/partial usage checker and exit."
 SIGNATURES_HELP: Final[str] = "Run the function signature width checker and exit."
 CACHE_HELP: Final[str] = "Run the functools cache usage checker and exit."
 PYQA_RULES_HELP: Final[str] = "Enable pyqa-specific lint rules even when running outside the pyqa repository."
+CHECK_INTERFACES_HELP: Final[str] = "Run the pyqa interface enforcement linter and exit."
+CHECK_DI_HELP: Final[str] = "Run the dependency-injection guardrails linter and exit."
+CHECK_MODULE_DOCS_HELP: Final[str] = "Validate required MODULE.md documentation files and exit."
 FILTER_HELP: Final[str] = "Filter stdout/stderr from TOOL using regex (TOOL:pattern)."
 OUTPUT_MODE_HELP: Final[str] = "Output mode: concise, pretty, or raw."
 REPORT_JSON_HELP: Final[str] = "Write JSON report to the provided path."
@@ -771,6 +774,18 @@ def _meta_runtime_checks_dependency(
         bool,
         typer.Option(False, "--check-value-types", help="Verify value-type helpers expose ergonomic dunder methods."),
     ],
+    check_interfaces: Annotated[
+        bool,
+        typer.Option(False, "--check-interfaces", help=CHECK_INTERFACES_HELP),
+    ],
+    check_di: Annotated[
+        bool,
+        typer.Option(False, "--check-di", help=CHECK_DI_HELP),
+    ],
+    check_module_docs: Annotated[
+        bool,
+        typer.Option(False, "--check-module-docs", help=CHECK_MODULE_DOCS_HELP),
+    ],
     pyqa_rules: Annotated[
         bool,
         typer.Option(False, "--pyqa-rules", help=PYQA_RULES_HELP),
@@ -783,6 +798,9 @@ def _meta_runtime_checks_dependency(
         check_signatures=check_signatures,
         check_cache_usage=check_cache_usage,
         check_value_types=check_value_types,
+        check_interfaces=check_interfaces,
+        check_di=check_di,
+        check_module_docs=check_module_docs,
         pyqa_rules=pyqa_rules,
     )
 
@@ -805,6 +823,9 @@ def _meta_params_dependency(
             check_signatures=True,
             check_cache_usage=True,
             check_value_types=True,
+            check_interfaces=True,
+            check_di=True,
+            check_module_docs=True,
             pyqa_rules=True,
         )
     else:

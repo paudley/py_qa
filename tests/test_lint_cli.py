@@ -51,6 +51,9 @@ def _meta_flags(
     check_signatures: bool = False,
     check_cache_usage: bool = False,
     check_value_types: bool = False,
+    check_interfaces: bool = False,
+    check_di: bool = False,
+    check_module_docs: bool = False,
     pyqa_rules: bool = False,
 ) -> LintMetaParams:
     """Return ``LintMetaParams`` populated for test scenarios."""
@@ -74,6 +77,9 @@ def _meta_flags(
             check_signatures=check_signatures,
             check_cache_usage=check_cache_usage,
             check_value_types=check_value_types,
+            check_interfaces=check_interfaces,
+            check_di=check_di,
+            check_module_docs=check_module_docs,
             pyqa_rules=pyqa_rules,
         ),
     )
@@ -353,6 +359,9 @@ def test_explain_tools_outputs_table(tmp_path: Path, monkeypatch) -> None:
     assert result.exit_code == 0
     assert "Tool Selection Plan" in result.stdout
     assert "Planned" in result.stdout
+    assert "pyqa-interfaces" in result.stdout
+    assert "pyqa-di" in result.stdout
+    assert "pyqa-module-docs" in result.stdout
 
 
 def test_explain_tools_conflicts_with_tool_info(tmp_path: Path) -> None:

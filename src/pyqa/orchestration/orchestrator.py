@@ -46,7 +46,7 @@ from .action_executor import (
     wrap_runner,
 )
 from .runtime import discover_files, filter_files_for_tool, prepare_runtime
-from .tool_selection import SelectionResult, ToolSelector
+from .tool_selection import SelectionResult, ToolDecision, ToolSelector
 from .worker import run_command
 
 FetchEvent = Literal["start", "completed", "error"]
@@ -182,16 +182,12 @@ class Orchestrator:
         if registry is None or discovery is None:
             raise TypeError("Orchestrator requires 'registry' and 'discovery' dependencies")
 
-        if services is None:
-            services = ServiceContainer()
-            register_default_services(services)
-            register_analysis_services(services)
-
         self._context = _RuntimeContext(registry=registry, discovery=discovery)
         base_runner = final_runner or _build_default_runner()
         self._runner = base_runner if isinstance(base_runner, RunnerCallable) else wrap_runner(base_runner)
         self._hooks = final_hooks or OrchestratorHooks()
-        self._services: ServiceContainer = services
+        self._services: ServiceContainer = services or ServiceContainer()
+        self._ensure_bootstrap_services()
         self._debug_logger: Callable[[str], None] | None = debug_logger
         self._analysis = self._create_analysis_providers()
         self._pipeline = self._create_pipeline(final_preparer)
@@ -199,6 +195,20 @@ class Orchestrator:
     def _debug(self, message: str) -> None:
         if self._debug_logger:
             self._debug_logger(message)
+
+    def _ensure_bootstrap_services(self) -> None:
+        """Ensure core analysis/default services exist on the container."""
+
+        bootstrap = ServiceContainer()
+        register_default_services(bootstrap)
+        register_analysis_services(bootstrap)
+        for key, record in bootstrap._factories.items():
+            if key not in self._services:
+                self._services.register(
+                    key,
+                    record.factory,
+                    singleton=record.singleton,
+                )
 
     def _create_pipeline(
         self,

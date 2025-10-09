@@ -114,20 +114,14 @@ Given a prepared lint state, tool selection proceeds as follows:
 These carry `pyqa_scoped = True` in their metadata so the launcher can toggle
 them based on workspace detection or the `--pyqa-rules` flag.
 
-* `pyqa_interface_linter` – enforces imports through `pyqa.interfaces.*`,
-  flags concrete dependencies outside approved composition roots, validates
-  module size/complexity guardrails, and checks value-object conventions.
-* `pyqa_di_factory_linter` – guards service construction, ensuring DI wiring
-  happens only in sanctioned factories/bootstrap modules and that procedural
-  dispatch patterns stay inside the strategy layer.
-* `pyqa_module_doc_linter` – requires each package directory to ship an
-  uppercase `{MODULE}.md` guide describing patterns, DI seams, and
-  extension points.
-* `pyqa_composition_root_audit` – verifies registration boundaries and
-  cross-package imports against the architectural dependency graph.
-* `pyqa_constructor_ban_linter` – detects direct instantiation of banned
-  implementations (e.g., analysis engines, context resolvers) outside their
-  owning modules.
+* `pyqa-interfaces` – enforces imports through `pyqa.interfaces.*`, flags
+  concrete dependencies outside approved composition roots, and blocks banned
+  constructor usage.
+* `pyqa-di` – guards service construction, ensuring DI wiring happens only in
+  sanctioned factories/bootstrap modules and that procedural dispatch patterns
+  stay inside the strategy layer.
+* `pyqa-module-docs` – requires each package directory to ship an uppercase
+  `{MODULE}.md` guide describing patterns, DI seams, and extension points.
 
 ## Example scenarios
 

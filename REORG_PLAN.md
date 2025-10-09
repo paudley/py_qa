@@ -347,7 +347,7 @@ Deliverable: Completion of Phase 8 means every coding-rule exception is justifie
 
 *See `docs/reorg/PHASE9.md` for the detailed execution plan.*
 
-1. Integrate pyqa-scoped internal linters (`pyqa_interface_linter`, `pyqa_di_factory_linter`, `pyqa_module_doc_linter`, etc.) and wire them into the lint pipeline with the `--pyqa-rules` opt-in.
+1. Integrate pyqa-scoped internal linters (`pyqa-interfaces`, `pyqa-di`, `pyqa-module-docs`, etc.) and wire them into the lint pipeline with the `--pyqa-rules` opt-in.
 2. Extend architectural tests to enforce module-level SOLID boundaries and DI composition rules.
 3. Backfill package-level documentation (`{MODULE}.md`) capturing usage patterns, DI seams, and extension points across the repository.
 
