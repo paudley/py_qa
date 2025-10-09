@@ -9,6 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 from ....analysis.bootstrap import register_analysis_services
 from ....catalog.model_catalog import CatalogSnapshot
@@ -86,20 +87,32 @@ def _coerce_hooks(hooks: OrchestratorHooks) -> ConcreteOrchestratorHooks:
 
     concrete = ConcreteOrchestratorHooks()
 
-    def _proxy(name: str):
-        def _call(*args, **kwargs):
-            callback = getattr(hooks, name)
-            if callback:
-                callback(*args, **kwargs)
-
-        return _call
-
-    concrete.before_tool = _proxy("before_tool")
-    concrete.after_tool = _proxy("after_tool")
-    concrete.after_discovery = _proxy("after_discovery")
-    concrete.after_execution = _proxy("after_execution")
-    concrete.after_plan = _proxy("after_plan")
+    concrete.before_tool = _HookProxy(hooks, "before_tool")
+    concrete.after_tool = _HookProxy(hooks, "after_tool")
+    concrete.after_discovery = _HookProxy(hooks, "after_discovery")
+    concrete.after_execution = _HookProxy(hooks, "after_execution")
+    concrete.after_plan = _HookProxy(hooks, "after_plan")
     return concrete
+
+
+@dataclass(slots=True)
+class _HookProxy:
+    """Delegate orchestrator hook invocations to optional hook callables."""
+
+    hooks: OrchestratorHooks
+    name: str
+
+    def __call__(self, *args: Any, **kwargs: Any) -> None:
+        """Invoke the named hook when the backing ``hooks`` exposes it.
+
+        Args:
+            *args: Positional arguments forwarded to the hook callable.
+            **kwargs: Keyword arguments forwarded to the hook callable.
+        """
+
+        callback = getattr(self.hooks, self.name)
+        if callback:
+            callback(*args, **kwargs)
 
 
 class _OrchestratorExecutionPipeline(ExecutionPipeline):

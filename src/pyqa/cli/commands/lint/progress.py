@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Final, Literal
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
 from rich.text import Text
 
-from pyqa.interfaces.core import get_console_manager
+from pyqa.runtime.console.manager import get_console_manager
 
 from ...core.runtime import ServiceResolutionError
 from .literals import OUTPUT_MODE_CONCISE

@@ -252,6 +252,32 @@ def _build_parser_loader() -> ParserFactory | None:
     return ParserFactory(parser_cls=parser_cls, get_parser=get_parser, language_cls=language_cls)
 
 
+@dataclass(slots=True)
+class _ParserLoader:
+    """Callable wrapper that constructs parsers and reports failures."""
+
+    parser_factory: ParserFactory
+    grammar_name: str
+    register_warning: Callable[[str], None]
+
+    def __call__(self) -> Any | None:
+        """Return a parser for ``grammar_name`` or emit a warning on failure.
+
+        Returns:
+            Any | None: Parser instance when creation succeeds; otherwise ``None``.
+        """
+
+        parser = self.parser_factory.create(
+            self.grammar_name,
+            register_warning=self.register_warning,
+        )
+        if parser is None:
+            self.register_warning(
+                f"Tree-sitter grammar '{self.grammar_name}' unavailable; falling back to heuristic context extraction.",
+            )
+        return parser
+
+
 _PARSER_FACTORY = _build_parser_loader()
 
 
@@ -395,6 +421,16 @@ class TreeSitterContextResolver:
         return parser
 
     def _resolve_parser_loader(self, language: Language) -> Callable[[], Any] | None:
+        """Return a parser factory for ``language`` when available.
+
+        Args:
+            language: Language enum identifying the requested parser.
+
+        Returns:
+            Callable[[], Any] | None: Zero-argument callable creating a parser or
+            ``None`` when no parser can be produced.
+        """
+
         factory = _PARSER_FACTORY
         if factory is None:
             self._register_warning("Tree-sitter parser unavailable; falling back to heuristic context extraction.")
@@ -405,20 +441,11 @@ class TreeSitterContextResolver:
             self._disable_language(language)
             return None
 
-        parser_factory = factory
-
-        def _loader() -> Any:
-            parser = parser_factory.create(
-                grammar_name,
-                register_warning=self._register_warning,
-            )
-            if parser is None:
-                self._register_warning(
-                    f"Tree-sitter grammar '{grammar_name}' unavailable; falling back to heuristic context extraction.",
-                )
-            return parser
-
-        return _loader
+        return _ParserLoader(
+            parser_factory=factory,
+            grammar_name=grammar_name,
+            register_warning=self._register_warning,
+        )
 
     def _disable_language(self, language: Language) -> None:
         if language not in self._FALLBACK_LANGUAGES:

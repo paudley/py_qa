@@ -23,7 +23,7 @@ def _stub_load(name: str):  # pragma: no cover - helper for stub module
 _stub_spacy.load = _stub_load  # type: ignore[attr-defined]
 sys.modules.setdefault("spacy", _stub_spacy)
 
-from pyqa.interfaces.analysis import NullContextResolver
+from pyqa.analysis.providers import NullContextResolver
 from pyqa.cache.context import CacheContext
 from pyqa.catalog import ToolCatalogLoader
 from pyqa.catalog.strategies import command_option_map

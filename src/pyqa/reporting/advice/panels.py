@@ -10,7 +10,7 @@ from collections.abc import Callable, Iterable
 from rich.panel import Panel
 from rich.text import Text
 
-from pyqa.interfaces.core import get_console_manager
+from pyqa.runtime.console.manager import get_console_manager
 
 from ...config import OutputConfig
 from ...interfaces.analysis import AnnotationProvider

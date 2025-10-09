@@ -11,29 +11,25 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal, cast
+from typing import Final, Literal
 
-from pyqa.config import Config, SensitivityLevel
-from pyqa.platform.workspace import is_py_qa_workspace
-from pyqa.tools.base import PHASE_NAMES, PhaseLiteral
+from pyqa.tools.base import PhaseLiteral
 
 ToolFamilyLiteral = Literal["external", "internal", "internal-pyqa", "unknown"]
-DEFAULT_PHASE: Final[PhaseLiteral] = "lint"
-PHASE_ORDER: Final[tuple[PhaseLiteral, ...]] = cast(tuple[PhaseLiteral, ...], PHASE_NAMES)
 
 
 @dataclass(frozen=True, slots=True)
 class SelectionContext:
     """Derived inputs used to evaluate tool eligibility."""
 
-    config: Config
+    config: object
     root: Path
     files: tuple[Path, ...]
     requested_only: tuple[str, ...]
     requested_languages: tuple[str, ...]
     detected_languages: tuple[str, ...]
     file_extensions: frozenset[str]
-    sensitivity: SensitivityLevel
+    sensitivity: object
     pyqa_workspace: bool
     pyqa_rules: bool
 
@@ -99,51 +95,11 @@ class SelectionResult:
         return tuple(filtered)
 
 
-class UnknownToolRequestedError(RuntimeError):
-    """Error raised when ``--only`` references tools that are not registered."""
-
-    def __init__(self, tool_names: Sequence[str]) -> None:
-        deduplicated = tuple(dict.fromkeys(tool_names))
-        display = ", ".join(deduplicated)
-        message = f"Unknown tool(s) requested via --only: {display}"
-        super().__init__(message)
-        self.tool_names: tuple[str, ...] = deduplicated
-
-
-def build_selection_context(
-    cfg: Config,
-    files: Sequence[Path],
-    *,
-    detected_languages: Sequence[str],
-    root: Path,
-) -> SelectionContext:
-    """Return a :class:`SelectionContext` derived from ``cfg`` and ``files``."""
-
-    file_tuple = tuple(files)
-    extensions = frozenset(path.suffix.lower() for path in file_tuple if path.suffix)
-    return SelectionContext(
-        config=cfg,
-        root=root,
-        files=file_tuple,
-        requested_only=tuple(cfg.execution.only),
-        requested_languages=tuple(cfg.execution.languages),
-        detected_languages=tuple(sorted(detected_languages)),
-        file_extensions=extensions,
-        sensitivity=cfg.severity.sensitivity,
-        pyqa_workspace=is_py_qa_workspace(root),
-        pyqa_rules=cfg.execution.pyqa_rules,
-    )
-
-
 __all__ = [
-    "PHASE_ORDER",
     "PhaseLiteral",
-    "DEFAULT_PHASE",
     "SelectionContext",
     "SelectionResult",
     "ToolDecision",
     "ToolEligibility",
     "ToolFamilyLiteral",
-    "UnknownToolRequestedError",
-    "build_selection_context",
 ]

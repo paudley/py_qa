@@ -62,6 +62,32 @@ FetchCallback = Callable[[FetchEvent, str, str, int, int, str | None], None]
 CommandPreparationFn = Callable[[CommandPreparationRequest], PreparedCommand]
 
 
+@dataclass(slots=True)
+class _LegacyPreparerAdapter:
+    """Adapter that converts legacy preparer signatures into request-aware callables."""
+
+    legacy_callable: Callable[..., PreparedCommand]
+
+    def __call__(self, request: CommandPreparationRequest) -> PreparedCommand:
+        """Invoke ``legacy_callable`` using fields extracted from ``request``.
+
+        Args:
+            request: Dataclass describing the command preparation inputs.
+
+        Returns:
+            PreparedCommand: Prepared command produced by the legacy callable.
+        """
+
+        return self.legacy_callable(
+            tool=request.tool,
+            base_cmd=list(request.command),
+            root=request.root,
+            cache_dir=request.cache_dir,
+            system_preferred=request.system_preferred,
+            use_local_override=request.use_local_override,
+        )
+
+
 @dataclass
 class OrchestratorHooks:
     """Optional hooks to customise orchestration behaviour."""
@@ -1020,17 +1046,7 @@ class Orchestrator:
             CommandPreparationFn: Adapter that builds a request from legacy inputs.
         """
 
-        def _wrapped(request: CommandPreparationRequest) -> PreparedCommand:
-            return legacy_callable(
-                tool=request.tool,
-                base_cmd=list(request.command),
-                root=request.root,
-                cache_dir=request.cache_dir,
-                system_preferred=request.system_preferred,
-                use_local_override=request.use_local_override,
-            )
-
-        return _wrapped
+        return _LegacyPreparerAdapter(legacy_callable=legacy_callable)
 
 
 @dataclass(frozen=True)

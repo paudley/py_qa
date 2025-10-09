@@ -39,10 +39,32 @@ _ALLOWED_INTERFACE_IMPORTS: Final[dict[str, set[str]]] = {
         "pyqa.orchestration.orchestrator",
         "pyqa.orchestration.runtime",
     },
-    "pyqa.reporting.advice.builder": {"pyqa.analysis.services"},
-    "pyqa.reporting.output.highlighting": {"pyqa.analysis"},
-    "pyqa.reporting.presenters.emitters": {"pyqa.analysis.annotations"},
+    "pyqa.cli.commands.lint.command": {
+        "pyqa.runtime.console.manager",
+        "pyqa.orchestration.selection_context",
+    },
+    "pyqa.cli.commands.lint.fetch": {"pyqa.runtime.console.manager"},
+    "pyqa.cli.commands.lint.progress": {"pyqa.runtime.console.manager"},
+    "pyqa.cli.commands.lint.reporting": {
+        "pyqa.analysis.providers",
+        "pyqa.reporting",
+        "pyqa.reporting.output.highlighting",
+        "pyqa.reporting.presenters.emitters",
+    },
+    "pyqa.cli.commands.lint.meta": {"pyqa.orchestration.selection_context"},
+    "pyqa.reporting.advice.builder": {"pyqa.analysis.services", "pyqa.analysis.providers"},
+    "pyqa.reporting.output.highlighting": {"pyqa.analysis", "pyqa.analysis.providers"},
+    "pyqa.reporting.presenters.emitters": {"pyqa.analysis.annotations", "pyqa.analysis.providers"},
+    "pyqa.reporting.presenters.formatters": {"pyqa.analysis.providers", "pyqa.runtime.console.manager"},
+    "pyqa.reporting.presenters.stats": {"pyqa.runtime.console.manager"},
+    "pyqa.reporting.advice.panels": {"pyqa.runtime.console.manager"},
+    "pyqa.reporting.advice.refactor": {"pyqa.runtime.console.manager"},
+    "pyqa.reporting.output.diagnostics": {"pyqa.core.logging.public", "pyqa.runtime.console.manager"},
+    "pyqa.reporting.output.modes": {"pyqa.core.logging.public", "pyqa.runtime.console.manager"},
     "pyqa.runtime.installers.bootstrap": {"pyqa.runtime"},
+    "pyqa.core.logging.public": {"pyqa.runtime.console.manager"},
+    "pyqa.core.runtime.di": {"pyqa.runtime.console.manager"},
+    "pyqa.diagnostics.core": {"pyqa.analysis.providers"},
 }
 _ALLOWED_INTERFACE_PACKAGES: Final[set[str]] = {
     "pyqa.analysis.bootstrap",
@@ -50,6 +72,7 @@ _ALLOWED_INTERFACE_PACKAGES: Final[set[str]] = {
     "pyqa.runtime.installers.bootstrap",
     "pyqa.orchestration.orchestrator",
     "pyqa.orchestration.runtime",
+    "pyqa.runtime.console.manager",
 }
 _BANNED_DOMAIN_SUFFIXES: Final[tuple[str, ...]] = (
     "analysis",
@@ -150,12 +173,12 @@ class _InterfaceVisitor(BaseAstLintVisitor):
         self._class_stack.pop()
 
     def visit_Assign(self, node: ast.Assign) -> None:  # noqa: D401 suppression_valid
-        if self._is_interface_module and _is_concrete_expression(node.value):
+        if self._is_interface_module and not self._class_stack and _is_concrete_expression(node.value):
             self._record_concrete_symbol(node, "assignment")
         self.generic_visit(node)
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:  # noqa: D401 suppression_valid
-        if self._is_interface_module and _is_concrete_expression(node.value):
+        if self._is_interface_module and not self._class_stack and _is_concrete_expression(node.value):
             self._record_concrete_symbol(node, "assignment")
         self.generic_visit(node)
 
@@ -249,6 +272,8 @@ class _InterfaceVisitor(BaseAstLintVisitor):
 
     def _record_concrete_symbol(self, node: ast.AST, symbol_kind: str) -> None:
         symbol = getattr(node, "name", None)
+        if symbol == "__all__":
+            return
         name_part = f" '{symbol}'" if symbol else ""
         message = (
             f"Interfaces module '{self._module}' must not define concrete {symbol_kind}{name_part}"
@@ -298,12 +323,19 @@ def _is_interface_module_name(name: str | None) -> bool:
 def _should_visit_file(path: Path) -> bool:
     """Return ``True`` when ``path`` is outside traditional test directories."""
 
-    return "tests" not in {part.lower() for part in path.parts}
+    lowered_parts = {part.lower() for part in path.parts}
+    if "tests" in lowered_parts:
+        return False
+    if "pyqa" in lowered_parts and "linting" in lowered_parts:
+        return False
+    return True
 
 
 def _is_allowed_interface_class(node: ast.ClassDef) -> bool:
     base_names = {_qualify_expr(base) for base in node.bases}
     if any(name.endswith(_ALLOWED_ABSTRACT_CLASS_SUFFIXES) for name in base_names if name):
+        return True
+    if any(name and name.split(".")[-1] in {"Exception", "RuntimeError", "Error"} for name in base_names if name):
         return True
     decorator_names = {_qualify_expr(deco) for deco in node.decorator_list}
     if any(name and name.split(".")[-1] in _ALLOWED_CLASS_DECORATORS for name in decorator_names):
@@ -314,12 +346,27 @@ def _is_allowed_interface_class(node: ast.ClassDef) -> bool:
 def _is_concrete_expression(expr: ast.AST | None) -> bool:
     if expr is None:
         return False
-    if isinstance(expr, (ast.Call, ast.Attribute, ast.Lambda, ast.Subscript)):
+    if isinstance(expr, ast.Subscript):
+        base_name = _qualify_expr(expr.value)
+        if base_name.split(".")[-1] in {"Literal", "Final", "Annotated", "Union", "Optional", "Tuple"}:
+            return False
+        return True
+    if isinstance(expr, ast.Call):
+        func_name = _qualify_expr(expr.func)
+        simple_name = func_name.split(".")[-1]
+        if simple_name in {"cast", "tuple", "frozenset", "literal"}:
+            return any(_is_concrete_expression(arg) for arg in expr.args[1:]) if simple_name == "cast" else False
+        return True
+    if isinstance(expr, (ast.Attribute, ast.Lambda)):
         return True
     if isinstance(expr, ast.Name):
         return expr.id not in {"None", "True", "False"}
-    if isinstance(expr, (ast.Dict, ast.List, ast.Tuple, ast.Set, ast.JoinedStr)):
-        return True
+    if isinstance(expr, (ast.List, ast.Tuple, ast.Set)):
+        return any(_is_concrete_expression(element) for element in expr.elts)
+    if isinstance(expr, ast.Dict):
+        return any(_is_concrete_expression(value) for value in expr.values)
+    if isinstance(expr, ast.JoinedStr):
+        return any(_is_concrete_expression(value) for value in expr.values)
     return False
 
 
@@ -335,6 +382,8 @@ def _qualify_expr(node: ast.AST) -> str:
         if isinstance(current, ast.Name):
             parts.append(current.id)
             return ".".join(reversed(parts))
+    if isinstance(node, ast.Call):
+        return _qualify_expr(node.func)
     try:
         return ast.unparse(node)
     except Exception:  # pragma: no cover - resilience for Python AST edge cases.

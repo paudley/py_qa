@@ -8,7 +8,8 @@ from __future__ import annotations
 from pyqa.core.models import RunResult
 
 from ....config import Config
-from ....interfaces.analysis import AnnotationProvider, NullAnnotationProvider
+from ....analysis.providers import NullAnnotationProvider
+from ....interfaces.analysis import AnnotationProvider
 from ....reporting import render
 from ....reporting.output.highlighting import set_annotation_provider as set_highlighting_annotation_provider
 from ....reporting.presenters.emitters import set_annotation_provider as set_emitter_annotation_provider

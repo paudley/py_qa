@@ -9,8 +9,9 @@ from typing import Annotated, Final
 import typer
 from rich.progress import Progress
 
-from pyqa.interfaces.core import detect_tty
-from pyqa.interfaces.orchestration_selection import PHASE_ORDER, PhaseLiteral, UnknownToolRequestedError
+from pyqa.runtime.console.manager import detect_tty
+from pyqa.interfaces.orchestration_selection import PhaseLiteral
+from pyqa.orchestration.selection_context import PHASE_ORDER, UnknownToolRequestedError
 
 from ....config import ConfigError
 from ....linting.registry import iter_internal_linters

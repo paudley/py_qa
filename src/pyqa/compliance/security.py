@@ -403,12 +403,12 @@ class SecurityScanner:
         for level, count in metrics.items():
             symbol = BANDIT_HIGH_SYMBOL if BANDIT_HIGH_TOKEN in level else BANDIT_WARNING_SYMBOL
             suffix = level.rsplit(".", maxsplit=1)[-1].title()
-            print(f"  {symbol} {suffix} severity: {count}")
+            info(f"  {symbol} {suffix} severity: {count}", use_emoji=self.use_emoji)
         if samples:
-            print("\n  Sample issues:")
+            info("\n  Sample issues:", use_emoji=self.use_emoji)
             for sample in samples:
-                print(f"    {sample}")
-        print(f"\n  {BANDIT_GUIDANCE}")
+                info(f"    {sample}", use_emoji=self.use_emoji)
+        info(f"\n  {BANDIT_GUIDANCE}", use_emoji=self.use_emoji)
 
 
 def _match_pattern(

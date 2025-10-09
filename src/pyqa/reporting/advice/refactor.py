@@ -9,7 +9,7 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 
-from pyqa.interfaces.core import get_console_manager
+from pyqa.runtime.console.manager import get_console_manager
 
 from ...config import OutputConfig
 from ...core.models import RunResult

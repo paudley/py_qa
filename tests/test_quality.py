@@ -333,6 +333,57 @@ def test_pyqa_python_hygiene_flags_print(tmp_path: Path) -> None:
     assert any("print" in diagnostic.message for diagnostic in report.outcome.diagnostics)
 
 
+def test_pyqa_python_hygiene_allows_console_print(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    target = tmp_path / "library.py"
+    target.write_text(
+        "from pyqa.core.logging.public import get_console_manager\n"
+        "console = get_console_manager().get(color=True, emoji=True)\n"
+        "console.print('debug')\n",
+        encoding="utf-8",
+    )
+
+    config = _load_quality_config(tmp_path)
+    config.severity.sensitivity = "maximum"
+    config.quality.enforce_in_lint = True
+    state = _build_hygiene_state(tmp_path, [target])
+    report = run_pyqa_python_hygiene_linter(state, emit_to_logger=False, config=config)
+
+    assert report.outcome.diagnostics == []
+
+
+def test_pyqa_python_hygiene_allows_rich_print(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    target = tmp_path / "library.py"
+    target.write_text("import rich\nrich.print('debug')\n", encoding="utf-8")
+
+    config = _load_quality_config(tmp_path)
+    config.severity.sensitivity = "maximum"
+    config.quality.enforce_in_lint = True
+    state = _build_hygiene_state(tmp_path, [target])
+    report = run_pyqa_python_hygiene_linter(state, emit_to_logger=False, config=config)
+
+    assert report.outcome.diagnostics == []
+
+
+def test_pyqa_python_hygiene_ignores_system_exit_literals(tmp_path: Path) -> None:
+    _write_repo_layout(tmp_path)
+    target = tmp_path / "library.py"
+    target.write_text(
+        "message = \"avoid raise SystemExit in modules\"\n"
+        "check = 'os._exit' in message\n",
+        encoding="utf-8",
+    )
+
+    config = _load_quality_config(tmp_path)
+    config.severity.sensitivity = "maximum"
+    config.quality.enforce_in_lint = True
+    state = _build_hygiene_state(tmp_path, [target])
+    report = run_pyqa_python_hygiene_linter(state, emit_to_logger=False, config=config)
+
+    assert report.outcome.diagnostics == []
+
+
 def test_evaluate_quality_checks_pyqa_overrides(tmp_path: Path) -> None:
     _write_repo_layout(tmp_path)
     target = tmp_path / "module.py"

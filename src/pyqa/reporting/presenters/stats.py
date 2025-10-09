@@ -12,7 +12,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from pyqa.interfaces.core import get_console_manager
+from pyqa.runtime.console.manager import get_console_manager
 
 from ...config import OutputConfig
 from ...core.metrics import SUPPRESSION_LABELS, FileMetrics, compute_file_metrics

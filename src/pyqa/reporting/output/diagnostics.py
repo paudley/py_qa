@@ -8,10 +8,12 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from typing import Final
 
+from rich.text import Text
+
 from pyqa.core.severity import Severity
 
 from ...config import OutputConfig
-from ...core.logging import colorize
+from ...runtime.console.manager import get_console_manager
 from ...core.models import Diagnostic
 from .highlighting import (
     LOCATION_SEPARATOR,
@@ -91,18 +93,20 @@ def format_diagnostic_line(
     location: str,
     location_width: int,
     cfg: OutputConfig,
-) -> str:
+) -> Text:
     """Return a formatted diagnostic line for quiet/pretty output."""
 
-    severity_display = colorize(
-        diagnostic.severity.value,
-        severity_color(diagnostic.severity),
-        cfg.color,
-    )
+    severity_style = severity_color(diagnostic.severity)
+    severity_text = Text(diagnostic.severity.value)
+    if cfg.color:
+        severity_text.stylize(severity_style)
     code_value = (diagnostic.code or "").strip()
-    code_display = f" [{format_code_value(code_value, cfg.color)}]" if code_value else ""
+    code_text = Text()
+    if code_value:
+        code_text.append(" [")
+        code_text.append_text(format_code_value(code_value, cfg.color))
+        code_text.append("]")
     padded_location = location.ljust(location_width) if location_width else location
-    padding = " " if padded_location else ""
     message = clean_message(code_value, diagnostic.message)
     location_display = highlight_for_output(
         padded_location,
@@ -110,7 +114,15 @@ def format_diagnostic_line(
         extra_spans=location_function_spans(padded_location),
     )
     message_display = highlight_for_output(message, color=cfg.color)
-    return f"  {severity_display} {location_display}{padding}{message_display}{code_display}"
+    line = Text("  ")
+    line.append_text(severity_text)
+    line.append(" ")
+    line.append_text(location_display)
+    if padded_location:
+        line.append(" ")
+    line.append_text(message_display)
+    line.append_text(code_text)
+    return line
 
 
 def dump_diagnostics(diags: Iterable[Diagnostic], cfg: OutputConfig) -> None:
@@ -122,10 +134,11 @@ def dump_diagnostics(diags: Iterable[Diagnostic], cfg: OutputConfig) -> None:
 
     locations = [raw_location(diag) for diag in collected]
     location_width = max((len(loc) for loc in locations), default=0)
+    console = get_console_manager().get(color=cfg.color, emoji=cfg.emoji)
 
     for diag, location in zip(collected, locations, strict=False):
         line = format_diagnostic_line(diag, location, location_width, cfg)
-        print(line)
+        console.print(line)
 
 
 __all__ = [

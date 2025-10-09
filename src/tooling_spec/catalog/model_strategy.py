@@ -35,6 +35,36 @@ _STRATEGY_TYPE_ALIASES: Final[dict[str, StrategyType]] = {
 }
 
 
+@dataclass(slots=True)
+class _StrategyFactory:
+    """Callable wrapper that normalises payloads for strategy implementations."""
+
+    implementation: Callable[..., Any]
+
+    def __call__(self, config: Mapping[str, Any] | None = None, **overrides: Any) -> Any:
+        """Invoke ``implementation`` with a merged mapping of configuration values.
+
+        Args:
+            config: Optional mapping sourced from catalog metadata.
+            **overrides: Keyword overrides supplied by runtime callers.
+
+        Returns:
+            Any: Result produced by the underlying strategy implementation.
+        """
+
+        payload: dict[str, Any] = {}
+        if config is not None:
+            payload.update({str(key): value for key, value in config.items()})
+        if overrides:
+            payload.update(overrides)
+        try:
+            return self.implementation(payload)
+        except TypeError:
+            if payload:
+                raise
+            return self.implementation()
+
+
 def normalize_strategy_type(value: JSONValue | None, *, context: str) -> StrategyType:
     """Return the canonical strategy type for catalog metadata.
 
@@ -232,21 +262,7 @@ class StrategyDefinition:
         """
 
         implementation = self.resolve_callable()
-
-        def factory(config: Mapping[str, Any] | None = None, **overrides: Any) -> Any:
-            payload: dict[str, Any] = {}
-            if config is not None:
-                payload.update({str(key): value for key, value in config.items()})
-            if overrides:
-                payload.update(overrides)
-            try:
-                return implementation(payload)
-            except TypeError:
-                if payload:
-                    raise
-                return implementation()
-
-        return factory
+        return _StrategyFactory(implementation=implementation)
 
     @staticmethod
     def from_mapping(data: Mapping[str, JSONValue], *, source: Path) -> StrategyDefinition:

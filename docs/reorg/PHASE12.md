@@ -25,11 +25,11 @@
   * `interfaces/orchestration_selection.py` – owns all selection dataclasses
     and helper builders.
   * `interfaces/core.py` – exposes protocols for `ConsoleFactory`,
-    `ConsoleManager`, `LoggerFactory`, etc; no direct Rich references.
+    `ConsoleManager`, `LoggerFactory`, etc., while runtime console factories
+    (`detect_tty`, `RichConsoleManager`) live under `pyqa.runtime.console`.
   * `interfaces/analysis.py` – provides `AnnotationProvider`, `ContextResolver`,
-    `FunctionScaleEstimator`, `MessageSpan`, `HighlightKind`, plus
-    `NullAnnotationProvider/NullContextResolver` dataclasses (pure data, no
-    external imports).
+    `FunctionScaleEstimator`, `MessageSpan`, `HighlightKind`; concrete null
+    providers now live in `pyqa.analysis.providers`.
 * Update `__init__.py` to remain empty (no exports) with explanatory docstring.
 
 ### Runtime & DI Modules
@@ -68,7 +68,8 @@
 ### Reporting Modules
 
 * Switch reporting presenters/emitters/highlighting/advice builders to import
-  `NullAnnotationProvider`, `MessageSpan`, etc., from `interfaces.analysis`.
+  null/default providers from `pyqa.analysis.providers` while consuming
+  protocols and dataclasses from `interfaces.analysis`.
 * Ensure annotation service lookups use DI or factories located in
   `analysis/services.py`, not interfaces.
 * Update progress/reporting renders to get console managers from DI/resolution
@@ -100,5 +101,7 @@
 2. All consumers import from either interfaces (for contracts) or domain
    modules (for implementations) without violating DIP.
 3. `pyqa-interfaces` linter passes cleanly.
-4. CLI lint/reporting/install commands run through DI-resolved services.
+4. CLI lint/reporting/install commands run through DI-resolved services and
+   consume runtime helpers (`pyqa.orchestration.selection_context`,
+   `pyqa.runtime.console.manager`) instead of interface-hosted shims.
 5. Documentation and tests reflect the new architecture and guardrails.

@@ -424,19 +424,17 @@ class PythonHygieneCheck:
                         check=PYTHON_HYGIENE_DEBUG_IMPORT,
                     )
 
-                if not is_cli_module and (
-                    "raise systemexit" in lower_stripped
-                    or "systemexit(" in lower_stripped
-                    or "os._exit" in lower_stripped
-                ):
+                if not is_cli_module and _contains_system_exit(stripped):
                     result.add_warning(
                         f"Line {line_number}: Direct process termination bypasses orchestrator safeguards; use structured exit helpers.",
                         path,
                         check=PYTHON_HYGIENE_SYSTEM_EXIT,
                     )
 
-                if not is_cli_module and re.search(r"\b(pprint|print)\s*\(", stripped):
+                if not is_cli_module and _contains_print_call(stripped):
                     if "logger" in lower_stripped or "logging." in lower_stripped:
+                        continue
+                    if _is_console_print(stripped):
                         continue
                     result.add_warning(
                         f"Line {line_number}: Replace print-style output with structured logging.",
@@ -448,6 +446,62 @@ class PythonHygieneCheck:
         """Return ``False`` because hygiene issues require manual review."""
 
         return False
+
+
+def _contains_system_exit(line: str) -> bool:
+    lowered = line.lower()
+    for token in ("raise systemexit", "systemexit(", "os._exit"):
+        start = lowered.find(token)
+        while start != -1:
+            if not _is_within_quotes(line, start, start + len(token)):
+                return True
+            start = lowered.find(token, start + len(token))
+    return False
+
+
+def _is_within_quotes(line: str, start: int, end: int) -> bool:
+    in_single = False
+    in_double = False
+    escape = False
+    for idx, char in enumerate(line):
+        if idx >= start:
+            break
+        if escape:
+            escape = False
+            continue
+        if char == "\\":
+            escape = True
+            continue
+        if char == "'" and not in_double:
+            in_single = not in_single
+        elif char == '"' and not in_single:
+            in_double = not in_double
+    return in_single or in_double
+
+
+def _is_console_print(line: str) -> bool:
+    if ".print(" not in line:
+        return False
+    prefix = line.split(".print(", 1)[0]
+    lowered = prefix.lower()
+    allowed_receivers = (
+        "console",
+        "self.console",
+        "get_console_manager",
+        "rich",
+    )
+    return any(receiver in lowered for receiver in allowed_receivers)
+
+
+def _contains_print_call(line: str) -> bool:
+    for pattern in (r"print\s*\(", r"pprint\s*\("):
+        for match in re.finditer(pattern, line):
+            start, end = match.span()
+            if start > 0 and (line[start - 1].isalnum() or line[start - 1] in {"_", "."}):
+                continue
+            if not _is_within_quotes(line, start, end):
+                return True
+    return False
 
 
 @dataclass(slots=True)

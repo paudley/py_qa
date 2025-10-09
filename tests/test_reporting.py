@@ -1293,7 +1293,7 @@ def test_generate_advice_includes_interface_guidance() -> None:
         file="src/pyqa/interfaces/core.py",
         tool="pyqa-interfaces",
         code="pyqa:interfaces",
-        message="Interfaces module 'pyqa.interfaces.core' must not define concrete function 'detect_tty'",
+        message="Interfaces module 'pyqa.interfaces.core' must not define concrete class 'Example'",
     )
     builder = AdviceBuilder()
     advice_entries = generate_advice(
@@ -1312,6 +1312,43 @@ def test_generate_advice_includes_interface_guidance() -> None:
 
     interface_entry = next(entry for entry in advice_entries if entry.category == "Interface")
     assert "interfaces packages limited" in interface_entry.body
+
+
+def test_generate_advice_includes_python_hygiene_guidance() -> None:
+    builder = AdviceBuilder()
+    diagnostics = [
+        _advice_diag(
+            file="src/pyqa/catalog/metadata.py",
+            tool="pyqa-python-hygiene",
+            code="pyqa-python-hygiene:python-hygiene:print",
+            message="Replace print-style output with structured logging.",
+        ),
+        _advice_diag(
+            file="src/pyqa/library.py",
+            tool="pyqa-python-hygiene",
+            code="pyqa-python-hygiene:python-hygiene:system-exit",
+            message="Direct process termination bypasses orchestrator safeguards; use structured exit helpers.",
+        ),
+    ]
+    advice_entries = generate_advice(
+        [
+            (
+                diag.file or "",
+                diag.line if diag.line is not None else -1,
+                diag.function or "",
+                diag.tool,
+                diag.code or "-",
+                diag.message,
+            )
+            for diag in diagnostics
+        ],
+        builder.annotation_engine,
+    )
+
+    logging_entry = next(entry for entry in advice_entries if entry.category == "Logging")
+    assert "structured logging" in logging_entry.body
+    safety_entry = next(entry for entry in advice_entries if entry.category == "Runtime safety")
+    assert "SystemExit" in safety_entry.body or "exit" in safety_entry.body
 
 
 def test_advice_builder_delegates_to_generate_advice() -> None:

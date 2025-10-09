@@ -21,7 +21,7 @@ from rich.progress import (
 from rich.table import Table
 
 from pyqa.core.environment.tool_env.models import PreparedCommand
-from pyqa.interfaces.core import detect_tty, get_console_manager
+from pyqa.runtime.console.manager import detect_tty, get_console_manager
 
 from ....config import Config
 from ....tools.base import Tool

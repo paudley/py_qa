@@ -40,6 +40,30 @@ __all__ = [
 ]
 
 
+@dataclass(slots=True)
+class _DownloadInstaller:
+    """Installer callable materialising artifacts defined in the catalog."""
+
+    download_mapping: Mapping[str, JSONValue]
+    version: str | None
+    context_value: str
+
+    def __call__(self, ctx: ToolContext) -> None:
+        """Download the artifact for ``ctx`` using the resolved configuration.
+
+        Args:
+            ctx: Tool execution context describing the project root.
+        """
+
+        cache_root = ctx.root / ".lint-cache"
+        _download_artifact_for_tool(
+            self.download_mapping,
+            version=self.version,
+            cache_root=cache_root,
+            context=self.context_value,
+        )
+
+
 def install_download_artifact(config: Mapping[str, JSONValue]) -> Callable[[ToolContext], None]:
     """Return a catalog-driven installer for download artifacts.
 
@@ -80,16 +104,11 @@ def install_download_artifact(config: Mapping[str, JSONValue]) -> Callable[[Tool
             "install_download_artifact: 'contextLabel' must be a non-empty string",
         )
 
-    def installer(ctx: ToolContext) -> None:
-        cache_root = ctx.root / ".lint-cache"
-        _download_artifact_for_tool(
-            download_mapping,
-            version=version_value,
-            cache_root=cache_root,
-            context=context_value,
-        )
-
-    return installer
+    return _DownloadInstaller(
+        download_mapping=download_mapping,
+        version=version_value,
+        context_value=context_value,
+    )
 
 
 def _load_attribute(path: str, *, context: str) -> Any:

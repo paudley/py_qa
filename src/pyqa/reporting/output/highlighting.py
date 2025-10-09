@@ -9,10 +9,11 @@ import re
 from collections.abc import Sequence
 from typing import Any, Final
 
+from rich.style import Style
 from rich.text import Text
 
-from ...core.logging import colorize
-from ...interfaces.analysis import AnnotationProvider, NullAnnotationProvider, SimpleMessageSpan
+from ...analysis.providers import NullAnnotationProvider
+from ...interfaces.analysis import AnnotationProvider, MessageSpan, SimpleMessageSpan
 
 
 class _AnnotationRouter(AnnotationProvider):
@@ -157,7 +158,10 @@ def apply_highlighting_text(
     spans.extend(literal_spans)
     spans.sort(key=lambda span: (span.start, span.end))
     for span in spans:
-        text.stylize(span.style, span.start, span.end)
+        style = _style_from_code(span.style)
+        if style is None:
+            continue
+        text.stylize(style, span.start, span.end)
     return text
 
 
@@ -185,47 +189,50 @@ def highlight_for_output(
     color: bool,
     extra_spans: Sequence[MessageSpan] | None = None,
     engine: AnnotationProvider | None = None,
-) -> str:
-    """Return a string with inline highlighting suitable for terminal output."""
+) -> Text:
+    """Return Rich text with inline highlighting suitable for terminal output."""
 
     clean = message.replace("`", "")
     if not color:
         clean, _ = strip_literal_quotes(clean)
-        return clean
+        return Text(clean)
     clean, literal_spans = strip_literal_quotes(clean)
     spans = collect_highlight_spans(clean, engine=engine)
     spans.extend(literal_spans)
     if extra_spans:
         spans.extend(extra_spans)
-    if not spans:
-        return clean
-    spans.sort(key=lambda span: (span.start, span.end - span.start))
-    merged: list[MessageSpan] = []
+    text = Text(clean)
+    spans.sort(key=lambda span: (span.start, span.end))
     for span in spans:
-        if merged and span.start < merged[-1].end:
+        style = _style_from_code(span.style)
+        if style is None:
             continue
-        merged.append(span)
-    result: list[str] = []
-    cursor = 0
-    for span in merged:
-        start, end, style = span.start, span.end, span.style
-        if start < cursor:
-            continue
-        result.append(clean[cursor:start])
-        token = clean[start:end]
-        result.append(colorize(token, style, color))
-        cursor = end
-    result.append(clean[cursor:])
-    return "".join(result)
+        text.stylize(style, span.start, span.end)
+    return text
 
 
-def format_code_value(code: str, color_enabled: bool) -> str:
+def format_code_value(code: str, color_enabled: bool) -> Text:
     """Return a colourised diagnostic code for concise output."""
 
     clean = code.strip() or EMPTY_CODE_PLACEHOLDER
-    if clean == EMPTY_CODE_PLACEHOLDER:
-        return clean
-    return colorize(clean, CODE_TINT, color_enabled)
+    text = Text(clean)
+    if not color_enabled or clean == EMPTY_CODE_PLACEHOLDER:
+        return text
+    style = _style_from_code(CODE_TINT)
+    if style is not None:
+        text.stylize(style)
+    return text
+
+
+def _style_from_code(style_code: str | None) -> Style | None:
+    """Return a Rich style constructed from ``style_code`` tokens."""
+
+    if not style_code:
+        return None
+    if style_code.startswith("ansi256:"):
+        value = style_code.split(":", 1)[1]
+        return Style(color=f"color({value})")
+    return Style.parse(style_code)
 
 
 __all__ = [

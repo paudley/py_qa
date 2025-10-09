@@ -11,6 +11,7 @@ while preserving the import contract for entry-point shims.
 from __future__ import annotations
 
 import ast
+import logging
 import os
 import platform
 import shutil
@@ -67,6 +68,8 @@ class ProbeError(RuntimeError):
     """Raised when probing an interpreter fails."""
 
 
+LOGGER = logging.getLogger(__name__)
+
 PROBE_SCRIPT: Final[str] = (
     "import importlib\n"
     "import sys\n"
@@ -77,20 +80,20 @@ PROBE_SCRIPT: Final[str] = (
     "    cli = importlib.import_module('pyqa.cli')\n"
     "    app = importlib.import_module('pyqa.cli.app')\n"
     "except Exception:\n"
-    f"    print('{ProbeStatus.MISSING.value}', end='')\n"
+    f"    sys.stdout.write('{ProbeStatus.MISSING.value}')\n"
     "    sys.exit(0)\n\n"
     "for module in (pyqa, cli, app):\n"
     "    module_file = getattr(module, '__file__', None)\n"
     "    if not module_file:\n"
-    f"        print('{ProbeStatus.OUTSIDE.value}', end='')\n"
+    f"        sys.stdout.write('{ProbeStatus.OUTSIDE.value}')\n"
     "        sys.exit(0)\n"
     "    path = Path(module_file).resolve()\n"
     "    try:\n"
     "        path.relative_to(SRC)\n"
     "    except ValueError:\n"
-    f"        print('{ProbeStatus.OUTSIDE.value}', end='')\n"
+    f"        sys.stdout.write('{ProbeStatus.OUTSIDE.value}')\n"
     "        sys.exit(0)\n\n"
-    f"print('{ProbeStatus.OK.value}', end='')\n"
+    f"sys.stdout.write('{ProbeStatus.OK.value}')\n"
 )
 
 __all__ = ["launch"]
@@ -127,7 +130,7 @@ def _debug(message: str) -> None:
     """
 
     if os.environ.get(VERBOSE_ENV):
-        print(message, file=sys.stderr)
+        LOGGER.debug(message)
 
 
 def _select_interpreter() -> Path:
@@ -137,7 +140,7 @@ def _select_interpreter() -> Path:
     if override:
         path = Path(shutil.which(override) or override).expanduser()
         if not path.exists():
-            print(f"PYQA_PYTHON interpreter not found: {path}", file=sys.stderr)
+            LOGGER.error("PYQA_PYTHON interpreter not found: %s", path)
             sys.exit(1)
         _debug(f"Using PYQA_PYTHON interpreter: {path}")
         return path
@@ -244,7 +247,9 @@ def _read_python_version_info(python_path: Path) -> tuple[int, int]:
         ProbeError: If the interpreter reports an unexpected version payload.
     """
 
-    output = subprocess.check_output([str(python_path), "-c", "import sys; print(sys.version_info[:2])"])
+    output = subprocess.check_output(
+        [str(python_path), "-c", "import sys; sys.stdout.write(str(sys.version_info[:2]))"]
+    )
     text = output.decode().strip()
     parsed = ast.literal_eval(text)
     if not (isinstance(parsed, tuple) and len(parsed) == VERSION_COMPONENTS):

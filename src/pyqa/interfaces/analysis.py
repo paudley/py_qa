@@ -109,39 +109,6 @@ class FunctionScaleEstimator(Protocol):
         raise NotImplementedError
 
 
-__all__ = ["AnnotationProvider", "ContextResolver", "FunctionScaleEstimator", "MessageSpan"]
-
-
-class NullAnnotationProvider(AnnotationProvider):
-    """Annotation provider that returns empty structures for all requests."""
-
-    def annotate_run(self, result: Any) -> dict[int, Any]:
-        return {}
-
-    def message_spans(self, message: str) -> Sequence[MessageSpan]:
-        return (SimpleMessageSpan(start=0, end=0, style=""),)
-
-    def message_signature(self, message: str) -> Sequence[str]:
-        return ()
-
-
-class NullContextResolver(ContextResolver):
-    """Context resolver that performs no augmentation."""
-
-    def annotate(self, diagnostics: Iterable[Any], *, root: Path) -> None:
-        del diagnostics, root
-
-    def resolve_context_for_lines(
-        self,
-        file_path: str,
-        *,
-        root: Path,
-        lines: Iterable[int],
-    ) -> dict[int, str]:
-        del file_path, root, lines
-        return {}
-
-
 @dataclass(frozen=True, slots=True)
 class SimpleMessageSpan(MessageSpan):
     """Concrete message span dataclass implementing the protocol."""
@@ -159,6 +126,4 @@ __all__ = [
     "HighlightKind",
     "MessageSpan",
     "SimpleMessageSpan",
-    "NullAnnotationProvider",
-    "NullContextResolver",
 ]

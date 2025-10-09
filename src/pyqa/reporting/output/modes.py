@@ -10,20 +10,22 @@ from pathlib import Path
 from ...config import OutputConfig
 from ...core.logging import colorize
 from ...core.models import RunResult
+from ...runtime.console.manager import get_console_manager
 from .diagnostics import dump_diagnostics, join_output
 
 
 def render_quiet_mode(result: RunResult, cfg: OutputConfig) -> None:
     """Render diagnostics in quiet mode."""
 
+    console = get_console_manager().get(color=cfg.color, emoji=cfg.emoji)
     failed = [outcome for outcome in result.outcomes if not outcome.ok]
     if not failed:
-        print("ok")
+        console.print("ok")
         return
     for outcome in failed:
-        print(f"{outcome.tool}:{outcome.action} failed rc={outcome.returncode}")
+        console.print(f"{outcome.tool}:{outcome.action} failed rc={outcome.returncode}")
         if outcome.stderr:
-            print(join_output(outcome.stderr).rstrip())
+            console.print(join_output(outcome.stderr).rstrip())
         if outcome.diagnostics:
             dump_diagnostics(outcome.diagnostics, cfg)
 
@@ -32,31 +34,33 @@ def render_pretty_mode(result: RunResult, cfg: OutputConfig) -> None:
     """Render orchestrator results in a human-friendly pretty format."""
 
     root_display = colorize(str(Path(result.root).resolve()), "blue", cfg.color)
-    print(f"Root: {root_display}")
+    console = get_console_manager().get(color=cfg.color, emoji=cfg.emoji)
+    console.print(f"Root: {root_display}")
     for outcome in result.outcomes:
         status = colorize("PASS", "green", cfg.color) if outcome.ok else colorize("FAIL", "red", cfg.color)
-        print(f"\n{outcome.tool}:{outcome.action} — {status}")
+        console.print(f"\n{outcome.tool}:{outcome.action} — {status}")
         if outcome.stdout:
-            print(colorize("stdout:", "cyan", cfg.color))
-            print(join_output(outcome.stdout).rstrip())
+            console.print(colorize("stdout:", "cyan", cfg.color))
+            console.print(join_output(outcome.stdout).rstrip())
         if outcome.stderr:
-            print(colorize("stderr:", "yellow", cfg.color))
-            print(join_output(outcome.stderr).rstrip())
+            console.print(colorize("stderr:", "yellow", cfg.color))
+            console.print(join_output(outcome.stderr).rstrip())
         if outcome.diagnostics:
-            print(colorize("diagnostics:", "bold", cfg.color))
+            console.print(colorize("diagnostics:", "bold", cfg.color))
             dump_diagnostics(outcome.diagnostics, cfg)
 
     if result.outcomes:
-        print()
+        console.print()
 
 
 def render_raw_mode(result: RunResult) -> None:
     """Render orchestrator stdout/stderr streams without additional formatting."""
 
+    console = get_console_manager().get(color=False, emoji=False)
     for outcome in result.outcomes:
-        print(join_output(outcome.stdout).rstrip())
+        console.print(join_output(outcome.stdout).rstrip())
         if outcome.stderr:
-            print(join_output(outcome.stderr).rstrip())
+            console.print(join_output(outcome.stderr).rstrip())
 
 
 __all__ = [

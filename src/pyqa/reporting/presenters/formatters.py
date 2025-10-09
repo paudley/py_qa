@@ -6,16 +6,20 @@ from __future__ import annotations
 
 import re
 from collections import OrderedDict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
 from ...config import OutputConfig
-from ...core.logging import colorize, emoji
+from ...core.logging import emoji
 from ...core.models import Diagnostic, RunResult
 from ...filesystem.paths import normalize_path
-from ...interfaces.analysis import AnnotationProvider, NullAnnotationProvider
+from ...runtime.console.manager import get_console_manager
+from ...analysis.providers import NullAnnotationProvider
+from ...interfaces.analysis import AnnotationProvider
+from rich.style import Style
+from rich.text import Text
 from ..advice.panels import render_advice_panel
 from ..advice.refactor import render_refactor_navigator
 from ..output.diagnostics import (
@@ -225,9 +229,36 @@ def _render_concise_summary(
         stats_parts.append(f"{cached_actions} cached action(s)")
 
     stats_body = "— " + "; ".join(stats_parts)
-    status_text = colorize(summary_label, summary_color, cfg.color)
-    stats_text = colorize(stats_body, "white", cfg.color)
-    print(f"{status_text} {stats_text}".strip())
+    console = get_console_manager().get(color=cfg.color, emoji=cfg.emoji)
+    summary_line = _format_summary_line(summary_label, summary_color, stats_body, cfg)
+    console.print(summary_line)
+
+
+def _format_summary_line(
+    summary_label: str,
+    summary_color: str,
+    stats_body: str,
+    cfg: OutputConfig,
+) -> Text:
+    """Return summary output styled appropriately for concise mode.
+
+    Args:
+        summary_label: Status label such as ``✅ Passed``.
+        summary_color: Primary colour name to apply when colour is enabled.
+        stats_body: Aggregated statistics string for the summary.
+        cfg: Output configuration describing colour/emoji preferences.
+
+    Returns:
+        Rich :class:`Text` combining the status label and stats payload.
+    """
+
+    if not cfg.color:
+        return Text(f"{summary_label} {stats_body}".strip())
+    summary_text = Text(summary_label, style=f"bold {summary_color}")
+    stats_text = Text(stats_body, style="white")
+    summary_text.append(" ")
+    summary_text.append(stats_text)
+    return summary_text
 
 
 def _resolve_root_path(raw_root: str | Path) -> Path:
@@ -424,6 +455,7 @@ def _print_concise_entries(
         tool_width = min(raw_tool_width, TOOL_PADDING_LIMIT)
 
     tint_tool = _tool_tinter(result, cfg)
+    console = get_console_manager().get(color=cfg.color, emoji=cfg.emoji)
     for entry in sorted(
         entries,
         key=lambda item: (
@@ -445,12 +477,56 @@ def _print_concise_entries(
         message_display = highlight_for_output(entry.message, color=cfg.color)
         code_display = format_code_value(entry.code, cfg.color)
         tool_display = tint_tool(entry.tool)
-        print(
-            f"{tool_display}, {spacer}{location_display}, {code_display}, {message_display}",
-        )
+        line = Text()
+        line.append_text(tool_display)
+        line.append(", ")
+        if spacer:
+            line.append(spacer)
+        line.append_text(location_display)
+        line.append(", ")
+        line.append_text(code_display)
+        line.append(", ")
+        line.append_text(message_display)
+        console.print(line)
 
 
-def _tool_tinter(result: RunResult, cfg: OutputConfig) -> Callable[[str], str]:
+def _plain_tool_tinter(tool: str) -> Text:
+    """Return an unstyled ``Text`` instance for ``tool`` names.
+
+    Args:
+        tool: Tool identifier to convert into ``Text``.
+
+    Returns:
+        Text: Unstyled ``Text`` representation of ``tool``.
+    """
+
+    return Text(tool)
+
+
+@dataclass(slots=True)
+class _ToolTinter:
+    """Callable that enriches tool labels with Rich styles."""
+
+    tint_map: Mapping[str, Style]
+
+    def __call__(self, tool: str) -> Text:
+        """Return ``tool`` as ``Text`` applying a style when available.
+
+        Args:
+            tool: Tool identifier slated for colourisation.
+
+        Returns:
+            Text: Rich text representing ``tool`` with optional styling.
+        """
+
+        text = Text(tool)
+        style = self.tint_map.get(tool)
+        if style is not None:
+            text.stylize(style)
+        return text
+
+
+def _tool_tinter(result: RunResult, cfg: OutputConfig) -> Callable[[str], Text]:
     """Return a function that colourises tool names when colour is enabled.
 
     Args:
@@ -461,21 +537,17 @@ def _tool_tinter(result: RunResult, cfg: OutputConfig) -> Callable[[str], str]:
         Callable[[str], str]: Function that colourises tool names for output.
     """
     if not cfg.color:
-        return lambda tool: tool
+        return _plain_tool_tinter
 
     tools = sorted(
         {diag.tool or outcome.tool for outcome in result.outcomes for diag in outcome.diagnostics},
     )
-    tint_map: dict[str, str] = {}
+    tint_map: dict[str, Style] = {}
     palette = [255, 254, 253, 252, 251, 250, 249, 248]
     for index, tool_name in enumerate(tools):
-        tint_map[tool_name or ""] = f"ansi256:{palette[index % len(palette)]}"
+        tint_map[tool_name or ""] = Style(color=f"color({palette[index % len(palette)]})")
 
-    def tint(tool: str) -> str:
-        color = tint_map.get(tool)
-        return colorize(tool, color, cfg.color) if color else tool
-
-    return tint
+    return _ToolTinter(tint_map)
 
 
 def _normalise_symbol(value: str | None) -> str:

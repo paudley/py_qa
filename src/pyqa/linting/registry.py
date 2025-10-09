@@ -58,6 +58,51 @@ class InternalLinterDefinition:
     pyqa_scoped: bool = False
 
 
+@dataclass(slots=True)
+class _InternalRunnerAction:
+    """Invoke an internal linter runner and normalise the resulting outcome."""
+
+    definition: InternalLinterDefinition
+    state: PreparedLintState
+    runner: InternalLintRunner
+
+    def __call__(self, _context: ToolContext) -> ToolOutcome:
+        """Execute the bound runner and annotate the resulting outcome.
+
+        Args:
+            _context: Tool context provided by orchestrator execution.
+
+        Returns:
+            ToolOutcome: Deep-copied outcome associated with ``definition``.
+        """
+
+        report: InternalLintReport = self.runner(self.state, emit_to_logger=False)
+        outcome = report.outcome.model_copy(deep=True)
+        outcome.tool = self.definition.name
+        outcome.action = "check"
+        return outcome
+
+
+@dataclass(slots=True)
+class _RunnerBinding:
+    """Standardise runner call signatures for registration helpers."""
+
+    func: Callable[..., InternalLintReport]
+
+    def __call__(self, state: PreparedLintState, emit_to_logger: bool) -> InternalLintReport:
+        """Delegate to ``func`` using the canonical internal runner signature.
+
+        Args:
+            state: Prepared lint state provided by the CLI pipeline.
+            emit_to_logger: Flag indicating whether logging side effects should occur.
+
+        Returns:
+            InternalLintReport: Report produced by ``func``.
+        """
+
+        return self.func(state, emit_to_logger=emit_to_logger)
+
+
 INTERNAL_LINTERS: tuple[InternalLinterDefinition, ...] = (
     InternalLinterDefinition(
         name="docstrings",
@@ -291,14 +336,7 @@ def _wrap_internal_runner(
 ) -> Callable[[ToolContext], ToolOutcome]:
     """Return an action runner compatible with :class:`ToolAction`."""
 
-    def _execute(_context: ToolContext) -> ToolOutcome:
-        report: InternalLintReport = runner(state, emit_to_logger=False)
-        outcome = report.outcome.model_copy(deep=True)
-        outcome.tool = definition.name
-        outcome.action = "check"
-        return outcome
-
-    return _execute
+    return _InternalRunnerAction(definition=definition, state=state, runner=runner)
 
 
 def _bind_runner_callable(
@@ -306,10 +344,7 @@ def _bind_runner_callable(
 ) -> Callable[[PreparedLintState, bool], InternalLintReport]:
     """Return a callable enforcing the standard internal runner signature."""
 
-    def _runner(state: PreparedLintState, emit_to_logger: bool) -> InternalLintReport:
-        return func(state, emit_to_logger=emit_to_logger)
-
-    return _runner
+    return _RunnerBinding(func=func)
 
 
 __all__ = [

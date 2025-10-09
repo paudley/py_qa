@@ -12,7 +12,8 @@ from pyqa.config import Config
 from pyqa.core.environment.tool_env.models import PreparedCommand
 from pyqa.core.models import RawDiagnostic
 from pyqa.orchestration.orchestrator import Orchestrator, OrchestratorOverrides
-from pyqa.orchestration.tool_selection import ToolSelector, UnknownToolRequestedError
+from pyqa.orchestration.selection_context import UnknownToolRequestedError
+from pyqa.orchestration.tool_selection import ToolSelector
 from pyqa.testing import flatten_test_suppressions
 from pyqa.tools.base import DeferredCommand, Tool, ToolAction, ToolContext
 from pyqa.tools.registry import ToolRegistry

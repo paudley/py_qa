@@ -8,7 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from pyqa.interfaces.orchestration_selection import SelectionResult, UnknownToolRequestedError
+from pyqa.interfaces.orchestration_selection import SelectionResult
+from pyqa.orchestration.selection_context import UnknownToolRequestedError
 
 from ....catalog.errors import CatalogIntegrityError, CatalogValidationError
 from ....tools.builtin_registry import initialize_registry

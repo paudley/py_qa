@@ -6,9 +6,9 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Any, ParamSpec, cast, overload
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
+from typing import Any, Final, Generic, ParamSpec, cast, overload
 
 import typer
 from rich.console import Console
@@ -97,6 +97,56 @@ class Depends:
 CommandParams = ParamSpec("CommandParams")
 
 
+@dataclass(slots=True)
+class _CommandDecorator(Generic[CommandParams]):
+    """Callable helper registering Typer commands without nested closures."""
+
+    app: typer.Typer
+    name: str | None
+    help_text: str | None
+    typer_kwargs: Mapping[str, Any] = field(default_factory=dict)
+
+    def __call__(self, func: Callable[CommandParams, None]) -> Callable[CommandParams, None]:
+        """Register ``func`` as a Typer command and return the registered callback.
+
+        Args:
+            func: Callable executed when the CLI command runs.
+
+        Returns:
+            Callable[CommandParams, None]: Callback returned by Typer registration.
+        """
+
+        registered = self.app.command(name=self.name, help=self.help_text, **self.typer_kwargs)(
+            cast(Callable[..., Any], func)
+        )
+        return cast(Callable[CommandParams, None], registered)
+
+
+@dataclass(slots=True)
+class _CallbackDecorator(Generic[CommandParams]):
+    """Callable helper registering Typer callbacks with cached metadata."""
+
+    app: typer.Typer
+    invoke_without_command: bool
+    typer_kwargs: Mapping[str, Any] = field(default_factory=dict)
+
+    def __call__(self, func: Callable[CommandParams, None]) -> Callable[CommandParams, None]:
+        """Register ``func`` as a Typer callback and return the wrapped callable.
+
+        Args:
+            func: Callback executed when the Typer application is invoked.
+
+        Returns:
+            Callable[CommandParams, None]: Callback returned by Typer registration.
+        """
+
+        registered = self.app.callback(
+            invoke_without_command=self.invoke_without_command,
+            **self.typer_kwargs,
+        )(cast(Callable[..., Any], func))
+        return cast(Callable[CommandParams, None], registered)
+
+
 def command_decorator(
     app: typer.Typer,
     *,
@@ -117,11 +167,12 @@ def command_decorator(
         passes it through unchanged.
     """
 
-    def decorator(func: Callable[CommandParams, None]) -> Callable[CommandParams, None]:
-        registered = app.command(name=name, help=help_text, **typer_kwargs)(cast(Callable[..., Any], func))
-        return cast(Callable[CommandParams, None], registered)
-
-    return decorator
+    return _CommandDecorator(
+        app=app,
+        name=name,
+        help_text=help_text,
+        typer_kwargs=dict(typer_kwargs),
+    )
 
 
 @overload
@@ -193,14 +244,11 @@ def callback_decorator(
         returns it unchanged.
     """
 
-    def decorator(func: Callable[CommandParams, None]) -> Callable[CommandParams, None]:
-        registered = app.callback(
-            invoke_without_command=invoke_without_command,
-            **typer_kwargs,
-        )(cast(Callable[..., Any], func))
-        return cast(Callable[CommandParams, None], registered)
-
-    return decorator
+    return _CallbackDecorator(
+        app=app,
+        invoke_without_command=invoke_without_command,
+        typer_kwargs=dict(typer_kwargs),
+    )
 
 
 @overload
@@ -254,7 +302,7 @@ def register_callback(
     return decorator
 
 
-__all__ = [
+__all__: Final = [
     "CLIError",
     "CLILogger",
     "build_cli_logger",

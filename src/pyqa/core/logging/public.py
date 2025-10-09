@@ -7,7 +7,7 @@ from __future__ import annotations
 from rich.rule import Rule
 from rich.text import Text
 
-from pyqa.interfaces.core import detect_tty, get_console_manager
+from pyqa.runtime.console.manager import detect_tty, get_console_manager
 
 ANSI = {
     "reset": "\033[0m",

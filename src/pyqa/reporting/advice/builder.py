@@ -21,7 +21,8 @@ from typing import TYPE_CHECKING, Final
 from ...analysis.services import resolve_function_scale_estimator
 from ...catalog.metadata import catalog_duplicate_hint_codes
 from ...filesystem.paths import normalize_path
-from ...interfaces.analysis import AnnotationProvider, FunctionScaleEstimator, NullAnnotationProvider
+from ...analysis.providers import NullAnnotationProvider
+from ...interfaces.analysis import AnnotationProvider, FunctionScaleEstimator
 
 if TYPE_CHECKING:  # pragma: no cover - types only
     pass
@@ -119,6 +120,12 @@ PYQA_DI_ALLOWED_ROOTS: Final[tuple[str, ...]] = (
     "pyqa.analysis.bootstrap",
 )
 PYQA_DI_ALLOWED_SUFFIX: Final[str] = ".bootstrap"
+PYTHON_HYGIENE_TOOLS: Final[frozenset[str]] = frozenset({
+    "python-hygiene",
+    "pyqa-python-hygiene",
+})
+PYTHON_HYGIENE_PRINT_SUFFIX: Final[str] = "PYTHON-HYGIENE:PRINT"
+PYTHON_HYGIENE_SYSTEM_EXIT_SUFFIX: Final[str] = "PYTHON-HYGIENE:SYSTEM-EXIT"
 PYQA_INTERFACES_TOOL: Final[str] = "pyqa-interfaces"
 PYQA_INTERFACES_CODE: Final[str] = "PYQA:INTERFACES"
 
@@ -206,6 +213,7 @@ def generate_advice(
     _append_duplicate_guidance(accumulator, diagnostics)
     _append_di_guidance(accumulator, diagnostics)
     _append_interfaces_guidance(accumulator, diagnostics)
+    _append_python_hygiene_guidance(accumulator, diagnostics)
     _append_interface_guidance(accumulator, diagnostics)
     _append_focus_guidance(accumulator, diagnostics)
 
@@ -636,6 +644,42 @@ def _append_interface_guidance(
                 (f"reconcile module boundaries in {file_path}; define the missing attribute or export it."),
             )
             return
+
+
+def _append_python_hygiene_guidance(
+    accumulator: _AdviceAccumulator,
+    diagnostics: Sequence[DiagnosticRecord],
+) -> None:
+    """Encourage structured logging and orchestrated exits for hygiene findings."""
+
+    if not diagnostics:
+        return
+    has_print = False
+    has_exit = False
+    for record in diagnostics:
+        code = (record.code or "").upper()
+        if record.tool in PYTHON_HYGIENE_TOOLS:
+            if code.endswith("PRINT"):
+                has_print = True
+            if code.endswith("SYSTEM-EXIT"):
+                has_exit = True
+    if has_print:
+        accumulator.add(
+            AdviceCategory.LOGGING,
+            (
+                "Route user-facing output through structured logging helpers such as"
+                " `pyqa.core.logging.public` or the CLI logger instead of raw print/pprint so"
+                " reporters stay consistent and colour-aware."
+            ),
+        )
+    if has_exit:
+        accumulator.add(
+            AdviceCategory.RUNTIME_SAFETY,
+            (
+                "Replace direct `SystemExit`/`os._exit` calls with orchestrator exit helpers or command"
+                " results so the pipeline can persist diagnostics and teardown safely."
+            ),
+        )
 
 
 def _append_focus_guidance(

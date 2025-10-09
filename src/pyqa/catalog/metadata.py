@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
@@ -15,6 +16,8 @@ from pyqa.platform.paths import get_pyqa_root
 from .errors import CatalogIntegrityError
 from .loader import ToolCatalogLoader
 from .model_catalog import CatalogSnapshot
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,8 +213,7 @@ def _load_snapshot() -> CatalogSnapshot | None:
     try:
         return loader.load_snapshot()
     except (CatalogIntegrityError, ValueError, OSError) as exc:
-        # Debug aid: surface catalog loading issues to ease troubleshooting.
-        print(f"[catalog-metadata] failed to load snapshot: {exc}")
+        LOGGER.warning("catalog snapshot load failed: %s", exc)
         return None
 
 

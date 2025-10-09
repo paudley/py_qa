@@ -8,9 +8,10 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
-from pyqa.interfaces.core import get_console_manager
+from pyqa.runtime.console.manager import get_console_manager
 
 from ...cache import ResultCache, build_cache_context
 from ...plugins import (
@@ -76,12 +77,16 @@ class ServiceContainer:
         return record.factory(self)
 
     def provide(self, key: str) -> Callable[[], Any]:
-        """Return a zero-argument provider that resolves ``key`` lazily."""
+        """Return a zero-argument provider that resolves ``key`` lazily.
 
-        def _provider() -> Any:
-            return self.resolve(key)
+        Args:
+            key: Identifier registered in the service container.
 
-        return _provider
+        Returns:
+            Callable[[], Any]: Provider that resolves the service on demand.
+        """
+
+        return partial(self.resolve, key)
 
     def __contains__(self, key: object) -> bool:
         """Return ``True`` when ``key`` corresponds to a registered service.

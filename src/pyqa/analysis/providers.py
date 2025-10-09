@@ -8,7 +8,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
-from pyqa.interfaces.analysis import AnnotationProvider, ContextResolver, SimpleMessageSpan
+from pyqa.interfaces.analysis import AnnotationProvider, ContextResolver, MessageSpan, SimpleMessageSpan
 
 
 class NullAnnotationProvider(AnnotationProvider):
