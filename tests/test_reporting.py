@@ -11,15 +11,8 @@ from pyqa.analysis import AnnotationEngine, MessageSpan
 from pyqa.config import OutputConfig
 from pyqa.core.models import Diagnostic, RunResult, ToolOutcome
 from pyqa.core.severity import Severity
-from pyqa.reporting import (
-    AdviceBuilder,
-    AdviceEntry,
-    generate_advice,
-    render,
-    write_json_report,
-    write_pr_summary,
-    write_sarif_report,
-)
+from pyqa.reporting import AdviceBuilder, AdviceEntry, generate_advice, render, write_json_report, write_pr_summary, write_sarif_report
+from pyqa.reporting.presenters.emitters import PRSummaryOptions
 
 
 def _run_result(tmp_path: Path) -> RunResult:
@@ -101,10 +94,10 @@ def test_write_sarif_report(tmp_path: Path) -> None:
     assert runs[0]["results"][0]["ruleId"] == "F401"
 
 
-def test_write_pr_summary(tmp_path: Path) -> None:
+def test__write_summary(tmp_path: Path) -> None:
     result = _run_result(tmp_path)
     dest = tmp_path / "summary.md"
-    write_pr_summary(result, dest, limit=10)
+    _write_summary(result, dest, limit=10)
 
     content = dest.read_text(encoding="utf-8")
     assert "Lint Summary" in content
@@ -116,7 +109,7 @@ def test_write_pr_summary(tmp_path: Path) -> None:
 def test_write_pr_summary_with_filter_and_template(tmp_path: Path) -> None:
     result = _run_result(tmp_path)
     dest = tmp_path / "summary.md"
-    write_pr_summary(
+    _write_summary(
         result,
         dest,
         limit=5,
@@ -177,7 +170,7 @@ def test_write_pr_summary_can_include_advice(tmp_path: Path) -> None:
         tool_versions={},
     )
     dest = tmp_path / "summary.md"
-    write_pr_summary(result, dest, include_advice=True, advice_limit=3)
+    _write_summary(result, dest, include_advice=True, advice_limit=3)
 
     content = dest.read_text(encoding="utf-8")
     assert "## SOLID Advice" in content
@@ -231,7 +224,7 @@ def test_write_pr_summary_allows_advice_template_override(tmp_path: Path) -> Non
         tool_versions={},
     )
     dest = tmp_path / "summary.md"
-    write_pr_summary(
+    _write_summary(
         result,
         dest,
         include_advice=True,
@@ -293,7 +286,7 @@ def build_widget(foo, bar, baz):
         tool_versions={},
     )
     dest = tmp_path / "summary.md"
-    write_pr_summary(
+    _write_summary(
         result,
         dest,
         template="- {code}: {message} (Top: {advice_primary_category})",
@@ -355,7 +348,7 @@ def test_write_pr_summary_supports_custom_advice_builder(tmp_path: Path) -> None
         body = ", ".join(f"{entry.category}:{entry.body}" for entry in entries[:1])
         return ["", "## Custom Advice", "", f"* {body}"]
 
-    write_pr_summary(
+    _write_summary(
         result,
         dest,
         include_advice=True,
@@ -434,7 +427,7 @@ def test_write_pr_summary_custom_builder_respects_severity(tmp_path: Path) -> No
             return []
         return ["", "## Severity Advice", "", f"* total={len(entries)}"]
 
-    write_pr_summary(
+    _write_summary(
         result,
         dest,
         include_advice=True,
@@ -537,7 +530,7 @@ def typed_func(arg1, arg2):
             *[f"* {entry.category}: {entry.body}" for entry in entries[:2]],
         ]
 
-    write_pr_summary(
+    _write_summary(
         result,
         dest,
         include_advice=True,
@@ -1380,3 +1373,6 @@ def test_advice_builder_delegates_to_generate_advice() -> None:
 
     assert result == expected
     assert dummy.calls
+def _write_summary(result: RunResult, path: Path, **kwargs: object) -> None:
+    options = PRSummaryOptions(**kwargs)
+    write_pr_summary(result, path, options=options)

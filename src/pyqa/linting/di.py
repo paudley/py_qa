@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import ast
+from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:  # pragma: no cover - import for typing only
@@ -17,10 +18,12 @@ from ._ast_visitors import BaseAstLintVisitor, VisitorMetadata, run_ast_linter
 from ._module_utils import module_name_from_path
 from .base import InternalLintReport
 
-_ALLOWED_SERVICE_REGISTERERS: Final[frozenset[str]] = frozenset({
-    "pyqa.core.runtime.di",
-    "pyqa.analysis.bootstrap",
-})
+_ALLOWED_SERVICE_REGISTERERS: Final[frozenset[str]] = frozenset(
+    {
+        "pyqa.core.runtime.di",
+        "pyqa.analysis.bootstrap",
+    }
+)
 _ALLOWED_SERVICE_SUFFIXES: Final[tuple[str, ...]] = (".bootstrap",)
 _ALLOWED_SERVICE_REGISTERERS_DISPLAY: Final[str] = ", ".join(
     (*sorted(_ALLOWED_SERVICE_REGISTERERS), "*bootstrap modules"),
@@ -48,18 +51,31 @@ def run_pyqa_di_linter(
     return run_ast_linter(
         state,
         metadata=metadata,
-        visitor_factory=lambda path, st, meta: _DiVisitor(path, st, meta),
+        visitor_factory=_build_di_visitor,
     )
+
+
+def _build_di_visitor(
+    path: Path,
+    state: PreparedLintState,
+    metadata: VisitorMetadata,
+) -> _DiVisitor:
+    """Return a DI visitor instance bound to ``path``."""
+
+    return _DiVisitor(path, state, metadata)
 
 
 class _DiVisitor(BaseAstLintVisitor):
     """Visitor detecting DI rule violations."""
 
-    def __init__(self, path, state, metadata):  # type: ignore[override] suppression_valid: Visitor signature must match NodeVisitor even when typing narrows parameters.
+    def __init__(self, path: Path, state: PreparedLintState, metadata: VisitorMetadata) -> None:
+        """Initialise module context for dependency injection checks."""
+
         super().__init__(path, state, metadata)
         self._module = module_name_from_path(path, state.options.target_options.root)
 
-    def visit_call(self, node: ast.Call) -> None:  # noqa: D401 suppression_valid: NodeVisitor API requires this signature; additional docstring would duplicate inherited documentation.
+    def visit_call(self, node: ast.Call) -> None:
+        """Record violations for forbidden service registration calls."""
         if self._is_service_registration(node):
             if not self._is_allowed_module():
                 service_label = self._describe_service(node)

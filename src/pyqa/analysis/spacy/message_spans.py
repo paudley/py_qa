@@ -5,21 +5,22 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Final
+from typing import Final, TypeVar
+
+from pyqa.interfaces.analysis import MessageSpan
 
 from .loader import DocLike
 
 DEFAULT_CLASS_STYLE: Final[str] = "ansi256:154"
 DEFAULT_VARIABLE_STYLE: Final[str] = "ansi256:208"
 
-if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from ..annotations.engine import MessageSpan
+SpanT = TypeVar("SpanT", bound=MessageSpan)
 
 
 def build_spacy_spans(
     doc: DocLike,
-    span_factory: Callable[[int, int, str, str | None], MessageSpan],
-) -> list[MessageSpan]:
+    span_factory: Callable[[int, int, str, str | None], SpanT],
+) -> list[SpanT]:
     """Return highlight spans derived from ``doc`` tokens.
 
     Args:
@@ -30,7 +31,7 @@ def build_spacy_spans(
         list[MessageSpan]: Highlight spans identified by analysing the document.
     """
 
-    spans: list[MessageSpan] = []
+    spans: list[SpanT] = []
     for token in doc:
         if token.is_stop or not token.text.strip():
             continue

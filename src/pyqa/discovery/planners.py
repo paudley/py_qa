@@ -8,7 +8,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final, cast
+from typing import Final
+
+from pyqa.core.serialization import JsonValue
 
 from ..catalog.command_options import OptionMapping, compile_option_mappings
 from ..catalog.loader import CatalogIntegrityError
@@ -215,7 +217,7 @@ class _ProjectScannerStrategy(CommandBuilder):
         command.extend(targets)
 
 
-def build_project_scanner(plain_config: Mapping[str, Any]) -> CommandBuilder:
+def build_project_scanner(plain_config: Mapping[str, JSONValue]) -> CommandBuilder:
     """Return a project-aware scanner command builder driven by catalog data."""
 
     base_config = plain_config.get("base")
@@ -227,7 +229,7 @@ def build_project_scanner(plain_config: Mapping[str, Any]) -> CommandBuilder:
             "command_project_scanner: 'base' must contain at least one argument",
         )
 
-    raw_options = cast(JSONValue | None, plain_config.get("options"))
+    raw_options = plain_config.get("options")
     option_mappings = compile_option_mappings(
         raw_options,
         context="command_project_scanner.options",
@@ -285,7 +287,7 @@ def build_project_scanner(plain_config: Mapping[str, Any]) -> CommandBuilder:
     )
 
 
-def _parse_project_target_plan(entry: Any) -> _ProjectTargetPlan:
+def _parse_project_target_plan(entry: JsonValue) -> _ProjectTargetPlan:
     """Materialise target planning configuration from catalog data."""
 
     if not isinstance(entry, Mapping):

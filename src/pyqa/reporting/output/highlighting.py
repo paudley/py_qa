@@ -7,13 +7,19 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from typing import Any, Final
+from typing import Final
 
 from rich.style import Style
 from rich.text import Text
 
 from ...analysis.providers import NullAnnotationProvider
-from ...interfaces.analysis import AnnotationProvider, MessageSpan, SimpleMessageSpan
+from ...core.models import RunResult
+from ...interfaces.analysis import (
+    AnnotationProvider,
+    DiagnosticAnnotation,
+    MessageSpan,
+    SimpleMessageSpan,
+)
 
 
 class _AnnotationRouter(AnnotationProvider):
@@ -31,7 +37,7 @@ class _AnnotationRouter(AnnotationProvider):
 
         self._provider = provider
 
-    def annotate_run(self, result: Any) -> dict[int, Any]:
+    def annotate_run(self, result: RunResult) -> dict[int, DiagnosticAnnotation]:
         """Delegate run annotation to the active provider.
 
         Args:
@@ -41,7 +47,7 @@ class _AnnotationRouter(AnnotationProvider):
             Mapping of diagnostic ids to annotation metadata.
         """
 
-        return self._provider.annotate_run(result)
+        return dict(self._provider.annotate_run(result))
 
     def message_spans(self, message: str) -> Sequence[MessageSpan]:
         """Return spans detected in ``message`` using the active provider.
@@ -90,32 +96,55 @@ EMPTY_CODE_PLACEHOLDER: Final[str] = "-"
 _LITERAL_PATTERN = re.compile(r"''(.*?)''")
 
 
+def _coerce_span(span: MessageSpan) -> SimpleMessageSpan:
+    """Return a ``SimpleMessageSpan`` mirroring ``span`` values."""
+
+    style = getattr(span, "style", ANNOTATION_SPAN_STYLE)
+    kind = getattr(span, "kind", None)
+    return SimpleMessageSpan(start=span.start, end=span.end, style=str(style), kind=kind)
+
+
+def _coerce_spans(spans: Sequence[MessageSpan]) -> list[SimpleMessageSpan]:
+    """Return ``spans`` converted into ``SimpleMessageSpan`` instances."""
+
+    return [_coerce_span(span) for span in spans]
+
+
 def collect_highlight_spans(
     text: str,
     *,
     engine: AnnotationProvider | None = None,
-) -> list[AnalysisMessageSpan]:
-    """Return annotation spans present in *text* using the provided engine."""
+) -> list[SimpleMessageSpan]:
+    """Return annotation spans present in *text* using the provided engine.
+
+    Args:
+        text: Diagnostic message text to analyse.
+        engine: Optional provider overriding the module-level annotation engine.
+
+    Returns:
+        list[SimpleMessageSpan]: Normalised spans annotated with style metadata.
+    """
 
     target_engine = engine or _ANNOTATION_ROUTER
-    spans: list[MessageSpan] = []
+    spans: list[SimpleMessageSpan] = []
     for span in target_engine.message_spans(text):
-        spans.append(
-            SimpleMessageSpan(
-                start=span.start,
-                end=span.end,
-                style=getattr(span, "style", ""),
-                kind=getattr(span, "kind", None),
-            ),
-        )
+        spans.append(_coerce_span(span))
     return spans
 
 
-def strip_literal_quotes(text: str) -> tuple[str, list[AnalysisMessageSpan]]:
-    """Return text with ``''literal''`` markers removed while tracking spans."""
+def strip_literal_quotes(text: str) -> tuple[str, list[SimpleMessageSpan]]:
+    """Return text with ``''literal''`` markers removed while tracking spans.
+
+    Args:
+        text: Message text that may contain double-quoted literal markers.
+
+    Returns:
+        tuple[str, list[SimpleMessageSpan]]: Cleaned text paired with literal
+        spans suitable for downstream highlighting.
+    """
 
     segments: list[str] = []
-    spans: list[MessageSpan] = []
+    spans: list[SimpleMessageSpan] = []
     cursor = 0
     output_length = 0
 
@@ -169,8 +198,17 @@ def location_function_spans(
     location: str,
     *,
     separator: str = LOCATION_SEPARATOR,
-) -> list[MessageSpan]:
-    """Return highlight spans for function suffixes in location strings."""
+) -> list[SimpleMessageSpan]:
+    """Return highlight spans for function suffixes in location strings.
+
+    Args:
+        location: Fully qualified diagnostic location string.
+        separator: Delimiter used between file path and symbol location.
+
+    Returns:
+        list[SimpleMessageSpan]: Spans highlighting the trailing function name
+        when present; otherwise an empty list.
+    """
 
     if separator not in location:
         return []
@@ -200,7 +238,7 @@ def highlight_for_output(
     spans = collect_highlight_spans(clean, engine=engine)
     spans.extend(literal_spans)
     if extra_spans:
-        spans.extend(extra_spans)
+        spans.extend(_coerce_spans(extra_spans))
     text = Text(clean)
     spans.sort(key=lambda span: (span.start, span.end))
     for span in spans:

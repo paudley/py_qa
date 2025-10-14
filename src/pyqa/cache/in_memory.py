@@ -12,12 +12,17 @@ from __future__ import annotations
 
 import time
 from collections import OrderedDict
-from collections.abc import Callable, Hashable
+from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass
 from functools import partial, update_wrapper
 from threading import Lock
 from types import MethodType
-from typing import Any, Final, Generic, ParamSpec, TypeVar, cast
+from typing import Final, Generic, ParamSpec, TypeVar, cast
+
+ArgT = TypeVar("ArgT")
+KwargT = TypeVar("KwargT")
+InstanceT = TypeVar("InstanceT")
+HashableCandidate = TypeVar("HashableCandidate", bound=Hashable)
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -40,7 +45,7 @@ class CacheInfo:
     maxsize: int | None
 
 
-def _build_cache_key(args: tuple[Hashable, ...], kwargs: dict[str, Hashable]) -> CacheKey:
+def _build_cache_key(args: tuple[Hashable, ...], kwargs: Mapping[str, Hashable]) -> CacheKey:
     """Construct a stable hashable cache key.
 
     Args:
@@ -56,6 +61,37 @@ def _build_cache_key(args: tuple[Hashable, ...], kwargs: dict[str, Hashable]) ->
     return args + (tuple(sorted(kwargs.items())),)
 
 
+def _ensure_hashable(value: HashableCandidate, *, label: str) -> HashableCandidate:
+    """Return ``value`` ensuring it is hashable for cache key construction.
+
+    Args:
+        value: Arbitrary argument value supplied to the cached callable.
+        label: Human-readable label used when raising descriptive errors.
+
+    Returns:
+        Hashable: The original value when it supports hashing.
+
+    Raises:
+        TypeError: If ``value`` is not hashable.
+    """
+
+    if isinstance(value, Hashable):
+        return value
+    raise TypeError(f"{label} must be hashable to participate in caching")
+
+
+def _hashable_args(args: tuple[ArgT, ...]) -> tuple[Hashable, ...]:
+    """Return ``args`` coerced to a hashable tuple for cache keys."""
+
+    return tuple(_ensure_hashable(arg, label=f"positional argument {index}") for index, arg in enumerate(args))
+
+
+def _hashable_kwargs(kwargs: Mapping[str, KwargT]) -> dict[str, Hashable]:
+    """Return keyword arguments coerced to hashable values for cache keys."""
+
+    return {key: _ensure_hashable(value, label=f"keyword argument '{key}'") for key, value in kwargs.items()}
+
+
 class _MemoizedCallable(Generic[P, R]):
     """Callable that implements an optional-size LRU cache."""
 
@@ -67,6 +103,7 @@ class _MemoizedCallable(Generic[P, R]):
         self._hits = 0
         update_wrapper(self, func)
 
+    # suppression_valid: lint=internal-signatures method mirrors functools decorator API to maintain external compatibility while leveraging typed registry semantics.
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Invoke the wrapped callable applying memoization semantics.
 
@@ -78,7 +115,9 @@ class _MemoizedCallable(Generic[P, R]):
             R: Result produced by the wrapped callable.
         """
 
-        cache_key = _build_cache_key(args, kwargs)
+        hashable_args = _hashable_args(args)
+        hashable_kwargs = _hashable_kwargs(kwargs)
+        cache_key = _build_cache_key(hashable_args, hashable_kwargs)
         with self._lock:
             cached = self._store.get(cache_key)
             if cached is not None:
@@ -92,7 +131,7 @@ class _MemoizedCallable(Generic[P, R]):
                 self._store.popitem(last=False)
         return result
 
-    def __get__(self, instance: object, owner: type[Any] | None = None) -> Callable[..., R]:
+    def __get__(self, instance: InstanceT | None, owner: type[InstanceT] | None = None) -> Callable[P, R]:
         """Return a descriptor-aware callable bound to ``instance``.
 
         Args:
@@ -105,7 +144,7 @@ class _MemoizedCallable(Generic[P, R]):
 
         if instance is None:
             return self
-        return MethodType(self, instance)
+        return cast(Callable[P, R], MethodType(self, instance))
 
     def cache_clear(self) -> None:
         """Clear cached entries and reset hit tracking.
@@ -118,12 +157,18 @@ class _MemoizedCallable(Generic[P, R]):
             self._store.clear()
             self._hits = 0
 
-    def cache_info(self) -> CacheInfo:
-        """Return cache metadata in a ``CacheInfo`` payload.
+    def cache_info(self) -> tuple[int, int, int | None]:
+        """Return cache metadata mirroring ``functools.lru_cache`` semantics.
 
         Returns:
-            CacheInfo: Snapshot describing the cache state.
+            tuple[int, int, int | None]: Tuple of ``(current_size, currsize, maxsize)``.
         """
+
+        metadata = self.cache_metadata()
+        return metadata.current_size, metadata.current_size, metadata.maxsize
+
+    def cache_metadata(self) -> CacheInfo:
+        """Return cache metadata in a ``CacheInfo`` payload including hits."""
 
         with self._lock:
             return CacheInfo(current_size=len(self._store), hits=self._hits, maxsize=self._maxsize)
@@ -139,6 +184,7 @@ class _TTLCacheCallable(Generic[P, R]):
         self._lock = Lock()
         update_wrapper(self, func)
 
+    # suppression_valid: lint=internal-signatures method preserves functools-compatible descriptor behaviour required by decorated callables across the codebase.
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Invoke the wrapped callable applying TTL caching semantics.
 
@@ -150,7 +196,9 @@ class _TTLCacheCallable(Generic[P, R]):
             R: Result produced by the wrapped callable.
         """
 
-        cache_key = _build_cache_key(args, kwargs)
+        hashable_args = _hashable_args(args)
+        hashable_kwargs = _hashable_kwargs(kwargs)
+        cache_key = _build_cache_key(hashable_args, hashable_kwargs)
         now = time.monotonic()
         with self._lock:
             entry = self._store.get(cache_key)
@@ -163,7 +211,7 @@ class _TTLCacheCallable(Generic[P, R]):
             self._store[cache_key] = (now + self._ttl_seconds, result)
         return result
 
-    def __get__(self, instance: object, owner: type[Any] | None = None) -> Callable[..., R]:
+    def __get__(self, instance: InstanceT | None, owner: type[InstanceT] | None = None) -> Callable[P, R]:
         """Return a descriptor-aware callable bound to ``instance``.
 
         Args:
@@ -176,7 +224,7 @@ class _TTLCacheCallable(Generic[P, R]):
 
         if instance is None:
             return self
-        return MethodType(self, instance)
+        return cast(Callable[P, R], MethodType(self, instance))
 
     def cache_clear(self) -> None:
         """Clear cached TTL values.

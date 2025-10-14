@@ -14,6 +14,7 @@ from typing import Final
 import typer
 
 from pyqa.core.config.constants import PY_QA_DIR_NAME
+from pyqa.linting.suppressions import SuppressionRegistry
 from pyqa.platform.workspace import is_py_qa_workspace
 
 from ....config import default_parallel_jobs
@@ -77,6 +78,7 @@ class PreparedLintState:
     artifacts: LintOutputArtifacts
     display: CLIDisplayOptions
     logger: CLILogger
+    suppressions: SuppressionRegistry
 
 
 @dataclass(slots=True)
@@ -233,6 +235,7 @@ def prepare_lint_state(
         artifacts=artifacts,
         display=display,
         logger=logger,
+        suppressions=SuppressionRegistry(normalized_targets.root),
     )
 
 
@@ -733,6 +736,7 @@ def _collect_provided_flags(
         "check_signatures",
         "check_cache_usage",
         "check_value_types",
+        "check_value_types_general",
         "check_pyqa_python_hygiene",
         "show_valid_suppressions",
         "check_license_header",

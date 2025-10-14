@@ -23,7 +23,7 @@ from ..config import Config
 from ..core.logging import warn
 from ..core.metrics import FileMetrics, compute_file_metrics
 from ..core.models import Diagnostic, RawDiagnostic, ToolExitCategory, ToolOutcome
-from ..core.runtime.process import CommandOptions
+from ..core.runtime.process import CommandOptions, CommandOverrideMapping
 from ..diagnostics.pipeline import DiagnosticPipeline as DiagnosticPipelineImpl
 from ..filesystem.paths import normalize_path_key
 from ..interfaces.analysis import ContextResolver
@@ -43,14 +43,14 @@ class RunnerCallable(Protocol):
         cmd: Sequence[str],
         *,
         options: CommandOptions | None = None,
-        **overrides: object,
+        overrides: CommandOverrideMapping | None = None,
     ) -> CompletedProcess[str]:
         """Execute ``cmd`` returning a completed subprocess.
 
         Args:
             cmd: Command to execute including executable and arguments.
             options: Optional command execution configuration overrides.
-            **overrides: Additional keyword arguments forwarded to the runner.
+            overrides: Additional keyword overrides forwarded to the runner.
 
         Returns:
             CompletedProcess[str]: Completed subprocess with captured output.
@@ -87,20 +87,20 @@ class FunctionRunner:
         cmd: Sequence[str],
         *,
         options: CommandOptions | None = None,
-        **overrides: object,
+        overrides: CommandOverrideMapping | None = None,
     ) -> CompletedProcess[str]:
         """Invoke the wrapped callable using runner semantics.
 
         Args:
             cmd: Command to execute.
             options: Optional execution options overriding defaults.
-            **overrides: Additional keyword arguments forwarded to the wrapped callable.
+            overrides: Additional keyword overrides forwarded to the wrapped callable.
 
         Returns:
             CompletedProcess[str]: Completed process metadata.
         """
 
-        return self.func(cmd, options=options, **overrides)
+        return self.func(cmd, options=options, overrides=overrides)
 
     def __repr__(self) -> str:
         """Return a descriptive representation of the wrapped callable.

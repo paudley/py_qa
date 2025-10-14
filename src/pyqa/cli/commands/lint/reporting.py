@@ -7,13 +7,20 @@ from __future__ import annotations
 
 from pyqa.core.models import RunResult
 
-from ....config import Config
 from ....analysis.providers import NullAnnotationProvider
+from ....config import Config
 from ....interfaces.analysis import AnnotationProvider
 from ....reporting import render
 from ....reporting.output.highlighting import set_annotation_provider as set_highlighting_annotation_provider
+from ....reporting.presenters.emitters import (
+    PRSummaryOptions,
+)
 from ....reporting.presenters.emitters import set_annotation_provider as set_emitter_annotation_provider
-from ....reporting.presenters.emitters import write_json_report, write_pr_summary, write_sarif_report
+from ....reporting.presenters.emitters import (
+    write_json_report,
+    write_pr_summary,
+    write_sarif_report,
+)
 from ...core.shared import CLILogger
 from .params import LintOutputArtifacts
 
@@ -41,13 +48,12 @@ def handle_reporting(
         if logger:
             logger.ok(f"Saved SARIF report to {artifacts.sarif_out}")
     if artifacts.pr_summary_out:
-        write_pr_summary(
-            result,
-            artifacts.pr_summary_out,
+        pr_options = PRSummaryOptions(
             limit=config.output.pr_summary_limit,
             min_severity=config.output.pr_summary_min_severity,
             template=config.output.pr_summary_template,
         )
+        write_pr_summary(result, artifacts.pr_summary_out, options=pr_options)
         if logger:
             logger.ok(f"Saved PR summary to {artifacts.pr_summary_out}")
 

@@ -42,7 +42,7 @@ from pyqa.linting.quality import (
     run_license_header_linter,
     run_python_hygiene_linter,
 )
-from pyqa.linting.suppressions import run_suppression_linter
+from pyqa.linting.suppressions import SuppressionRegistry, run_suppression_linter
 from pyqa.linting.registry import ensure_internal_tools_registered
 from pyqa.orchestration.tool_selection import SelectionResult, ToolDecision, ToolEligibility
 from pyqa.tools.base import ToolContext
@@ -60,6 +60,7 @@ def _meta_flags(
     check_signatures: bool = False,
     check_cache_usage: bool = False,
     check_value_types: bool = False,
+    check_value_types_general: bool = False,
     check_interfaces: bool = False,
     check_di: bool = False,
     check_module_docs: bool = False,
@@ -93,6 +94,7 @@ def _meta_flags(
             check_signatures=check_signatures,
             check_cache_usage=check_cache_usage,
             check_value_types=check_value_types,
+            check_value_types_general=check_value_types_general,
             check_interfaces=check_interfaces,
             check_di=check_di,
             check_module_docs=check_module_docs,
@@ -916,6 +918,7 @@ def _build_stub_state(
             check_pyqa_python_hygiene=check_pyqa_python_hygiene,
         ),
         logger=logger,
+        suppressions=SuppressionRegistry(root),
     )
 
 

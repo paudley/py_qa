@@ -9,8 +9,9 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import Any
+from typing import Protocol, cast
 
+from pyqa.core.serialization import JsonValue
 from pyqa.runtime.console.manager import get_console_manager
 
 from ...cache import ResultCache, build_cache_context
@@ -26,9 +27,13 @@ class ServiceResolutionError(KeyError):
     """Raised when a requested service has not been registered."""
 
 
+class Service(Protocol):
+    """Marker protocol satisfied by all container service values."""
+
+
 @dataclass(frozen=True)
 class _ServiceRecord:
-    factory: Callable[[ServiceContainer], Any]
+    factory: Callable[[ServiceContainer], Service]
     singleton: bool
 
 
@@ -37,26 +42,17 @@ class ServiceContainer:
 
     def __init__(self) -> None:
         self._factories: dict[str, _ServiceRecord] = {}
-        self._singletons: dict[str, Any] = {}
+        self._singletons: dict[str, Service] = {}
 
     def register(
         self,
         key: str,
-        factory: Callable[[ServiceContainer], Any],
+        factory: Callable[[ServiceContainer], Service],
         *,
         singleton: bool = True,
         replace: bool = False,
     ) -> None:
-        """Register ``factory`` under ``key``.
-
-        Args:
-            key: Identifier for the service.
-            factory: Callable that accepts the container and returns the service.
-            singleton: When ``True`` cache the value; otherwise call the factory
-                on every ``resolve``.
-            replace: When ``False`` raise ``ValueError`` if ``key`` is already
-                registered.
-        """
+        """Register ``factory`` under ``key``."""
 
         if not replace and key in self._factories:
             raise ValueError(f"service '{key}' already registered")
@@ -64,7 +60,7 @@ class ServiceContainer:
         if replace and key in self._singletons:
             self._singletons.pop(key, None)
 
-    def resolve(self, key: str) -> Any:
+    def resolve(self, key: str) -> Service:
         """Return the service registered under ``key``."""
 
         record = self._factories.get(key)
@@ -76,47 +72,24 @@ class ServiceContainer:
             return self._singletons[key]
         return record.factory(self)
 
-    def provide(self, key: str) -> Callable[[], Any]:
-        """Return a zero-argument provider that resolves ``key`` lazily.
-
-        Args:
-            key: Identifier registered in the service container.
-
-        Returns:
-            Callable[[], Any]: Provider that resolves the service on demand.
-        """
+    def provide(self, key: str) -> Callable[[], Service]:
+        """Return a zero-argument provider that resolves ``key`` lazily."""
 
         return partial(self.resolve, key)
 
-    def __contains__(self, key: object) -> bool:
-        """Return ``True`` when ``key`` corresponds to a registered service.
+    def __contains__(self, key: str) -> bool:
+        """Return ``True`` when ``key`` corresponds to a registered service."""
 
-        Args:
-            key: Potential service identifier.
-
-        Returns:
-            bool: ``True`` if ``key`` matches a known service name.
-        """
-
-        return isinstance(key, str) and key in self._factories
+        return key in self._factories
 
     def __len__(self) -> int:
-        """Return the number of services registered with the container.
-
-        Returns:
-            int: Count of registered services.
-        """
+        """Return the number of services registered with the container."""
 
         return len(self._factories)
 
 
 def register_default_services(container: ServiceContainer) -> None:
-    """Populate ``container`` with built-in service factories.
-
-    Args:
-        container: Service container receiving the default registrations.
-
-    """
+    """Populate ``container`` with built-in service factories."""
 
     container.register(
         "console_factory",
@@ -168,14 +141,10 @@ def register_default_services(container: ServiceContainer) -> None:
 
 
 class _JsonSerializer:
-    """Simple JSON serializer used as the default service implementation."""
+    """Default JSON serializer used by the service container."""
 
-    def dump(self, value: Any) -> str:
-        """Return a JSON string representation of ``value``."""
-
+    def dump(self, value: JsonValue) -> str:
         return json.dumps(value, default=str)
 
-    def load(self, payload: str) -> Any:
-        """Deserialize ``payload`` back into a Python object."""
-
-        return json.loads(payload)
+    def load(self, payload: str) -> JsonValue:
+        return cast(JsonValue, json.loads(payload))

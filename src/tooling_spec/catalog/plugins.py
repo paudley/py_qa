@@ -12,7 +12,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from importlib import metadata
 from pathlib import Path
-from typing import TypeVar
+from typing import TypeAlias, TypeVar, cast
 
 from .errors import CatalogIntegrityError
 from .model_catalog import CatalogFragment
@@ -49,14 +49,21 @@ class CatalogContribution:
         return not (self.fragments or self.strategies or self.tools)
 
 
+PluginFactory: TypeAlias = Callable[..., CatalogContribution | None]
+
+
 def load_plugin_contributions(
     context: CatalogPluginContext,
     *,
-    plugin_factories: Sequence[Callable[..., object]] | None = None,
+    plugin_factories: Sequence[PluginFactory] | None = None,
 ) -> tuple[CatalogContribution, ...]:
     """Return contributions sourced from discovered catalog plugins."""
 
-    factories = plugin_factories if plugin_factories is not None else _discover_plugin_factories()
+    factories: Sequence[PluginFactory]
+    if plugin_factories is not None:
+        factories = plugin_factories
+    else:
+        factories = _discover_plugin_factories()
     contributions: list[CatalogContribution] = []
     for factory in factories:
         contribution = _invoke_plugin(factory, context)
@@ -108,22 +115,22 @@ def combine_checksums(base_checksum: str, contributions: Sequence[CatalogContrib
     return hasher.hexdigest()
 
 
-def _discover_plugin_factories() -> tuple[Callable[..., object], ...]:
+def _discover_plugin_factories() -> tuple[PluginFactory, ...]:
     try:
         entries = metadata.entry_points()
     except metadata.PackageNotFoundError:  # pragma: no cover - metadata failure fallback
         return ()
     selected = entries.select(group=PLUGIN_GROUP)
-    factories: list[Callable[..., object]] = []
+    factories: list[PluginFactory] = []
     for entry in selected:
         try:
-            factories.append(entry.load())
+            factories.append(cast(PluginFactory, entry.load()))
         except (AttributeError, ImportError, ValueError):
             continue
     return tuple(factories)
 
 
-def _invoke_plugin(factory: Callable[..., object], context: CatalogPluginContext) -> CatalogContribution | None:
+def _invoke_plugin(factory: PluginFactory, context: CatalogPluginContext) -> CatalogContribution | None:
     try:
         signature = inspect.signature(factory)
     except (TypeError, ValueError):  # pragma: no cover - C extensions without metadata

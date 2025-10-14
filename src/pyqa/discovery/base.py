@@ -68,7 +68,7 @@ class DiscoveryService:
 
         return len(self._strategies)
 
-    def __contains__(self, strategy: object) -> bool:
+    def __contains__(self, strategy: DiscoveryStrategy) -> bool:
         """Return whether ``strategy`` participates in this service."""
 
         return strategy in self._strategies

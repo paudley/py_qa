@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Blackcat Informatics® Inc.
-"""Ensure value-type helpers expose ergonomic dunder methods."""
+"""Ensure pyqa value-type helpers expose ergonomic dunder methods."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ import inspect
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from types import ModuleType
+from typing import TYPE_CHECKING
 
 from pyqa.core.models import Diagnostic
 from pyqa.core.severity import Severity
@@ -68,6 +69,7 @@ def run_value_type_linter(
     _ = emit_to_logger
     diagnostics: list[Diagnostic] = []
     stdout_lines: list[str] = []
+    suppressions = getattr(state, "suppressions", None)
 
     for contract in _CONTRACTS:
         missing = _missing_methods(contract)
@@ -76,6 +78,15 @@ def run_value_type_linter(
         file_path, line_number = _definition_location(contract)
         message = f"{contract.qualname} is missing required dunder methods: {', '.join(sorted(missing))}"
         normalized = normalize_path_key(file_path, base_dir=state.root)
+        if suppressions is not None:
+            absolute_path = file_path if file_path.is_absolute() else (state.root / file_path).resolve()
+            if suppressions.should_suppress(
+                absolute_path,
+                line_number,
+                tool="pyqa-value-types",
+                code="pyqa-value-types:missing-methods",
+            ):
+                continue
         diagnostics.append(
             Diagnostic(
                 file=normalized,
@@ -83,14 +94,14 @@ def run_value_type_linter(
                 column=None,
                 severity=Severity.ERROR,
                 message=message,
-                tool="value-types",
-                code="internal:value-types",
+                tool="pyqa-value-types",
+                code="pyqa-value-types:missing-methods",
             ),
         )
         stdout_lines.append(f"{normalized}:{line_number}: {message}")
 
     return build_internal_report(
-        tool="value-types",
+        tool="pyqa-value-types",
         stdout=stdout_lines,
         diagnostics=diagnostics,
         files=(),
@@ -133,7 +144,7 @@ def _definition_location(contract: _ValueTypeContract) -> tuple[Path, int]:
     return Path(source_path), line_number
 
 
-def _import_module(path: str) -> Any | None:
+def _import_module(path: str) -> ModuleType | None:
     """Return the imported module for ``path`` when available."""
 
     try:

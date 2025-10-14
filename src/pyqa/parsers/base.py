@@ -10,14 +10,15 @@ from collections.abc import Callable, Iterator
 from collections.abc import Mapping as MappingABC
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import cast
 
+from pyqa.core.serialization import JsonValue
 from pyqa.core.severity import Severity
 
 from ..core.models import RawDiagnostic
 from ..tools.base import Parser, ToolContext
 
-JsonTransform = Callable[[Any, ToolContext], Sequence[RawDiagnostic]]
+JsonTransform = Callable[[JsonValue, ToolContext], Sequence[RawDiagnostic]]
 TextTransform = Callable[[Sequence[str], ToolContext], Sequence[RawDiagnostic]]
 
 
@@ -28,42 +29,42 @@ def _ensure_lines(value: Sequence[str]) -> list[str]:
     return [str(item) for item in value]
 
 
-def _load_json_stream(stdout: str) -> Any:
+def _load_json_stream(stdout: str) -> JsonValue:
     stdout = stdout.strip()
     if not stdout:
         return []
     try:
-        return json.loads(stdout)
+        return cast(JsonValue, json.loads(stdout))
     except json.JSONDecodeError:
-        payload: list[Any] = []
+        payload: list[JsonValue] = []
         for raw_line in stdout.splitlines():
             trimmed = raw_line.strip()
             if not trimmed:
                 continue
             try:
-                payload.append(json.loads(trimmed))
+                payload.append(cast(JsonValue, json.loads(trimmed)))
             except json.JSONDecodeError:
                 continue
         return payload
 
 
-def _coerce_object_mapping(value: object) -> dict[str, object]:
+def _coerce_object_mapping(value: JsonValue) -> dict[str, JsonValue]:
     if isinstance(value, MappingABC):
-        return {str(key): entry for key, entry in value.items()}
+        return {str(key): cast(JsonValue, entry) for key, entry in value.items()}
     return {}
 
 
-def _coerce_dict_sequence(value: object) -> list[dict[str, object]]:
+def _coerce_dict_sequence(value: JsonValue) -> list[dict[str, JsonValue]]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
         return []
-    collected: list[dict[str, object]] = []
+    collected: list[dict[str, JsonValue]] = []
     for item in value:
         if isinstance(item, MappingABC):
             collected.append(_coerce_object_mapping(item))
     return collected
 
 
-def _coerce_optional_str(value: object | None) -> str | None:
+def _coerce_optional_str(value: JsonValue | None) -> str | None:
     if isinstance(value, str):
         return value
     if value is None:
@@ -71,7 +72,7 @@ def _coerce_optional_str(value: object | None) -> str | None:
     return str(value)
 
 
-def iter_dicts(value: object) -> Iterator[MappingABC[str, Any]]:
+def iter_dicts(value: JsonValue) -> Iterator[MappingABC[str, JsonValue]]:
     """Yield mapping items from ``value`` when it is a sequence of dict-like objects."""
 
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
@@ -80,7 +81,7 @@ def iter_dicts(value: object) -> Iterator[MappingABC[str, Any]]:
                 yield item
 
 
-def map_severity(label: object, mapping: MappingABC[str, Severity], default: Severity) -> Severity:
+def map_severity(label: JsonValue, mapping: MappingABC[str, Severity], default: Severity) -> Severity:
     """Return a :class:`Severity` derived from ``label`` using ``mapping``."""
 
     if isinstance(label, str):

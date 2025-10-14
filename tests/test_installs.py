@@ -8,7 +8,9 @@ import json
 from pathlib import Path
 from subprocess import CompletedProcess
 
+from pyqa.core.runtime.process import CommandOptions
 from pyqa.runtime.installers import install_dev_environment
+from pyqa.runtime.installers.dev import install_with_preferred_manager
 
 
 def _completed(
@@ -24,7 +26,7 @@ def _completed(
 def test_install_dev_environment_installs_core_packages(monkeypatch, tmp_path: Path) -> None:
     commands: list[list[str]] = []
 
-    def fake_run_command(args, **kwargs):  # noqa: ANN001
+    def fake_run_command(args, *, options: CommandOptions | None = None, overrides=None):  # noqa: ANN001
         commands.append(list(args))
         return _completed(list(args))
 
@@ -48,12 +50,12 @@ def test_install_dev_environment_handles_optional_and_stubs(monkeypatch, tmp_pat
 
     def fake_run_command(
         args,
-        cwd=None,
-        check=True,
-        capture_output=False,
-        **kwargs,
+        *,
+        options: CommandOptions | None = None,
+        overrides=None,
     ):
         commands.append(list(args))
+        capture_output = bool(options.capture_output) if options else False
         if capture_output:
             packages = [
                 {"name": "requests"},
@@ -91,3 +93,38 @@ def test_install_dev_environment_handles_optional_and_stubs(monkeypatch, tmp_pat
         generate_stubs=True,
     )
     assert summary_again.generated_stub_modules == ()
+
+
+def test_install_with_preferred_manager_prefers_uv(monkeypatch, tmp_path: Path) -> None:
+    executed: list[list[str]] = []
+
+    def runner(args: list[str]) -> CompletedProcess[str]:
+        executed.append(list(args))
+        return _completed(list(args))
+
+    def fake_which(executable: str) -> str | None:
+        if executable == "uv":
+            return str(tmp_path / "uv")
+        if executable in {"pip3", "pip"}:
+            return str(tmp_path / executable)
+        return None
+
+    monkeypatch.setattr("pyqa.runtime.installers.dev.which", fake_which)
+    monkeypatch.setattr(
+        "pyqa.runtime.installers.dev.find_venv_bin",
+        lambda root: tmp_path / ".venv" / "bin",
+    )
+
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text("[project]\nname = 'demo'\n", encoding="utf-8")
+
+    result = install_with_preferred_manager(
+        ("example",),
+        runner=runner,
+        project_root=tmp_path,
+    )
+
+    assert result.returncode == 0
+    # The preferred runner should call uv add first and stop once it succeeds.
+    assert executed
+    assert executed[0][:3] == ["uv", "add", "-q"]

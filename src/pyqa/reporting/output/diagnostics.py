@@ -13,8 +13,8 @@ from rich.text import Text
 from pyqa.core.severity import Severity
 
 from ...config import OutputConfig
-from ...runtime.console.manager import get_console_manager
 from ...core.models import Diagnostic
+from ...runtime.console.manager import get_console_manager
 from .highlighting import (
     LOCATION_SEPARATOR,
     format_code_value,

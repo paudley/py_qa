@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
@@ -35,42 +35,56 @@ from pyqa.filesystem.paths import normalize_path_key
 from .base import InternalLintReport
 from .utils import collect_python_files, collect_target_files
 
+
+@dataclass(slots=True)
+class QualityCheckRequest:
+    """Describe an invocation of :func:`evaluate_quality_checks`."""
+
+    root: Path
+    config: Config
+    checks: tuple[str, ...]
+    files: tuple[Path, ...] | None = None
+    fix: bool = False
+    staged: bool = False
+
+
+@dataclass(slots=True)
+class QualitySubsetRequest:
+    """Describe parameters required for an internal quality subset run."""
+
+    state: PreparedLintState
+    config: Config
+    tool_name: str
+    checks: tuple[str, ...]
+    categories: frozenset[str]
+    files: tuple[Path, ...]
+    emit_to_logger: bool = False
+
+
 _ENFORCEMENT_SENSITIVITY: Final[frozenset[str]] = frozenset({"high", "maximum"})
 
 
-def evaluate_quality_checks(
-    *,
-    root: Path,
-    config: Config,
-    checks: Iterable[str],
-    files: Sequence[Path] | None,
-    fix: bool = False,
-    staged: bool = False,
-) -> QualityCheckResult:
+def evaluate_quality_checks(request: QualityCheckRequest) -> QualityCheckResult:
     """Execute quality checks and return the aggregated result.
 
     Args:
-        root: Repository root used to seed the quality checker.
-        config: Loaded configuration containing quality and license settings.
-        checks: Collection of quality check identifiers to execute.
-        files: Optional list of explicit files to analyse.
-        fix: Whether fix-capable checks should attempt automatic remediation.
+        request: Structured quality check execution parameters.
 
     Returns:
         QualityCheckResult: Aggregated quality findings produced by the checker.
     """
 
     checker = QualityChecker(
-        root=root,
-        quality=config.quality,
+        root=request.root,
+        quality=request.config.quality,
         options=QualityCheckerOptions(
-            license_overrides=config.license,
-            files=tuple(files) if files else None,
-            checks=tuple(checks),
-            staged=staged,
+            license_overrides=request.config.license,
+            files=request.files,
+            checks=request.checks,
+            staged=request.staged,
         ),
     )
-    return checker.run(fix=fix)
+    return checker.run(fix=request.fix)
 
 
 def run_license_header_linter(
@@ -81,15 +95,16 @@ def run_license_header_linter(
 ) -> InternalLintReport:
     """Run the license header enforcement linter."""
 
-    return _run_quality_subset(
-        state,
-        config,
-        emit_to_logger=emit_to_logger,
+    request = QualitySubsetRequest(
+        state=state,
+        config=config,
         tool_name="license-header",
         checks=("license",),
         categories=frozenset({LICENSE_HEADER_CATEGORY}),
-        files=collect_target_files(state),
+        files=tuple(collect_target_files(state)),
+        emit_to_logger=emit_to_logger,
     )
+    return _run_quality_subset(request)
 
 
 def run_copyright_linter(
@@ -100,15 +115,16 @@ def run_copyright_linter(
 ) -> InternalLintReport:
     """Run the copyright notice consistency linter."""
 
-    return _run_quality_subset(
-        state,
-        config,
-        emit_to_logger=emit_to_logger,
+    request = QualitySubsetRequest(
+        state=state,
+        config=config,
         tool_name="copyright",
         checks=("license",),
         categories=frozenset({COPYRIGHT_CATEGORY}),
-        files=collect_target_files(state),
+        files=tuple(collect_target_files(state)),
+        emit_to_logger=emit_to_logger,
     )
+    return _run_quality_subset(request)
 
 
 def run_python_hygiene_linter(
@@ -119,10 +135,9 @@ def run_python_hygiene_linter(
 ) -> InternalLintReport:
     """Run the Python hygiene linter covering debug breakpoints and bare excepts."""
 
-    return _run_quality_subset(
-        state,
-        config,
-        emit_to_logger=emit_to_logger,
+    request = QualitySubsetRequest(
+        state=state,
+        config=config,
         tool_name="python-hygiene",
         checks=("python",),
         categories=frozenset(
@@ -135,8 +150,10 @@ def run_python_hygiene_linter(
                 PYTHON_HYGIENE_DEBUG_IMPORT,
             }
         ),
-        files=collect_python_files(state),
+        files=tuple(collect_python_files(state)),
+        emit_to_logger=emit_to_logger,
     )
+    return _run_quality_subset(request)
 
 
 def run_file_size_linter(
@@ -147,15 +164,16 @@ def run_file_size_linter(
 ) -> InternalLintReport:
     """Run the file size threshold linter."""
 
-    return _run_quality_subset(
-        state,
-        config,
-        emit_to_logger=emit_to_logger,
+    request = QualitySubsetRequest(
+        state=state,
+        config=config,
         tool_name="file-size",
         checks=("file-size",),
         categories=frozenset({"file-size"}),
-        files=collect_target_files(state),
+        files=tuple(collect_target_files(state)),
+        emit_to_logger=emit_to_logger,
     )
+    return _run_quality_subset(request)
 
 
 def run_pyqa_schema_sync_linter(
@@ -166,15 +184,16 @@ def run_pyqa_schema_sync_linter(
 ) -> InternalLintReport:
     """Run the pyqa schema synchronisation linter."""
 
-    return _run_quality_subset(
-        state,
-        config,
-        emit_to_logger=emit_to_logger,
+    request = QualitySubsetRequest(
+        state=state,
+        config=config,
         tool_name="pyqa-schema-sync",
         checks=("schema",),
         categories=frozenset({SCHEMA_SYNC_CATEGORY}),
-        files=collect_target_files(state),
+        files=tuple(collect_target_files(state)),
+        emit_to_logger=emit_to_logger,
     )
+    return _run_quality_subset(request)
 
 
 def run_pyqa_python_hygiene_linter(
@@ -185,30 +204,27 @@ def run_pyqa_python_hygiene_linter(
 ) -> InternalLintReport:
     """Run the pyqa-specific Python hygiene checks."""
 
-    return _run_quality_subset(
-        state,
-        config,
-        emit_to_logger=emit_to_logger,
+    request = QualitySubsetRequest(
+        state=state,
+        config=config,
         tool_name="pyqa-python-hygiene",
         checks=("python",),
         categories=frozenset({PYTHON_HYGIENE_SYSTEM_EXIT, PYTHON_HYGIENE_PRINT}),
-        files=collect_python_files(state),
+        files=tuple(collect_python_files(state)),
+        emit_to_logger=emit_to_logger,
     )
+    return _run_quality_subset(request)
 
 
-def _run_quality_subset(
-    state: PreparedLintState,
-    config: Config,
-    *,
-    emit_to_logger: bool,
-    tool_name: str,
-    checks: Iterable[str],
-    categories: frozenset[str],
-    files: Sequence[Path],
-) -> InternalLintReport:
+def _run_quality_subset(request: QualitySubsetRequest) -> InternalLintReport:
     """Execute a specific quality check and convert results into diagnostics."""
 
-    del emit_to_logger
+    state = request.state
+    config = request.config
+    files = request.files
+    tool_name = request.tool_name
+    categories = request.categories
+    checks = request.checks
 
     if not files:
         outcome = ToolOutcome(
@@ -237,13 +253,14 @@ def _run_quality_subset(
         )
         return InternalLintReport(outcome=outcome, files=tuple(files))
 
-    result = evaluate_quality_checks(
+    quality_request = QualityCheckRequest(
         root=state.root,
         config=config,
         checks=checks,
-        files=files,
+        files=tuple(files),
         fix=False,
     )
+    result = evaluate_quality_checks(quality_request)
 
     diagnostics: list[Diagnostic] = []
     stdout_lines: list[str] = []
@@ -252,6 +269,8 @@ def _run_quality_subset(
             continue
         diagnostic = _issue_to_diagnostic(issue, tool_name=tool_name, root=state.root)
         if diagnostic is None:
+            continue
+        if _diagnostic_suppressed(state, diagnostic):
             continue
         diagnostics.append(diagnostic)
         location = diagnostic.file or ""
@@ -271,6 +290,23 @@ def _run_quality_subset(
         exit_category=exit_category,
     )
     return InternalLintReport(outcome=outcome, files=tuple(files))
+
+
+def _diagnostic_suppressed(state: PreparedLintState, diagnostic: Diagnostic) -> bool:
+    suppressions = getattr(state, "suppressions", None)
+    if suppressions is None or not diagnostic.file or diagnostic.line is None:
+        return False
+    diagnostic_path = Path(diagnostic.file)
+    if not diagnostic_path.is_absolute():
+        diagnostic_path = (state.root / diagnostic_path).resolve()
+    return bool(
+        suppressions.should_suppress(
+            diagnostic_path,
+            diagnostic.line,
+            tool=diagnostic.tool,
+            code=diagnostic.code or diagnostic.tool,
+        )
+    )
 
 
 def _issue_to_diagnostic(issue: QualityIssue, *, tool_name: str, root: Path) -> Diagnostic | None:

@@ -115,4 +115,9 @@ def test_pyqa_di_linter_reports_registration_outside_allowlist(tmp_path: Path) -
     assert "pyqa.core.runtime.di" in hint_text
     assert "test DI fixtures" in hint_text
     assert diagnostic.meta.get("service") == "tool"
-    assert diagnostic.meta.get("allowed_suffixes") == di_linter._ALLOWED_SERVICE_SUFFIXES
+    suffixes = diagnostic.meta.get("allowed_suffixes")
+    if isinstance(suffixes, list):
+        suffixes_value = tuple(suffixes)
+    else:
+        suffixes_value = suffixes
+    assert suffixes_value == di_linter._ALLOWED_SERVICE_SUFFIXES

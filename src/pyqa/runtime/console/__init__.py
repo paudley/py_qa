@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
-from .manager import ConsoleManager, console_manager, is_tty
+from ...interfaces.core import ConsoleManager
+from .manager import RichConsoleManager, console_manager, is_tty
 
-__all__ = ["ConsoleManager", "console_manager", "is_tty"]
+__all__ = ["ConsoleManager", "RichConsoleManager", "console_manager", "is_tty"]

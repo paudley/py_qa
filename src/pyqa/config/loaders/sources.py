@@ -10,11 +10,12 @@ import os
 import tomllib
 from collections.abc import Iterable, Mapping, MutableMapping
 from pathlib import Path
-from typing import Any, Final
+from typing import Final
 
 from ...interfaces.config import ConfigSource
 from ..defaults import default_config_payload
 from ..models import ConfigError
+from ..types import ConfigFragment, ConfigValue
 from ..utils import _deep_merge, _expand_env, _normalise_pyproject_payload
 
 DEFAULT_INCLUDE_KEY: Final[str] = "include"
@@ -22,7 +23,7 @@ PYPROJECT_TOOL_KEY: Final[str] = "tool"
 PYPROJECT_SECTION_KEY: Final[str] = "pyqa"
 CONFIG_KEY: Final[str] = "config"
 
-_TOML_CACHE: dict[tuple[Path, int], Mapping[str, Any]] = {}
+_TOML_CACHE: dict[tuple[Path, int], ConfigFragment] = {}
 
 
 class DefaultConfigSource(ConfigSource):
@@ -31,7 +32,7 @@ class DefaultConfigSource(ConfigSource):
     def __init__(self) -> None:
         self.name = "defaults"
 
-    def load(self) -> Mapping[str, Any]:
+    def load(self) -> ConfigFragment:
         """Return the built-in configuration payload.
 
         Returns:
@@ -66,7 +67,7 @@ class TomlConfigSource(ConfigSource):
         self._include_key = include_key
         self._env = env or os.environ
 
-    def load(self) -> Mapping[str, Any]:
+    def load(self) -> ConfigFragment:
         """Return configuration data resolved from the root TOML document.
 
         Returns:
@@ -75,7 +76,7 @@ class TomlConfigSource(ConfigSource):
 
         return self._load(self._root_path, ())
 
-    def _load(self, path: Path, stack: tuple[Path, ...]) -> Mapping[str, Any]:
+    def _load(self, path: Path, stack: tuple[Path, ...]) -> dict[str, ConfigValue]:
         """Return merged configuration for ``path`` while tracking recursion.
 
         Args:
@@ -102,16 +103,16 @@ class TomlConfigSource(ConfigSource):
             _TOML_CACHE[cache_key] = copy.deepcopy(data)
         if not isinstance(data, MutableMapping):
             raise ConfigError(f"Configuration at {path} must be a table")
-        document: dict[str, Any] = dict(data)
+        document: dict[str, ConfigValue] = dict(data)
         includes = document.pop(self._include_key, None)
-        merged: dict[str, Any] = {}
+        merged: dict[str, ConfigValue] = {}
         for include_path in self._coerce_includes(includes, path.parent):
             fragment = self._load(include_path, stack + (path,))
             merged = _deep_merge(merged, fragment)
         merged = _deep_merge(merged, document)
         return _expand_env(merged, self._env)
 
-    def _coerce_includes(self, raw: Any, base_dir: Path) -> Iterable[Path]:
+    def _coerce_includes(self, raw: ConfigValue, base_dir: Path) -> Iterable[Path]:
         """Return include paths derived from ``raw`` relative to ``base_dir``.
 
         Args:
@@ -124,13 +125,20 @@ class TomlConfigSource(ConfigSource):
 
         if raw is None:
             return []
-        if isinstance(raw, (str, Path)):
-            return [self._resolve_path(Path(raw), base_dir)]
-        if isinstance(raw, MutableMapping):
-            return [self._resolve_path(Path(value), base_dir) for value in raw.values()]
-        if isinstance(raw, Iterable):
-            return [self._resolve_path(Path(item), base_dir) for item in raw]
-        raise ConfigError(f"Unsupported include declaration: {raw!r}")
+        if isinstance(raw, Mapping):
+            return [self._coerce_include_value(value, base_dir) for value in raw.values()]
+        if isinstance(raw, Iterable) and not isinstance(raw, (str, bytes)):
+            return [self._coerce_include_value(item, base_dir) for item in raw]
+        return [self._coerce_include_value(raw, base_dir)]
+
+    def _coerce_include_value(self, value: ConfigValue, base_dir: Path) -> Path:
+        """Return a resolved include path for ``value`` relative to ``base_dir``."""
+
+        if isinstance(value, Path):
+            return self._resolve_path(value, base_dir)
+        if isinstance(value, str):
+            return self._resolve_path(Path(value), base_dir)
+        raise ConfigError(f"Unsupported include declaration: {value!r}")
 
     @staticmethod
     def _resolve_path(path: Path, base_dir: Path) -> Path:
@@ -162,7 +170,7 @@ class PyProjectConfigSource(TomlConfigSource):
     def __init__(self, path: Path) -> None:
         super().__init__(path, name=str(path))
 
-    def load(self) -> Mapping[str, Any]:
+    def load(self) -> ConfigFragment:
         """Return configuration extracted from ``[tool.pyqa]`` sections.
 
         Returns:

@@ -11,13 +11,12 @@ from pathlib import Path
 from shutil import which
 from subprocess import CompletedProcess
 from types import SimpleNamespace
-from typing import Any
 
 from pyqa.core.environment import find_venv_bin
 from pyqa.core.environment.tool_env.constants import PROJECT_MARKER_FILENAME
-from pyqa.core.runtime.process import SubprocessExecutionError, run_command
+from pyqa.core.runtime.process import CommandOptions, SubprocessExecutionError, run_command
 
-Runner = Callable[[list[str]], Any]
+Runner = Callable[[list[str]], CompletedProcess[str]]
 Warn = Callable[[str], None]
 
 
@@ -186,7 +185,8 @@ def _run_uv(args: Sequence[str], project_root: Path, *, check: bool) -> Complete
         CompletedProcess[str]: Captured subprocess result.
     """
 
-    return run_command(args, cwd=project_root, check=check)
+    options = CommandOptions(cwd=project_root, check=check)
+    return run_command(args, options=options)
 
 
 def _installed_packages(project_root: Path) -> set[str]:
@@ -202,9 +202,7 @@ def _installed_packages(project_root: Path) -> set[str]:
     try:
         completed = run_command(
             ["uv", "pip", "list", "--format=json"],
-            cwd=project_root,
-            check=True,
-            capture_output=True,
+            options=CommandOptions(cwd=project_root, check=True, capture_output=True),
         )
     except (FileNotFoundError, SubprocessExecutionError):
         return set()
@@ -316,7 +314,7 @@ def install_with_preferred_manager(
     runner: Runner,
     warn: Warn | None = None,
     project_root: Path | None = None,
-) -> Any:
+) -> CompletedProcess[str]:
     """Install packages using uv/pip preferences.
 
     Args:
@@ -326,7 +324,7 @@ def install_with_preferred_manager(
         project_root: Project directory used to detect uv/virtualenv availability.
 
     Returns:
-        Any: Subprocess result from the command that ultimately executed.
+        CompletedProcess[str]: Subprocess result from the command that ultimately executed.
 
     The resolution order matches the legacy script:
     1. ``uv add --dev`` when ``pyproject.toml`` is present.

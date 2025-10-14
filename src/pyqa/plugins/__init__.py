@@ -12,25 +12,66 @@ mutation of the loaded plugin sequences.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from importlib import metadata
+from importlib.metadata import EntryPoint, EntryPoints
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import TYPE_CHECKING, TypeAlias, TypeVar, cast
+
+from tooling_spec.catalog.plugins import CatalogContribution
+from tooling_spec.catalog.types import JSONValue as CatalogJSONValue
+
+if TYPE_CHECKING:
+    from typer import Typer
+else:  # pragma: no cover - typer may be unavailable in minimal environments
+    try:
+        from typer import Typer
+    except ModuleNotFoundError:  # pragma: no cover - fallback stub for tooling tests
+
+        class Typer:  # type: ignore[too-many-ancestors]
+            """Fallback stub used when Typer is not installed."""
+
+            ...
+
 
 CATALOG_PLUGIN_GROUP = "pyqa.catalog.plugins"
 CLI_PLUGIN_GROUP = "pyqa.cli.plugins"
 DIAGNOSTICS_PLUGIN_GROUP = "pyqa.diagnostics.plugins"
 
-_EntryPointCallable = Callable[..., Any]
+CatalogPluginFactory: TypeAlias = Callable[..., CatalogContribution]
+CLIPluginFactory: TypeAlias = Callable[[Typer], None]
+DiagnosticsPlugin: TypeAlias = Callable[..., None] | str | Mapping[str, CatalogJSONValue]
+
+_EntryPointSource: TypeAlias = EntryPoints | Mapping[str, Sequence[EntryPoint]]
+_FactoryT = TypeVar("_FactoryT")
 
 
-def noop_plugin(*_args: Any, **_kwargs: Any) -> None:
+def noop_plugin(invocation: Mapping[str, CatalogJSONValue] | None = None) -> None:
     """Default plugin callable used as a placeholder."""
 
-    return None
+    del invocation
 
 
-def _discover_entry_points(group: str) -> Sequence[_EntryPointCallable]:
+def _select_entry_points(entries: _EntryPointSource, group: str) -> Iterable[EntryPoint]:
+    """Return entry points exposed under ``group`` from ``entries``.
+
+    Args:
+        entries: Raw entry-point container returned by :func:`metadata.entry_points`.
+        group: Name of the entry-point group to extract.
+
+    Returns:
+        Iterable[EntryPoint]: Entry points belonging to ``group``. When the
+        container lacks the requested group an empty iterable is returned.
+    """
+
+    if isinstance(entries, Mapping):
+        return entries.get(group, ())
+    if hasattr(entries, "select"):
+        return entries.select(group=group)
+    return ()
+
+
+def _discover_entry_points(group: str) -> tuple[_FactoryT, ...]:
     """Return callables exposed by the entry-point *group*.
 
     The helper tolerates importlib API differences between Python versions
@@ -38,39 +79,37 @@ def _discover_entry_points(group: str) -> Sequence[_EntryPointCallable]:
     gracefully ignores plugins that fail to resolve.
     """
 
-    entries: Any = metadata.entry_points()
+    entries_raw = metadata.entry_points()
+    selected = _select_entry_points(cast(_EntryPointSource, entries_raw), group)
 
-    selected: Iterable[Any]
-    if hasattr(entries, "select"):
-        selected = cast(Iterable[Any], entries.select(group=group))
-    elif isinstance(entries, dict):  # pragma: no cover - compatibility path
-        selected = cast(Iterable[Any], entries.get(group, ()))
-    else:  # pragma: no cover - unexpected metadata shape
-        selected = ()
-
-    callables: list[_EntryPointCallable] = []
+    callables: list[_FactoryT] = []
     for entry in selected:
         try:
-            callables.append(entry.load())
+            plugin = entry.load()
         except (AttributeError, ImportError, ValueError, RuntimeError):
             continue
+        callables.append(cast(_FactoryT, plugin))
     return tuple(callables)
 
 
-def load_catalog_plugins() -> Sequence[_EntryPointCallable]:
+def load_catalog_plugins() -> tuple[CatalogPluginFactory, ...]:
     """Return catalog plugin factories discovered via entry points."""
 
     return _discover_entry_points(CATALOG_PLUGIN_GROUP)
 
 
-def load_cli_plugins() -> Sequence[_EntryPointCallable]:
+def load_cli_plugins() -> tuple[CLIPluginFactory, ...]:
     """Return CLI plugin factories discovered via entry points."""
 
     return _discover_entry_points(CLI_PLUGIN_GROUP)
 
 
-def load_diagnostics_plugins() -> Sequence[_EntryPointCallable]:
-    """Return diagnostics plugin factories discovered via entry points."""
+def load_diagnostics_plugins() -> tuple[DiagnosticsPlugin, ...]:
+    """Return diagnostics plugins discovered via entry points.
+
+    Diagnostics plugins may be simple descriptors or callables depending on the
+    consuming subsystem, so the helper preserves their native types.
+    """
 
     return _discover_entry_points(DIAGNOSTICS_PLUGIN_GROUP)
 

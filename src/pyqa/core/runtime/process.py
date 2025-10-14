@@ -12,7 +12,10 @@ import subprocess  # nosec B404 suppression_valid: The subprocess module is stan
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+
+CommandOverrideValue = Path | Mapping[str, str] | bool | float | None
+CommandOverrideMapping = Mapping[str, CommandOverrideValue]
 
 if TYPE_CHECKING:
     # Bandit: type-only import of subprocess metadata is part of the safe wrapper.
@@ -33,7 +36,7 @@ class CommandOptions:
     timeout: float | None = None
     discard_stdin: bool = False
 
-    def with_overrides(self, overrides: Mapping[str, Any]) -> CommandOptions:
+    def with_overrides(self, overrides: CommandOverrideMapping) -> CommandOptions:
         """Return a new options instance with ``overrides`` applied.
 
         Args:
@@ -102,14 +105,14 @@ def run_command(
     args: Sequence[str],
     *,
     options: CommandOptions | None = None,
-    **overrides: Any,
+    overrides: CommandOverrideMapping | None = None,
 ) -> _CompletedProcess[str]:
     """Execute ``args`` after normalising the executable path.
 
     Args:
         args: Command and argument sequence to execute.
         options: Base options configuring execution semantics.
-        **overrides: Keyword overrides applied to a cloned ``options`` instance.
+        overrides: Keyword overrides applied to a cloned ``options`` instance.
 
     Returns:
         CompletedProcess: Subprocess execution metadata.
@@ -122,7 +125,8 @@ def run_command(
     """
 
     normalized = _normalize_args(args)
-    resolved_options = (options or CommandOptions()).with_overrides(overrides)
+    overrides_mapping: CommandOverrideMapping = overrides or {}
+    resolved_options = (options or CommandOptions()).with_overrides(overrides_mapping)
 
     def _ensure_text(value: str | bytes | None) -> str | None:
         if value is None or isinstance(value, str):

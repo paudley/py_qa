@@ -8,6 +8,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
+from pyqa.core.serialization import JsonValue
+
 
 @runtime_checkable
 class ComplianceCheck(Protocol):
@@ -32,7 +34,7 @@ class PolicyEvaluator(Protocol):
         """Return the policy name evaluated by the service."""
         raise NotImplementedError("PolicyEvaluator.policy_name must be implemented")
 
-    def evaluate(self, payload: object) -> None:
+    def evaluate(self, payload: JsonValue) -> None:
         """Evaluate ``payload`` and raise if policy constraints are violated."""
         raise NotImplementedError
 

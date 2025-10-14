@@ -10,7 +10,7 @@ import shutil
 import stat
 from pathlib import Path
 
-from pyqa.core.runtime.process import run_command
+from pyqa.core.runtime.process import CommandOptions, run_command
 from pyqa.tools.base import Tool
 
 from ..models import PreparedCommand
@@ -71,8 +71,7 @@ class GoRuntime(RuntimeHandler):
 
         run_command(
             ["go", "install", requirement],
-            capture_output=True,
-            env=env,
+            options=CommandOptions(capture_output=True, env=env),
         )
 
         if not binary.exists():

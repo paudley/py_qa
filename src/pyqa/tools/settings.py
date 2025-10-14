@@ -10,8 +10,12 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import TypeAlias
 
 from ..catalog.metadata import CatalogOption, catalog_tool_options
+
+JSONPrimitive: TypeAlias = str | int | float | bool | None
+JSONValue: TypeAlias = JSONPrimitive | list["JSONValue"] | dict[str, "JSONValue"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,9 +26,9 @@ class SettingField:
     description: str
     enum: tuple[str, ...] | None = None
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(self) -> dict[str, JSONValue]:
         """Return a JSON-serialisable representation of the setting field."""
-        payload: dict[str, object] = {
+        payload: dict[str, JSONValue] = {
             "type": self.type,
             "description": self.description,
         }
@@ -34,7 +38,7 @@ class SettingField:
 
 
 ToolSettingSchema = Mapping[str, Mapping[str, SettingField]]
-RawToolSettingSchema = dict[str, dict[str, dict[str, object]]]
+RawToolSettingSchema = dict[str, dict[str, dict[str, JSONValue]]]
 
 
 def _normalise_type(option: CatalogOption) -> str:

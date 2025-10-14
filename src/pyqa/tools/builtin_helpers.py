@@ -11,12 +11,13 @@ import tarfile
 import tempfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from importlib import import_module
+from functools import lru_cache
 from pathlib import Path
-from typing import Final, Protocol, cast
+from typing import Final, Protocol
 
 from pyqa.core.severity import Severity
 
+from ..config.types import ConfigValue
 from ..core.models import RawDiagnostic
 from ..filesystem.paths import normalize_path
 from ..utils.bool_utils import interpret_optional_bool
@@ -70,19 +71,28 @@ class _HttpResponse(Protocol):
 _RequestsGet = Callable[..., _HttpResponse]
 
 
+@lru_cache(maxsize=1)
 def _load_requests_get() -> _RequestsGet:
-    module = import_module("requests")
-    get_callable = getattr(module, "get", None)
-    if not callable(get_callable):
-        msg = "requests.get not available"
-        raise RuntimeError(msg)
-    return cast(_RequestsGet, get_callable)
+    """Return the cached ``requests.get`` callable.
+
+    Returns:
+        Callable[..., _HttpResponse]: Requests GET function used for downloads.
+
+    Raises:
+        RuntimeError: If the ``requests`` package is not available.
+    """
+
+    try:
+        import requests
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("requests package is required to download tool artifacts") from exc
+    return requests.get
 
 
-_REQUESTS_GET: Final[_RequestsGet] = _load_requests_get()
+SettingsMapping = Mapping[str, ConfigValue]
 
 
-def _setting(settings: Mapping[str, object], *names: str) -> object | None:
+def _setting(settings: SettingsMapping, *names: str) -> ConfigValue | None:
     """Return the first configured value from *names* within *settings*."""
     for name in names:
         if name in settings:
@@ -93,7 +103,7 @@ def _setting(settings: Mapping[str, object], *names: str) -> object | None:
     return None
 
 
-def _settings_list(value: object) -> list[str]:
+def _settings_list(value: ConfigValue | None) -> list[str]:
     """Coerce a setting value into a list of strings."""
     if value is None:
         return []
@@ -106,7 +116,7 @@ def _settings_list(value: object) -> list[str]:
     return [str(value)]
 
 
-def _resolve_path(root: Path, value: object) -> Path:
+def _resolve_path(root: Path, value: ConfigValue) -> Path:
     """Return an absolute path for *value* anchored at *root* when needed."""
     candidate = Path(str(value)).expanduser()
     try:
@@ -118,9 +128,26 @@ def _resolve_path(root: Path, value: object) -> Path:
     return (root / normalised).resolve()
 
 
-def _as_bool(value: object | None) -> bool | None:
-    """Interpret arbitrary values as optional booleans."""
-    return interpret_optional_bool(value)
+def _as_bool(value: ConfigValue | None) -> bool | None:
+    """Interpret arbitrary configuration values as optional booleans.
+
+    Args:
+        value: Configuration value to interpret.
+
+    Returns:
+        bool | None: Parsed boolean value or ``None`` when unset.
+
+    Raises:
+        TypeError: If ``value`` cannot be interpreted as a boolean.
+    """
+
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (str, int, float)):
+        return interpret_optional_bool(value)
+    raise TypeError("boolean settings must be bool, string, or numeric values")
 
 
 @dataclass(frozen=True)
@@ -135,7 +162,7 @@ class _DownloadTarget:
 
 
 def download_tool_artifact(
-    spec: Mapping[str, object],
+    spec: Mapping[str, ConfigValue],
     *,
     version: str | None,
     cache_root: Path,
@@ -170,19 +197,24 @@ def download_tool_artifact(
 
 
 def _parse_download_targets(
-    spec: Mapping[str, object],
+    spec: Mapping[str, ConfigValue],
     *,
     context: str,
 ) -> tuple[_DownloadTarget, ...]:
     targets_value = spec.get("targets")
     if not isinstance(targets_value, Sequence) or not targets_value:
         raise RuntimeError(f"{context}: download specification must include targets")
-    return tuple(_normalize_download_target(target, context=context) for target in targets_value)
+    normalized_targets: list[_DownloadTarget] = []
+    for target in targets_value:
+        if not isinstance(target, Mapping):
+            raise RuntimeError(f"{context}: download target entries must be objects")
+        normalized_targets.append(_normalize_download_target(target, context=context))
+    return tuple(normalized_targets)
 
 
 def _resolve_cache_directory(
     cache_root: Path,
-    spec: Mapping[str, object],
+    spec: Mapping[str, ConfigValue],
     *,
     tool_name: str,
     version: str | None,
@@ -200,7 +232,18 @@ def _determine_filename(target: _DownloadTarget) -> str:
 
 
 def _fetch_artifact(url: str, *, timeout: int) -> _HttpResponse:
-    response = _REQUESTS_GET(url, timeout=timeout)
+    """Return the HTTP response for the artifact located at ``url``.
+
+    Args:
+        url: Artifact download URL.
+        timeout: Timeout in seconds applied to the HTTP request.
+
+    Returns:
+        _HttpResponse: Response object ready for content consumption.
+    """
+
+    get = _load_requests_get()
+    response = get(url, timeout=timeout)
     response.raise_for_status()
     return response
 
@@ -225,18 +268,19 @@ def _make_executable(path: Path) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
-def _normalize_download_target(data: object, *, context: str) -> _DownloadTarget:
-    if not isinstance(data, Mapping):
-        raise RuntimeError(f"{context}: download target entries must be objects")
-
+def _normalize_download_target(
+    data: Mapping[str, ConfigValue],
+    *,
+    context: str,
+) -> _DownloadTarget:
     url_value = data.get("url")
     if not isinstance(url_value, str) or not url_value:
         raise RuntimeError(f"{context}: download target requires a non-empty 'url'")
 
     os_value = data.get("os") or data.get("oses")
-    os_list = _normalize_string_sequence(os_value) if os_value is not None else None
+    os_list = _normalize_string_sequence(os_value, context=context) if os_value is not None else None
     arch_value = data.get("arch") or data.get("architectures")
-    arch_list = _normalize_string_sequence(arch_value) if arch_value is not None else None
+    arch_list = _normalize_string_sequence(arch_value, context=context) if arch_value is not None else None
 
     archive_value = data.get("archive")
     archive_format = None
@@ -271,17 +315,17 @@ def _normalize_download_target(data: object, *, context: str) -> _DownloadTarget
     )
 
 
-def _normalize_string_sequence(value: object) -> tuple[str, ...]:
+def _normalize_string_sequence(value: ConfigValue, *, context: str) -> tuple[str, ...]:
     if isinstance(value, str):
         return (value,)
     if isinstance(value, Sequence):
-        result = []
+        result: list[str] = []
         for item in value:
             if not isinstance(item, str):
-                raise RuntimeError("Download target entries must be strings")
+                raise RuntimeError(f"{context}: download target entries must be strings")
             result.append(item)
         return tuple(result)
-    raise RuntimeError("Download target sequences must be arrays of strings")
+    raise RuntimeError(f"{context}: download target sequences must be arrays of strings")
 
 
 def _select_download_target(targets: Sequence[_DownloadTarget], *, context: str) -> _DownloadTarget:
@@ -344,7 +388,7 @@ def _extract_tar_member(
         destination.write_bytes(extracted.read_bytes())
 
 
-def _normalize_timeout(value: object, *, context: str) -> int:
+def _normalize_timeout(value: ConfigValue, *, context: str) -> int:
     """Coerce the timeout value into an integer number of seconds."""
 
     if isinstance(value, bool):

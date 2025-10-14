@@ -18,6 +18,7 @@ from pyqa.core.config.loader import FieldUpdate
 
 from ....catalog.model_tool import ToolDefinition
 from ....config import Config
+from ....config.types import ConfigValue
 from ....tools.base import Tool, ToolContext
 from ...core.utils import ToolStatus
 
@@ -68,7 +69,7 @@ def build_actions_table(
     tool: Tool,
     cfg: Config,
     root: Path,
-    overrides: dict[str, object],
+    overrides: dict[str, ConfigValue],
 ) -> Table:
     """Return a rich table describing the tool's registered actions.
 
@@ -138,7 +139,7 @@ def render_documentation(console: Console, tool: Tool) -> None:
         )
 
 
-def render_overrides_panel(console: Console, overrides: dict[str, object]) -> None:
+def render_overrides_panel(console: Console, overrides: dict[str, ConfigValue]) -> None:
     """Render configuration override information.
 
     Args:

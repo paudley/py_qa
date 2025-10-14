@@ -11,28 +11,29 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Final, cast
+from types import ModuleType
+from typing import Final, cast
 
 from pydantic import BaseModel, ConfigDict
+from tree_sitter import Language as TSLanguage
+from tree_sitter import Node as TSNode
+from tree_sitter import Parser as TSParser
+from tree_sitter import Tree as TSTree
 
 from ...core.logging import warn
 from ...core.models import Diagnostic
+from ..treesitter.grammars import ensure_language
 
-EnsureLanguageCallable = Callable[[str], Any | None]
+EnsureLanguageCallable = Callable[[str], TSLanguage | None]
 
-try:
-    from .grammars import ensure_language as _ensure_language_impl
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
-    _ENSURE_LANGUAGE: EnsureLanguageCallable | None = None
-else:
-    _ENSURE_LANGUAGE = cast(EnsureLanguageCallable, _ensure_language_impl)
+_ENSURE_LANGUAGE: EnsureLanguageCallable | None = ensure_language
 
 MARKDOWN_HEADING_NODE_TYPE: Final[str] = "heading"
 JSON_PAIR_NODE_TYPE: Final[str] = "pair"
 
 
 class _ParseResult(BaseModel):
-    tree: Any
+    tree: TSTree
     source: bytes
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -62,16 +63,16 @@ class Language(str, Enum):
 class ParserFactory:
     """Factory capable of constructing tree-sitter parsers on demand."""
 
-    parser_cls: Callable[[], Any] | None
-    get_parser: Callable[[str], Any] | None
-    language_cls: type[Any] | None
+    parser_cls: Callable[[], TSParser] | None
+    get_parser: Callable[[str], TSParser] | None
+    language_cls: type[TSLanguage] | None
 
     def create(
         self,
         grammar_name: str,
         *,
         register_warning: Callable[[str], None] | None = None,
-    ) -> Any | None:
+    ) -> TSParser | None:
         """Build a parser capable of handling ``grammar_name``.
 
         Args:
@@ -79,8 +80,8 @@ class ParserFactory:
             register_warning: Optional callback used to surface warning messages.
 
         Returns:
-            Any | None: Parser configured with the requested language, or ``None`` when
-            the parser cannot be created.
+            TSParser | None: Parser configured with the requested language, or ``None``
+            when the parser cannot be created.
         """
 
         if self.get_parser is not None:
@@ -99,18 +100,18 @@ class ParserFactory:
             return None
         return self._assign_language(parser, language)
 
-    def _build_language(self, module: Any) -> Any | None:
+    def _build_language(self, module: ModuleType) -> TSLanguage | None:
         """Construct a Tree-sitter language from a packaged module.
 
         Args:
             module: Imported grammar module exposing a ``language`` factory.
 
         Returns:
-            Any | None: Instantiated language object when the factory succeeds.
+            TSLanguage | None: Instantiated language object when the factory succeeds.
         """
 
         language_factory = getattr(module, "language", None)
-        if not callable(language_factory) or not callable(self.language_cls):
+        if not callable(language_factory) or self.language_cls is None:
             return None
         try:
             return self.language_cls(language_factory())
@@ -122,7 +123,7 @@ class ParserFactory:
         grammar_name: str,
         *,
         register_warning: Callable[[str], None] | None,
-    ) -> Any | None:
+    ) -> TSLanguage | None:
         """Compile grammar sources when bundled modules are unavailable.
 
         Args:
@@ -130,7 +131,7 @@ class ParserFactory:
             register_warning: Optional callback used to record warnings.
 
         Returns:
-            Any | None: Compiled language when successful; otherwise ``None``.
+            TSLanguage | None: Compiled language when successful; otherwise ``None``.
         """
 
         if _ENSURE_LANGUAGE is None:
@@ -155,11 +156,11 @@ class ParserFactory:
             return None
         return language
 
-    def _build_parser(self) -> Any | None:
+    def _build_parser(self) -> TSParser | None:
         """Instantiate a parser using the configured parser factory.
 
         Returns:
-            Any | None: Parser instance when creation succeeds; otherwise ``None``.
+            TSParser | None: Parser instance when creation succeeds; otherwise ``None``.
         """
 
         parser_factory = self.parser_cls
@@ -171,14 +172,14 @@ class ParserFactory:
             return None
 
     @staticmethod
-    def _import_language_module(module_name: str) -> Any | None:
+    def _import_language_module(module_name: str) -> ModuleType | None:
         """Import the Tree-sitter language module when it is installed.
 
         Args:
             module_name: Fully-qualified module name to import.
 
         Returns:
-            Any | None: Imported module or ``None`` if the module cannot be located.
+            ModuleType | None: Imported module or ``None`` if the module cannot be located.
         """
 
         try:
@@ -187,7 +188,7 @@ class ParserFactory:
             return None
 
     @staticmethod
-    def _assign_language(parser: Any, language: Any) -> Any | None:
+    def _assign_language(parser: TSParser, language: TSLanguage) -> TSParser | None:
         """Attach ``language`` to ``parser`` returning the parser when successful.
 
         Args:
@@ -195,7 +196,7 @@ class ParserFactory:
             language: Language object returned by ``create``.
 
         Returns:
-            Any | None: Parser after assignment, or ``None`` when assignment fails.
+            TSParser | None: Parser after assignment, or ``None`` when assignment fails.
         """
 
         setter = getattr(parser, "set_language", None)
@@ -244,12 +245,17 @@ def _build_parser_loader() -> ParserFactory | None:
             return None
         return ParserFactory(parser_cls=parser_cls, get_parser=None, language_cls=language_cls)
 
-    get_parser = getattr(bundled, "get_parser", None)
-    if not callable(get_parser):
+    get_parser_attr = getattr(bundled, "get_parser", None)
+    if not callable(get_parser_attr):
         raise RuntimeError(
             "tree_sitter_languages.get_parser is unavailable; reinstall tree-sitter-languages",
         )
-    return ParserFactory(parser_cls=parser_cls, get_parser=get_parser, language_cls=language_cls)
+    bundled_get_parser = cast(Callable[[str], TSParser], get_parser_attr)
+    return ParserFactory(
+        parser_cls=parser_cls,
+        get_parser=bundled_get_parser,
+        language_cls=language_cls,
+    )
 
 
 @dataclass(slots=True)
@@ -260,12 +266,8 @@ class _ParserLoader:
     grammar_name: str
     register_warning: Callable[[str], None]
 
-    def __call__(self) -> Any | None:
-        """Return a parser for ``grammar_name`` or emit a warning on failure.
-
-        Returns:
-            Any | None: Parser instance when creation succeeds; otherwise ``None``.
-        """
+    def __call__(self) -> TSParser | None:
+        """Return a parser for ``grammar_name`` or emit a warning on failure."""
 
         parser = self.parser_factory.create(
             self.grammar_name,
@@ -332,7 +334,7 @@ class TreeSitterContextResolver:
     }
 
     def __init__(self) -> None:
-        self._parsers: dict[Language, Any] = {}
+        self._parsers: dict[Language, TSParser] = {}
         self._disabled: set[Language] = set()
         self._warnings: set[str] = set()
 
@@ -400,7 +402,7 @@ class TreeSitterContextResolver:
             candidate = (root / candidate).resolve()
         return candidate
 
-    def _get_parser(self, language: Language) -> Any | None:
+    def _get_parser(self, language: Language) -> TSParser | None:
         if language in self._disabled:
             return None
         cached = self._parsers.get(language)
@@ -420,14 +422,14 @@ class TreeSitterContextResolver:
         self._parsers[language] = parser
         return parser
 
-    def _resolve_parser_loader(self, language: Language) -> Callable[[], Any] | None:
+    def _resolve_parser_loader(self, language: Language) -> _ParserLoader | None:
         """Return a parser factory for ``language`` when available.
 
         Args:
             language: Language enum identifying the requested parser.
 
         Returns:
-            Callable[[], Any] | None: Zero-argument callable creating a parser or
+            _ParserLoader | None: Zero-argument callable creating a parser or
             ``None`` when no parser can be produced.
         """
 
@@ -534,7 +536,7 @@ class TreeSitterContextResolver:
             return self._json_fallback(path, line)
         return None
 
-    def _python_context(self, node: Any, line: int) -> str | None:
+    def _python_context(self, node: TSNode, line: int) -> str | None:
         """Return the most specific Python scope covering ``line``."""
 
         named_scope = _nearest_python_named_scope(node, line)
@@ -549,7 +551,7 @@ class TreeSitterContextResolver:
         node_type = getattr(generic_node, "type", None)
         return str(node_type) if isinstance(node_type, str) else None
 
-    def _markdown_context(self, node: Any, line: int, source: bytes) -> str | None:
+    def _markdown_context(self, node: TSNode, line: int, source: bytes) -> str | None:
         """Return the Markdown heading that precedes ``line`` when available.
 
         Args:
@@ -578,7 +580,7 @@ class TreeSitterContextResolver:
                 return heading
         return None
 
-    def _markdown_heading_text(self, node: Any, depth: int, source: bytes) -> str | None:
+    def _markdown_heading_text(self, node: TSNode, depth: int, source: bytes) -> str | None:
         """Return sanitised heading text for ``node`` with depth fallbacks.
 
         Args:
@@ -656,14 +658,14 @@ class TreeSitterContextResolver:
                 return heading
         return None
 
-    def _json_context(self, node: Any) -> str | None:
+    def _json_context(self, node: TSNode) -> str | None:
         parts: list[str] = []
         for current in _iter_tree_nodes(node):
             node_type = getattr(current, "type", "")
             if node_type == JSON_PAIR_NODE_TYPE:
                 key_node = getattr(current, "child_by_field_name", None)
                 if callable(key_node):
-                    key_token = key_node("key")
+                    key_token = cast(TSNode | None, key_node("key"))
                 else:
                     key_token = None
                 key_name = _tree_node_name(key_token)
@@ -690,7 +692,7 @@ class TreeSitterContextResolver:
         index = min(max(line - 1, 0), len(keys) - 1)
         return str(keys[index])
 
-    def _node_at(self, root: Any, line: int) -> Any | None:
+    def _node_at(self, root: TSNode, line: int) -> TSNode | None:
         for node in _iter_tree_nodes(root):
             if _node_contains_line(node, line):
                 return node
@@ -734,8 +736,11 @@ class TreeSitterContextResolver:
         return raw or None
 
 
-def _tree_node_name(node: Any) -> str | None:
+def _tree_node_name(node: TSNode | None) -> str | None:
     """Return a normalised display name for ``node`` when available."""
+
+    if node is None:
+        return None
 
     extractor = getattr(node, "child_by_field_name", None)
     if callable(extractor):
@@ -753,7 +758,7 @@ def _tree_node_name(node: Any) -> str | None:
     return None
 
 
-def _iter_tree_nodes(node: Any) -> Iterator[Any]:
+def _iter_tree_nodes(node: TSNode) -> Iterator[TSNode]:
     """Yield nodes in depth-first order starting from ``node``."""
 
     yield node
@@ -765,7 +770,7 @@ def _iter_tree_nodes(node: Any) -> Iterator[Any]:
             yield from _iter_tree_nodes(child)
 
 
-def _iter_tree_nodes_with_depth(node: Any, depth: int = 0) -> Iterator[tuple[Any, int]]:
+def _iter_tree_nodes_with_depth(node: TSNode, depth: int = 0) -> Iterator[tuple[TSNode, int]]:
     """Yield nodes and their depth in depth-first order."""
 
     yield node, depth
@@ -777,7 +782,7 @@ def _iter_tree_nodes_with_depth(node: Any, depth: int = 0) -> Iterator[tuple[Any
             yield from _iter_tree_nodes_with_depth(child, depth + 1)
 
 
-def _node_row_span(node: Any) -> tuple[int | None, int | None]:
+def _node_row_span(node: TSNode) -> tuple[int | None, int | None]:
     """Return 1-based (start, end) line numbers for ``node`` when available."""
 
     start_point = getattr(node, "start_point", None)
@@ -787,14 +792,14 @@ def _node_row_span(node: Any) -> tuple[int | None, int | None]:
     return start_row, end_row
 
 
-def _node_contains_line(node: Any, line: int) -> bool:
+def _node_contains_line(node: TSNode, line: int) -> bool:
     """Return ``True`` when ``node`` spans ``line``."""
 
     start_row, end_row = _node_row_span(node)
     return bool(start_row is not None and end_row is not None and start_row <= line <= end_row)
 
 
-def _nearest_python_named_scope(node: Any, line: int) -> str | None:
+def _nearest_python_named_scope(node: TSNode, line: int) -> str | None:
     """Return the innermost named Python scope covering ``line``."""
 
     best_line = -1
@@ -815,10 +820,10 @@ def _nearest_python_named_scope(node: Any, line: int) -> str | None:
     return best_name
 
 
-def _nearest_python_generic_node(node: Any, line: int) -> Any | None:
+def _nearest_python_generic_node(node: TSNode, line: int) -> TSNode | None:
     """Return the deepest node covering ``line`` when no named scope exists."""
 
-    best_node: Any | None = None
+    best_node: TSNode | None = None
     best_line = -1
     for current in _iter_tree_nodes(node):
         if not _node_contains_line(current, line):

@@ -4,9 +4,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from functools import cache
 from pathlib import Path
-from typing import Any
+from typing import TypeAlias, cast
 
 from pyqa.core.config.constants import PY_QA_DIR_NAME
 
@@ -32,7 +33,7 @@ def _is_py_qa_workspace_cached(root_str: str) -> bool:
     if not pyproject.is_file():
         return False
     try:
-        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        data = cast(PyProjectPayload, tomllib.loads(pyproject.read_text(encoding="utf-8")))
     except (OSError, tomllib.TOMLDecodeError):
         return False
     name = _extract_project_name(data)
@@ -41,16 +42,20 @@ def _is_py_qa_workspace_cached(root_str: str) -> bool:
     return _has_required_entries(root)
 
 
-def _extract_project_name(payload: dict[str, Any]) -> str | None:
+TomlValue: TypeAlias = str | int | float | bool | None | Sequence["TomlValue"] | Mapping[str, "TomlValue"]
+PyProjectPayload: TypeAlias = Mapping[str, TomlValue]
+
+
+def _extract_project_name(payload: PyProjectPayload) -> str | None:
     project = payload.get("project")
-    if isinstance(project, dict):
+    if isinstance(project, Mapping):
         candidate = project.get("name")
         if isinstance(candidate, str):
             return candidate
     tool = payload.get("tool")
-    if isinstance(tool, dict):
+    if isinstance(tool, Mapping):
         poetry = tool.get("poetry")
-        if isinstance(poetry, dict):
+        if isinstance(poetry, Mapping):
             candidate = poetry.get("name")
             if isinstance(candidate, str):
                 return candidate

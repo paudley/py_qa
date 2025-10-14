@@ -11,7 +11,7 @@ import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from pyqa.core.runtime.process import run_command
+from pyqa.core.runtime.process import CommandOptions, run_command
 from pyqa.tools.base import Tool
 
 from ..constants import ToolCacheLayout
@@ -119,7 +119,10 @@ class RustRuntime(RuntimeHandler):
         """Install a rustup component required by a tool."""
         if not shutil.which("rustup"):
             raise RuntimeError("rustup is required to install rustup components")
-        run_command(["rustup", "component", "add", component], capture_output=True)
+        run_command(
+            ["rustup", "component", "add", component],
+            options=CommandOptions(capture_output=True),
+        )
 
     def _ensure_rustup_tool(self, layout: ToolCacheLayout, component: str) -> Path:
         """Return the cargo executable after ensuring a rustup component exists.
@@ -194,7 +197,7 @@ class RustRuntime(RuntimeHandler):
         if spec.version_spec:
             install_cmd.extend(["--version", str(spec.version_spec)])
 
-        run_command(install_cmd, capture_output=True, env=env)
+        run_command(install_cmd, options=CommandOptions(capture_output=True, env=env))
 
         if not plan.binary.exists():
             raise RuntimeError(f"Failed to install rust tool '{spec.tool_name}'")

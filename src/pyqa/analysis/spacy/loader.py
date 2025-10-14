@@ -6,9 +6,11 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass
 from importlib import import_module
 from shutil import which
-from typing import Any, Final, Protocol, cast, runtime_checkable
+from types import ModuleType
+from typing import Final, Protocol, cast, runtime_checkable
 
 
 @runtime_checkable
@@ -78,9 +80,14 @@ class SpacyLanguage(Protocol):
         raise NotImplementedError
 
 
-_UNSET: Final[object] = object()
-_LOADER_STATE: dict[str, object] = {"value": _UNSET}
-_VERSION_STATE: dict[str, object] = {"value": _UNSET}
+@dataclass(frozen=True)
+class _UnsetSentinel:
+    """Marker type indicating an uninitialised cache entry."""
+
+
+_SENTINEL: Final[_UnsetSentinel] = _UnsetSentinel()
+_LOADER_CACHE: Callable[[str], SpacyLanguage] | None | _UnsetSentinel = _SENTINEL
+_VERSION_CACHE: str | None | _UnsetSentinel = _SENTINEL
 
 
 def load_language(model_name: str) -> SpacyLanguage | None:
@@ -158,20 +165,21 @@ def _resolve_loader(force: bool = False) -> Callable[[str], SpacyLanguage] | Non
         when spaCy is not installed.
     """
 
-    cached = _LOADER_STATE["value"]
-    if not force and cached is not _UNSET:
-        return cast(Callable[[str], SpacyLanguage] | None, cached)
+    global _LOADER_CACHE
+
+    if not force and _LOADER_CACHE is not _SENTINEL:
+        return cast(Callable[[str], SpacyLanguage] | None, _LOADER_CACHE)
     try:
-        module = import_module("spacy")
+        module: ModuleType = import_module("spacy")
     except ModuleNotFoundError:  # pragma: no cover - optional dependency
-        _LOADER_STATE["value"] = None
+        _LOADER_CACHE = None
         return None
-    load_fn: Any = getattr(module, "load", None)
+    load_fn = getattr(module, "load", None)
     if not callable(load_fn):
-        _LOADER_STATE["value"] = None
+        _LOADER_CACHE = None
         return None
     loader = cast(Callable[[str], SpacyLanguage], load_fn)
-    _LOADER_STATE["value"] = loader
+    _LOADER_CACHE = loader
     return loader
 
 
@@ -185,17 +193,18 @@ def _resolve_version(force: bool = False) -> str | None:
         str | None: Resolved spaCy version or ``None`` if unavailable.
     """
 
-    cached = _VERSION_STATE["value"]
-    if not force and cached is not _UNSET:
-        return cast(str | None, cached)
+    global _VERSION_CACHE
+
+    if not force and _VERSION_CACHE is not _SENTINEL:
+        return cast(str | None, _VERSION_CACHE)
     try:
-        module = import_module("spacy")
+        module: ModuleType = import_module("spacy")
     except ModuleNotFoundError:  # pragma: no cover - optional dependency
-        _VERSION_STATE["value"] = None
+        _VERSION_CACHE = None
         return None
     version = getattr(module, "__version__", None)
     resolved = version if isinstance(version, str) else None
-    _VERSION_STATE["value"] = resolved
+    _VERSION_CACHE = resolved
     return resolved
 
 

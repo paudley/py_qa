@@ -5,10 +5,22 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
-from typing import Annotated, Any, Final, TypeVar, cast, get_args, get_origin, get_type_hints
+from types import EllipsisType, GenericAlias, UnionType
+from typing import (
+    Annotated,
+    Final,
+    Literal,
+    Protocol,
+    TypeAlias,
+    TypeVar,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 import click
 import typer
@@ -16,17 +28,41 @@ import typer.main
 from click.core import Argument, Context, Option, Parameter
 from click.formatting import HelpFormatter
 from typer.core import TyperCommand, TyperGroup
-from typer.models import OptionInfo, ParameterInfo
+from typer.models import OptionInfo, ParamMeta, ParameterInfo
 
-from .shared import Depends
+from .shared import (
+    CommandCallable,
+    CommandResult,
+    Depends,
+)
+
+
+class CLIParameterValue(Protocol):
+    """Marker protocol for values exchanged through Typer callbacks."""
+
+
+CLIConvertor: TypeAlias = Callable[[CLIParameterValue], CLIParameterValue]
+ConvertorMap: TypeAlias = dict[str, CLIConvertor]
+DefaultsMap: TypeAlias = dict[str, CLIParameterValue]
+AnnotationValue: TypeAlias = type | GenericAlias | UnionType | tuple[type, ...] | str | EllipsisType | None
+AnnotationMap: TypeAlias = Mapping[str, AnnotationValue]
+ParamsMetadata: TypeAlias = tuple[list[Argument | Option], ConvertorMap, str | None]
+TyperParamShim: TypeAlias = Callable[..., ParamsMetadata]
+TyperCallbackShim: TypeAlias = Callable[..., Callable[..., CLIParameterValue] | None]
+DependencyCallable: TypeAlias = Callable[..., CLIParameterValue]
+AnalyzableCallable: TypeAlias = Callable[..., CLIParameterValue]
+TyperContextValue: TypeAlias = bool | int | float | str | Sequence[str] | None
+TyperContextSettings: TypeAlias = Mapping[str, TyperContextValue]
+GetClickParamCallable: TypeAlias = Callable[[ParamMeta], tuple[Argument | Option, CLIParameterValue]]
 
 
 @dataclass(slots=True)
 class _DependencyMeta:
     param_name: str
-    dependency: Callable[..., Any]
+    dependency: DependencyCallable
     cli_param_names: set[str]
     context_param_name: str | None
+    defaults: DefaultsMap
 
 
 @dataclass(slots=True)
@@ -34,23 +70,25 @@ class _AnalyzedCallback:
     """Capture Typer callback metadata required to build Click parameters."""
 
     params: list[Argument | Option]
-    convertors: dict[str, Callable[[Any], Any]]
+    convertors: ConvertorMap
     context_param_name: str | None
     dependencies: list[_DependencyMeta]
     cli_param_names: set[str]
+    defaults: DefaultsMap
 
 
 @dataclass(slots=True)
 class _DependencyInvocation:
     """Invoke callbacks with dependency context and preserved convertors."""
 
-    resolver: "_DependencyResolver"
-    callback: Callable[..., Any]
+    resolver: _DependencyResolver
+    callback: CommandCallable
     analysis: _AnalyzedCallback
-    defaults: dict[str, Any]
-    convertors: dict[str, Callable[[Any], Any]]
+    defaults: DefaultsMap
+    convertors: ConvertorMap
 
-    def __call__(self, *call_args: Any, **kwargs: Any) -> Any:
+    # suppression_valid: lint=internal-signatures Typer callback wrapper must expose the dynamic call signature expected by Typer while routing through our resolver.
+    def __call__(self, *call_args: CLIParameterValue, **kwargs: CLIParameterValue) -> CommandResult:
         """Execute ``callback`` using resolver-managed dependency injection.
 
         Args:
@@ -58,18 +96,17 @@ class _DependencyInvocation:
             **kwargs: Keyword arguments forwarded to the callback.
 
         Returns:
-            Any: Value produced by the wrapped callback.
+            CommandResult: Value produced by the wrapped callback.
         """
 
-        context = call_args[0] if call_args else click.get_current_context()
-        if len(call_args) > 1:  # pragma: no cover - defensive guard
-            raise TypeError("Positional arguments beyond the Typer context are not supported.")
+        context = cast(click.Context, call_args[0] if call_args else click.get_current_context())
+        params: DefaultsMap = dict(kwargs)
         plan = self.resolver.InvocationPlan(
             analysis=self.analysis,
             defaults=self.defaults,
             convertors=self.convertors,
             context=context,
-            params=kwargs,
+            params=params,
         )
         return self.resolver.invoke(self.callback, plan)
 
@@ -79,10 +116,11 @@ class _AnalysisState:
     """Mutable state accumulated while analysing a callback."""
 
     params: list[Argument | Option]
-    convertors: dict[str, Callable[[Any], Any]]
+    convertors: ConvertorMap
     dependencies: list[_DependencyMeta]
     cli_param_names: set[str]
     context_param_name: str | None
+    defaults: DefaultsMap
 
 
 @dataclass(slots=True)
@@ -90,24 +128,18 @@ class _DirectParameterContext:
     """Container describing a direct parameter without dependency metadata."""
 
     parameter: inspect.Parameter
-    annotation: Any
+    annotation: AnnotationValue
     parameter_info: ParameterInfo | None
 
 
 ARGUMENT_PARAM_TYPE: Final[str] = "argument"
 
-ParamsMetadata = tuple[list[Any], dict[str, Callable[[Any], Any]], str | None]
-ParamsAdapter = Callable[[Callable[..., Any] | None], ParamsMetadata]
-CallbackAdapter = Callable[..., Callable[..., Any] | None]
-TyperParamShim = Callable[..., tuple[list[Argument | Option], dict[str, Any], str | None]]
-TyperCallbackShim = Callable[..., Callable[..., Any] | None]
-
 
 def _sanitize_param_decl(
-    param: Any,
+    param: ParamMeta,
     *,
-    original_get_click_param: Callable[[Any], tuple[Any, Any]],
-) -> tuple[Any, Any]:
+    original_get_click_param: GetClickParamCallable,
+) -> tuple[Argument | Option, CLIParameterValue]:
     """Strip non-string parameter declarations before delegating to Typer.
 
     Args:
@@ -115,7 +147,7 @@ def _sanitize_param_decl(
         original_get_click_param: Typer helper used to generate Click parameters.
 
     Returns:
-        tuple[Any, Any]: Click parameter pair as expected by Typer.
+        tuple[Argument | Option, CLIConvertor | None]: Click parameter pair produced by Typer.
     """
 
     param_decls = getattr(param.default, "param_decls", None)
@@ -123,14 +155,27 @@ def _sanitize_param_decl(
         sanitized = tuple(decl for decl in param_decls if isinstance(decl, str))
         if len(sanitized) != len(param_decls):
             setattr(param.default, "param_decls", sanitized)
-    return original_get_click_param(param)
+    click_param, convertor = original_get_click_param(param)
+    return click_param, cast(CLIParameterValue, convertor)
+
+
+@dataclass(frozen=True)
+class _ParamSanitizer:
+    """Callable wrapper that normalises Typer parameter declarations."""
+
+    original: GetClickParamCallable
+
+    def __call__(self, param: ParamMeta) -> tuple[Argument | Option, CLIParameterValue]:
+        """Sanitise ``param`` before delegating to the original Click factory."""
+
+        return _sanitize_param_decl(param, original_get_click_param=self.original)
 
 
 def _dependency_param_adapter(
-    callback: Callable[..., Any] | None,
+    callback: AnalyzableCallable | None,
     *,
-    resolver: "_DependencyResolver",
-) -> tuple[list[Argument | Option], dict[str, Any], str | None]:
+    resolver: _DependencyResolver,
+) -> ParamsMetadata:
     """Return analyzer-backed Typer parameter metadata for ``callback``.
 
     Args:
@@ -138,29 +183,29 @@ def _dependency_param_adapter(
         resolver: Resolver providing dependency metadata caches.
 
     Returns:
-        tuple[list[Argument | Option], dict[str, Any], str | None]:
-            Parameter metadata consumed by Typer.
+        ParamsMetadata: Parameter metadata consumed by Typer.
     """
 
     if callback is None:
-        return [], {}, None
+        return [], dict[str, CLIConvertor](), None
     analysis = resolver.analyze(callback)
     return (
         analysis.params,
-        cast(dict[str, Any], analysis.convertors),
+        analysis.convertors,
         analysis.context_param_name,
     )
 
 
+# suppression_valid: lint=internal-signatures adapter must mirror Typer's callback factory signature to intercept dependency resolution without breaking upstream expectations.
 def _dependency_callback_adapter(
     *,
-    callback: Callable[..., Any] | None = None,
-    params: Iterable[Any] = (),
-    convertors: dict[str, Callable[[Any], Any]] | None = None,
+    callback: AnalyzableCallable | None = None,
+    params: Sequence[inspect.Parameter] = (),
+    convertors: ConvertorMap | None = None,
     context_param_name: str | None = None,
     pretty_exceptions_short: bool,
-    resolver: "_DependencyResolver",
-) -> Callable[..., Any] | None:
+    resolver: _DependencyResolver,
+) -> CommandCallable | None:
     """Build a dependency-aware Typer callback wrapper.
 
     Args:
@@ -172,20 +217,22 @@ def _dependency_callback_adapter(
         resolver: Resolver orchestrating dependency injection.
 
     Returns:
-        Callable[..., Any] | None: Wrapped callback or ``None`` when no callback is provided.
+        CommandCallable | None: Wrapped callback or ``None`` when no callback is provided.
     """
 
     if callback is None:
         return None
     del params, context_param_name, pretty_exceptions_short
     analysis = resolver.analyze(callback)
-    defaults = resolver.build_default_values(callback)
-    use_convertors = dict(analysis.convertors)
+    defaults = dict(analysis.defaults)
+    defaults.update(resolver.build_default_values(callback))
+    use_convertors: ConvertorMap = dict(analysis.convertors)
     if convertors:
         use_convertors.update(convertors)
+    wrapped_callback = cast(CommandCallable, callback)
     return _DependencyInvocation(
         resolver=resolver,
-        callback=callback,
+        callback=wrapped_callback,
         analysis=analysis,
         defaults=defaults,
         convertors=use_convertors,
@@ -203,18 +250,18 @@ def _install_param_decl_sanitizer() -> None:
     if getattr(typer.main, "_pyqa_param_sanitizer_installed", False):
         return
 
-    original_get_click_param = typer.main.get_click_param
-
-    typer.main.get_click_param = partial(
-        _sanitize_param_decl,
-        original_get_click_param=original_get_click_param,
-    )
+    original_get_click_param = cast(GetClickParamCallable, typer.main.get_click_param)
+    sanitizer = _ParamSanitizer(original=original_get_click_param)
+    sanitizer_callable = cast(GetClickParamCallable, sanitizer)
+    setattr(typer.main, "get_click_param", sanitizer_callable)
     setattr(typer.main, "_pyqa_param_sanitizer_installed", True)
 
     _install_dependency_support(original_get_click_param)
 
 
-def _install_dependency_support(original_get_click_param: Callable[[Any], tuple[Any, Any]]) -> None:
+def _install_dependency_support(
+    original_get_click_param: GetClickParamCallable,
+) -> None:
     """Install dependency-aware Typer patches to support nested callbacks.
 
     Args:
@@ -253,16 +300,26 @@ def _build_dependency_callback_adapter(
 class _DependencyResolver:
     """Analyse Typer callbacks and resolve nested dependencies lazily."""
 
-    def __init__(self, original_get_click_param: Callable[[Any], tuple[Any, Any]]) -> None:
+    def __init__(
+        self,
+        original_get_click_param: GetClickParamCallable,
+    ) -> None:
         self._get_click_param = original_get_click_param
 
     # Public API ------------------------------------------------------------------
 
-    def analyze(self, callback: Callable[..., Any] | None) -> _AnalyzedCallback:
+    def analyze(self, callback: AnalyzableCallable | None) -> _AnalyzedCallback:
         """Return analysis metadata for ``callback`` reusing cached results."""
 
         if callback is None:
-            return _AnalyzedCallback([], {}, None, [], set())
+            return _AnalyzedCallback(
+                [],
+                dict[str, CLIConvertor](),
+                None,
+                [],
+                set(),
+                dict[str, CLIParameterValue](),
+            )
         cached: _AnalyzedCallback | None = getattr(callback, "__pyqa_analysis__", None)
         if cached is not None:
             return cached
@@ -273,8 +330,8 @@ class _DependencyResolver:
 
     def resolve(
         self,
-        callback: Callable[..., Any],
-        values: dict[str, Any],
+        callback: AnalyzableCallable,
+        values: DefaultsMap,
         context: click.Context,
     ) -> None:
         """Resolve dependency outputs for ``callback`` and populate ``values``."""
@@ -293,18 +350,20 @@ class _DependencyResolver:
         """Describe resolved parameters required to invoke a callback."""
 
         analysis: _AnalyzedCallback
-        defaults: dict[str, Any]
-        convertors: dict[str, Callable[[Any], Any]]
+        defaults: DefaultsMap
+        convertors: ConvertorMap
         context: click.Context
-        params: dict[str, Any]
+        params: DefaultsMap
 
-    def invoke(self, callback: Callable[..., Any], plan: InvocationPlan) -> Any:
+    def invoke(self, callback: CommandCallable, plan: InvocationPlan) -> CommandResult:
         """Invoke ``callback`` with dependency-aware argument resolution."""
 
-        values: dict[str, Any] = dict(plan.defaults)
+        values: DefaultsMap = dict(plan.defaults)
         for key, value in plan.params.items():
             if key in plan.convertors:
-                values[key] = plan.convertors[key](value) if value is not None else values.get(key)
+                if value is None:
+                    continue
+                values[key] = plan.convertors[key](value)
                 continue
             if value is not None:
                 values[key] = value
@@ -314,21 +373,22 @@ class _DependencyResolver:
             values[plan.analysis.context_param_name] = plan.context
         self.resolve(callback, values, plan.context)
         call_signature = inspect.signature(callback)
-        call_kwargs = {name: values[name] for name in call_signature.parameters if name in values}
+        call_kwargs: DefaultsMap = {name: values[name] for name in call_signature.parameters if name in values}
         return callback(**call_kwargs)
 
     # Internal helpers ------------------------------------------------------------
 
-    def _build_analysis(self, callback: Callable[..., Any]) -> _AnalyzedCallback:
+    def _build_analysis(self, callback: AnalyzableCallable) -> _AnalyzedCallback:
         signature = inspect.signature(callback)
         type_hints = self._safe_type_hints(callback)
 
         state = _AnalysisState(
             params=[],
-            convertors={},
+            convertors=dict[str, CLIConvertor](),
             dependencies=[],
             cli_param_names=set(),
             context_param_name=None,
+            defaults=dict[str, CLIParameterValue](),
         )
 
         for param_name, parameter in signature.parameters.items():
@@ -345,9 +405,10 @@ class _DependencyResolver:
             context_param_name=state.context_param_name,
             dependencies=state.dependencies,
             cli_param_names=state.cli_param_names,
+            defaults=state.defaults,
         )
 
-    def _cache_analysis(self, callback: Callable[..., Any], analysis: _AnalyzedCallback) -> None:
+    def _cache_analysis(self, callback: AnalyzableCallable, analysis: _AnalyzedCallback) -> None:
         """Persist ``analysis`` on ``callback`` for subsequent invocations."""
 
         setattr(callback, "__pyqa_analysis__", analysis)
@@ -358,7 +419,7 @@ class _DependencyResolver:
         setattr(callback, "__pyqa_cli_param_names__", analysis.cli_param_names)
         setattr(callback, "__pyqa_analyzed__", True)
 
-    def _safe_type_hints(self, callback: Callable[..., Any]) -> dict[str, Any]:
+    def _safe_type_hints(self, callback: AnalyzableCallable) -> dict[str, AnnotationValue]:
         """Return type hints for ``callback`` handling failures defensively."""
 
         try:
@@ -369,16 +430,16 @@ class _DependencyResolver:
             TypeError,
             ValueError,
         ):  # pragma: no cover - defensive fallback
-            return {}
+            return dict[str, AnnotationValue]()
 
     def _parse_annotation(
         self,
-        annotation: Any,
+        annotation: AnnotationValue,
         parameter: inspect.Parameter,
-    ) -> tuple[Any, ParameterInfo | None, Depends | None]:
+    ) -> tuple[AnnotationValue, ParameterInfo | None, Depends[CLIParameterValue] | None]:
         """Return resolved annotation metadata for ``parameter``."""
 
-        dependency_info: Depends | None = None
+        dependency_info: Depends[CLIParameterValue] | None = None
         parameter_info: ParameterInfo | None = None
         if annotation is inspect.Signature.empty:
             annotation = str
@@ -395,45 +456,56 @@ class _DependencyResolver:
             parameter_info = parameter.default
         return annotation, parameter_info, dependency_info
 
-    def _is_context_parameter(self, annotation: Any) -> bool:
+    def _is_context_parameter(self, annotation: AnnotationValue) -> bool:
         """Return ``True`` when ``annotation`` requests a Click context."""
 
-        return inspect.isclass(annotation) and issubclass(annotation, click.Context)
+        return isinstance(annotation, type) and issubclass(annotation, click.Context)
 
     def _build_click_parameter(
         self,
         parameter: inspect.Parameter,
-        annotation: Any,
+        annotation: AnnotationValue,
         parameter_info: ParameterInfo | None,
-    ) -> tuple[Argument | Option, Callable[[Any], Any] | None]:
+    ) -> tuple[Argument | Option, CLIConvertor | None]:
         """Return the Click parameter + convertor for Typer metadata."""
 
         info = parameter_info or OptionInfo()
         updated_parameter = parameter.replace(annotation=annotation, default=info)
-        click_param, convertor = self._get_click_param(updated_parameter)
+        param_meta = ParamMeta(
+            name=updated_parameter.name,
+            default=updated_parameter.default,
+            annotation=updated_parameter.annotation,
+        )
+        click_param, convertor_value = self._get_click_param(param_meta)
         typed_param = cast(Argument | Option, click_param)
+        convertor = cast(CLIConvertor | None, convertor_value)
         return typed_param, convertor
 
     def _extract_dependency_values(
         self,
-        values: dict[str, Any],
+        values: DefaultsMap,
         meta: _DependencyMeta,
         context: click.Context,
-    ) -> dict[str, Any]:
+    ) -> DefaultsMap:
         """Return values mapped to ``meta`` while removing them from ``values``."""
 
-        dep_values: dict[str, Any] = {}
+        dep_values: DefaultsMap = dict[str, CLIParameterValue]()
         for name in meta.cli_param_names:
             if name in values:
                 dep_values[name] = values.pop(name)
+                continue
+            if name in meta.defaults:
+                dep_values[name] = meta.defaults[name]
+                continue
+            dep_values[name] = None
         if meta.context_param_name:
             dep_values[meta.context_param_name] = context
         return dep_values
 
-    def build_default_values(self, callback: Callable[..., Any]) -> dict[str, Any]:
+    def build_default_values(self, callback: AnalyzableCallable) -> DefaultsMap:
         """Return default parameter values derived from ``callback`` signature."""
 
-        defaults: dict[str, Any] = {}
+        defaults: DefaultsMap = dict[str, CLIParameterValue]()
         signature = inspect.signature(callback)
         for name, parameter in signature.parameters.items():
             default_candidate = parameter.default
@@ -450,7 +522,7 @@ class _DependencyResolver:
         *,
         param_name: str,
         parameter: inspect.Parameter,
-        type_hints: dict[str, Any],
+        type_hints: AnnotationMap,
         state: _AnalysisState,
     ) -> None:
         """Analyse a single parameter and update analysis state."""
@@ -485,7 +557,7 @@ class _DependencyResolver:
         self,
         *,
         param_name: str,
-        dependency_callable: Callable[..., Any],
+        dependency_callable: DependencyCallable,
         state: _AnalysisState,
     ) -> None:
         """Register dependency metadata for ``param_name``."""
@@ -493,12 +565,14 @@ class _DependencyResolver:
         dep_analysis = self.analyze(dependency_callable)
         state.params.extend(dep_analysis.params)
         state.convertors.update(dep_analysis.convertors)
+        meta_defaults: DefaultsMap = {name: dep_analysis.defaults.get(name) for name in dep_analysis.cli_param_names}
         state.dependencies.append(
             _DependencyMeta(
                 param_name=param_name,
                 dependency=dependency_callable,
                 cli_param_names=set(dep_analysis.cli_param_names),
                 context_param_name=dep_analysis.context_param_name,
+                defaults=meta_defaults,
             )
         )
         state.cli_param_names.update(dep_analysis.cli_param_names)
@@ -528,6 +602,9 @@ class _DependencyResolver:
         if convertor:
             state.convertors[param_name] = convertor
         state.cli_param_names.add(param_name)
+        if hasattr(click_param, "default"):
+            default_value = getattr(click_param, "default")
+            state.defaults[param_name] = cast(CLIParameterValue, default_value)
 
 
 class SortedTyperCommand(TyperCommand):
@@ -574,68 +651,169 @@ class SortedTyperGroup(TyperGroup):
     command_class = SortedTyperCommand
 
 
-CommandCallback = TypeVar("CommandCallback", bound=Callable[..., Any])
+CommandCallback = TypeVar("CommandCallback", bound=CommandCallable)
+
+
+class TyperCallback(Protocol):
+    """Protocol describing callbacks consumed by Typer."""
+
+    def __call__(self, *args: CLIParameterValue, **kwargs: CLIParameterValue) -> CLIParameterValue | None:
+        """Invoke the callback returning an optional CLI parameter value."""
 
 
 class SortedTyper(typer.Typer):
     """Typer application that emits sorted option listings by default."""
 
-    def __init__(self, *args: Any, cls: type[TyperGroup] | None = None, **kwargs: Any) -> None:
-        """Initialise the Typer application with sorted help semantics.
+    def __init__(
+        self,
+        *,
+        name: str | None = None,
+        cls: type[TyperGroup] | None = None,
+        invoke_without_command: bool = False,
+        no_args_is_help: bool = False,
+        subcommand_metavar: str | None = None,
+        chain: bool = False,
+        result_callback: TyperCallback | None = None,
+        context_settings: TyperContextSettings | None = None,
+        callback: TyperCallback | None = None,
+        help: str | None = None,
+        epilog: str | None = None,
+        short_help: str | None = None,
+        options_metavar: str = "[OPTIONS]",
+        add_help_option: bool = True,
+        hidden: bool = False,
+        deprecated: bool = False,
+        add_completion: bool = True,
+        rich_markup_mode: Literal["markdown", "rich", None] | None = None,
+        rich_help_panel: str | None = None,
+        pretty_exceptions_enable: bool = True,
+        pretty_exceptions_show_locals: bool = True,
+        pretty_exceptions_short: bool = True,
+    ) -> None:
+        """Initialise the Typer application with sorted help semantics."""
 
-        Args:
-            *args: Positional arguments forwarded to :class:`typer.Typer`.
-            cls: Optional group class to override the default sorted group.
-            **kwargs: Keyword arguments forwarded to :class:`typer.Typer`.
-
-        Returns:
-            None
-
-        """
-
-        group_cls = cls or SortedTyperGroup
-        super().__init__(*args, cls=group_cls, **kwargs)
+        final_cls = cls or SortedTyperGroup
+        settings_dict = dict(context_settings) if context_settings is not None else None
+        super().__init__(
+            name=name,
+            cls=final_cls,
+            invoke_without_command=invoke_without_command,
+            no_args_is_help=no_args_is_help,
+            subcommand_metavar=subcommand_metavar,
+            chain=chain,
+            result_callback=result_callback,
+            context_settings=settings_dict,
+            callback=callback,
+            help=help,
+            epilog=epilog,
+            short_help=short_help,
+            options_metavar=options_metavar,
+            add_help_option=add_help_option,
+            hidden=hidden,
+            deprecated=deprecated,
+            add_completion=add_completion,
+            rich_markup_mode=rich_markup_mode,
+            rich_help_panel=rich_help_panel,
+            pretty_exceptions_enable=pretty_exceptions_enable,
+            pretty_exceptions_show_locals=pretty_exceptions_show_locals,
+            pretty_exceptions_short=pretty_exceptions_short,
+        )
 
     def command(
         self,
         name: str | None = None,
         *,
         cls: type[TyperCommand] | None = None,
-        **kwargs: Any,
+        context_settings: TyperContextSettings | None = None,
+        help: str | None = None,
+        epilog: str | None = None,
+        short_help: str | None = None,
+        options_metavar: str = "[OPTIONS]",
+        add_help_option: bool = True,
+        no_args_is_help: bool = False,
+        hidden: bool = False,
+        deprecated: bool = False,
+        rich_help_panel: str | None = None,
     ) -> Callable[[CommandCallback], CommandCallback]:
-        """Return a decorator that registers commands using sorted help output.
+        """Return a decorator that registers commands using sorted help output."""
 
-        Args:
-            name: Optional explicit command name.
-            cls: Command class to instantiate; defaults to
-                :class:`SortedTyperCommand` when ``None``.
-            **kwargs: Additional keyword arguments forwarded to the base
-                :meth:`typer.Typer.command` implementation.
+        final_cls = cls or SortedTyperCommand
+        settings_dict = dict(context_settings) if context_settings is not None else None
+        return super().command(
+            name,
+            cls=final_cls,
+            context_settings=settings_dict,
+            help=help,
+            epilog=epilog,
+            short_help=short_help,
+            options_metavar=options_metavar,
+            add_help_option=add_help_option,
+            no_args_is_help=no_args_is_help,
+            hidden=hidden,
+            deprecated=deprecated,
+            rich_help_panel=rich_help_panel,
+        )
 
-        Returns:
-            Callable[[CommandCallback], CommandCallback]: Decorator that
-            registers the wrapped callable as a Typer command while
-            preserving the original callback signature.
 
-        """
-
-        if cls is None:
-            cls = SortedTyperCommand
-        return super().command(name, cls=cls, **kwargs)
-
-
-def create_typer(*, cls: type[TyperGroup] | None = None, **kwargs: Any) -> SortedTyper:
+# suppression_valid: lint=internal-signatures factory intentionally forwards arbitrary kwargs to maintain Typer compatibility while enforcing sorted command help.
+def create_typer(
+    *,
+    name: str | None = None,
+    cls: type[TyperGroup] | None = None,
+    invoke_without_command: bool = False,
+    no_args_is_help: bool = False,
+    subcommand_metavar: str | None = None,
+    chain: bool = False,
+    result_callback: TyperCallback | None = None,
+    context_settings: TyperContextSettings | None = None,
+    callback: TyperCallback | None = None,
+    help: str | None = None,
+    epilog: str | None = None,
+    short_help: str | None = None,
+    options_metavar: str = "[OPTIONS]",
+    add_help_option: bool = True,
+    hidden: bool = False,
+    deprecated: bool = False,
+    add_completion: bool = True,
+    rich_markup_mode: Literal["markdown", "rich", None] | None = None,
+    rich_help_panel: str | None = None,
+    pretty_exceptions_enable: bool = True,
+    pretty_exceptions_show_locals: bool = True,
+    pretty_exceptions_short: bool = True,
+) -> SortedTyper:
     """Return a :class:`SortedTyper` configured to emit sorted help listings.
 
     Args:
-        cls: Optional Typer group subclass controlling command creation.
         **kwargs: Additional arguments forwarded to :class:`SortedTyper`.
 
     Returns:
         SortedTyper: Configured Typer application with sorted help output.
 
     """
-    return SortedTyper(cls=cls, **kwargs)
+    return SortedTyper(
+        name=name,
+        cls=cls,
+        invoke_without_command=invoke_without_command,
+        no_args_is_help=no_args_is_help,
+        subcommand_metavar=subcommand_metavar,
+        chain=chain,
+        result_callback=result_callback,
+        context_settings=context_settings,
+        callback=callback,
+        help=help,
+        epilog=epilog,
+        short_help=short_help,
+        options_metavar=options_metavar,
+        add_help_option=add_help_option,
+        hidden=hidden,
+        deprecated=deprecated,
+        add_completion=add_completion,
+        rich_markup_mode=rich_markup_mode,
+        rich_help_panel=rich_help_panel,
+        pretty_exceptions_enable=pretty_exceptions_enable,
+        pretty_exceptions_show_locals=pretty_exceptions_show_locals,
+        pretty_exceptions_short=pretty_exceptions_short,
+    )
 
 
 def _primary_option_name(param: Parameter) -> str:

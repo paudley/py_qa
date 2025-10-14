@@ -9,13 +9,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
 
 from ....analysis.bootstrap import register_analysis_services
 from ....catalog.model_catalog import CatalogSnapshot
 from ....config import Config
 from ....core.environment.tool_env.models import PreparedCommand
-from ....core.models import RunResult
+from ....core.models import RunResult, ToolOutcome
 from ....discovery import build_default_discovery
 from ....discovery.base import SupportsDiscovery
 from ....interfaces.orchestration import ExecutionPipeline, OrchestratorHooks
@@ -87,32 +86,86 @@ def _coerce_hooks(hooks: OrchestratorHooks) -> ConcreteOrchestratorHooks:
 
     concrete = ConcreteOrchestratorHooks()
 
-    concrete.before_tool = _HookProxy(hooks, "before_tool")
-    concrete.after_tool = _HookProxy(hooks, "after_tool")
-    concrete.after_discovery = _HookProxy(hooks, "after_discovery")
-    concrete.after_execution = _HookProxy(hooks, "after_execution")
-    concrete.after_plan = _HookProxy(hooks, "after_plan")
+    concrete.before_tool = _BeforeToolProxy(hooks).run
+    concrete.after_tool = _AfterToolProxy(hooks).run
+    concrete.after_discovery = _AfterDiscoveryProxy(hooks).run
+    concrete.after_execution = _AfterExecutionProxy(hooks).run
+    concrete.after_plan = _AfterPlanProxy(hooks).run
     return concrete
 
 
 @dataclass(slots=True)
-class _HookProxy:
-    """Delegate orchestrator hook invocations to optional hook callables."""
+class _BeforeToolProxy:
+    """Proxy that safely invokes the ``before_tool`` hook."""
 
     hooks: OrchestratorHooks
-    name: str
 
-    def __call__(self, *args: Any, **kwargs: Any) -> None:
-        """Invoke the named hook when the backing ``hooks`` exposes it.
+    def run(self, tool_name: str) -> None:
+        """Invoke ``before_tool`` when defined.
 
         Args:
-            *args: Positional arguments forwarded to the hook callable.
-            **kwargs: Keyword arguments forwarded to the hook callable.
+            tool_name: Identifier of the tool scheduled for execution.
         """
 
-        callback = getattr(self.hooks, self.name)
-        if callback:
-            callback(*args, **kwargs)
+        callback = self.hooks.before_tool
+        if callback is not None:
+            callback(tool_name)
+
+
+@dataclass(slots=True)
+class _AfterToolProxy:
+    """Proxy that invokes the ``after_tool`` hook on completion."""
+
+    hooks: OrchestratorHooks
+
+    def run(self, outcome: ToolOutcome) -> None:
+        """Invoke ``after_tool`` when defined."""
+
+        callback = self.hooks.after_tool
+        if callback is not None:
+            callback(outcome)
+
+
+@dataclass(slots=True)
+class _AfterDiscoveryProxy:
+    """Proxy that invokes ``after_discovery`` following project scan."""
+
+    hooks: OrchestratorHooks
+
+    def run(self, file_count: int) -> None:
+        """Invoke ``after_discovery`` when defined."""
+
+        callback = self.hooks.after_discovery
+        if callback is not None:
+            callback(file_count)
+
+
+@dataclass(slots=True)
+class _AfterExecutionProxy:
+    """Proxy that invokes the ``after_execution`` hook."""
+
+    hooks: OrchestratorHooks
+
+    def run(self, result: RunResult) -> None:
+        """Invoke ``after_execution`` when defined."""
+
+        callback = self.hooks.after_execution
+        if callback is not None:
+            callback(result)
+
+
+@dataclass(slots=True)
+class _AfterPlanProxy:
+    """Proxy that invokes ``after_plan`` when selection completes."""
+
+    hooks: OrchestratorHooks
+
+    def run(self, planned_tools: int) -> None:
+        """Invoke ``after_plan`` when defined."""
+
+        callback = self.hooks.after_plan
+        if callback is not None:
+            callback(planned_tools)
 
 
 class _OrchestratorExecutionPipeline(ExecutionPipeline):
@@ -154,16 +207,27 @@ register_default_services(_DEFAULT_SERVICES)
 register_analysis_services(_DEFAULT_SERVICES)
 
 
-DEFAULT_LINT_DEPENDENCIES = LintRuntimeDependencies(
-    registry=DEFAULT_REGISTRY,
-    discovery_factory=build_default_discovery,
-    orchestrator_factory=lambda registry, discovery, hooks, debug_logger=None: _default_orchestrator_factory(
+def _orchestrator_with_default_services(
+    registry: ToolRegistry,
+    discovery: SupportsDiscovery,
+    hooks: OrchestratorHooks,
+    debug_logger: Callable[[str], None] | None = None,
+) -> ExecutionPipeline:
+    """Return an orchestrator wired with the shared default services."""
+
+    return _default_orchestrator_factory(
         registry,
         discovery,
         hooks,
         services=_DEFAULT_SERVICES,
         debug_logger=debug_logger,
-    ),
+    )
+
+
+DEFAULT_LINT_DEPENDENCIES = LintRuntimeDependencies(
+    registry=DEFAULT_REGISTRY,
+    discovery_factory=build_default_discovery,
+    orchestrator_factory=_orchestrator_with_default_services,
     catalog_initializer=lambda registry: initialize_registry(registry=registry),
     services=_DEFAULT_SERVICES,
 )
@@ -207,7 +271,7 @@ def build_lint_runtime_context(
             load_plugins = services.resolve("all_plugins")
         except ServiceResolutionError:
             load_plugins = None
-        if load_plugins is not None:
+        if callable(load_plugins):
             plugins = load_plugins()
     return LintRuntimeContext(
         state=state,

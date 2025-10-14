@@ -8,18 +8,26 @@ import json
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from pathlib import Path
-from typing import Any, TypeAlias
+from typing import TypeAlias
 
 from pydantic import BaseModel
 
-from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome, coerce_output_sequence
+from pyqa.core.models import (
+    Diagnostic,
+    JsonValue,
+    ToolExitCategory,
+    ToolOutcome,
+    coerce_output_sequence,
+)
 from pyqa.core.severity import Severity
 
-JsonPrimitive: TypeAlias = str | int | float | bool | None
-JsonValue: TypeAlias = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
+SerializableMapping: TypeAlias = dict[str, JsonValue | None]
+SerializableValue: TypeAlias = (
+    JsonValue | Path | BaseModel | Mapping[str, JsonValue] | Sequence[JsonValue] | AbstractSet[JsonValue]
+)
 
 
-def serialize_diagnostic(diag: Diagnostic) -> dict[str, object | None]:
+def serialize_diagnostic(diag: Diagnostic) -> SerializableMapping:
     """Convert a diagnostic into a JSON-friendly mapping."""
     return {
         "file": diag.file,
@@ -33,7 +41,7 @@ def serialize_diagnostic(diag: Diagnostic) -> dict[str, object | None]:
     }
 
 
-def serialize_outcome(outcome: ToolOutcome) -> dict[str, object]:
+def serialize_outcome(outcome: ToolOutcome) -> dict[str, JsonValue]:
     """Serialize a tool outcome including its diagnostics."""
     return {
         "tool": outcome.tool,
@@ -47,7 +55,7 @@ def serialize_outcome(outcome: ToolOutcome) -> dict[str, object]:
     }
 
 
-def deserialize_outcome(data: Mapping[str, Any]) -> ToolOutcome:
+def deserialize_outcome(data: Mapping[str, JsonValue]) -> ToolOutcome:
     """Rehydrate a :class:`ToolOutcome` from the serialized representation."""
     diagnostics: list[Diagnostic] = []
     for entry in _coerce_diagnostic_payload(data.get("diagnostics")):
@@ -96,7 +104,7 @@ def _parse_exit_category(value: str) -> ToolExitCategory:
         return ToolExitCategory.UNKNOWN
 
 
-def _coerce_severity(value: object) -> Severity:
+def _coerce_severity(value: JsonValue) -> Severity:
     """Return a :class:`Severity` derived from ``value`` with fallback."""
 
     try:
@@ -105,7 +113,7 @@ def _coerce_severity(value: object) -> Severity:
         return Severity.WARNING
 
 
-def safe_int(value: object, default: int = 0) -> int:
+def safe_int(value: JsonValue, default: int = 0) -> int:
     """Return ``value`` as ``int`` when possible, otherwise ``default``."""
     if isinstance(value, bool):
         return int(value)
@@ -119,7 +127,7 @@ def safe_int(value: object, default: int = 0) -> int:
     return default
 
 
-def coerce_optional_int(value: object) -> int | None:
+def coerce_optional_int(value: JsonValue) -> int | None:
     """Return an optional integer parsed from ``value`` when feasible."""
     if isinstance(value, bool):
         return int(value)
@@ -133,24 +141,24 @@ def coerce_optional_int(value: object) -> int | None:
     return None
 
 
-def coerce_optional_str(value: object) -> str | None:
+def coerce_optional_str(value: JsonValue) -> str | None:
     """Return a string representation of ``value`` or ``None`` when unset."""
     if value is None:
         return None
     return str(value)
 
 
-def _coerce_diagnostic_payload(value: object) -> list[dict[str, Any]]:
-    if not isinstance(value, list):
+def _coerce_diagnostic_payload(value: JsonValue | Sequence[JsonValue] | None) -> list[SerializableMapping]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
         return []
-    diagnostics: list[dict[str, Any]] = []
+    diagnostics: list[SerializableMapping] = []
     for item in value:
         if isinstance(item, dict):
-            diagnostics.append(item)
+            diagnostics.append({str(key): val for key, val in item.items()})
     return diagnostics
 
 
-def jsonify(value: Any) -> JsonValue:
+def jsonify(value: SerializableValue) -> JsonValue:
     """Convert ``value`` into a JSON-serializable payload."""
     if isinstance(value, (str, int, float, bool)) or value is None:
         result: JsonValue = value
@@ -181,6 +189,7 @@ __all__ = [
     "coerce_optional_int",
     "coerce_optional_str",
     "deserialize_outcome",
+    "JsonValue",
     "jsonify",
     "safe_int",
     "serialize_diagnostic",

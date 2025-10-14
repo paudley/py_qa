@@ -4,13 +4,19 @@
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 import pytest
 
-from pyqa.core.environment.tool_env import CommandPreparer, PreparedCommand, cache_layout, desired_version
+from pyqa.core.environment.tool_env import (
+    CommandPreparer,
+    LegacyCommandMapping,
+    PreparedCommand,
+    cache_layout,
+    desired_version,
+)
 from pyqa.core.environment.tool_env.runtimes import go as go_runtime
 from pyqa.core.environment.tool_env.runtimes import lua as lua_runtime
 from pyqa.core.environment.tool_env.runtimes import npm as npm_runtime
@@ -99,7 +105,7 @@ def test_npm_runtime_falls_back_to_local_when_system_version_too_low(
 
     monkeypatch.setattr(npm_runtime.NpmRuntime, "_ensure_local_package", fake_install)
 
-    result = preparer.prepare(
+    result = _legacy_prepare(preparer, 
         tool=tool,
         base_cmd=("eslint", "--format", "json"),
         root=tmp_path,
@@ -141,7 +147,7 @@ def test_npm_runtime_prefers_system_when_version_sufficient(
 
     monkeypatch.setattr(npm_runtime.NpmRuntime, "_ensure_local_package", fail_install)
 
-    result = preparer.prepare(
+    result = _legacy_prepare(preparer, 
         tool=tool,
         base_cmd=("eslint", "--format", "json"),
         root=tmp_path,
@@ -175,7 +181,7 @@ def test_npm_runtime_install_failure_propagates(
     monkeypatch.setattr(npm_runtime.shutil, "which", lambda _: None)
 
     with pytest.raises(subprocess.CalledProcessError):
-        preparer.prepare(
+        _legacy_prepare(preparer, 
             tool=tool,
             base_cmd=("remark", "--version"),
             root=tmp_path,
@@ -225,7 +231,7 @@ def test_go_runtime_installs_when_system_too_old(
 
     monkeypatch.setattr(go_runtime.GoRuntime, "_ensure_local_tool", fake_install)
 
-    result = preparer.prepare(
+    result = _legacy_prepare(preparer, 
         tool=tool,
         base_cmd=("kube-linter", "lint"),
         root=tmp_path,
@@ -273,7 +279,7 @@ def test_go_runtime_prefers_system_when_version_ok(
 
     monkeypatch.setattr(go_runtime.GoRuntime, "_ensure_local_tool", fail_install)
 
-    result = preparer.prepare(
+    result = _legacy_prepare(preparer, 
         tool=tool,
         base_cmd=("kube-linter", "lint"),
         root=tmp_path,
@@ -319,7 +325,7 @@ def test_go_runtime_installs_when_no_version_spec(
 
     monkeypatch.setattr(go_runtime.GoRuntime, "_ensure_local_tool", fake_install)
 
-    result = preparer.prepare(
+    result = _legacy_prepare(preparer, 
         tool=tool,
         base_cmd=("checkmake", "lint"),
         root=tmp_path,
@@ -351,7 +357,7 @@ def test_go_runtime_install_failure_propagates(
     monkeypatch.setattr(go_runtime.shutil, "which", lambda name: "/usr/bin/go" if name == "go" else None)
 
     with pytest.raises(subprocess.CalledProcessError):
-        preparer.prepare(
+        _legacy_prepare(preparer, 
             tool=tool,
             base_cmd=("kube-linter", "lint"),
             root=tmp_path,
@@ -377,7 +383,7 @@ def test_lua_runtime_install_failure_propagates(
     monkeypatch.setattr(lua_runtime, "run_command", fail_install)
 
     with pytest.raises(subprocess.CalledProcessError):
-        preparer.prepare(
+        _legacy_prepare(preparer, 
             tool=tool,
             base_cmd=("luacheck", "--version"),
             root=tmp_path,
@@ -401,7 +407,7 @@ def test_perl_runtime_install_failure_propagates(
     monkeypatch.setattr(perl_runtime, "run_command", fail_install)
 
     with pytest.raises(subprocess.CalledProcessError):
-        preparer.prepare(
+        _legacy_prepare(preparer, 
             tool=tool,
             base_cmd=("perlcritic", "--version"),
             root=tmp_path,
@@ -451,7 +457,7 @@ def test_rust_runtime_installs_when_system_too_old(
 
     monkeypatch.setattr(rust_runtime.RustRuntime, "_ensure_local_tool", fake_install)
 
-    result = preparer.prepare(
+    result = _legacy_prepare(preparer, 
         tool=tool,
         base_cmd=("dotenv-linter",),
         root=tmp_path,
@@ -499,7 +505,7 @@ def test_rust_runtime_prefers_system_when_version_ok(
 
     monkeypatch.setattr(rust_runtime.RustRuntime, "_ensure_local_tool", fail_install)
 
-    result = preparer.prepare(
+    result = _legacy_prepare(preparer, 
         tool=tool,
         base_cmd=("dotenv-linter",),
         root=tmp_path,
@@ -527,7 +533,7 @@ def test_rust_runtime_install_failure_propagates(
     monkeypatch.setattr(rust_runtime.shutil, "which", lambda name: "/usr/bin/cargo" if name == "cargo" else None)
 
     with pytest.raises(subprocess.CalledProcessError):
-        preparer.prepare(
+        _legacy_prepare(preparer, 
             tool=tool,
             base_cmd=("dotenv-linter",),
             root=tmp_path,
@@ -575,7 +581,7 @@ def test_rust_runtime_install_rustup_component(
 
     monkeypatch.setattr(preparer._versions, "capture", fake_capture)
 
-    result = preparer.prepare(
+    result = _legacy_prepare(preparer, 
         tool=tool,
         base_cmd=("cargo", "clippy", "--message-format=json"),
         root=tmp_path,
@@ -586,3 +592,6 @@ def test_rust_runtime_install_rustup_component(
 
     assert result.cmd[0] == "/usr/bin/cargo"
     assert any(Path(cmd[0]).name == "rustup" and cmd[1:3] == ["component", "add"] for cmd in calls)
+def _legacy_prepare(preparer: CommandPreparer, **kwargs: object) -> PreparedCommand:
+    legacy_mapping: LegacyCommandMapping = cast(LegacyCommandMapping, kwargs)
+    return preparer.prepare_from_mapping(legacy_mapping)

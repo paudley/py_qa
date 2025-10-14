@@ -5,11 +5,12 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any, Final
+from typing import Final
 
 from pyqa.core.severity import Severity, severity_from_code
 
 from ..core.models import RawDiagnostic
+from ..core.serialization import JsonValue, coerce_optional_int
 from ..tools.base import ToolContext
 from .base import (
     DiagnosticDetails,
@@ -19,7 +20,7 @@ from .base import (
 )
 
 
-def parse_ruff(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_ruff(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse Ruff JSON output into raw diagnostics.
 
     Args:
@@ -53,7 +54,7 @@ def parse_ruff(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
     return results
 
 
-def _normalise_pylint_code(symbol: object, item: Mapping[str, Any]) -> str | None:
+def _normalise_pylint_code(symbol: JsonValue, item: Mapping[str, JsonValue]) -> str | None:
     """Return a Pylint diagnostic code in canonical hyphenated form."""
 
     if isinstance(symbol, str) and symbol.strip():
@@ -66,7 +67,7 @@ def _normalise_pylint_code(symbol: object, item: Mapping[str, Any]) -> str | Non
     return None
 
 
-def parse_pylint(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_pylint(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse Pylint JSON output into raw diagnostics.
 
     Args:
@@ -80,8 +81,8 @@ def parse_pylint(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
     results: list[RawDiagnostic] = []
     for item in iter_dicts(payload):
         path = item.get("path") or item.get("filename")
-        line = item.get("line")
-        column = item.get("column")
+        line = coerce_optional_int(item.get("line"))
+        column = coerce_optional_int(item.get("column"))
         symbol = item.get("symbol")
         code = _normalise_pylint_code(symbol, item)
         message = str(item.get("message", "")).strip()
@@ -105,7 +106,7 @@ def parse_pylint(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
     return results
 
 
-def parse_pyright(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_pyright(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse Pyright JSON diagnostics.
 
     Args:
@@ -116,16 +117,18 @@ def parse_pyright(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]
         Sequence[RawDiagnostic]: Diagnostics ready for downstream processing.
     """
     del context
-    diagnostics = []
-    if isinstance(payload, dict):
-        diagnostics = payload.get("generalDiagnostics", []) or payload.get("diagnostics", [])
+    if isinstance(payload, Mapping):
+        diagnostics_value = payload.get("generalDiagnostics", []) or payload.get("diagnostics", [])
+        diagnostics = [entry for entry in diagnostics_value if isinstance(entry, Mapping)]
+    else:
+        diagnostics = [entry for entry in iter_dicts(payload)]
     results: list[RawDiagnostic] = []
     for item in diagnostics:
-        if not isinstance(item, dict):
-            continue
         path = item.get("file") or item.get("path")
-        rng = item.get("range") or {}
-        start = rng.get("start") or {}
+        rng_value = item.get("range")
+        rng = rng_value if isinstance(rng_value, Mapping) else {}
+        start_value = rng.get("start")
+        start = start_value if isinstance(start_value, Mapping) else {}
         severity = str(item.get("severity", "warning")).lower()
         sev_enum = {
             "error": Severity.ERROR,
@@ -136,8 +139,8 @@ def parse_pyright(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]
         rule = item.get("rule")
         diag_location = DiagnosticLocation(
             file=path,
-            line=start.get("line"),
-            column=start.get("character"),
+            line=coerce_optional_int(start.get("line")),
+            column=coerce_optional_int(start.get("character")),
         )
         details = _build_python_details(
             "pyright",
@@ -149,7 +152,7 @@ def parse_pyright(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]
     return results
 
 
-def _extract_mypy_function(entry: Mapping[str, Any]) -> str | None:
+def _extract_mypy_function(entry: Mapping[str, JsonValue]) -> str | None:
     """Extract the function or symbol name referenced by a MyPy diagnostic."""
 
     candidates = (
@@ -185,7 +188,7 @@ def _build_python_details(
     )
 
 
-def parse_mypy(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_mypy(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse MyPy JSON diagnostics.
 
     Args:
@@ -219,8 +222,8 @@ def parse_mypy(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
         }.get(severity, Severity.WARNING)
         diag_location = DiagnosticLocation(
             file=path,
-            line=item.get("line"),
-            column=item.get("column"),
+            line=coerce_optional_int(item.get("line")),
+            column=coerce_optional_int(item.get("column")),
         )
         details = _build_python_details(
             "mypy",
@@ -243,38 +246,34 @@ SELENE_SEVERITY_MAP: Final[dict[str, Severity]] = {
 SELENE_DIAGNOSTIC_TYPE: Final[str] = "diagnostic"
 
 
-def _iter_selene_records(payload: Any) -> Iterator[dict[str, Any]]:
+def _iter_selene_records(payload: JsonValue) -> Iterator[Mapping[str, JsonValue]]:
     if isinstance(payload, list):
-        yield from (item for item in payload if isinstance(item, dict))
-    elif isinstance(payload, dict):
+        yield from (item for item in payload if isinstance(item, Mapping))
+    elif isinstance(payload, Mapping):
         yield payload
 
 
-def _is_selene_diagnostic(entry: Mapping[str, Any]) -> bool:
+def _is_selene_diagnostic(entry: Mapping[str, JsonValue]) -> bool:
     entry_type = str(entry.get("type", "")).lower()
     return entry_type == SELENE_DIAGNOSTIC_TYPE
 
 
-def _extract_selene_location(entry: Mapping[str, Any]) -> tuple[str | None, int | None, int | None]:
+def _extract_selene_location(entry: Mapping[str, JsonValue]) -> tuple[str | None, int | None, int | None]:
     primary = entry.get("primary_label")
     if not isinstance(primary, Mapping):
         return None, None, None
-    span = primary.get("span")
-    span_mapping = span if isinstance(span, Mapping) else {}
-    line = span_mapping.get("start_line")
-    column = span_mapping.get("start_column")
-    if isinstance(line, int):
+    span_value = primary.get("span")
+    span_mapping = span_value if isinstance(span_value, Mapping) else {}
+    line = coerce_optional_int(span_mapping.get("start_line"))
+    column = coerce_optional_int(span_mapping.get("start_column"))
+    if line is not None:
         line += 1
-    else:
-        line = None
-    if isinstance(column, int):
+    if column is not None:
         column += 1
-    else:
-        column = None
     return primary.get("filename"), line, column
 
 
-def _collect_selene_notes(entry: Mapping[str, Any]) -> list[str]:
+def _collect_selene_notes(entry: Mapping[str, JsonValue]) -> list[str]:
     notes: list[str] = []
     for note in entry.get("notes", []) or []:
         text = str(note).strip()
@@ -288,7 +287,7 @@ def _collect_selene_notes(entry: Mapping[str, Any]) -> list[str]:
     return notes
 
 
-def _build_selene_message(entry: Mapping[str, Any]) -> str:
+def _build_selene_message(entry: Mapping[str, JsonValue]) -> str:
     base_message = str(entry.get("message", "")).strip()
     notes = _collect_selene_notes(entry)
     if not notes:
@@ -299,7 +298,7 @@ def _build_selene_message(entry: Mapping[str, Any]) -> str:
     return notes_content
 
 
-def _parse_selene_entry(entry: Mapping[str, Any]) -> RawDiagnostic | None:
+def _parse_selene_entry(entry: Mapping[str, JsonValue]) -> RawDiagnostic | None:
     if not _is_selene_diagnostic(entry):
         return None
     severity_label = str(entry.get("severity", "warning")).lower()
@@ -317,7 +316,7 @@ def _parse_selene_entry(entry: Mapping[str, Any]) -> RawDiagnostic | None:
     )
 
 
-def parse_selene(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_selene(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse selene JSON output (display-style json2)."""
     results: list[RawDiagnostic] = []
     for entry in _iter_selene_records(payload):

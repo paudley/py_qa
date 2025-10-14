@@ -15,7 +15,7 @@ from pyqa.core.config.constants import PY_QA_DIR_NAME
 from pyqa.core.environment.tool_env import VersionResolver
 from pyqa.platform.workspace import is_py_qa_workspace
 
-from ...core.runtime.process import run_command
+from ...core.runtime.process import CommandOptions, run_command
 from ...filesystem.paths import display_relative_path, ensure_absolute_path
 from ...tools.base import Tool
 
@@ -97,8 +97,7 @@ def check_tool_status(tool: Tool) -> ToolStatus:
     try:
         completed = run_command(
             list(version_cmd),
-            capture_output=True,
-            check=False,
+            options=CommandOptions(capture_output=True, check=False),
         )
     except FileNotFoundError:
         availability = ToolAvailability.VENDORED if tool.runtime != BINARY_RUNTIME else ToolAvailability.UNINSTALLED

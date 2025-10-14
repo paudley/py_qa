@@ -6,12 +6,12 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from typing import Any, Final
+from typing import Final
 
 from pyqa.core.severity import Severity
 
 from ..core.models import RawDiagnostic
-from ..core.serialization import coerce_optional_int
+from ..core.serialization import JsonValue, coerce_optional_int
 from ..tools.base import ToolContext
 from .base import (
     DiagnosticDetails,
@@ -139,7 +139,7 @@ def parse_perlcritic(stdout: Sequence[str], context: ToolContext) -> Sequence[Ra
     return results
 
 
-def parse_checkmake(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_checkmake(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse checkmake JSON diagnostics into normalised objects.
 
     Args:
@@ -162,8 +162,8 @@ def parse_checkmake(payload: Any, context: ToolContext) -> Sequence[RawDiagnosti
 
 
 def _build_checkmake_diagnostic(
-    file_path: object,
-    issue: Mapping[str, Any],
+    file_path: JsonValue | None,
+    issue: Mapping[str, JsonValue],
 ) -> RawDiagnostic | None:
     """Return a normalised checkmake diagnostic when ``issue`` is valid."""
 
@@ -180,8 +180,8 @@ def _build_checkmake_diagnostic(
     path = str(file_path) if file_path else None
     location = DiagnosticLocation(
         file=path,
-        line=issue.get("line"),
-        column=issue.get("column") or issue.get("col"),
+        line=coerce_optional_int(issue.get("line")),
+        column=coerce_optional_int(issue.get("column") or issue.get("col")),
     )
     details = DiagnosticDetails(
         severity=severity,
@@ -192,10 +192,13 @@ def _build_checkmake_diagnostic(
     return create_spec(location=location, details=details).build()
 
 
-def _iter_checkmake_entries(payload: Any) -> Iterator[Mapping[str, Any]]:
+def _iter_checkmake_entries(payload: JsonValue) -> Iterator[Mapping[str, JsonValue]]:
     """Yield checkmake file entries from ``payload``."""
 
-    candidates = payload.get("files") or payload.get("results") if isinstance(payload, Mapping) else payload
+    if isinstance(payload, Mapping):
+        candidates = payload.get("files") or payload.get("results") or []
+    else:
+        candidates = payload
     yield from iter_dicts(candidates)
 
 
@@ -316,7 +319,7 @@ def _build_tombi_diagnostic(header_line: str, body: Sequence[str]) -> RawDiagnos
     )
 
 
-def parse_golangci_lint(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_golangci_lint(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse golangci-lint JSON output into raw diagnostics.
 
     Args:
@@ -335,17 +338,21 @@ def parse_golangci_lint(payload: Any, context: ToolContext) -> Sequence[RawDiagn
     return results
 
 
-def _iter_golangci_entries(payload: Any) -> Iterator[Mapping[str, Any]]:
+def _iter_golangci_entries(payload: JsonValue) -> Iterator[Mapping[str, JsonValue]]:
     """Yield golangci-lint issue entries from ``payload``."""
 
-    candidates = payload.get("Issues") or payload.get("issues") if isinstance(payload, Mapping) else payload
+    if isinstance(payload, Mapping):
+        candidates = payload.get("Issues") or payload.get("issues") or []
+    else:
+        candidates = payload
     yield from iter_dicts(candidates)
 
 
-def _build_golangci_diagnostic(issue: Mapping[str, Any]) -> RawDiagnostic | None:
+def _build_golangci_diagnostic(issue: Mapping[str, JsonValue]) -> RawDiagnostic | None:
     """Return a golangci-lint diagnostic when ``issue`` contains data."""
 
-    position = issue.get("Pos") or issue.get("position") or {}
+    position_value = issue.get("Pos") or issue.get("position")
+    position = position_value if isinstance(position_value, Mapping) else {}
     path = position.get("Filename") or position.get("filename") or issue.get("file")
     message = str(issue.get("Text", "") or issue.get("text", "")).strip()
     if not message:
@@ -359,9 +366,9 @@ def _build_golangci_diagnostic(issue: Mapping[str, Any]) -> RawDiagnostic | None
     sub_linter = issue.get("FromLinter") or issue.get("source") or "golangci-lint"
     code_value = issue.get("Code") or issue.get("code")
     location = DiagnosticLocation(
-        file=path,
-        line=position.get("Line") or position.get("line"),
-        column=position.get("Column") or position.get("column"),
+        file=str(path) if path else None,
+        line=coerce_optional_int(position.get("Line") or position.get("line")),
+        column=coerce_optional_int(position.get("Column") or position.get("column")),
     )
     details = DiagnosticDetails(
         severity=severity,
@@ -372,7 +379,7 @@ def _build_golangci_diagnostic(issue: Mapping[str, Any]) -> RawDiagnostic | None
     return create_spec(location=location, details=details).build()
 
 
-def parse_cargo_clippy(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_cargo_clippy(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse Cargo clippy JSON payloads."""
     del context
     results: list[RawDiagnostic] = []
@@ -395,8 +402,8 @@ def parse_cargo_clippy(payload: Any, context: ToolContext) -> Sequence[RawDiagno
             spans[0] if spans else None,
         )
         file_name = primary.get("file_name") if isinstance(primary, dict) else None
-        line = primary.get("line_start") if isinstance(primary, dict) else None
-        column = primary.get("column_start") if isinstance(primary, dict) else None
+        line = coerce_optional_int(primary.get("line_start")) if isinstance(primary, dict) else None
+        column = coerce_optional_int(primary.get("column_start")) if isinstance(primary, dict) else None
         code_obj = message.get("code") or {}
         code = code_obj.get("code") if isinstance(code_obj, dict) else None
         sev_enum = {

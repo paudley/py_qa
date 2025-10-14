@@ -15,6 +15,7 @@ from typing import Final, Literal, cast
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..catalog.metadata import catalog_duplicate_preference
+from .types import ConfigValue
 
 
 class ConfigError(Exception):
@@ -152,17 +153,17 @@ _MYPY_STRICT_FLAGS: Final[tuple[str, ...]] = (
 )
 
 
-def _expected_mypy_profile(strict_level: StrictnessLevel) -> dict[str, object]:
+def _expected_mypy_profile(strict_level: StrictnessLevel) -> dict[str, ConfigValue]:
     """Return the expected mypy settings for a given strictness level.
 
     Args:
         strict_level: Desired strictness level for type checking.
 
     Returns:
-        dict[str, object]: Expected mypy INI-style configuration values.
+        dict[str, ConfigValue]: Expected mypy INI-style configuration values.
 
     """
-    profile: dict[str, object] = {flag: True for flag in _MYPY_BASE_TRUE_FLAGS}
+    profile: dict[str, ConfigValue] = {flag: True for flag in _MYPY_BASE_TRUE_FLAGS}
     profile["strict"] = strict_level is StrictnessLevel.STRICT
     for flag in _MYPY_STRICT_FLAGS:
         profile[flag] = strict_level is StrictnessLevel.STRICT
@@ -173,7 +174,7 @@ def _expected_mypy_profile(strict_level: StrictnessLevel) -> dict[str, object]:
 def _expected_mypy_value_for(
     key: str,
     strict_level: StrictnessLevel,
-) -> object:
+) -> ConfigValue | ConfigSentinel:
     """Return the default mypy setting for a specific configuration key.
 
     Args:
@@ -181,7 +182,8 @@ def _expected_mypy_value_for(
         strict_level: Strictness profile used to derive defaults.
 
     Returns:
-        object: Default value when known; otherwise ``NO_BASELINE``.
+        ConfigValue | ConfigSentinel: Default value when known; otherwise
+        ``NO_BASELINE``.
 
     """
     profile = _expected_mypy_profile(strict_level)
@@ -295,11 +297,11 @@ DEFAULT_CLEAN_TREES: Final[list[str]] = ["examples", "packages", "build"]
 DEFAULT_UPDATE_SKIP_PATTERNS: Final[list[str]] = ["pyreadstat", ".git/modules"]
 
 
-def _default_tool_settings() -> dict[str, dict[str, object]]:
+def _default_tool_settings() -> dict[str, dict[str, ConfigValue]]:
     """Return baseline tool settings that mirror the legacy lint script.
 
     Returns:
-        dict[str, dict[str, object]]: Default tool configuration mapping.
+        dict[str, dict[str, ConfigValue]]: Default tool configuration mapping.
 
     """
     return {}
@@ -369,8 +371,133 @@ class SeverityConfig(BaseModel):
     sensitivity: SensitivityLevel = SensitivityLevel.MEDIUM
 
 
-UNSET: Final[object] = object()
-NO_BASELINE: Final[object] = object()
+class ValueTypeFindingSeverity(str, Enum):
+    """Enumerate severities used by the generic value-type recommender."""
+
+    ERROR = "error"
+    WARNING = "warning"
+
+
+class ValueTypeTriggerKind(str, Enum):
+    """Describe the supported trigger categories for implications."""
+
+    METHOD = "method"
+    TRAIT = "trait"
+
+
+class GenericValueTypesImplication(BaseModel):
+    """Configuration describing a derived method recommendation."""
+
+    trigger: str
+    require: tuple[str, ...] = Field(default_factory=tuple)
+    recommend: tuple[str, ...] = Field(default_factory=tuple)
+    severity: ValueTypeFindingSeverity = ValueTypeFindingSeverity.WARNING
+    traits: tuple[str, ...] = Field(default_factory=tuple)
+
+    @model_validator(mode="after")
+    def _normalise(self) -> GenericValueTypesImplication:
+        """Normalise trigger metadata and enforce canonical formatting."""
+
+        trigger = self.trigger.strip()
+        if not trigger:
+            msg = "generic_value_types.implications.trigger cannot be blank"
+            raise ConfigError(msg)
+        self.trigger = trigger.lower()
+        self.traits = tuple(sorted({trait.strip() for trait in self.traits if trait.strip()}))
+        self.require = tuple(sorted({method.strip() for method in self.require if method.strip()}))
+        self.recommend = tuple(sorted({method.strip() for method in self.recommend if method.strip()}))
+        return self
+
+    def parsed_trigger(self) -> tuple[ValueTypeTriggerKind, str]:
+        """Return the trigger kind/value pair derived from configuration."""
+
+        token = self.trigger
+        if ":" not in token:
+            return ValueTypeTriggerKind.METHOD, token
+        prefix, value = (segment.strip() for segment in token.split(":", 1))
+        try:
+            kind = ValueTypeTriggerKind(prefix)
+        except ValueError as exc:  # pragma: no cover - defensive guard
+            raise ConfigError(f"Unsupported implication trigger kind '{prefix}'") from exc
+        if not value:
+            msg = "generic_value_types.implications.trigger must include a value"
+            raise ConfigError(msg)
+        return kind, value
+
+
+class GenericValueTypesRule(BaseModel):
+    """Configuration rule describing explicit dunder expectations."""
+
+    pattern: str
+    traits: tuple[str, ...] = Field(default_factory=tuple)
+    require: tuple[str, ...] = Field(default_factory=tuple)
+    recommend: tuple[str, ...] = Field(default_factory=tuple)
+    allow_missing: tuple[str, ...] = Field(default_factory=tuple)
+    description: str | None = None
+
+    @model_validator(mode="after")
+    def _normalise(self) -> GenericValueTypesRule:
+        """Normalise rule inputs and enforce sorted unique collections."""
+
+        pattern = self.pattern.strip()
+        if not pattern:
+            msg = "generic_value_types.rules.pattern cannot be blank"
+            raise ConfigError(msg)
+        self.pattern = pattern
+        self.traits = tuple(sorted({trait.strip() for trait in self.traits if trait.strip()}))
+        self.require = tuple(sorted({method.strip() for method in self.require if method.strip()}))
+        self.recommend = tuple(sorted({method.strip() for method in self.recommend if method.strip()}))
+        self.allow_missing = tuple(sorted({method.strip() for method in self.allow_missing if method.strip()}))
+        if self.description is not None:
+            description = self.description.strip()
+            self.description = description or None
+        return self
+
+
+class GenericValueTypesConfig(BaseModel):
+    """Configuration namespace for the generic value-type recommender."""
+
+    enabled: bool = False
+    rules: tuple[GenericValueTypesRule, ...] = Field(default_factory=tuple)
+    implications: tuple[GenericValueTypesImplication, ...] = Field(
+        default_factory=lambda: GenericValueTypesConfig._default_implications()
+    )
+
+    @staticmethod
+    def _default_implications() -> tuple[GenericValueTypesImplication, ...]:
+        """Return conservative default implications for value-type ergonomics."""
+
+        base_implications = (
+            GenericValueTypesImplication(
+                trigger="method:__iter__",
+                require=("__len__", "__contains__"),
+                severity=ValueTypeFindingSeverity.WARNING,
+            ),
+            GenericValueTypesImplication(
+                trigger="method:__len__",
+                require=("__bool__",),
+                severity=ValueTypeFindingSeverity.WARNING,
+            ),
+            GenericValueTypesImplication(
+                trigger="method:__eq__",
+                require=("__hash__",),
+                recommend=("__repr__", "__str__"),
+                severity=ValueTypeFindingSeverity.WARNING,
+            ),
+        )
+        return base_implications
+
+
+class _ConfigSentinel(Enum):
+    """Sentinel values used to distinguish absent and unmanaged settings."""
+
+    UNSET = "UNSET"
+    NO_BASELINE = "NO_BASELINE"
+
+
+ConfigSentinel: TypeAlias = _ConfigSentinel
+UNSET: Final[ConfigSentinel] = _ConfigSentinel.UNSET
+NO_BASELINE: Final[ConfigSentinel] = _ConfigSentinel.NO_BASELINE
 MYPY_TOOL_KEY: Final[str] = "mypy"
 
 
@@ -382,7 +509,7 @@ class ToolSpecificOverride:
     value: ToolOverrideValue
     skip_if_truthy: bool = False
 
-    def apply(self, tool_settings: MutableMapping[str, object]) -> None:
+    def apply(self, tool_settings: MutableMapping[str, ConfigValue]) -> None:
         """Apply the configured override onto a tool-specific mapping.
 
         Args:
@@ -524,7 +651,7 @@ class SharedKnobSnapshot:
     knob_values: Mapping[ConfigOverrideKey, SensitivityOverrideValue]
     pylint_init_import: bool | None
 
-    def value_for(self, tool: str, key: str) -> object:
+    def value_for(self, tool: str, key: str) -> ConfigValue | ConfigSentinel:
         """Return the baseline value for the given tool configuration key.
 
         Args:
@@ -532,8 +659,9 @@ class SharedKnobSnapshot:
             key: Tool-specific configuration option identifier.
 
         Returns:
-            object: Baseline value when maintained, or ``NO_BASELINE`` when
-            the shared configuration does not manage the requested key.
+            ConfigValue | ConfigSentinel: Baseline value when maintained, or
+            ``NO_BASELINE`` when the shared configuration does not manage the
+            requested key.
 
         """
         mapping_key = (tool, key)
@@ -563,18 +691,21 @@ class SharedKnobSnapshot:
         return NO_BASELINE
 
     @staticmethod
-    def _normalise_value(value: object) -> object:
+    def _normalise_value(
+        value: ConfigValue | Enum | ConfigSentinel,
+    ) -> ConfigValue | ConfigSentinel:
         """Convert enum values to their serialisable counterparts.
 
         Args:
             value: Raw value retrieved from the snapshot mapping.
 
         Returns:
-            object: Serialisable value suitable for downstream comparisons.
+            ConfigValue | ConfigSentinel: Serialisable value suitable for
+            downstream comparisons.
 
         """
         if isinstance(value, Enum):
-            return value.value
+            return cast(ConfigValue, value.value)
         return value
 
 
@@ -635,27 +766,28 @@ class Config(BaseModel):
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
     dedupe: DedupeConfig = Field(default_factory=DedupeConfig)
     severity_rules: list[str] = Field(default_factory=list)
-    tool_settings: dict[str, dict[str, object]] = Field(default_factory=_default_tool_settings)
+    tool_settings: dict[str, dict[str, ConfigValue]] = Field(default_factory=_default_tool_settings)
     license: LicenseConfig = Field(default_factory=LicenseConfig)
     quality: QualityConfigSection = Field(default_factory=QualityConfigSection)
+    generic_value_types: GenericValueTypesConfig = Field(default_factory=GenericValueTypesConfig)
     clean: CleanConfig = Field(default_factory=CleanConfig)
     update: UpdateConfig = Field(default_factory=UpdateConfig)
     complexity: ComplexityConfig = Field(default_factory=ComplexityConfig)
     strictness: StrictnessConfig = Field(default_factory=StrictnessConfig)
     severity: SeverityConfig = Field(default_factory=SeverityConfig)
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(self) -> dict[str, ConfigValue]:
         """Return a dictionary representation suitable for serialization.
 
         Returns:
-            dict[str, object]: Serialisable mapping of configuration values.
+            dict[str, ConfigValue]: Serialisable mapping of configuration values.
 
         """
-        payload: dict[str, object] = dict(self.model_dump(mode="python"))
+        payload: dict[str, ConfigValue] = dict(self.model_dump(mode="python"))
         payload["severity_rules"] = list(self.severity_rules)
         raw_tool_settings = payload.get("tool_settings", {})
         if isinstance(raw_tool_settings, dict):
-            tool_settings_map: dict[str, dict[str, object]] = {}
+            tool_settings_map: dict[str, dict[str, ConfigValue]] = {}
             for tool, settings in raw_tool_settings.items():
                 if isinstance(settings, dict):
                     tool_settings_map[str(tool)] = dict(settings.items())
@@ -745,10 +877,10 @@ class Config(BaseModel):
     def update_severity(
         self,
         *,
-        bandit_level: BanditLevel | object = UNSET,
-        bandit_confidence: BanditConfidence | object = UNSET,
-        pylint_fail_under: float | None | object = UNSET,
-        max_warnings: int | None | object = UNSET,
+        bandit_level: BanditLevel | ConfigSentinel = UNSET,
+        bandit_confidence: BanditConfidence | ConfigSentinel = UNSET,
+        pylint_fail_under: float | None | ConfigSentinel = UNSET,
+        max_warnings: int | None | ConfigSentinel = UNSET,
     ) -> None:
         """Apply targeted updates to the severity configuration section.
 
@@ -769,10 +901,10 @@ class Config(BaseModel):
     def _update_severity(
         self,
         *,
-        bandit_level: BanditLevel | object = UNSET,
-        bandit_confidence: BanditConfidence | object = UNSET,
-        pylint_fail_under: float | None | object = UNSET,
-        max_warnings: int | None | object = UNSET,
+        bandit_level: BanditLevel | ConfigSentinel = UNSET,
+        bandit_confidence: BanditConfidence | ConfigSentinel = UNSET,
+        pylint_fail_under: float | None | ConfigSentinel = UNSET,
+        max_warnings: int | None | ConfigSentinel = UNSET,
     ) -> None:
         """Apply targeted updates to the severity configuration section.
 
@@ -783,11 +915,11 @@ class Config(BaseModel):
             max_warnings: Optional override for maximum tolerable warnings.
 
         """
-        updates: dict[str, object | None] = {}
+        updates: dict[str, ConfigValue | None] = {}
         if bandit_level is not UNSET:
-            updates["bandit_level"] = cast(BanditLevel, bandit_level)
+            updates["bandit_level"] = cast(ConfigValue, bandit_level)
         if bandit_confidence is not UNSET:
-            updates["bandit_confidence"] = cast(BanditConfidence, bandit_confidence)
+            updates["bandit_confidence"] = cast(ConfigValue, bandit_confidence)
         if pylint_fail_under is not UNSET:
             updates["pylint_fail_under"] = cast(float | None, pylint_fail_under)
         if max_warnings is not UNSET:
@@ -833,7 +965,7 @@ class Config(BaseModel):
 
         """
         mypy_settings = self.tool_settings.setdefault("mypy", {})
-        baseline_profile: Mapping[str, object] = {}
+        baseline_profile: Mapping[str, ConfigValue] = {}
         strictness = self.strictness.type_checking
         if baseline is not None:
             strictness = cast(
@@ -861,11 +993,11 @@ class Config(BaseModel):
 class _MypySettingManager:
     """Manage mypy defaults while respecting override semantics."""
 
-    settings: dict[str, object]
-    baseline: Mapping[str, object]
+    settings: dict[str, ConfigValue]
+    baseline: Mapping[str, ConfigValue]
     override: bool
 
-    def set_default(self, key: str, value: object | None) -> None:
+    def set_default(self, key: str, value: ConfigValue | None) -> None:
         """Set or remove a mypy setting following override rules.
 
         Args:
@@ -873,8 +1005,8 @@ class _MypySettingManager:
             value: Desired default value, or ``None`` to remove the key.
 
         """
-        existing = self.settings.get(key, UNSET)
-        baseline_value = self.baseline.get(key, NO_BASELINE)
+        existing: ConfigValue | ConfigSentinel = self.settings.get(key, UNSET)
+        baseline_value: ConfigValue | ConfigSentinel = self.baseline.get(key, NO_BASELINE)
         if value is None:
             if self.override and (
                 existing is UNSET or (baseline_value is not NO_BASELINE and existing != baseline_value)

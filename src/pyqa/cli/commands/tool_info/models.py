@@ -15,6 +15,7 @@ from pyqa.core.config.loader import FieldUpdate
 from ....catalog.model_catalog import CatalogSnapshot
 from ....catalog.model_tool import ToolDefinition
 from ....config import Config
+from ....config.types import ConfigValue
 from ....tools.base import Tool
 from ...core.shared import CLIError
 from ...core.utils import ToolStatus
@@ -48,7 +49,7 @@ class ToolInfoContext:
     config: ToolInfoConfigData
     tool: Tool
     status: ToolStatus
-    overrides: dict[str, object]
+    overrides: dict[str, ConfigValue]
     catalog_snapshot: CatalogSnapshot
     catalog_tool: ToolDefinition | None
 

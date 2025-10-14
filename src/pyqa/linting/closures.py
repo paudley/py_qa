@@ -6,11 +6,13 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Iterable
-
-from pyqa.cli.commands.lint.preparation import PreparedLintState
+from typing import TYPE_CHECKING
 
 from ._ast_visitors import BaseAstLintVisitor, VisitorMetadata, run_ast_linter
 from .base import InternalLintReport
+
+if TYPE_CHECKING:
+    from pyqa.cli.commands.lint.preparation import PreparedLintState
 
 
 def run_closure_linter(state: PreparedLintState, *, emit_to_logger: bool = True) -> InternalLintReport:

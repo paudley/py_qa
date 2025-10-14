@@ -6,13 +6,19 @@
 from __future__ import annotations
 
 import importlib
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast, runtime_checkable
 
 from .io import load_schema
 from .types import JSONValue
+
+
+class SchemaValidationError(Protocol):
+    """Protocol capturing jsonschema validation error payloads."""
+
+    message: str
 
 
 @runtime_checkable
@@ -22,7 +28,7 @@ class SchemaValidator(Protocol):
     def validate(self, instance: JSONValue) -> None:
         """Validate ``instance`` against the bound schema."""
 
-    def iter_errors(self, instance: JSONValue) -> object:
+    def iter_errors(self, instance: JSONValue) -> Iterable[SchemaValidationError]:
         """Yield validation errors for ``instance`` without raising immediately."""
 
 

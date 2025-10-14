@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS, PY_QA_DIR_NAME
 from pyqa.core.logging import fail, info, ok, warn
-from pyqa.core.runtime.process import run_command
+from pyqa.core.runtime.process import CommandOptions, run_command
 from pyqa.platform.workspace import is_py_qa_workspace
 
 CommandRunner = Callable[[Sequence[str], Path | None], CompletedProcess[str]]
@@ -99,7 +99,7 @@ class CommandSpec(BaseModel):
 
     @field_validator("args", mode="before")
     @classmethod
-    def _coerce_args(cls, value: object) -> tuple[str, ...]:
+    def _coerce_args(cls, value: Sequence[str] | str) -> tuple[str, ...]:
         if isinstance(value, tuple):
             return tuple(str(entry) for entry in value)
         if isinstance(value, (list, Sequence)):
@@ -110,7 +110,7 @@ class CommandSpec(BaseModel):
 
     @field_validator("requires", mode="before")
     @classmethod
-    def _coerce_requires(cls, value: object) -> tuple[str, ...]:
+    def _coerce_requires(cls, value: Sequence[str] | set[str] | str | None) -> tuple[str, ...]:
         if value is None:
             return ()
         if isinstance(value, tuple):
@@ -857,7 +857,8 @@ def _manifest_for(kind: WorkspaceKind, directory: Path) -> Path:
 def _default_runner(args: Sequence[str], cwd: Path | None) -> CompletedProcess[str]:
     """Invoke :func:`run_command` using the configured runner signature."""
 
-    return run_command(args, cwd=cwd, check=False)
+    options = CommandOptions(cwd=cwd, check=False)
+    return run_command(args, options=options)
 
 
 def _format_relative(path: Path, root: Path) -> str:

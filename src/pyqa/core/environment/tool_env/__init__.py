@@ -8,7 +8,7 @@ from pyqa.platform.paths import get_pyqa_root
 
 from .constants import PROJECT_MARKER_FILENAME, ToolCacheLayout, cache_layout
 from .models import PreparedCommand
-from .preparer import CommandPreparationRequest, CommandPreparer
+from .preparer import CommandPreparationRequest, CommandPreparer, LegacyCommandMapping
 from .runtimes.go import GoRuntime
 from .runtimes.lua import LuaRuntime
 from .runtimes.npm import NpmRuntime
@@ -24,6 +24,7 @@ __all__ = [
     "cache_layout",
     "CommandPreparationRequest",
     "CommandPreparer",
+    "LegacyCommandMapping",
     "GoRuntime",
     "LuaRuntime",
     "NpmRuntime",

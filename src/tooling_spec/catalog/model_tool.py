@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final, cast
+from typing import Final, Protocol, TypeAlias, cast
 
 from .errors import CatalogIntegrityError
 from .model_actions import ActionDefinition, actions_array
@@ -44,7 +44,6 @@ class ToolBehaviour:
 
     default_enabled: bool
     auto_install: bool
-    automatically_fix: bool
     automatically_fix: bool
 
 
@@ -420,15 +419,72 @@ TOOL_MODEL_EXPORTS: Final[tuple[str, ...]] = (
     "parse_tool_metadata",
 )
 
-TOOL_MODEL_OBJECTS: Final[tuple[object, ...]] = (
-    ToolBehaviour,
-    ToolComponents,
-    ToolDefinition,
-    ToolFiles,
-    ToolIdentity,
-    ToolMetadata,
-    ToolOrdering,
-    parse_documentation_bundle,
-    parse_runtime_definition,
-    parse_tool_metadata,
+
+def _tool_model_objects() -> tuple[ToolModelObject, ...]:
+    """Return the objects corresponding to ``TOOL_MODEL_EXPORTS``."""
+
+    return (
+        ToolBehaviour,
+        ToolComponents,
+        ToolDefinition,
+        ToolFiles,
+        ToolIdentity,
+        ToolMetadata,
+        ToolOrdering,
+        parse_documentation_bundle,
+        parse_runtime_definition,
+        parse_tool_metadata,
+    )
+
+
+TOOL_MODEL_OBJECTS = _tool_model_objects()
+
+
+class ToolDocumentationParser(Protocol):
+    """Protocol describing documentation parser callables."""
+
+    def __call__(
+        self,
+        data: Mapping[str, JSONValue],
+        *,
+        context: str,
+        catalog_root: Path,
+        source: Path,
+    ) -> DocumentationBundle | None: ...
+
+
+class ToolRuntimeParser(Protocol):
+    """Protocol describing runtime parser callables."""
+
+    def __call__(
+        self,
+        data: Mapping[str, JSONValue],
+        *,
+        context: str,
+    ) -> RuntimeDefinition | None: ...
+
+
+class ToolMetadataParser(Protocol):
+    """Protocol describing tool metadata parser callables."""
+
+    def __call__(
+        self,
+        data: Mapping[str, JSONValue],
+        *,
+        context: str,
+        schema_version: str,
+    ) -> ToolMetadata: ...
+
+
+ToolModelObject: TypeAlias = (
+    type[ToolBehaviour]
+    | type[ToolComponents]
+    | type[ToolDefinition]
+    | type[ToolFiles]
+    | type[ToolIdentity]
+    | type[ToolMetadata]
+    | type[ToolOrdering]
+    | ToolDocumentationParser
+    | ToolRuntimeParser
+    | ToolMetadataParser
 )

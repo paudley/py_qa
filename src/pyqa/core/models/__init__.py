@@ -5,16 +5,20 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from enum import Enum
 from pathlib import Path
 from re import Pattern
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 from pyqa.core.metrics import FileMetrics
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path
+
+JsonScalar = str | int | float | bool | None
+JsonArray = list[JsonScalar]
+JsonValue = JsonScalar | JsonArray | dict[str, JsonScalar | JsonArray]
 
 
 class OutputFilter(BaseModel):
@@ -56,7 +60,7 @@ class Diagnostic(BaseModel):
     function: str | None = None
     hints: tuple[str, ...] = Field(default_factory=tuple)
     tags: tuple[str, ...] = Field(default_factory=tuple)
-    meta: dict[str, Any] = Field(default_factory=dict)
+    meta: dict[str, JsonValue] = Field(default_factory=dict)
 
 
 class RawDiagnostic(BaseModel):
@@ -76,21 +80,21 @@ class RawDiagnostic(BaseModel):
 
     @field_validator("file", mode="before")
     @classmethod
-    def _normalize_file(cls, value: object) -> object:
+    def _normalize_file(cls, value: str | Path | None) -> str | None:
         """Ensure diagnostic file paths are stored relative to the invocation root."""
         if value is None:
             return None
         if isinstance(value, str) and not value.strip():
             return value
-        raw = Path(str(value)) if not isinstance(value, Path) else value
+        raw = value if isinstance(value, Path) else Path(value)
         try:
             normalised = normalize_path(raw)
         except (OSError, RuntimeError, ValueError):
-            return str(value)
+            return str(raw)
         return normalised.as_posix()
 
 
-def coerce_output_sequence(value: object) -> list[str]:
+def coerce_output_sequence(value: JsonValue | Sequence[str] | None) -> list[str]:
     """Normalise stdout/stderr payloads into a list of strings.
 
     Args:
@@ -142,7 +146,7 @@ class ToolOutcome(BaseModel):
 
     @field_validator("stdout", "stderr", mode="before")
     @classmethod
-    def _coerce_output(cls, value: object) -> list[str]:
+    def _coerce_output(cls, value: JsonValue | Sequence[str] | None) -> list[str]:
         return coerce_output_sequence(value)
 
     def is_ok(self) -> bool:
@@ -183,7 +187,7 @@ class RunResult(BaseModel):
     outcomes: list[ToolOutcome]
     tool_versions: dict[str, str] = Field(default_factory=dict)
     file_metrics: dict[str, FileMetrics] = Field(default_factory=dict)
-    analysis: dict[str, Any] = Field(default_factory=dict)
+    analysis: dict[str, JsonValue] = Field(default_factory=dict)
 
     def has_failures(self) -> bool:
         """Return ``True`` when any outcome failed."""

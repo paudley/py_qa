@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import partial
 from pathlib import Path
-from typing import Any, Final, Protocol, cast
+from typing import Final, Protocol
 
 from ..tools.base import CommandBuilder, ToolContext
 from ..tools.builtin_commands_python import (
@@ -23,6 +23,7 @@ from ..tools.builtin_commands_python import (
 from ..tools.builtin_helpers import _as_bool, _resolve_path, _setting, _settings_list
 from .loader import CatalogIntegrityError
 from .types import JSONValue
+from .utils import expect_mapping, freeze_json_mapping, freeze_json_value
 
 __all__ = (
     "command_option_map",
@@ -321,7 +322,7 @@ class OptionMapping:
 
         value: JSONValue | None = None
         for name in self.settings:
-            candidate = cast("JSONValue | None", _setting(ctx.settings, name))
+            candidate = _setting(ctx.settings, name)
             if candidate is not None:
                 value = candidate
                 break
@@ -384,7 +385,7 @@ class _OptionCommandStrategy(CommandBuilder):
         return tuple(command)
 
 
-def command_option_map(config: Mapping[str, Any]) -> CommandBuilder:
+def command_option_map(config: Mapping[str, JSONValue]) -> CommandBuilder:
     """Return a command builder that maps catalog options onto CLI arguments.
 
     Args:
@@ -404,7 +405,7 @@ def command_option_map(config: Mapping[str, Any]) -> CommandBuilder:
 
     base_args = require_string_sequence(config, "base", context="command_option_map")
     append_files = bool(config.get("appendFiles", True))
-    options_config = cast("JSONValue | None", config.get("options"))
+    options_config = config.get("options")
     mappings = compile_option_mappings(
         options_config,
         context="command_option_map.options",
@@ -451,7 +452,11 @@ def compile_option_mappings(
         option_context = f"{context}[{index}]"
         if not isinstance(raw_option, Mapping):
             raise CatalogIntegrityError(f"{option_context}: option must be an object")
-        parsed = _collect_option_config(raw_option, option_context)
+        option_mapping = freeze_json_mapping(
+            expect_mapping(raw_option, key="option", context=option_context),
+            context=option_context,
+        )
+        parsed = _collect_option_config(option_mapping, option_context)
         behavior = _build_option_behavior(parsed, context=option_context)
         compiled.append(
             OptionMapping(
@@ -489,7 +494,7 @@ def require_str(config: Mapping[str, JSONValue], key: str, *, context: str) -> s
     return value
 
 
-def _collect_option_config(entry: Mapping[str, Any], context: str) -> _ParsedOptionConfig:
+def _collect_option_config(entry: Mapping[str, JSONValue], context: str) -> _ParsedOptionConfig:
     """Parse option configuration mapping into a typed structure.
 
     Args:
@@ -510,7 +515,8 @@ def _collect_option_config(entry: Mapping[str, Any], context: str) -> _ParsedOpt
     join_with = _parse_optional_string(entry.get("joinWith"), "joinWith", context)
     negate_flag = _parse_optional_string(entry.get("negateFlag"), "negateFlag", context)
     literal_values = _parse_literal_values(entry.get("literalValues", ()), context)
-    default_value = cast("JSONValue | None", entry.get("default"))
+    default_raw = entry.get("default")
+    default_value = freeze_json_value(default_raw, context=f"{context}.default") if default_raw is not None else None
     default_from = _parse_optional_string(entry.get("defaultFrom"), "defaultFrom", context)
     transform = _parse_transform(entry.get("transform"), context)
 
@@ -534,7 +540,7 @@ def _collect_option_config(entry: Mapping[str, Any], context: str) -> _ParsedOpt
     )
 
 
-def _parse_option_names(raw: Any, context: str) -> tuple[str, ...]:
+def _parse_option_names(raw: JSONValue, context: str) -> tuple[str, ...]:
     """Normalise the ``setting`` field into a tuple of option names.
 
     Args:
@@ -562,7 +568,7 @@ def _parse_option_names(raw: Any, context: str) -> tuple[str, ...]:
     return names
 
 
-def _parse_option_kind(raw: Any, context: str) -> OptionKind:
+def _parse_option_kind(raw: JSONValue, context: str) -> OptionKind:
     """Map ``type`` entries onto :class:`OptionKind` members.
 
     Args:
@@ -593,7 +599,7 @@ def _parse_option_kind(raw: Any, context: str) -> OptionKind:
         raise CatalogIntegrityError(f"{context}: unsupported option type '{raw}'") from exc
 
 
-def _parse_optional_string(raw: Any, field_name: str, context: str) -> str | None:
+def _parse_optional_string(raw: JSONValue, field_name: str, context: str) -> str | None:
     """Return a cleaned optional string value when provided.
 
     Args:
@@ -617,7 +623,7 @@ def _parse_optional_string(raw: Any, field_name: str, context: str) -> str | Non
     raise CatalogIntegrityError(f"{context}: '{field_name}' must be a string when provided")
 
 
-def _parse_literal_values(raw: Any, context: str) -> tuple[str, ...]:
+def _parse_literal_values(raw: JSONValue, context: str) -> tuple[str, ...]:
     """Return literal values that bypass path resolution.
 
     Args:
@@ -642,7 +648,7 @@ def _parse_literal_values(raw: Any, context: str) -> tuple[str, ...]:
     raise CatalogIntegrityError(f"{context}: 'literalValues' must be a string or array of strings")
 
 
-def _parse_transform(raw: Any, context: str) -> TransformName | None:
+def _parse_transform(raw: JSONValue, context: str) -> TransformName | None:
     """Normalise optional transform names.
 
     Args:
@@ -888,7 +894,7 @@ def _resolve_default_reference(token: str, ctx: ToolContext) -> JSONValue | None
         return _DYNAMIC_REFERENCE_LOOKUP[token](ctx)
     if token.startswith("tool_setting."):
         setting_name = token.split(".", 1)[1]
-        return cast("JSONValue | None", _setting(ctx.settings, setting_name))
+        return _setting(ctx.settings, setting_name)
     return None
 
 

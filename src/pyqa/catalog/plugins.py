@@ -28,7 +28,7 @@ __all__ = (
 def load_plugin_contributions(
     context: CatalogPluginContext,
     *,
-    plugin_factories: Sequence[Callable[..., object]] | None = None,
+    plugin_factories: Sequence[Callable[..., CatalogContribution]] | None = None,
 ) -> tuple[CatalogContribution, ...]:
     """Return catalog contributions sourced from entry-point plugins.
 
@@ -43,5 +43,8 @@ def load_plugin_contributions(
         plugin factories.
     """
 
-    factories = plugin_factories if plugin_factories is not None else load_catalog_plugins()
+    if plugin_factories is None:
+        factories = load_catalog_plugins()
+    else:
+        factories = tuple(plugin_factories)
     return _spec_plugins.load_plugin_contributions(context, plugin_factories=factories)

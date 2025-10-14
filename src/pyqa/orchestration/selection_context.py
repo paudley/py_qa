@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 from pyqa.config import Config
 from pyqa.interfaces.orchestration_selection import (
@@ -16,7 +16,7 @@ from pyqa.platform.workspace import is_py_qa_workspace
 from pyqa.tools.base import PHASE_NAMES
 
 DEFAULT_PHASE: Final[PhaseLiteral] = "lint"
-PHASE_ORDER: Final[tuple[PhaseLiteral, ...]] = tuple(PHASE_NAMES)
+PHASE_ORDER: Final[tuple[PhaseLiteral, ...]] = cast(tuple[PhaseLiteral, ...], tuple(PHASE_NAMES))
 
 
 class UnknownToolRequestedError(RuntimeError):

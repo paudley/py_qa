@@ -89,7 +89,7 @@ class BaseAstLintVisitor(ast.NodeVisitor):
         message: str,
         *,
         hints: Sequence[str] | None = None,
-        meta: dict[str, object] | None = None,
+        meta: dict[str, JsonValue] | None = None,
     ) -> None:
         """Append a diagnostic and stdout entry anchored to ``node``.
 
@@ -103,6 +103,14 @@ class BaseAstLintVisitor(ast.NodeVisitor):
 
         normalized = normalize_path_key(self._path, base_dir=self._state.root)
         line = getattr(node, "lineno", 1)
+        suppressions = getattr(self._state, "suppressions", None)
+        if suppressions is not None and suppressions.should_suppress(
+            self._path,
+            line,
+            tool=self._metadata.tool,
+            code=self._metadata.code,
+        ):
+            return
         diagnostic = Diagnostic(
             file=normalized,
             line=line,

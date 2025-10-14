@@ -7,6 +7,8 @@ from __future__ import annotations
 from rich.table import Table
 
 from pyqa.interfaces.orchestration_selection import SelectionResult, ToolDecision
+from pyqa.tools.base import Tool
+from pyqa.tools.registry import ToolRegistry
 
 from .runtime import LintRuntimeContext
 
@@ -82,8 +84,10 @@ def _format_toggle(label: str, value: bool) -> str:
     return f"{label}={_CHECKMARK if value else _CROSS}"
 
 
-def _lookup_description(registry, tool_name: str) -> str:
-    tool = registry.try_get(tool_name)
+def _lookup_description(registry: ToolRegistry, tool_name: str) -> str:
+    """Return the registry description for ``tool_name`` when available."""
+
+    tool: Tool | None = registry.try_get(tool_name)
     if tool is None:
         return ""
     return tool.description or ""

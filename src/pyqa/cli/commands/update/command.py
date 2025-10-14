@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Annotated, Any, Final, Literal, cast
+from subprocess import CompletedProcess
+from typing import Annotated, Final, Literal, cast
 
 import click
 import typer
@@ -25,7 +26,7 @@ from pyqa.runtime.installers.update import (
 )
 
 from ....core.logging import fail, ok, warn
-from ....core.runtime.process import run_command
+from ....core.runtime.process import CommandOptions, run_command
 from ...core.shared import Depends
 from ...core.typer_ext import create_typer
 from .models import UpdateOptions, build_update_options
@@ -55,7 +56,7 @@ if not _REGISTERED_MANAGERS <= set(VALID_MANAGERS):  # pragma: no cover - defens
     )
 
 
-def _default_runner(args: Sequence[str], cwd: Path | None) -> Any:
+def _default_runner(args: Sequence[str], cwd: Path | None) -> CompletedProcess[str]:
     """Return a command runner suitable for dependency update tasks.
 
     Args:
@@ -63,11 +64,12 @@ def _default_runner(args: Sequence[str], cwd: Path | None) -> Any:
         cwd: Working directory in which the command should run.
 
     Returns:
-        Any: Completed process information emitted by :func:`run_command`.
+        CompletedProcess[str]: Completed process information emitted by :func:`run_command`.
 
     """
 
-    return run_command(args, cwd=cwd, check=False)
+    options = CommandOptions(cwd=cwd, check=False)
+    return run_command(args, options=options)
 
 
 @update_app.callback(invoke_without_command=True)

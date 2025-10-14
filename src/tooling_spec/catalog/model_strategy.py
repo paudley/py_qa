@@ -10,7 +10,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Final, Literal, TypeAlias, cast
+from typing import Final, Literal, Protocol, TypeAlias, cast, runtime_checkable
 
 from .errors import CatalogIntegrityError
 from .model_options import OptionType, normalize_option_type
@@ -35,28 +35,36 @@ _STRATEGY_TYPE_ALIASES: Final[dict[str, StrategyType]] = {
 }
 
 
+@runtime_checkable
+class StrategyCallable(Protocol):
+    """Callable produced by catalog strategies."""
+
+    def __call__(self, config: Mapping[str, JSONValue] | None = None) -> JSONValue | None: ...
+
+
 @dataclass(slots=True)
 class _StrategyFactory:
     """Callable wrapper that normalises payloads for strategy implementations."""
 
-    implementation: Callable[..., Any]
+    implementation: Callable[..., JSONValue | None]
 
-    def __call__(self, config: Mapping[str, Any] | None = None, **overrides: Any) -> Any:
+    # suppression_valid: lint=internal-signatures strategy wrapper preserves the variadic factory signature expected by catalogue integrations while adding structured payload handling.
+    def __call__(
+        self,
+        config: Mapping[str, JSONValue] | None = None,
+    ) -> JSONValue | None:
         """Invoke ``implementation`` with a merged mapping of configuration values.
 
         Args:
             config: Optional mapping sourced from catalog metadata.
-            **overrides: Keyword overrides supplied by runtime callers.
 
         Returns:
-            Any: Result produced by the underlying strategy implementation.
+            JSONValue | None: Result produced by the underlying strategy implementation.
         """
 
-        payload: dict[str, Any] = {}
+        payload: dict[str, JSONValue] = {}
         if config is not None:
             payload.update({str(key): value for key, value in config.items()})
-        if overrides:
-            payload.update(overrides)
         try:
             return self.implementation(payload)
         except TypeError:
@@ -204,12 +212,12 @@ class StrategyDefinition:
 
         return cast(Mapping[str, JSONValue], thaw_json_value(self._raw_mapping))
 
-    def resolve_callable(self) -> Callable[..., Any]:
+    def resolve_callable(self) -> Callable[..., JSONValue | None]:
         """Return the callable implementing the strategy.
 
         Returns:
-            Callable[..., Any]: Imported callable referenced by the strategy
-            metadata.
+            Callable[..., JSONValue | None]: Imported callable referenced by
+            the strategy metadata.
 
         Raises:
             CatalogIntegrityError: If the implementation cannot be imported or
@@ -250,15 +258,15 @@ class StrategyDefinition:
             raise CatalogIntegrityError(
                 f"{self.source}: strategy implementation '{self.implementation}' is not callable",
             )
-        return cast(Callable[..., Any], attribute)
+        return cast(Callable[..., JSONValue | None], attribute)
 
-    def build_factory(self) -> Callable[..., Any]:
+    def build_factory(self) -> StrategyCallable:
         """Return a factory that executes the underlying strategy callable.
 
         Returns:
-            Callable[[Mapping[str, Any] | None], Any]: Factory callable that
-            accepts an optional configuration mapping and delegates to the
-            imported implementation.
+            StrategyCallable: Factory callable that accepts an
+            optional configuration mapping and delegates to the imported
+            implementation.
         """
 
         implementation = self.resolve_callable()

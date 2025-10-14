@@ -32,7 +32,7 @@ def coerce_bool_literal(value: str) -> bool:
     raise ValueError(f"Unsupported boolean literal: {value!r}")
 
 
-def interpret_optional_bool(value: object | None) -> bool | None:
+def interpret_optional_bool(value: bool | str | int | float | None) -> bool | None:
     """Best-effort conversion of ``value`` into an optional boolean.
 
     ``None`` values remain ``None``; other types fall back to Python's truthiness

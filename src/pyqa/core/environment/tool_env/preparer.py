@@ -4,10 +4,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
 
 from pyqa.platform.paths import get_pyqa_root
 from pyqa.tools.base import Tool
@@ -72,14 +71,14 @@ class CommandPreparer:
     def prepare(
         self,
         request: CommandPreparationRequest | None = None,
-        **legacy_kwargs: object,
+        legacy_kwargs: LegacyCommandMapping | None = None,
     ) -> PreparedCommand:
         """Return a prepared command for *request* or legacy keyword arguments.
 
         Args:
             request: Fully populated command preparation request. When ``None``
-                the deprecated keyword-argument path is used.
-            **legacy_kwargs: Legacy keyword arguments accepted by the previous
+                the deprecated mapping-based path is used.
+            legacy_kwargs: Legacy keyword arguments accepted by the previous
                 API shape.
 
         Returns:
@@ -90,9 +89,10 @@ class CommandPreparer:
                 when required legacy arguments are missing.
         """
 
+        legacy_mapping: dict[str, LegacyCommandValue] = dict(legacy_kwargs or {})
         if request is None:
-            request = self._from_legacy_kwargs(legacy_kwargs)
-        elif legacy_kwargs:
+            request = self._from_legacy_kwargs(legacy_mapping)
+        elif legacy_mapping:
             raise TypeError("CommandPreparer.prepare() received unexpected legacy arguments")
 
         handler = self._handlers.get(request.tool.runtime, self._handlers["binary"])
@@ -118,7 +118,7 @@ class CommandPreparer:
         )
         return handler.prepare(runtime_request)
 
-    def _from_legacy_kwargs(self, legacy_kwargs: dict[str, object]) -> CommandPreparationRequest:
+    def _from_legacy_kwargs(self, legacy_kwargs: dict[str, LegacyCommandValue]) -> CommandPreparationRequest:
         """Build a request object from the legacy keyword-call style.
 
         Args:
@@ -143,24 +143,29 @@ class CommandPreparer:
         if missing:  # pragma: no cover - mirrors legacy call expectations
             raise TypeError(f"Missing required legacy argument(s): {', '.join(sorted(missing))}")
 
-        tool = legacy_kwargs.pop("tool")
-        command = legacy_kwargs.pop("base_cmd")
-        root = legacy_kwargs.pop("root")
-        cache_dir = legacy_kwargs.pop("cache_dir")
-        system_preferred = legacy_kwargs.pop("system_preferred")
-        use_local_override = legacy_kwargs.pop("use_local_override")
+        tool_value = legacy_kwargs.pop("tool")
+        command_value = legacy_kwargs.pop("base_cmd")
+        root_value = legacy_kwargs.pop("root")
+        cache_dir_value = legacy_kwargs.pop("cache_dir")
+        system_preferred_value = legacy_kwargs.pop("system_preferred")
+        use_local_override_value = legacy_kwargs.pop("use_local_override")
         if legacy_kwargs:
             unexpected = ", ".join(sorted(legacy_kwargs))
             raise TypeError(f"Unexpected legacy arguments in prepare(): {unexpected}")
-        if not isinstance(command, (tuple, list)):
+        if not isinstance(command_value, Sequence):
             raise TypeError("base_cmd must be a sequence of strings")
+        command_seq = tuple(str(part) for part in command_value)
+        root_path = root_value if isinstance(root_value, Path) else Path(str(root_value))
+        cache_path = cache_dir_value if isinstance(cache_dir_value, Path) else Path(str(cache_dir_value))
+        if not isinstance(tool_value, Tool):
+            raise TypeError("tool must be an instance of Tool")
         return CommandPreparationRequest(
-            tool=cast(Tool, tool),
-            command=tuple(cast(Sequence[str], command)),
-            root=cast(Path, root),
-            cache_dir=cast(Path, cache_dir),
-            system_preferred=bool(system_preferred),
-            use_local_override=bool(use_local_override),
+            tool=tool_value,
+            command=command_seq,
+            root=root_path,
+            cache_dir=cache_path,
+            system_preferred=bool(system_preferred_value),
+            use_local_override=bool(use_local_override_value),
         )
 
     def _ensure_dirs(self, layout: ToolCacheLayout) -> None:
@@ -184,5 +189,17 @@ class CommandPreparer:
 
         return self.prepare(request=request)
 
+    def prepare_from_mapping(self, legacy_kwargs: LegacyCommandMapping) -> PreparedCommand:
+        """Prepare a command using the legacy keyword argument contract."""
 
-__all__ = ["CommandPreparationRequest", "CommandPreparer"]
+        return self.prepare(legacy_kwargs=legacy_kwargs)
+
+
+__all__ = [
+    "CommandPreparationRequest",
+    "CommandPreparer",
+    "LegacyCommandMapping",
+]
+
+LegacyCommandValue = Tool | Sequence[str] | Path | bool
+LegacyCommandMapping = Mapping[str, LegacyCommandValue]

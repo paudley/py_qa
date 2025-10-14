@@ -15,7 +15,13 @@ from pyqa.cache.in_memory import memoize
 
 from ...core.logging import warn
 from ...core.models import RunResult
-from ...interfaces.analysis import AnnotationProvider, ContextResolver, SimpleMessageSpan
+from ...interfaces.analysis import (
+    AnnotationProvider,
+    ContextResolver,
+    DiagnosticAnnotation,
+    MessageSpan,
+    SimpleMessageSpan,
+)
 from ..spacy.loader import SpacyLanguage, load_language
 from ..spacy.message_spans import build_spacy_spans, iter_signature_tokens
 from ..warnings import record_tool_warning
@@ -66,15 +72,6 @@ class MessageAnalysis:
 
     spans: tuple[SimpleMessageSpan, ...]
     signature: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DiagnosticAnnotation:
-    """Annotation metadata for a diagnostic."""
-
-    function: str | None
-    class_name: str | None
-    message_spans: tuple[SimpleMessageSpan, ...]
 
 
 class AnnotationEngine(AnnotationProvider):
@@ -177,7 +174,7 @@ class AnnotationEngine(AnnotationProvider):
         """
 
         base = message
-        spans: list[MessageSpan] = []
+        spans: list[SimpleMessageSpan] = []
         signature_tokens: list[str] = []
         heuristic_spans, heuristic_tokens = _heuristic_spans(base)
         spans.extend(heuristic_spans)
@@ -244,8 +241,8 @@ _ATTRIBUTE_SPEC: Final[_SpanSpec] = _SpanSpec(style=_ATTRIBUTE_STYLE, kind="attr
 _FUNCTION_SPEC: Final[_SpanSpec] = _SpanSpec(style=_FUNCTION_STYLE, kind="function")
 
 
-def _build_span(start: int, end: int, style: str, kind: str | None) -> MessageSpan:
-    """Create a ``MessageSpan`` instance for spaCy-driven highlights.
+def _build_span(start: int, end: int, style: str, kind: str | None) -> SimpleMessageSpan:
+    """Create a ``SimpleMessageSpan`` instance for spaCy-driven highlights.
 
     Args:
         start: Inclusive span starting offset within the analysed message.
@@ -254,21 +251,21 @@ def _build_span(start: int, end: int, style: str, kind: str | None) -> MessageSp
         kind: Optional semantic kind describing the highlight purpose.
 
     Returns:
-        MessageSpan: Concrete span dataclass used to satisfy the span protocol.
+        SimpleMessageSpan: Concrete span dataclass used to satisfy the span protocol.
     """
 
     highlight_kind = cast(HighlightKind | None, kind)
     return SimpleMessageSpan(start=start, end=end, style=style, kind=highlight_kind)
 
 
-def _heuristic_spans(message: str) -> tuple[list[MessageSpan], list[str]]:
+def _heuristic_spans(message: str) -> tuple[list[SimpleMessageSpan], list[str]]:
     """Heuristically derive spans and signature tokens from ``message``.
 
     Args:
         message: Diagnostic message text awaiting annotation.
 
     Returns:
-        tuple[list[MessageSpan], list[str]]: Pairs of spans and associated tokens
+        tuple[list[SimpleMessageSpan], list[str]]: Pairs of spans and associated tokens
         derived from quick heuristics before spaCy enrichment.
     """
 
@@ -280,7 +277,7 @@ def _heuristic_spans(message: str) -> tuple[list[MessageSpan], list[str]]:
 @dataclass(slots=True)
 class _SpanCollector:
     message: str
-    spans: list[MessageSpan]
+    spans: list[SimpleMessageSpan]
     tokens: list[str]
 
     def collect(self) -> None:
@@ -412,7 +409,7 @@ def _looks_camel_case(token: str) -> bool:
     return has_lower and has_upper
 
 
-def _dedupe_spans(spans: Sequence[MessageSpan]) -> list[MessageSpan]:
+def _dedupe_spans(spans: Sequence[SimpleMessageSpan]) -> list[SimpleMessageSpan]:
     """Return span collection stripped of overlapping spans.
 
     Args:
@@ -422,7 +419,7 @@ def _dedupe_spans(spans: Sequence[MessageSpan]) -> list[MessageSpan]:
         list[MessageSpan]: De-duplicated spans sorted by position and size.
     """
 
-    seen: list[MessageSpan] = []
+    seen: list[SimpleMessageSpan] = []
     for span in sorted(spans, key=lambda s: (s.start, s.end - s.start)):
         if any(_overlap(span, existing) for existing in seen):
             continue
@@ -430,7 +427,7 @@ def _dedupe_spans(spans: Sequence[MessageSpan]) -> list[MessageSpan]:
     return seen
 
 
-def _overlap(left: MessageSpan, right: MessageSpan) -> bool:
+def _overlap(left: SimpleMessageSpan, right: SimpleMessageSpan) -> bool:
     """Return ``True`` when span ranges intersect.
 
     Args:

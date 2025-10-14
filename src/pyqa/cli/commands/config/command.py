@@ -8,12 +8,12 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
 
 import typer
 from pydantic import BaseModel, ConfigDict
 
 from pyqa.core.config.loader import ConfigLoadResult, FieldUpdate
+from pyqa.core.serialization import JsonValue
 
 from ...core.shared import CLIError, build_cli_logger, register_command
 from ...core.typer_ext import create_typer
@@ -247,7 +247,7 @@ def config_export_tools(
     logger.echo(str(out_path))
 
 
-def _config_to_mapping(result: ConfigLoadResult) -> Mapping[str, Any]:
+def _config_to_mapping(result: ConfigLoadResult) -> Mapping[str, JsonValue]:
     """Backwards compatible wrapper used by older callers."""
 
     return render_config_mapping(result)
@@ -259,22 +259,22 @@ def _summarise_updates(updates: list[FieldUpdate]) -> list[str]:
     return summarise_updates(updates)
 
 
-def _summarise_value(field_path: str, value: Any) -> str:
+def _summarise_value(field_path: str, value: JsonValue) -> str:
     """Backwards compatible wrapper around :func:`summarise_value`."""
 
     return summarise_value(field_path, value)
 
 
 def _diff_snapshots(
-    left: Mapping[str, Any],
-    right: Mapping[str, Any],
-) -> dict[str, Any]:
+    left: Mapping[str, JsonValue],
+    right: Mapping[str, JsonValue],
+) -> dict[str, JsonValue]:
     """Backwards compatible wrapper for older imports."""
 
     return diff_snapshots(left, right)
 
 
-def _schema_to_markdown(schema: Mapping[str, Any]) -> str:
+def _schema_to_markdown(schema: Mapping[str, JsonValue]) -> str:
     """Backwards compatible wrapper mirroring previous behaviour."""
 
     return schema_to_markdown(schema)
@@ -285,7 +285,7 @@ class ToolSettingsDoc(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    tools: dict[str, dict[str, Any]]
+    tools: dict[str, dict[str, dict[str, str | int | float | bool | None | list[str]]]]
 
 
 __all__ = ["config_app"]

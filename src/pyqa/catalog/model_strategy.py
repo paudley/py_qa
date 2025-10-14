@@ -14,6 +14,7 @@ StrategyDefinition = _spec_model_strategy.StrategyDefinition
 StrategyImplementation = _spec_model_strategy.StrategyImplementation
 StrategyMetadata = _spec_model_strategy.StrategyMetadata
 StrategyType = _spec_model_strategy.StrategyType
+StrategyCallable = _spec_model_strategy.StrategyCallable
 normalize_strategy_type = _spec_model_strategy.normalize_strategy_type
 parse_strategy_metadata = _spec_model_strategy.parse_strategy_metadata
 strategy_config_mapping = _spec_model_strategy.strategy_config_mapping
@@ -27,4 +28,5 @@ __all__: Final[tuple[str, ...]] = (
     "StrategyImplementation",
     "StrategyDefinition",
     "StrategyConfigField",
+    "StrategyCallable",
 )

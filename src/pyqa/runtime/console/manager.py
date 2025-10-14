@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import sys
 from functools import lru_cache
-from typing import Final
+from typing import Final, Literal
 
 from rich.console import Console
 
@@ -39,7 +39,9 @@ class RichConsoleManager(ConsoleManager):
         tty = detect_tty()
         key = (color, emoji, tty)
         if key not in self._cache:
-            color_system: str | None = "auto" if color and tty else None
+            color_system: Literal["auto", "standard", "256", "truecolor", "windows"] | None = (
+                "auto" if color and tty else None
+            )
             self._cache[key] = Console(
                 color_system=color_system,
                 force_terminal=tty,

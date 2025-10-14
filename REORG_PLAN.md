@@ -151,6 +151,12 @@ specification as a standalone project.
    * Extend snapshot and contract tests to validate alternative presenters,
      advice providers, and compliance policies via interface injection.
 
+## Phase 13 – Generic Dunder Guidance (1 sprint)
+
+* ✅ **Tree-sitter heuristics complete** – `generic-value-types` linter analyses classes for dataclass/slots/iterable traits and reports missing dunders with configurable severity using Tree-sitter.
+* ✅ **Suppression integration** – findings honour `suppression_valid` directives through the shared suppression registry.
+* ✅ **CLI exposure & docs** – `--check-value-types-general` flag enabled, configuration schema documented, and Phase 13 guide expanded with usage examples.
+
 ## Phase 6 – Hardening & Release (1–2 sprints)
 
 1. **Docs & communication**

@@ -30,6 +30,7 @@ _ALLOWED_INTERFACE_IMPORTS: Final[dict[str, set[str]]] = {
     "pyqa.cli.commands.install.command": {"pyqa.runtime.installers"},
     "pyqa.cli.commands.update.command": {"pyqa.runtime.installers.update"},
     "pyqa.cli.commands.lint.reporting": {
+        "pyqa.analysis.providers",
         "pyqa.reporting",
         "pyqa.reporting.output.highlighting",
         "pyqa.reporting.presenters.emitters",
@@ -45,12 +46,6 @@ _ALLOWED_INTERFACE_IMPORTS: Final[dict[str, set[str]]] = {
     },
     "pyqa.cli.commands.lint.fetch": {"pyqa.runtime.console.manager"},
     "pyqa.cli.commands.lint.progress": {"pyqa.runtime.console.manager"},
-    "pyqa.cli.commands.lint.reporting": {
-        "pyqa.analysis.providers",
-        "pyqa.reporting",
-        "pyqa.reporting.output.highlighting",
-        "pyqa.reporting.presenters.emitters",
-    },
     "pyqa.cli.commands.lint.meta": {"pyqa.orchestration.selection_context"},
     "pyqa.reporting.advice.builder": {"pyqa.analysis.services", "pyqa.analysis.providers"},
     "pyqa.reporting.output.highlighting": {"pyqa.analysis", "pyqa.analysis.providers"},
@@ -88,12 +83,14 @@ _ALLOWED_ABSTRACT_CLASS_SUFFIXES: Final[tuple[str, ...]] = (
     "Enum",
     "StrEnum",
 )
-_ALLOWED_CLASS_DECORATORS: Final[frozenset[str]] = frozenset({
-    "dataclass",
-    "runtime_checkable",
-    "unique",
-    "final",
-})
+_ALLOWED_CLASS_DECORATORS: Final[frozenset[str]] = frozenset(
+    {
+        "dataclass",
+        "runtime_checkable",
+        "unique",
+        "final",
+    }
+)
 _BANNED_CONSTRUCTORS: Final[tuple[str, ...]] = (
     "TreeSitterContextResolver",
     "AnnotationEngine",
@@ -124,7 +121,7 @@ def run_pyqa_interface_linter(
     return run_ast_linter(
         state,
         metadata=metadata,
-        visitor_factory=lambda path, st, meta: _InterfaceVisitor(path, st, meta),
+        visitor_factory=_build_interface_visitor,
         file_filter=_should_visit_file,
     )
 
@@ -137,18 +134,28 @@ class _ImportViolation:
     message: str
 
 
+def _build_interface_visitor(
+    path: Path,
+    state: PreparedLintState,
+    metadata: VisitorMetadata,
+) -> _InterfaceVisitor:
+    """Return an interface visitor instance bound to ``path``."""
+
+    return _InterfaceVisitor(path, state, metadata)
+
+
 class _InterfaceVisitor(BaseAstLintVisitor):
     """AST visitor that audits imports and constructor usage."""
 
-    def __init__(self, path, state, metadata):  # type: ignore[override] suppression_valid: Visitor subclasses must accept the broader NodeVisitor parameters even though typing narrows them downstream.
+    def __init__(self, path: Path, state: PreparedLintState, metadata: VisitorMetadata) -> None:
+        """Initialise module metadata used during linting."""
+
         super().__init__(path, state, metadata)
         self._module = module_name_from_path(path, state.options.target_options.root)
         parts = self._module.split(".") if self._module else []
         self._namespace_root = parts[0] if parts else ""
         self._namespace_prefix = f"{self._namespace_root}." if self._namespace_root else ""
-        self._banned_concrete_prefixes = tuple(
-            f"{self._namespace_root}.{suffix}" for suffix in _BANNED_DOMAIN_SUFFIXES
-        )
+        self._banned_concrete_prefixes = tuple(f"{self._namespace_root}.{suffix}" for suffix in _BANNED_DOMAIN_SUFFIXES)
         self._is_interface_module = _is_interface_module_name(self._module)
         self._class_stack: list[str] = []
 
@@ -184,7 +191,7 @@ class _InterfaceVisitor(BaseAstLintVisitor):
 
     # --- Import handling -----------------------------------------------------------------
 
-    def visit_import(self, node: ast.Import) -> None:  # noqa: D401 suppression_valid: NodeVisitor API contract supplies the visitor docstring; duplicating it here would add no clarity.
+    def visit_import(self, node: ast.Import) -> None:  # noqa: D401 suppression_valid
         for alias in node.names:
             target = alias.name
             violation = self._check_import_target(target)
@@ -192,7 +199,7 @@ class _InterfaceVisitor(BaseAstLintVisitor):
                 self.record_issue(node, violation.message)
         self.generic_visit(node)
 
-    def visit_import_from(self, node: ast.ImportFrom) -> None:  # noqa: D401 suppression_valid: Method inherits NodeVisitor semantics; an inline docstring would repeat the inherited contract.
+    def visit_import_from(self, node: ast.ImportFrom) -> None:  # noqa: D401 suppression_valid
         target = node.module
         if node.level:
             target = self._resolve_relative_module(target, node.level)
@@ -258,7 +265,11 @@ class _InterfaceVisitor(BaseAstLintVisitor):
 
     # --- Constructor bans ----------------------------------------------------------------
 
-    def visit_call(self, node: ast.Call) -> None:  # noqa: D401 suppression_valid: Call visitor adheres to NodeVisitor API and its behaviour is fully described by the base class.
+    def visit_call(
+        self, node: ast.Call
+    ) -> (
+        None
+    ):  # noqa: D401 suppression_valid: Call visitor adheres to NodeVisitor API and its behaviour is fully described by the base class.
         fully_qualified = _call_qualifier(node.func)
         if fully_qualified is None:
             self.generic_visit(node)
@@ -275,9 +286,7 @@ class _InterfaceVisitor(BaseAstLintVisitor):
         if symbol == "__all__":
             return
         name_part = f" '{symbol}'" if symbol else ""
-        message = (
-            f"Interfaces module '{self._module}' must not define concrete {symbol_kind}{name_part}"
-        )
+        message = f"Interfaces module '{self._module}' must not define concrete {symbol_kind}{name_part}"
         hints = (
             "Limit interfaces packages to Protocols, TypedDicts, dataclasses, and literals.",
             "Move concrete logic into the owning runtime/orchestration module and expose Protocols here only.",

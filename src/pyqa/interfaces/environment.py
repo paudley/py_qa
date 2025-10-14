@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
+
+from pyqa.core.serialization import JsonValue
 
 
 @runtime_checkable
@@ -60,7 +62,7 @@ class EnvironmentInspector(Protocol):
         """Return the identifier of the inspector implementation."""
         raise NotImplementedError("EnvironmentInspector.inspector_name must be implemented")
 
-    def inspect(self, project_root: Path) -> dict[str, Any]:
+    def inspect(self, project_root: Path) -> dict[str, JsonValue]:
         """Return structured metadata for ``project_root``."""
 
         raise NotImplementedError

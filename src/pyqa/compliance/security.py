@@ -16,7 +16,7 @@ from subprocess import CompletedProcess
 from typing import Final
 
 from ..core.logging import fail, info, ok, warn
-from ..core.runtime.process import run_command
+from ..core.runtime.process import CommandOptions, run_command
 
 # Patterns for secret detection (compiled lazily)
 _SECRET_PATTERNS: list[re.Pattern[str]] = [
@@ -348,6 +348,7 @@ class SecurityScanner:
     def _invoke_bandit(self, src_dir: Path, report_path: Path) -> CompletedProcess[str]:
         """Run Bandit against ``src_dir`` capturing the JSON report at ``report_path``."""
 
+        options = CommandOptions(capture_output=True, check=False)
         return run_command(
             [
                 "bandit",
@@ -359,8 +360,7 @@ class SecurityScanner:
                 str(report_path),
                 "--quiet",
             ],
-            capture_output=True,
-            check=False,
+            options=options,
         )
 
     def _log_bandit_failure(self, completed: CompletedProcess[str]) -> None:
@@ -482,11 +482,10 @@ def _temporary_report_path(suffix: str) -> Iterator[Path]:
 def get_staged_files(root: Path) -> list[Path]:
     """Return files with staged changes in git."""
     try:
+        options = CommandOptions(capture_output=True, check=False, cwd=root)
         completed = run_command(
             ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
-            capture_output=True,
-            check=False,
-            cwd=root,
+            options=options,
         )
     except FileNotFoundError:  # git not installed
         return []

@@ -11,15 +11,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from rich.style import Style
+from rich.text import Text
+
+from ...analysis.providers import NullAnnotationProvider
 from ...config import OutputConfig
 from ...core.logging import emoji
 from ...core.models import Diagnostic, RunResult
 from ...filesystem.paths import normalize_path
-from ...runtime.console.manager import get_console_manager
-from ...analysis.providers import NullAnnotationProvider
 from ...interfaces.analysis import AnnotationProvider
-from rich.style import Style
-from rich.text import Text
+from ...runtime.console.manager import get_console_manager
 from ..advice.panels import render_advice_panel
 from ..advice.refactor import render_refactor_navigator
 from ..output.diagnostics import (

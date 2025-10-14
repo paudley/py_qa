@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 
 from packaging.version import InvalidVersion, Version
 
-from pyqa.core.runtime.process import SubprocessExecutionError, run_command
+from pyqa.core.runtime.process import CommandOptions, SubprocessExecutionError, run_command
 
 
 class VersionResolver:
@@ -27,8 +27,7 @@ class VersionResolver:
         try:
             completed = run_command(
                 list(command),
-                capture_output=True,
-                env=env,
+                options=CommandOptions(capture_output=True, env=env),
             )
         except (OSError, ValueError, SubprocessExecutionError):
             return None

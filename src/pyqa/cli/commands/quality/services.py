@@ -13,7 +13,7 @@ from pyqa.core.config.constants import PY_QA_DIR_NAME
 from pyqa.platform.workspace import is_py_qa_workspace
 
 from ....compliance.quality import QualityCheckResult
-from ....linting.quality import evaluate_quality_checks
+from ....linting.quality import QualityCheckRequest, evaluate_quality_checks
 from ...core._config_loading import load_config_result
 from ...core.shared import CLILogger
 from ...core.utils import filter_py_qa_paths
@@ -137,14 +137,15 @@ def run_quality_checks(
         QualityCheckResult: Aggregated findings produced by the quality checks.
     """
 
-    return evaluate_quality_checks(
+    request = QualityCheckRequest(
         root=context.root,
         config=context.config,
-        checks=checks,
-        files=files,
+        checks=tuple(checks),
+        files=tuple(files) if files else None,
         fix=context.options.fix,
         staged=context.options.staged,
     )
+    return evaluate_quality_checks(request)
 
 
 def _apply_workspace_protections(context: QualityConfigContext) -> None:

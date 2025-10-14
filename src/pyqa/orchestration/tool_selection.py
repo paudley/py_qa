@@ -99,10 +99,11 @@ class ToolSelector:
     # Context & evaluation helpers
 
     def _build_context(self, cfg: Config, files: Sequence[Path], root: Path) -> SelectionContext:
+        detected = tuple(sorted(detect_languages(root, files)))
         return build_selection_context(
             cfg,
             files,
-            detected_languages=detect_languages(root, files),
+            detected_languages=detected,
             root=root,
         )
 
@@ -169,13 +170,14 @@ class ToolSelector:
                     internal_enabled=internal_enabled,
                 )
             else:
-                decision = self._internal_pyqa_decision(
-                    tool,
-                    family,
+                decision_request = _InternalDecisionRequest(
+                    tool=tool,
+                    family=family,
                     internal_enabled=internal_enabled,
                     pyqa_scope_active=pyqa_scope_active,
                     pyqa_rules=context.pyqa_rules,
                 )
+                decision = self._internal_pyqa_decision(decision_request)
             decisions.append(decision)
         return decisions
 
@@ -269,27 +271,19 @@ class ToolSelector:
             eligibility=eligibility,
         )
 
-    def _internal_pyqa_decision(
-        self,
-        tool: Tool,
-        family: ToolFamilyLiteral,
-        *,
-        internal_enabled: bool,
-        pyqa_scope_active: bool,
-        pyqa_rules: bool,
-    ) -> ToolDecision:
-        default_enabled = bool(tool.default_enabled)
-        sensitivity_ok = internal_enabled or pyqa_rules
-        scope_ok = pyqa_scope_active
+    def _internal_pyqa_decision(self, request: _InternalDecisionRequest) -> ToolDecision:
+        default_enabled = bool(request.tool.default_enabled)
+        sensitivity_ok = request.internal_enabled or request.pyqa_rules
+        scope_ok = request.pyqa_scope_active
         should_run = scope_ok
         reasons: list[str] = []
         if should_run:
             reasons.append("pyqa-scope")
-            if pyqa_rules and not internal_enabled:
+            if request.pyqa_rules and not request.internal_enabled:
                 reasons.append("forced-by-flag")
-            elif internal_enabled:
+            elif request.internal_enabled:
                 reasons.append("sensitivity>=high")
-            if default_enabled and not (internal_enabled or pyqa_rules):
+            if default_enabled and not (request.internal_enabled or request.pyqa_rules):
                 reasons.append("default-enabled")
         else:
             if not scope_ok:
@@ -298,17 +292,17 @@ class ToolSelector:
                 reasons.append("sensitivity-too-low")
 
         eligibility = ToolEligibility(
-            name=tool.name,
-            family=family,
-            phase=tool.phase,
+            name=request.tool.name,
+            family=request.family,
+            phase=request.tool.phase,
             sensitivity_ok=sensitivity_ok,
             pyqa_scope=scope_ok,
             default_enabled=default_enabled,
         )
         return ToolDecision(
-            name=tool.name,
-            family=family,
-            phase=tool.phase,
+            name=request.tool.name,
+            family=request.family,
+            phase=request.tool.phase,
             action="run" if should_run else "skip",
             reasons=tuple(reasons),
             eligibility=eligibility,
@@ -445,16 +439,28 @@ class ToolSelector:
 
 @lru_cache(maxsize=1)
 def _internal_name_sets() -> tuple[frozenset[str], frozenset[str]]:
-    from ..linting.registry import iter_internal_linters
+    try:
+        from ..linting.registry import iter_internal_linters
+    except ImportError:
+        return frozenset(), frozenset()
 
     internal: set[str] = set()
     internal_pyqa: set[str] = set()
     for definition in iter_internal_linters():
-        if definition.pyqa_scoped:
-            internal_pyqa.add(definition.name)
-        else:
-            internal.add(definition.name)
+        destination = internal_pyqa if definition.pyqa_scoped else internal
+        destination.add(definition.name)
     return frozenset(internal), frozenset(internal_pyqa)
 
 
-__all__ = ["ToolSelector"]
+__all__ = ["ToolSelector", "SelectionResult", "ToolDecision"]
+
+
+@dataclass(slots=True)
+class _InternalDecisionRequest:
+    """Inputs controlling internal pyqa decision evaluation."""
+
+    tool: Tool
+    family: ToolFamilyLiteral
+    internal_enabled: bool
+    pyqa_scope_active: bool
+    pyqa_rules: bool

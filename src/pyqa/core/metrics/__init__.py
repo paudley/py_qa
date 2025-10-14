@@ -5,10 +5,14 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from pyqa.filesystem.paths import normalise_path_key, normalize_path_key
+
+JSONPrimitive = str | int | float | bool | None
+JSONValue = JSONPrimitive | list["JSONValue"] | dict[str, "JSONValue"]
 
 
 @dataclass(slots=True)
@@ -18,7 +22,7 @@ class FileMetrics:
     line_count: int = 0
     suppressions: dict[str, int] = field(default_factory=dict)
 
-    def to_payload(self) -> dict[str, object]:
+    def to_payload(self) -> dict[str, JSONValue]:
         """Serialise the metrics into a JSON-compatible mapping."""
 
         return {
@@ -27,7 +31,7 @@ class FileMetrics:
         }
 
     @classmethod
-    def from_payload(cls, payload: dict[str, object] | None) -> FileMetrics:
+    def from_payload(cls, payload: Mapping[str, JSONValue] | None) -> FileMetrics:
         """Create :class:`FileMetrics` from a payload produced by :meth:`to_payload`.
 
         Args:
@@ -49,7 +53,7 @@ class FileMetrics:
             line_count = 0
         raw_suppressions = payload.get("suppressions", {})
         suppressions: dict[str, int] = dict.fromkeys(SUPPRESSION_LABELS, 0)
-        if isinstance(raw_suppressions, dict):
+        if isinstance(raw_suppressions, Mapping):
             for label, value in raw_suppressions.items():
                 if isinstance(value, (int, float, str)):
                     try:
@@ -102,4 +106,5 @@ __all__ = [
     "compute_file_metrics",
     "normalise_path_key",
     "normalize_path_key",
+    "JSONValue",
 ]

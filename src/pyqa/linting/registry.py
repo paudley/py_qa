@@ -7,8 +7,8 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from functools import partial
+from typing import TYPE_CHECKING
 
-from pyqa.cli.commands.lint.preparation import PreparedLintState
 from pyqa.config import Config
 from pyqa.core.models import ToolOutcome
 from pyqa.tools.base import DeferredCommand, PhaseLiteral, Tool, ToolAction, ToolContext
@@ -19,6 +19,7 @@ from .cache_usage import run_cache_linter
 from .closures import run_closure_linter
 from .di import run_pyqa_di_linter
 from .docstrings import run_docstring_linter
+from .generic_value_types import run_generic_value_type_linter
 from .interfaces import run_pyqa_interface_linter
 from .module_docs import run_pyqa_module_doc_linter
 from .quality import (
@@ -33,6 +34,9 @@ from .signatures import run_signature_linter
 from .suppressions import run_suppression_linter
 from .typing_strict import run_typing_linter
 from .value_types import run_value_type_linter
+
+if TYPE_CHECKING:
+    from pyqa.cli.commands.lint.preparation import PreparedLintState
 
 
 @dataclass(slots=True)
@@ -183,11 +187,21 @@ INTERNAL_LINTERS: tuple[InternalLinterDefinition, ...] = (
         description="Reject direct functools.lru_cache usage in favour of pyqa.cache utilities.",
     ),
     InternalLinterDefinition(
-        name="value-types",
+        name="pyqa-value-types",
         meta_attribute="check_value_types",
         selection_tokens=("value-types", "dunder"),
         runner=run_value_type_linter,
-        description="Ensure NavigatorBucket, CleanResult, and ServiceContainer expose ergonomic dunder methods.",
+        description="Ensure pyqa value-type helpers expose ergonomic dunder methods.",
+        options=InternalLinterOptions(tags=("internal-linter", "pyqa-only")),
+        pyqa_scoped=True,
+    ),
+    InternalLinterDefinition(
+        name="generic-value-types",
+        meta_attribute="check_value_types_general",
+        selection_tokens=("value-types-general", "generic-value-types"),
+        runner=run_generic_value_type_linter,
+        description="Recommend dunder methods for value-type classes using Tree-sitter heuristics.",
+        options=InternalLinterOptions(requires_config=True),
     ),
     InternalLinterDefinition(
         name="license-header",

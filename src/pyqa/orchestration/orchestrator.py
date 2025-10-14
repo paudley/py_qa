@@ -29,7 +29,7 @@ from ..config import Config
 from ..core.logging import warn
 from ..core.models import RunResult, ToolOutcome
 from ..core.runtime import ServiceContainer, ServiceResolutionError, register_default_services
-from ..core.runtime.process import CommandOptions
+from ..core.runtime.process import CommandOptions, CommandOverrideMapping
 from ..diagnostics import build_severity_rules, dedupe_outcomes
 from ..discovery.base import SupportsDiscovery
 from ..interfaces.analysis import AnnotationProvider, ContextResolver, FunctionScaleEstimator
@@ -1080,9 +1080,9 @@ def _build_default_runner() -> RunnerCallable:
         cmd: Sequence[str],
         *,
         options: CommandOptions | None = None,
-        **overrides: object,
+        overrides: CommandOverrideMapping | None = None,
     ) -> CompletedProcess[str]:
-        return run_command(cmd, options=options, **overrides)
+        return run_command(cmd, options=options, overrides=overrides)
 
     return wrap_runner(_runner)
 

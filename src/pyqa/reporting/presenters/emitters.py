@@ -8,9 +8,10 @@ import json
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, cast
+from typing import Final, TypeAlias, cast
 
 from pyqa.core.severity import Severity, severity_to_sarif
+from tooling_spec.catalog.types import JSONValue as CatalogJSONValue
 
 from ...analysis.providers import NullAnnotationProvider
 from ...core.models import Diagnostic, RunResult
@@ -55,6 +56,9 @@ SEVERITY_ORDER: Final[dict[Severity, int]] = {
 UNKNOWN_SEVERITY_RANK: Final[int] = 99
 ADVICE_PLACEHOLDER: Final[str] = "{advice"
 HIGHLIGHT_PLACEHOLDER: Final[str] = "{highlighted_message"
+
+SarifValue: TypeAlias = CatalogJSONValue
+SarifObject: TypeAlias = dict[str, SarifValue]
 
 
 @dataclass(frozen=True)
@@ -132,7 +136,7 @@ class _AdviceContext:
     count: int
 
 
-def _coerce_int(value: object, default: int, name: str) -> int:
+def _coerce_int(value: int | str | bool | None, default: int, name: str) -> int:
     """Return an integer value parsed from *value* with validation.
 
     Args:
@@ -159,7 +163,7 @@ def _coerce_int(value: object, default: int, name: str) -> int:
     raise TypeError(f"{name} must be an integer-compatible value")
 
 
-def _coerce_str(value: object, default: str, name: str) -> str:
+def _coerce_str(value: str | None, default: str, name: str) -> str:
     """Return a string derived from *value* with validation.
 
     Args:
@@ -181,7 +185,7 @@ def _coerce_str(value: object, default: str, name: str) -> str:
     raise TypeError(f"{name} must be a string value")
 
 
-def _coerce_bool(value: object, default: bool) -> bool:
+def _coerce_bool(value: bool | str | int | float | None, default: bool) -> bool:
     """Return a boolean flag derived from *value* with validation.
 
     Args:
@@ -199,7 +203,7 @@ def _coerce_bool(value: object, default: bool) -> bool:
 
 
 def _coerce_section_builder(
-    value: object,
+    value: Callable[[Sequence[AdviceEntry]], Sequence[str]] | None,
     default: Callable[[Sequence[AdviceEntry]], Sequence[str]] | None,
     name: str,
 ) -> Callable[[Sequence[AdviceEntry]], Sequence[str]] | None:
@@ -257,7 +261,7 @@ def write_sarif_report(result: RunResult, path: Path) -> None:
         result: Completed orchestrator run result to serialise.
         path: Destination path that receives the SARIF document.
     """
-    runs: list[dict[str, object]] = []
+    runs: list[SarifObject] = []
     for tool_name, diagnostics in _group_diagnostics_by_tool(result):
         version = result.tool_versions.get(tool_name)
         run = _build_sarif_run(tool_name, diagnostics, version)
@@ -275,7 +279,7 @@ def _build_sarif_run(
     tool_name: str,
     diagnostics: Sequence[Diagnostic],
     version: str | None,
-) -> dict[str, object]:
+) -> SarifObject:
     """Construct the SARIF run payload for a single tool.
 
     Args:
@@ -284,10 +288,10 @@ def _build_sarif_run(
         version: Optional tool version string recorded with the run.
 
     Returns:
-        dict[str, object]: SARIF-compliant run dictionary.
+        SarifObject: SARIF-compliant run dictionary.
     """
-    rules: dict[str, dict[str, object]] = {}
-    results: list[dict[str, object]] = []
+    rules: dict[str, SarifObject] = {}
+    results: list[SarifObject] = []
 
     for diag in diagnostics:
         rule_id = diag.code or tool_name
@@ -298,13 +302,13 @@ def _build_sarif_run(
                 "shortDescription": {"text": diag.message[:120]},
             }
 
-        result_entry: dict[str, object] = {
+        result_entry: SarifObject = {
             "ruleId": rule_id,
             "level": severity_to_sarif(diag.severity),
             "message": {"text": diag.message},
         }
         if diag.file:
-            physical_location: dict[str, object] = {
+            physical_location: SarifObject = {
                 "artifactLocation": {"uri": diag.file},
             }
             region: dict[str, int] = {}
@@ -334,7 +338,6 @@ def write_pr_summary(
     path: Path,
     *,
     options: PRSummaryOptions | None = None,
-    **legacy_kwargs: object,
 ) -> None:
     """Render a Markdown summary for pull requests.
 
@@ -342,13 +345,12 @@ def write_pr_summary(
         result: Completed orchestrator run result to summarise.
         path: Destination path that receives the Markdown summary.
         options: Optional structured configuration for the summary renderer.
-        **legacy_kwargs: Backwards-compatible keyword arguments from older callers.
 
     Raises:
         TypeError: If conflicting or unexpected keyword arguments are supplied.
     """
 
-    settings = _options_from_legacy_kwargs(options, legacy_kwargs)
+    settings = options or PRSummaryOptions()
     config = _build_summary_config(settings)
     diagnostics = _collect_diagnostics(result)
     filtered_pairs = _filter_diagnostics(diagnostics, config.min_rank)
@@ -373,91 +375,6 @@ def write_pr_summary(
             lines.extend(additional_lines)
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def _options_from_legacy_kwargs(
-    options: PRSummaryOptions | None,
-    legacy_kwargs: dict[str, object],
-) -> PRSummaryOptions:
-    """Normalise legacy keyword arguments into a summary options object.
-
-    Args:
-        options: Explicit options object, if provided by the caller.
-        legacy_kwargs: Raw keyword arguments from legacy call sites.
-
-    Returns:
-        PRSummaryOptions: Effective configuration for summary rendering.
-
-    Raises:
-        TypeError: If unexpected arguments remain after normalisation.
-    """
-    if options is not None and legacy_kwargs:
-        raise TypeError("write_pr_summary() received both options and legacy keyword arguments")
-    if options is not None:
-        return options
-
-    settings = PRSummaryOptions()
-    values = {
-        "limit": settings.limit,
-        "min_severity": settings.min_severity,
-        "template": settings.template,
-        "include_advice": settings.include_advice,
-        "advice_limit": settings.advice_limit,
-        "advice_template": settings.advice_template,
-        "advice_section_builder": settings.advice_section_builder,
-    }
-    extracted: dict[str, object] = {}
-    for key in list(legacy_kwargs):
-        if key not in values:
-            raise TypeError(f"Unexpected keyword argument: {key}")
-        extracted[key] = legacy_kwargs.pop(key)
-    if legacy_kwargs:
-        raise TypeError(f"Unexpected keyword arguments: {', '.join(sorted(legacy_kwargs))}")
-
-    limit = _coerce_int(
-        extracted.get("limit"),
-        settings.limit,
-        "limit",
-    )
-    advice_limit = _coerce_int(
-        extracted.get("advice_limit"),
-        settings.advice_limit,
-        "advice_limit",
-    )
-    min_severity = _coerce_str(
-        extracted.get("min_severity"),
-        settings.min_severity,
-        "min_severity",
-    )
-    template = _coerce_str(
-        extracted.get("template"),
-        settings.template,
-        "template",
-    )
-    advice_template = _coerce_str(
-        extracted.get("advice_template"),
-        settings.advice_template,
-        "advice_template",
-    )
-    include_advice = _coerce_bool(
-        extracted.get("include_advice"),
-        settings.include_advice,
-    )
-    section_builder = _coerce_section_builder(
-        extracted.get("advice_section_builder"),
-        settings.advice_section_builder,
-        "advice_section_builder",
-    )
-
-    return PRSummaryOptions(
-        limit=limit,
-        min_severity=min_severity,
-        template=template,
-        include_advice=include_advice,
-        advice_limit=advice_limit,
-        advice_template=advice_template,
-        advice_section_builder=section_builder,
-    )
 
 
 def _build_summary_config(settings: PRSummaryOptions) -> _SummaryConfig:

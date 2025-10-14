@@ -29,15 +29,16 @@ class SeverityOverrides:
     bandit_confidence: BanditConfidence | None = None
     pylint_fail_under: float | None = None
 
-    def updates(self) -> dict[str, object]:
+    def updates(self) -> dict[str, SensitivityLevel | BanditLevel | BanditConfidence | float]:
         """Return a mapping of overridden severity fields.
 
         Returns:
-            dict[str, object]: Keys and values that should overwrite the
-            configuration severity section.
+            dict[str, SensitivityLevel | BanditLevel | BanditConfidence | float]:
+            Keys and values that should overwrite the configuration severity
+            section.
         """
 
-        payload: dict[str, object] = {}
+        payload: dict[str, SensitivityLevel | BanditLevel | BanditConfidence | float] = {}
         if self.sensitivity is not None:
             payload["sensitivity"] = self.sensitivity
         if self.bandit_level is not None:

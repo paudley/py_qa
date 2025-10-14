@@ -7,7 +7,7 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final, Literal, cast
+from typing import Final, Literal, cast
 
 import typer
 
@@ -18,7 +18,7 @@ from pyqa.core.config.loader import (
     FieldUpdate,
     generate_config_schema,
 )
-from pyqa.core.serialization import JsonValue, jsonify
+from pyqa.core.serialization import JsonValue, SerializableValue, jsonify
 
 from ....tools.settings import TOOL_SETTING_SCHEMA, SettingField, tool_setting_schema_as_dict
 from ...core.shared import CLIError, CLILogger
@@ -96,12 +96,12 @@ def render_config_mapping(result: ConfigLoadResult) -> Mapping[str, JsonValue]:
 
     config = result.config
     return {
-        "file_discovery": jsonify(config.file_discovery),
-        "output": jsonify(config.output),
-        "execution": jsonify(config.execution),
-        "dedupe": jsonify(config.dedupe),
+        "file_discovery": jsonify(cast(SerializableValue, config.file_discovery)),
+        "output": jsonify(cast(SerializableValue, config.output)),
+        "execution": jsonify(cast(SerializableValue, config.execution)),
+        "dedupe": jsonify(cast(SerializableValue, config.dedupe)),
         "severity_rules": list(config.severity_rules),
-        "tool_settings": jsonify(config.tool_settings),
+        "tool_settings": jsonify(cast(SerializableValue, config.tool_settings)),
     }
 
 
@@ -118,12 +118,13 @@ def summarise_updates(updates: Sequence[FieldUpdate]) -> list[str]:
     rendered: list[str] = []
     for update in updates:
         field_path = update.field if update.section == ROOT_SECTION else f"{update.section}.{update.field}"
-        formatted_value = summarise_value(field_path, update.value)
+        rendered_value = jsonify(cast(SerializableValue, update.value))
+        formatted_value = summarise_value(field_path, rendered_value)
         rendered.append(f"- {field_path} <- {update.source} -> {formatted_value}")
     return rendered
 
 
-def summarise_value(field_path: str, value: object) -> str:
+def summarise_value(field_path: str, value: JsonValue) -> str:
     """Return a readable representation of ``value`` for updates.
 
     Args:
@@ -142,13 +143,13 @@ def summarise_value(field_path: str, value: object) -> str:
         for key, entry in value.items():
             field = schema.get(key)
             description = field.description if isinstance(field, SettingField) else None
-            rendered = json.dumps(jsonify(entry), sort_keys=True)
+            rendered = json.dumps(jsonify(cast(SerializableValue, entry)), sort_keys=True)
             if description:
                 sections.append(f"{key}={rendered} ({description})")
             else:
                 sections.append(f"{key}={rendered}")
         return "; ".join(sections) if sections else json.dumps({}, sort_keys=True)
-    return json.dumps(jsonify(value), sort_keys=True)
+    return json.dumps(jsonify(cast(SerializableValue, value)), sort_keys=True)
 
 
 def render_schema(fmt: SchemaFormatLiteral) -> str:
@@ -176,7 +177,7 @@ def render_schema(fmt: SchemaFormatLiteral) -> str:
     raise typer.BadParameter("Unknown schema format. Use 'json', 'json-tools', or 'markdown'.")
 
 
-def schema_to_markdown(schema: Mapping[str, object]) -> str:
+def schema_to_markdown(schema: Mapping[str, JsonValue]) -> str:
     """Convert a schema mapping into markdown documentation.
 
     Args:
@@ -189,14 +190,14 @@ def schema_to_markdown(schema: Mapping[str, object]) -> str:
     lines: list[str] = []
     for section, fields in schema.items():
         lines.append(f"## {section}")
-        if isinstance(fields, Mapping) and TYPE_KEY in fields:
-            lines.append("| Field | Type | Default |")
-            lines.append("| --- | --- | --- |")
-            default = json.dumps(fields.get(DEFAULT_KEY), sort_keys=True)
-            lines.append(f"| {section} | {fields[TYPE_KEY]} | {default} |")
-            lines.append("")
-            continue
         if isinstance(fields, Mapping):
+            if TYPE_KEY in fields:
+                lines.append("| Field | Type | Default |")
+                lines.append("| --- | --- | --- |")
+                default = json.dumps(fields.get(DEFAULT_KEY), sort_keys=True)
+                lines.append(f"| {section} | {fields[TYPE_KEY]} | {default} |")
+                lines.append("")
+                continue
             lines.append("| Field | Type | Default | Description |")
             lines.append("| --- | --- | --- | --- |")
             for name, payload in fields.items():
@@ -228,18 +229,21 @@ def write_output(content: str, *, out: Path | None, logger: CLILogger) -> None:
     logger.echo(str(out_path))
 
 
-def build_tool_schema_payload() -> dict[str, Any]:
+def build_tool_schema_payload() -> dict[str, JsonValue]:
     """Return a JSON-serialisable payload describing tool settings.
 
     Returns:
-        dict[str, Any]: Schema payload including metadata and tool settings.
+        dict[str, JsonValue]: Schema payload including metadata and tool settings.
     """
 
-    payload: dict[str, Any] = {
+    payload: dict[str, JsonValue] = {
         "_license": "SPDX-License-Identifier: MIT",
         "_copyright": "Copyright (c) 2025 Blackcat Informatics® Inc.",
     }
-    payload.update(tool_setting_schema_as_dict())
+    schema_dict = tool_setting_schema_as_dict()
+    payload.update(
+        {key: jsonify(cast(SerializableValue, value)) for key, value in schema_dict.items()},
+    )
     return payload
 
 
@@ -255,8 +259,8 @@ def collect_layer_snapshots(result: ConfigLoadResult) -> dict[str, JsonValue]:
 
     snapshots: dict[str, JsonValue] = {}
     for key, value in result.snapshots.items():
-        snapshots[key.lower()] = jsonify(value)
-    snapshots[FINAL_LAYER_KEY] = dict(render_config_mapping(result))
+        snapshots[key.lower()] = jsonify(cast(SerializableValue, value))
+    snapshots[FINAL_LAYER_KEY] = cast(JsonValue, dict(render_config_mapping(result)))
     return snapshots
 
 
@@ -286,24 +290,40 @@ def diff_snapshots(
             continue
         key_path = f"{prefix}.{key}" if prefix else key
         if isinstance(left, Mapping) and isinstance(right, Mapping):
-            nested = diff_snapshots(left, right, prefix=key_path)
+            nested = diff_snapshots(
+                cast(Mapping[str, JsonValue], left),
+                cast(Mapping[str, JsonValue], right),
+                prefix=key_path,
+            )
             diff.update(nested)
             continue
         if isinstance(left, Mapping) or isinstance(right, Mapping):
-            left_mapping = left if isinstance(left, Mapping) else {}
-            right_mapping = right if isinstance(right, Mapping) else {}
+            left_mapping: Mapping[str, JsonValue] = (
+                cast(Mapping[str, JsonValue], left) if isinstance(left, Mapping) else cast(Mapping[str, JsonValue], {})
+            )
+            right_mapping: Mapping[str, JsonValue] = (
+                cast(Mapping[str, JsonValue], right)
+                if isinstance(right, Mapping)
+                else cast(Mapping[str, JsonValue], {})
+            )
             nested = diff_snapshots(left_mapping, right_mapping, prefix=key_path)
             if nested:
                 diff.update(nested)
-            diff[key_path] = {
-                "from": jsonify(left),
-                "to": jsonify(right),
-            }
+            diff[key_path] = cast(
+                JsonValue,
+                {
+                    "from": jsonify(cast(SerializableValue, left)),
+                    "to": jsonify(cast(SerializableValue, right)),
+                },
+            )
             continue
-        diff[key_path] = {
-            "from": jsonify(left),
-            "to": jsonify(right),
-        }
+        diff[key_path] = cast(
+            JsonValue,
+            {
+                "from": jsonify(cast(SerializableValue, left)),
+                "to": jsonify(cast(SerializableValue, right)),
+            },
+        )
     return diff
 
 
@@ -311,7 +331,7 @@ def diff_snapshots(
 class ConfigDiffComputation:
     """Result payload describing configuration diff metadata."""
 
-    diff: dict[str, Any]
+    diff: dict[str, JsonValue]
     available_layers: list[str]
 
 

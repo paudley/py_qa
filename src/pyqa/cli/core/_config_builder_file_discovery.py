@@ -43,18 +43,18 @@ def apply_file_discovery_overrides(
 ) -> FileDiscoveryConfig:
     """Return ``current`` updated with the supplied override mapping."""
 
-    return model_clone(
-        current,
-        roots=list(overrides["roots"]),
-        excludes=list(overrides["excludes"]),
-        explicit_files=list(overrides["explicit_files"]),
-        limit_to=list(overrides["boundaries"]),
-        paths_from_stdin=overrides["paths_from_stdin"],
-        changed_only=overrides["changed_only"],
-        diff_ref=overrides["diff_ref"],
-        include_untracked=overrides["include_untracked"],
-        base_branch=overrides["base_branch"],
-    )
+    updates = {
+        "roots": list(overrides["roots"]),
+        "excludes": list(overrides["excludes"]),
+        "explicit_files": list(overrides["explicit_files"]),
+        "limit_to": list(overrides["boundaries"]),
+        "paths_from_stdin": overrides["paths_from_stdin"],
+        "changed_only": overrides["changed_only"],
+        "diff_ref": overrides["diff_ref"],
+        "include_untracked": overrides["include_untracked"],
+        "base_branch": overrides["base_branch"],
+    }
+    return model_clone(current, updates=updates)
 
 
 def collect_file_discovery_overrides(

@@ -9,9 +9,10 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Final, TypedDict
+from typing import Final, TypedDict, cast
 
 from ..core.models import Diagnostic, RunResult
+from ..core.serialization import SerializableValue, jsonify
 from ..interfaces.analysis import AnnotationProvider, FunctionScaleEstimator
 from .services import resolve_function_scale_estimator
 
@@ -187,7 +188,8 @@ def build_refactor_navigator(
             f"{bucket.file}::{bucket.function}",
         ),
     )
-    result.analysis["refactor_navigator"] = [bucket.to_payload() for bucket in summary[:MAX_NAVIGATOR_ENTRIES]]
+    navigator_payload = [bucket.to_payload() for bucket in summary[:MAX_NAVIGATOR_ENTRIES]]
+    result.analysis["refactor_navigator"] = jsonify(cast(SerializableValue, navigator_payload))
 
 
 def _issue_tag(diag: Diagnostic, engine: AnnotationProvider) -> IssueTag | None:

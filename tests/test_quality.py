@@ -20,6 +20,7 @@ from pyqa.compliance.quality import (
 )
 from pyqa.core.config.loader import ConfigLoader
 from pyqa.linting.quality import evaluate_quality_checks, run_pyqa_python_hygiene_linter, run_python_hygiene_linter
+from pyqa.linting.suppressions import SuppressionRegistry
 from pyqa.tools.settings import tool_setting_schema_as_dict
 
 
@@ -78,6 +79,7 @@ def _build_hygiene_state(root: Path, files: list[Path]) -> SimpleNamespace:
         ),
         meta=SimpleNamespace(show_valid_suppressions=False),
         logger=None,
+        suppressions=SuppressionRegistry(root),
     )
 
 
@@ -392,13 +394,14 @@ def test_evaluate_quality_checks_pyqa_overrides(tmp_path: Path) -> None:
     config = _load_quality_config(tmp_path)
     config.severity.sensitivity = "maximum"
     config.quality.enforce_in_lint = True
-    result = evaluate_quality_checks(
+    request = QualityCheckRequest(
         root=tmp_path,
         config=config,
         checks=("python",),
-        files=[target],
+        files=(target,),
         fix=False,
     )
+    result = evaluate_quality_checks(request)
     codes = {issue.check for issue in result.issues}
     assert "python-hygiene:system-exit" in codes
     assert "python-hygiene:print" in codes

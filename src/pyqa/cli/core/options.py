@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, TypeAlias, cast
 
 from .lint_literals import (
     BanditLevelLiteral,
@@ -163,6 +163,9 @@ class LintOptionBundles:
     output: LintOutputBundle
     execution: LintExecutionOptions
     overrides: LintOverrideOptions
+
+
+LintOptionValue: TypeAlias = bool | int | float | str | Path | None | Sequence[str] | Sequence[Path]
 
 
 _OPTION_ATTRIBUTE_MAP: Final[dict[str, tuple[str, ...]]] = {
@@ -470,14 +473,14 @@ class LintOptions:
 
         return self._overrides
 
-    def __getattr__(self, name: str) -> object:
+    def __getattr__(self, name: str) -> LintOptionValue:
         """Proxy attribute access to nested option bundles.
 
         Args:
             name: Attribute name requested by the caller.
 
         Returns:
-            object: Value extracted from the composed lint option dataclasses.
+            LintOptionValue: Value extracted from the composed lint option dataclasses.
 
         Raises:
             AttributeError: If ``name`` is not a recognised option attribute.
@@ -486,14 +489,14 @@ class LintOptions:
 
         return self._resolve_attribute(name)
 
-    def _resolve_attribute(self, name: str) -> object:
+    def _resolve_attribute(self, name: str) -> LintOptionValue:
         """Return the nested attribute value associated with ``name``.
 
         Args:
             name: Attribute identifier defined in ``_OPTION_ATTRIBUTE_MAP``.
 
         Returns:
-            object: Value obtained by traversing the configured attribute path.
+            LintOptionValue: Value obtained by traversing the configured attribute path.
 
         Raises:
             AttributeError: If the attribute name is not recognised.
@@ -502,10 +505,10 @@ class LintOptions:
         path = _OPTION_ATTRIBUTE_MAP.get(name)
         if path is None:
             raise AttributeError(name) from None
-        value: object = self
+        carrier: LintAttributeCarrier = self
         for attribute in path:
-            value = getattr(value, attribute)
-        return value
+            carrier = cast(LintAttributeCarrier, getattr(carrier, attribute))
+        return cast(LintOptionValue, carrier)
 
     def __dir__(self) -> list[str]:
         """Return a merged attribute listing including proxied entries.
@@ -570,6 +573,26 @@ class LintOptions:
         updated = set(self._provided)
         updated.update(flag for flag in flags if flag)
         self._provided = frozenset(updated)
+
+
+LintAttributeCarrier: TypeAlias = (
+    LintOptions
+    | LintTargetOptions
+    | LintGitOptions
+    | LintSelectionOptions
+    | LintDisplayOptions
+    | LintDisplayToggles
+    | LintSummaryOptions
+    | LintOutputBundle
+    | ExecutionRuntimeOptions
+    | ExecutionFormattingOptions
+    | LintExecutionOptions
+    | LintComplexityOptions
+    | LintStrictnessOptions
+    | LintSeverityOptions
+    | LintOverrideOptions
+    | LintOptionValue
+)
 
 
 @dataclass(slots=True)

@@ -10,7 +10,7 @@ import shutil
 import stat
 from pathlib import Path
 
-from pyqa.core.runtime.process import run_command
+from pyqa.core.runtime.process import CommandOptions, run_command
 
 from ..models import PreparedCommand
 from ..utils import _slugify
@@ -71,7 +71,7 @@ class PerlRuntime(RuntimeHandler):
             str(prefix),
             requirement,
         ]
-        run_command(cmd, capture_output=True)
+        run_command(cmd, options=CommandOptions(capture_output=True))
 
         target = prefix / "bin" / binary_name
         if not target.exists():

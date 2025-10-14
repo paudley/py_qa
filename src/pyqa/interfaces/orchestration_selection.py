@@ -8,11 +8,11 @@ be evolved without cascading changes.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal
+from typing import Literal
 
+from pyqa.config import Config, SensitivityLevel
 from pyqa.tools.base import PhaseLiteral
 
 ToolFamilyLiteral = Literal["external", "internal", "internal-pyqa", "unknown"]
@@ -22,14 +22,14 @@ ToolFamilyLiteral = Literal["external", "internal", "internal-pyqa", "unknown"]
 class SelectionContext:
     """Derived inputs used to evaluate tool eligibility."""
 
-    config: object
+    config: Config
     root: Path
     files: tuple[Path, ...]
     requested_only: tuple[str, ...]
     requested_languages: tuple[str, ...]
     detected_languages: tuple[str, ...]
     file_extensions: frozenset[str]
-    sensitivity: object
+    sensitivity: SensitivityLevel
     pyqa_workspace: bool
     pyqa_rules: bool
 

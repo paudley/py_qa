@@ -4,14 +4,15 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Final
+from typing import Annotated, Final, cast
 
 import typer
 from rich.progress import Progress
 
-from pyqa.runtime.console.manager import detect_tty
+from pyqa.interfaces.analysis import AnnotationProvider
 from pyqa.interfaces.orchestration_selection import PhaseLiteral
 from pyqa.orchestration.selection_context import PHASE_ORDER, UnknownToolRequestedError
+from pyqa.runtime.console.manager import detect_tty
 
 from ....config import ConfigError
 from ....linting.registry import iter_internal_linters
@@ -153,6 +154,7 @@ def _validate_cli_combinations(inputs: LintCLIInputs) -> None:
         meta.check_signatures,
         meta.check_cache_usage,
         meta.check_value_types,
+        meta.check_value_types_general,
         meta.check_license_header,
         meta.check_copyright,
         meta.check_python_hygiene,
@@ -229,10 +231,13 @@ def _run_lint_pipeline(runtime: LintRuntimeContext) -> None:
         controller.console.print(final_summary)
     controller.stop()
 
-    annotation_provider = None
+    annotation_provider: AnnotationProvider | None = None
     if runtime.services is not None:
         try:
-            annotation_provider = runtime.services.resolve("annotation_provider")
+            annotation_provider = cast(
+                AnnotationProvider,
+                runtime.services.resolve("annotation_provider"),
+            )
         except ServiceResolutionError:
             annotation_provider = None
 

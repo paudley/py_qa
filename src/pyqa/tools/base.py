@@ -4,50 +4,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final, Literal, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Final, Literal, Protocol, TypeAlias, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
+from ..config.types import ConfigValue
 from ..core.models import Diagnostic, OutputFilter, RawDiagnostic, ToolOutcome
 
-
-class ToolContext(BaseModel):
-    """Runtime context made available when resolving tool commands."""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    cfg: ConfigField
-    root: Path
-    files: tuple[Path, ...] = Field(default_factory=tuple)
-    settings: Mapping[str, Any] = Field(default_factory=dict)
-
-    def __init__(
-        self,
-        *,
-        cfg: ConfigField,
-        root: Path,
-        files: Sequence[Path] | None = None,
-        settings: Mapping[str, Any] | None = None,
-        **data: Any,
-    ) -> None:
-        if files is not None:
-            data.setdefault("files", files)
-        if settings is not None:
-            data.setdefault("settings", settings)
-        super().__init__(cfg=cfg, root=root, **data)
-
-    @field_validator("files", mode="before")
-    @classmethod
-    def _coerce_files(cls, value: object) -> tuple[Path, ...]:
-        if value is None:
-            return ()
-        if isinstance(value, tuple):
-            return value
-        if isinstance(value, Sequence):
-            return tuple(Path(item) if not isinstance(item, Path) else item for item in value)
-        raise TypeError("files must be a sequence of paths")
+ToolSettingsMap: TypeAlias = Mapping[str, ConfigValue]
+ToolContextValue: TypeAlias = ConfigValue | Sequence[Path]
+ToolContextExtras: TypeAlias = Mapping[str, ToolContextValue]
 
 
 @runtime_checkable
@@ -64,11 +32,6 @@ class Parser(Protocol):
         """Convert raw tool output into diagnostics or raw diagnostics."""
         raise NotImplementedError
 
-    def describe(self) -> str:
-        """Return a human-readable description of the parser implementation."""
-
-        return self.__class__.__name__
-
 
 @runtime_checkable
 class CommandBuilder(Protocol):
@@ -78,26 +41,108 @@ class CommandBuilder(Protocol):
         """Return the executable command derived from *ctx*."""
         raise NotImplementedError
 
-    def describe(self) -> str:
-        """Return a human-readable description of the builder."""
-
-        return self.__class__.__name__
-
 
 if TYPE_CHECKING:
     from ..config import Config
 
-    CommandField = CommandBuilder
-    ParserField = Parser | None
     ConfigField = Config
 else:
-    CommandField = Any
-    ParserField = Any
-    ConfigField = Any
+
+    @runtime_checkable
+    class _ConfigProtocol(Protocol):
+        """Runtime placeholder satisfied by configuration models."""
+
+        ...
+
+    ConfigField = _ConfigProtocol
+
+CommandField: TypeAlias = CommandBuilder
+ParserField: TypeAlias = Parser | None
 
 
-InstallerCallable = Callable[["ToolContext"], None]
-InternalActionRunner = Callable[["ToolContext"], ToolOutcome]
+class ToolContext(BaseModel):
+    """Runtime context made available when resolving tool commands."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    cfg: ConfigField
+    root: Path
+    files: tuple[Path, ...] = Field(default_factory=tuple)
+    settings: ToolSettingsMap = Field(default_factory=dict)
+
+    # suppression_valid: lint=internal-signatures context initializer mirrors historical call signature so tool integrations can pass arbitrary metadata without wrapper shims.
+    def __init__(
+        self,
+        *,
+        cfg: ConfigField,
+        root: Path,
+        files: Sequence[Path] | None = None,
+        settings: ToolSettingsMap | None = None,
+        extra: ToolContextExtras | None = None,
+    ) -> None:
+        """Initialise a tool context used during command construction.
+
+        Args:
+            cfg: Active configuration model for the invocation.
+            root: Project root directory associated with the run.
+            files: Optional sequence of files selected for the tool.
+            settings: Tool-specific configuration overrides.
+            extra: Optional mapping of additional attributes carried forward for
+                compatibility with historical call sites.
+        """
+
+        payload: dict[str, ToolContextValue] = dict(extra or {})
+        if files is not None:
+            payload.setdefault("files", files)
+        if settings is not None:
+            payload.setdefault("settings", settings)
+        super().__init__(cfg=cfg, root=root, **payload)
+
+    @field_validator("files", mode="before")
+    @classmethod
+    def _coerce_files(
+        cls,
+        value: Sequence[Path | str] | Path | None,
+    ) -> tuple[Path, ...]:
+        """Normalise file collections into tuples of :class:`Path` instances.
+
+        Args:
+            value: Raw value supplied for the ``files`` field.
+
+        Returns:
+            tuple[Path, ...]: Files represented as ``Path`` objects.
+
+        Raises:
+            TypeError: If ``value`` is neither ``None`` nor a sequence of paths.
+        """
+
+        if value is None:
+            return ()
+        if isinstance(value, Path):
+            return (value,)
+        if isinstance(value, Sequence):
+            return tuple(Path(item) if not isinstance(item, Path) else item for item in value)
+        raise TypeError("files must be a sequence of paths")
+
+
+@runtime_checkable
+class InstallerCallable(Protocol):
+    """Protocol implemented by installer callbacks."""
+
+    def __call__(self, ctx: "ToolContext") -> None:
+        """Perform installation steps for the tool using *ctx*."""
+
+        ...
+
+
+@runtime_checkable
+class InternalActionRunner(Protocol):
+    """Protocol implemented by internal tool action runners."""
+
+    def __call__(self, ctx: "ToolContext") -> ToolOutcome:
+        """Execute the action and return a :class:`ToolOutcome`."""
+
+        ...
 
 
 class ActionExitCodes(BaseModel):
@@ -116,13 +161,28 @@ class ActionExitCodes(BaseModel):
 
     @field_validator("success", "diagnostic", "tool_failure", mode="before")
     @classmethod
-    def _coerce_codes(cls, value: object) -> tuple[int, ...]:
+    def _coerce_codes(
+        cls,
+        value: Sequence[int | str] | int | str | None,
+    ) -> tuple[int, ...]:
+        """Return validated integer exit codes from ``value``.
+
+        Args:
+            value: Raw exit code sequence supplied for a model field.
+
+        Returns:
+            tuple[int, ...]: Normalised integer exit codes.
+
+        Raises:
+            TypeError: If ``value`` is neither ``None`` nor an integer sequence.
+        """
+
         if value is None:
             return ()
         if isinstance(value, (list, tuple, set)):
             return tuple(int(item) for item in value)
-        if isinstance(value, int):
-            return (value,)
+        if isinstance(value, (int, str)):
+            return (int(value),)
         raise TypeError("exit code collections must contain integers")
 
     def as_sets(self) -> tuple[set[int], set[int], set[int]]:
@@ -140,7 +200,22 @@ class DeferredCommand(BaseModel):
 
     @field_validator("args", mode="before")
     @classmethod
-    def _coerce_args(cls, value: object) -> tuple[str, ...]:
+    def _coerce_args(
+        cls,
+        value: Sequence[str] | str | None,
+    ) -> tuple[str, ...]:
+        """Return command arguments as a tuple of strings.
+
+        Args:
+            value: Raw argument value supplied to the model.
+
+        Returns:
+            tuple[str, ...]: Normalised command arguments.
+
+        Raises:
+            TypeError: If ``value`` is neither ``None`` nor string data.
+        """
+
         if value is None:
             return ()
         if isinstance(value, (list, tuple, set)):
@@ -149,10 +224,23 @@ class DeferredCommand(BaseModel):
             return (value,)
         raise TypeError("DeferredCommand args must be a sequence of strings")
 
-    def __init__(self, args: Sequence[str] | None = None, **data: Any) -> None:
+    def __init__(
+        self,
+        args: Sequence[str] | None = None,
+        extra: ToolContextExtras | None = None,
+    ) -> None:
+        """Initialise the deferred command with optional argument overrides.
+
+        Args:
+            args: Optional command-line arguments preserved for later use.
+            extra: Additional key-value pairs forwarded to the Pydantic model to
+                maintain compatibility with historical construction patterns.
+        """
+
+        payload: dict[str, ToolContextValue] = dict(extra or {})
         if args is not None:
-            data.setdefault("args", args)
-        super().__init__(**data)
+            payload.setdefault("args", args)
+        super().__init__(**payload)
 
     def build(self, ctx: ToolContext) -> Sequence[str]:
         """Return the deferred command regardless of the provided *ctx*."""
@@ -186,7 +274,22 @@ class ToolAction(BaseModel):
 
     @field_validator("filter_patterns", mode="before")
     @classmethod
-    def _coerce_patterns(cls, value: object) -> tuple[str, ...]:
+    def _coerce_patterns(
+        cls,
+        value: Sequence[str] | str | None,
+    ) -> tuple[str, ...]:
+        """Return tuple of glob patterns parsed from ``value``.
+
+        Args:
+            value: Raw pattern specification.
+
+        Returns:
+            tuple[str, ...]: Normalised glob or regex patterns.
+
+        Raises:
+            TypeError: If ``value`` does not contain string data.
+        """
+
         if value is None:
             return ()
         if isinstance(value, (list, tuple, set)):
@@ -197,7 +300,22 @@ class ToolAction(BaseModel):
 
     @field_validator("env", mode="before")
     @classmethod
-    def _coerce_env(cls, value: object) -> Mapping[str, str]:
+    def _coerce_env(
+        cls,
+        value: Mapping[str, str | int | float | bool | Path] | None,
+    ) -> Mapping[str, str]:
+        """Return validated environment mappings for an action.
+
+        Args:
+            value: Raw environment mapping supplied to the model.
+
+        Returns:
+            Mapping[str, str]: Environment variables expressed as strings.
+
+        Raises:
+            TypeError: If ``value`` is neither ``None`` nor a mapping.
+        """
+
         if value is None:
             return {}
         if isinstance(value, Mapping):
@@ -208,12 +326,25 @@ class ToolAction(BaseModel):
     @classmethod
     def _coerce_internal_runner(
         cls,
-        value: object,
+        value: InternalActionRunner | None,
     ) -> InternalActionRunner | None:
+        """Validate optional internal runner callbacks.
+
+        Args:
+            value: Candidate callable supplied for the ``internal_runner`` field.
+
+        Returns:
+            InternalActionRunner | None: Runner preserved when valid, otherwise
+            ``None`` when unset.
+
+        Raises:
+            TypeError: If ``value`` is not callable.
+        """
+
         if value is None:
             return None
-        if callable(value):
-            return cast(InternalActionRunner, value)
+        if isinstance(value, InternalActionRunner):
+            return value
         raise TypeError("internal_runner must be callable")
 
     def build_command(self, ctx: ToolContext) -> list[str]:
@@ -311,14 +442,29 @@ class Tool(BaseModel):
     suppressions_tests: tuple[str, ...] = Field(default_factory=tuple)
     suppressions_general: tuple[str, ...] = Field(default_factory=tuple)
     suppressions_duplicates: tuple[str, ...] = Field(default_factory=tuple)
-    installers: tuple[Callable[[ToolContext], None], ...] = Field(default_factory=tuple)
+    installers: tuple[InstallerCallable, ...] = Field(default_factory=tuple)
     documentation: ToolDocumentation | None = None
 
     _actions_by_name: dict[str, ToolAction] = PrivateAttr(default_factory=dict)
 
     @field_validator("actions", mode="before")
     @classmethod
-    def _coerce_actions(cls, value: object) -> tuple[ToolAction, ...]:
+    def _coerce_actions(
+        cls,
+        value: ToolAction | Iterable[ToolAction],
+    ) -> tuple[ToolAction, ...]:
+        """Normalise tool actions into tuples for deterministic ordering.
+
+        Args:
+            value: Raw action or iterable supplied for the ``actions`` field.
+
+        Returns:
+            tuple[ToolAction, ...]: Tuple containing validated actions.
+
+        Raises:
+            TypeError: If ``value`` contains non-``ToolAction`` members.
+        """
+
         if isinstance(value, ToolAction):
             return (value,)
         if isinstance(value, Iterable):
@@ -351,14 +497,12 @@ class Tool(BaseModel):
 
         return len(self.actions)
 
-    def __contains__(self, item: object) -> bool:
+    def __contains__(self, item: ToolAction | str) -> bool:
         """Return ``True`` when *item* refers to an action in this tool."""
 
         if isinstance(item, ToolAction):
             return item in self.actions
-        if isinstance(item, str):
-            return item in self._actions_by_name
-        return False
+        return isinstance(item, str) and item in self._actions_by_name
 
     def __getitem__(self, key: int | str) -> ToolAction:
         if isinstance(key, int):
@@ -399,7 +543,22 @@ class Tool(BaseModel):
 
     @field_validator("languages", "file_extensions", "config_files", mode="before")
     @classmethod
-    def _coerce_str_tuple(cls, value: object) -> tuple[str, ...]:
+    def _coerce_str_tuple(
+        cls,
+        value: Sequence[str] | str | None,
+    ) -> tuple[str, ...]:
+        """Return tuple of strings parsed from a field value.
+
+        Args:
+            value: Raw value supplied for tuple fields.
+
+        Returns:
+            tuple[str, ...]: Normalised tuple of strings.
+
+        Raises:
+            TypeError: If ``value`` does not contain strings.
+        """
+
         if value is None:
             return ()
         if isinstance(value, (list, tuple, set)):
@@ -410,7 +569,22 @@ class Tool(BaseModel):
 
     @field_validator("before", "after", mode="before")
     @classmethod
-    def _coerce_ordering(cls, value: object) -> tuple[str, ...]:
+    def _coerce_ordering(
+        cls,
+        value: Sequence[str] | str | None,
+    ) -> tuple[str, ...]:
+        """Validate ordering constraints attached to a tool.
+
+        Args:
+            value: Sequence describing ordering relationships.
+
+        Returns:
+            tuple[str, ...]: Normalised ordering entries.
+
+        Raises:
+            TypeError: If ``value`` does not contain string data.
+        """
+
         if value is None:
             return ()
         if isinstance(value, (list, tuple, set)):
@@ -421,7 +595,23 @@ class Tool(BaseModel):
 
     @field_validator("version_command", mode="before")
     @classmethod
-    def _coerce_version_cmd(cls, value: object) -> tuple[str, ...] | None:
+    def _coerce_version_cmd(
+        cls,
+        value: Sequence[str] | str | None,
+    ) -> tuple[str, ...] | None:
+        """Validate the optional command used to resolve tool versions.
+
+        Args:
+            value: Raw command specification supplied via configuration.
+
+        Returns:
+            tuple[str, ...] | None: Normalised command arguments or ``None`` when
+            no custom command is configured.
+
+        Raises:
+            TypeError: If ``value`` does not contain string data.
+        """
+
         if value is None:
             return None
         if isinstance(value, (list, tuple, set)):
@@ -437,7 +627,22 @@ class Tool(BaseModel):
         mode="before",
     )
     @classmethod
-    def _coerce_suppressions(cls, value: object) -> tuple[str, ...]:
+    def _coerce_suppressions(
+        cls,
+        value: Sequence[str] | str | None,
+    ) -> tuple[str, ...]:
+        """Validate suppression identifiers for a tool.
+
+        Args:
+            value: Raw suppression identifiers supplied via configuration.
+
+        Returns:
+            tuple[str, ...]: Normalised suppression identifiers.
+
+        Raises:
+            TypeError: If ``value`` does not contain string data.
+        """
+
         if value is None:
             return ()
         if isinstance(value, (list, tuple, set)):
@@ -450,20 +655,37 @@ class Tool(BaseModel):
     @classmethod
     def _coerce_installers(
         cls,
-        value: object,
+        value: Sequence[InstallerCallable] | InstallerCallable | None,
     ) -> tuple[InstallerCallable, ...]:
+        """Validate optional installer callback sequences.
+
+        Args:
+            value: Raw installer callable or sequence of callables.
+
+        Returns:
+            tuple[InstallerCallable, ...]: Normalised installer callbacks.
+
+        Raises:
+            TypeError: If ``value`` contains non-callable members.
+        """
+
         if value is None:
             return ()
         if isinstance(value, tuple):
-            return tuple(cast(InstallerCallable, item) for item in value)
+            return tuple(cls._require_installer(item) for item in value)
         if isinstance(value, list):
-            installers: list[InstallerCallable] = []
-            for item in value:
-                if not callable(item):
-                    raise TypeError("installers must contain callables")
-                installers.append(cast(InstallerCallable, item))
-            return tuple(installers)
+            return tuple(cls._require_installer(item) for item in value)
+        if isinstance(value, InstallerCallable):
+            return (value,)
         raise TypeError("installers must be a sequence of callables")
+
+    @staticmethod
+    def _require_installer(candidate: object) -> InstallerCallable:
+        """Return ``candidate`` when it satisfies the :class:`InstallerCallable` protocol."""
+
+        if not isinstance(candidate, InstallerCallable):
+            raise TypeError("installers must contain callables")
+        return candidate
 
     def is_applicable(
         self,

@@ -5,13 +5,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from .errors import CatalogIntegrityError
-from .model_strategy import StrategyDefinition
+from .model_strategy import StrategyCallable, StrategyDefinition
 from .model_tool import ToolDefinition
 from .types import JSONValue
 
@@ -33,12 +32,12 @@ class CatalogSnapshot:
     _strategies: tuple[StrategyDefinition, ...]
     _fragments: tuple[CatalogFragment, ...]
     checksum: str
-    _strategy_factories: Mapping[str, Callable[..., Any]] = field(init=False, repr=False)
+    _strategy_factories: Mapping[str, StrategyCallable] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Validate strategy identifiers and cache factory callables."""
 
-        factories: dict[str, Callable[..., Any]] = {}
+        factories: dict[str, StrategyCallable] = {}
         for definition in self._strategies:
             identifier = definition.identifier
             if identifier in factories:
@@ -66,14 +65,14 @@ class CatalogSnapshot:
 
         return self._fragments
 
-    def strategy(self, identifier: str) -> Callable[..., Any]:
+    def strategy(self, identifier: str) -> StrategyCallable:
         """Return the strategy factory registered for ``identifier``.
 
         Args:
             identifier: Strategy identifier to resolve.
 
         Returns:
-            Callable[..., Any]: Strategy factory callable referenced by ``identifier``.
+            StrategyCallable: Strategy factory callable referenced by ``identifier``.
 
         Raises:
             KeyError: If ``identifier`` is not known to the snapshot.

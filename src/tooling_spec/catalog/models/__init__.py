@@ -63,7 +63,7 @@ parse_documentation_bundle = _model_tool.parse_documentation_bundle
 parse_runtime_definition = _model_tool.parse_runtime_definition
 parse_tool_metadata = _model_tool.parse_tool_metadata
 
-_EXPECTED_TOOL_MODEL_OBJECTS: Final[dict[str, object]] = {
+_EXPECTED_TOOL_MODEL_OBJECTS = {
     "ToolBehaviour": ToolBehaviour,
     "ToolComponents": ToolComponents,
     "ToolDefinition": ToolDefinition,

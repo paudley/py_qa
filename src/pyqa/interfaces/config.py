@@ -5,8 +5,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, MutableMapping
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+from pyqa.config.types import ConfigFragment, MutableConfigFragment
+
+if TYPE_CHECKING:
+    from pyqa.config.models import Config
 
 
 @runtime_checkable
@@ -16,7 +20,7 @@ class ConfigSource(Protocol):
     name: str
     """Identifier describing the configuration source."""
 
-    def load(self) -> Mapping[str, object]:
+    def load(self) -> ConfigFragment:
         """Return configuration values as a mapping.
 
         Returns:
@@ -46,7 +50,7 @@ class ConfigResolver(Protocol):
         """
         raise NotImplementedError("ConfigResolver.strategy_name must be implemented")
 
-    def resolve(self, *sources: Mapping[str, object]) -> Mapping[str, object]:
+    def resolve(self, *sources: ConfigFragment) -> ConfigFragment:
         """Merge ``sources`` according to resolver semantics.
 
         Args:
@@ -71,7 +75,7 @@ class ConfigMutator(Protocol):
         """
         raise NotImplementedError("ConfigMutator.description must be implemented")
 
-    def apply(self, data: MutableMapping[str, object]) -> None:
+    def apply(self, data: MutableConfigFragment) -> None:
         """Mutate ``data`` in place.
 
         Args:
@@ -93,7 +97,7 @@ class ConfigLoader(Protocol):
         """
         raise NotImplementedError("ConfigLoader.target_name must be implemented")
 
-    def load(self, *, strict: bool = False) -> Any:
+    def load(self, *, strict: bool = False) -> Config:
         """Return the resolved configuration object.
 
         Args:

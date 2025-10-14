@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from ..core.metrics.function_scale import FunctionScaleEstimatorService
 from ..core.runtime import ServiceContainer
 from .annotations import AnnotationEngine
@@ -24,7 +26,7 @@ def register_analysis_services(container: ServiceContainer) -> None:
     container.register(
         "annotation_provider",
         lambda services: AnnotationEngine(
-            context_resolver=services.resolve("context_resolver"),
+            context_resolver=cast(TreeSitterContextResolver, services.resolve("context_resolver")),
         ),
     )
     container.register(

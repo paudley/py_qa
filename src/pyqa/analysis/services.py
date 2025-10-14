@@ -23,15 +23,11 @@ def _default_services() -> ServiceContainer:
     return container
 
 
-def _resolve(container: ServiceContainer | None, key: str) -> object:
-    services = container or _default_services()
-    return services.resolve(key)
-
-
 def resolve_annotation_provider(container: ServiceContainer | None = None) -> AnnotationProvider:
     """Return the registered annotation provider implementation."""
 
-    provider = _resolve(container, "annotation_provider")
+    services = container or _default_services()
+    provider = services.resolve("annotation_provider")
     return cast(AnnotationProvider, provider)
 
 
@@ -40,14 +36,16 @@ def resolve_function_scale_estimator(
 ) -> FunctionScaleEstimator:
     """Return the registered function scale estimator implementation."""
 
-    estimator = _resolve(container, "function_scale_estimator")
+    services = container or _default_services()
+    estimator = services.resolve("function_scale_estimator")
     return cast(FunctionScaleEstimator, estimator)
 
 
 def resolve_context_resolver(container: ServiceContainer | None = None) -> ContextResolver:
     """Return the registered Tree-sitter context resolver implementation."""
 
-    resolver = _resolve(container, "context_resolver")
+    services = container or _default_services()
+    resolver = services.resolve("context_resolver")
     return cast(ContextResolver, resolver)
 
 

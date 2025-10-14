@@ -5,9 +5,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final, Literal, cast
+from typing import TYPE_CHECKING, Final, Literal, TypeAlias
 
 from rich import box
 from rich.console import Console
@@ -37,6 +37,110 @@ EVENT_START: Final[ProgressEventLiteral] = "start"
 EVENT_COMPLETED: Final[ProgressEventLiteral] = "completed"
 EVENT_ERROR: Final[ProgressEventLiteral] = "error"
 PROGRESS_PAYLOAD_SIZE: Final[int] = 6
+
+ProgressPayload: TypeAlias = tuple[
+    ProgressEventLiteral,
+    str,
+    str,
+    int,
+    int,
+    str | None,
+]
+
+_EVENT_LOOKUP: dict[str, ProgressEventLiteral] = {
+    EVENT_START: EVENT_START,
+    EVENT_COMPLETED: EVENT_COMPLETED,
+    EVENT_ERROR: EVENT_ERROR,
+}
+
+
+@dataclass(frozen=True)
+class ProgressEventData:
+    """Structured progress event metadata emitted by the orchestrator."""
+
+    event: str
+    tool_name: str
+    action_name: str
+    index: int
+    total: int
+    message: str | None
+
+
+@dataclass(frozen=True)
+class _ProgressHandler:
+    """Adapter that converts orchestrator events into payload tuples."""
+
+    handler: Callable[[ProgressPayload], None]
+
+    def __call__(
+        self,
+        event: str,
+        tool_name: str,
+        action_name: str,
+        index: int,
+        total: int,
+        message: str | None,
+    ) -> None:
+        """Convert raw event arguments into :class:`ProgressPayload` tuples."""
+
+        data = ProgressEventData(
+            event=event,
+            tool_name=tool_name,
+            action_name=action_name,
+            index=index,
+            total=total,
+            message=message,
+        )
+        payload = _progress_payload_from_data(data)
+        self.handler(payload)
+
+
+def _wrap_progress_handler(
+    handler: Callable[[ProgressPayload], None],
+) -> Callable[[str, str, str, int, int, str | None], None]:
+    """Return a callback adapting orchestrator progress events into payload tuples.
+
+    Args:
+        handler: Callable receiving structured progress payloads.
+
+    Returns:
+        Callable[[str, str, str, int, int, str | None], None]: Adapter matching the
+        orchestrator's progress callback signature.
+    """
+
+    return _ProgressHandler(handler)
+
+
+def _progress_payload_from_data(data: ProgressEventData) -> ProgressPayload:
+    """Return a structured payload tuple derived from ``data``."""
+
+    return (
+        _coerce_progress_event(data.event),
+        data.tool_name,
+        data.action_name,
+        data.index,
+        data.total,
+        data.message,
+    )
+
+
+def _coerce_progress_event(event: str) -> ProgressEventLiteral:
+    """Return ``event`` coerced into a known progress event literal.
+
+    Args:
+        event: Raw event string provided by the orchestrator.
+
+    Returns:
+        ProgressEventLiteral: Normalised event literal understood by the CLI.
+
+    Raises:
+        ValueError: If ``event`` is not recognised.
+    """
+
+    literal = _EVENT_LOOKUP.get(event)
+    if literal is None:
+        raise ValueError(f"Unknown progress event: {event}")
+    return literal
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,7 +219,7 @@ def _fetch_with_progress(
     )
     task_id = progress.add_task("Preparing tools", total=total_actions)
 
-    def progress_callback(*payload: object) -> None:
+    def handle_progress(payload: ProgressPayload) -> None:
         record = _coerce_progress_record(payload)
         description = f"{record.tool_name}:{record.action_name}"
         if record.event == EVENT_START:
@@ -137,6 +241,8 @@ def _fetch_with_progress(
             total=record.total,
             description=f"{status} {description}",
         )
+
+    progress_callback = _wrap_progress_handler(handle_progress)
 
     with progress:
         results = runtime.orchestrator.fetch_all_tools(
@@ -210,7 +316,7 @@ def _render_fetch_summary(
         logger.warn(failure)
 
 
-def _coerce_progress_record(payload: tuple[object, ...]) -> _FetchProgressRecord:
+def _coerce_progress_record(payload: ProgressPayload) -> _FetchProgressRecord:
     """Convert an arbitrary payload into a typed progress record.
 
     Args:
@@ -227,8 +333,6 @@ def _coerce_progress_record(payload: tuple[object, ...]) -> _FetchProgressRecord
     if len(payload) != PROGRESS_PAYLOAD_SIZE:
         raise ValueError("unexpected progress payload")
     event, tool_name, action_name, index, total, message = payload
-    if not isinstance(event, str):
-        raise TypeError("event must be a string")
     if event not in {EVENT_START, EVENT_COMPLETED, EVENT_ERROR}:
         raise ValueError(f"unsupported progress event: {event}")
     if not isinstance(tool_name, str) or not isinstance(action_name, str):
@@ -238,7 +342,7 @@ def _coerce_progress_record(payload: tuple[object, ...]) -> _FetchProgressRecord
     if message is not None and not isinstance(message, str):
         raise TypeError("message must be a string when provided")
     return _FetchProgressRecord(
-        event=cast(ProgressEventLiteral, event),
+        event=event,
         tool_name=tool_name,
         action_name=action_name,
         index=index,

@@ -9,13 +9,16 @@ import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal, TypedDict
+from typing import Final, Literal, TypeAlias, TypedDict, cast
 
 from pydantic import BaseModel, ConfigDict
 
 from ..core.metrics import FileMetrics
-from ..core.models import ToolOutcome
+from ..core.metrics import JSONValue as MetricsJSONValue
+from ..core.models import JsonValue, ToolOutcome
 from ..core.serialization import deserialize_outcome, safe_int, serialize_outcome
+
+JSONValue = JsonValue
 
 COMMAND_DELIMITER: Final[bytes] = b"::"
 FILES_FIELD: Final[Literal["files"]] = "files"
@@ -39,6 +42,10 @@ class MetricPayload(TypedDict, total=False):
     path: str
     line_count: int
     suppressions: dict[str, int]
+
+
+CacheJsonValue: TypeAlias = JsonValue | list[StatePayload] | list[MetricPayload]
+CachePayload: TypeAlias = dict[str, CacheJsonValue]
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,7 +191,7 @@ class ResultCache:
         if not _states_match(current_states, stored_states):
             return None
 
-        outcome = deserialize_outcome(payload)
+        outcome = deserialize_outcome(cast(Mapping[str, JsonValue], payload))
         outcome.cached = True
         metrics = _coerce_metrics_payload(payload.get(FILE_METRICS_FIELD))
         return CachedEntry(outcome=outcome, file_metrics=metrics)
@@ -229,7 +236,7 @@ class ResultCache:
         digest = hasher.hexdigest()
         return self._dir / f"{digest}.json"
 
-    def _read_entry(self, entry_path: Path) -> dict[str, object]:
+    def _read_entry(self, entry_path: Path) -> dict[str, JSONValue]:
         """Return the parsed JSON payload for *entry_path* or raise cache miss.
 
         Args:
@@ -249,7 +256,7 @@ class ResultCache:
             raise _CacheMiss from exc
         if not isinstance(raw, dict):
             raise _CacheMiss
-        return raw
+        return cast(dict[str, JSONValue], raw)
 
 
 def _files_available(files: Sequence[Path], states: tuple[FileState, ...]) -> bool:
@@ -287,15 +294,27 @@ def _outcome_to_payload(
     outcome: ToolOutcome,
     states: Iterable[FileState],
     file_metrics: Mapping[str, FileMetrics],
-) -> dict[str, object]:
-    payload = serialize_outcome(outcome)
-    payload[FILES_FIELD] = [_state_to_payload(state) for state in states]
+) -> CachePayload:
+    """Return a serialized payload representing ``outcome``.
+
+    Args:
+        outcome: Tool outcome captured from execution.
+        states: Filesystem states used to validate cache hits.
+        file_metrics: Derived per-file metrics keyed by normalized path.
+
+    Returns:
+        CachePayload: JSON-compatible payload persisted to the cache.
+    """
+
+    payload: CachePayload = dict(serialize_outcome(outcome))
+    state_payloads: list[StatePayload] = [_state_to_payload(state) for state in states]
+    payload[FILES_FIELD] = state_payloads
     if file_metrics:
         payload[FILE_METRICS_FIELD] = _metrics_to_payload(file_metrics)
     return payload
 
 
-def _coerce_state_payload(value: object) -> tuple[StatePayload, ...]:
+def _coerce_state_payload(value: CacheJsonValue | None) -> tuple[StatePayload, ...]:
     """Return normalized state payloads extracted from *value*.
 
     Args:
@@ -315,10 +334,12 @@ def _coerce_state_payload(value: object) -> tuple[StatePayload, ...]:
         if not isinstance(path_value, str):
             continue
         payload: StatePayload = {PATH_FIELD: path_value}
-        if MTIME_FIELD in item:
-            payload[MTIME_FIELD] = safe_int(item[MTIME_FIELD])
-        if SIZE_FIELD in item:
-            payload[SIZE_FIELD] = safe_int(item[SIZE_FIELD])
+        mtime_value = item.get(MTIME_FIELD)
+        if isinstance(mtime_value, (int, float, str)):
+            payload[MTIME_FIELD] = safe_int(mtime_value)
+        size_value = item.get(SIZE_FIELD)
+        if isinstance(size_value, (int, float, str)):
+            payload[SIZE_FIELD] = safe_int(size_value)
         states.append(payload)
     return tuple(states)
 
@@ -345,7 +366,7 @@ def _metrics_to_payload(metrics: Mapping[str, FileMetrics]) -> list[MetricPayloa
     return entries
 
 
-def _coerce_metrics_payload(value: object) -> dict[str, FileMetrics]:
+def _coerce_metrics_payload(value: CacheJsonValue | None) -> dict[str, FileMetrics]:
     """Return ``FileMetrics`` instances recreated from serialized payload.
 
     Args:
@@ -364,7 +385,18 @@ def _coerce_metrics_payload(value: object) -> dict[str, FileMetrics]:
         path_value = item.get(PATH_FIELD)
         if not isinstance(path_value, str):
             continue
-        metric = FileMetrics.from_payload(item)
+        metric_payload: dict[str, MetricsJSONValue] = {}
+        line_count_value = item.get("line_count")
+        if isinstance(line_count_value, (int, float, str)):
+            metric_payload["line_count"] = line_count_value
+        suppressions_value = item.get("suppressions")
+        if isinstance(suppressions_value, Mapping):
+            clean_suppressions: dict[str, MetricsJSONValue] = {}
+            for label, count in suppressions_value.items():
+                if isinstance(label, str) and isinstance(count, (int, float, str)):
+                    clean_suppressions[label] = count
+            metric_payload["suppressions"] = clean_suppressions
+        metric = FileMetrics.from_payload(metric_payload)
         metric.ensure_labels()
         metrics[path_value] = metric
     return metrics

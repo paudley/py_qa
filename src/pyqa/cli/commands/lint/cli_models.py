@@ -73,6 +73,7 @@ COPYRIGHT_HELP: Final[str] = "Run the copyright notice consistency checker and e
 PYTHON_HYGIENE_HELP: Final[str] = "Run the Python hygiene checker (debug breakpoints, bare excepts) and exit."
 FILE_SIZE_HELP: Final[str] = "Run the file size threshold checker and exit."
 SCHEMA_SYNC_HELP: Final[str] = "Run the pyqa schema synchronisation checker and exit."
+VALUE_TYPES_GENERAL_HELP: Final[str] = "Recommend dunder methods for value-type classes using Tree-sitter heuristics."
 FILTER_HELP: Final[str] = "Filter stdout/stderr from TOOL using regex (TOOL:pattern)."
 OUTPUT_MODE_HELP: Final[str] = "Output mode: concise, pretty, or raw."
 REPORT_JSON_HELP: Final[str] = "Write JSON report to the provided path."
@@ -108,6 +109,75 @@ class LintDisplayOptions:
     quiet: bool
     verbose: bool
     debug: bool
+
+
+@dataclass(slots=True)
+class LintOutputToggles:
+    """Boolean toggles controlling stdout rendering preferences."""
+
+    verbose: bool
+    quiet: bool
+    no_color: bool
+    no_emoji: bool
+    debug: bool
+
+
+@dataclass(slots=True)
+class MetaActionToggleParams:
+    """Encapsulate CLI meta-action toggles."""
+
+    doctor: bool
+    fetch_all_tools: bool
+    validate_schema: bool
+    normal: bool
+    explain_tools: bool
+
+
+@dataclass(slots=True)
+class MetaActionInfo:
+    """Hold optional meta-action arguments."""
+
+    tool_info: str | None
+
+
+@dataclass(slots=True)
+class RuntimeCoreChecks:
+    """Toggle set for core runtime lint checks."""
+
+    check_closures: bool
+    check_signatures: bool
+    check_cache_usage: bool
+    check_value_types: bool
+    check_value_types_general: bool
+
+
+@dataclass(slots=True)
+class RuntimeInterfaceChecks:
+    """Toggle set for interface-driven runtime checks."""
+
+    check_interfaces: bool
+    check_di: bool
+    check_module_docs: bool
+    check_pyqa_python_hygiene: bool
+
+
+@dataclass(slots=True)
+class RuntimePolicyChecks:
+    """Toggle set for compliance and hygiene-related runtime checks."""
+
+    show_valid_suppressions: bool
+    check_license_header: bool
+    check_copyright: bool
+    check_python_hygiene: bool
+
+
+@dataclass(slots=True)
+class RuntimeAdditionalChecks:
+    """Toggle set for advanced runtime verifications."""
+
+    check_file_size: bool
+    check_schema_sync: bool
+    pyqa_rules: bool
 
 
 PathArgument = Annotated[
@@ -437,12 +507,26 @@ def _execution_runtime_dependency(
     )
 
 
-def _output_params_dependency(
+def _output_toggle_dependency(
     verbose: Annotated[bool, typer.Option(False, help="Verbose output.")],
     quiet: Annotated[bool, typer.Option(False, "--quiet", "-q", help="Minimal output.")],
     no_color: Annotated[bool, typer.Option(False, help="Disable ANSI colour output.")],
     no_emoji: Annotated[bool, typer.Option(False, help="Disable emoji output.")],
     debug: Annotated[bool, typer.Option(False, "--debug", help="Emit detailed execution diagnostics.")],
+) -> LintOutputToggles:
+    """Return the raw CLI toggles backing output behaviour."""
+
+    return LintOutputToggles(
+        verbose=verbose,
+        quiet=quiet,
+        no_color=no_color,
+        no_emoji=no_emoji,
+        debug=debug,
+    )
+
+
+def _output_params_dependency(
+    toggles: Annotated[LintOutputToggles, Depends(_output_toggle_dependency)],
     output_mode: Annotated[
         str,
         typer.Option(OUTPUT_MODE_CONCISE, "--output", help=OUTPUT_MODE_HELP),
@@ -451,10 +535,7 @@ def _output_params_dependency(
     """Return rendering parameters for console output.
 
     Args:
-        verbose: Whether verbose output is enabled.
-        quiet: Whether output should be minimised.
-        no_color: Flag disabling ANSI colours.
-        no_emoji: Flag disabling emoji output.
+        toggles: Structured booleans describing output toggles.
         output_mode: Raw output mode supplied by the user.
 
     Returns:
@@ -462,11 +543,11 @@ def _output_params_dependency(
     """
 
     return LintOutputParams(
-        verbose=verbose,
-        quiet=quiet,
-        no_color=no_color,
-        no_emoji=no_emoji,
-        debug=debug,
+        verbose=toggles.verbose,
+        quiet=toggles.quiet,
+        no_color=toggles.no_color,
+        no_emoji=toggles.no_emoji,
+        debug=toggles.debug,
         output_mode=_coerce_output_mode(output_mode),
     )
 
@@ -703,14 +784,10 @@ def _severity_params_dependency(
     )
 
 
-def _meta_action_dependency(
+def _meta_action_toggle_dependency(
     doctor: Annotated[
         bool,
         typer.Option(False, "--doctor", help="Run environment diagnostics and exit."),
-    ],
-    tool_info: Annotated[
-        str | None,
-        typer.Option(None, "--tool-info", metavar="TOOL", help=TOOL_INFO_HELP),
     ],
     fetch_all_tools: Annotated[
         bool,
@@ -728,16 +805,42 @@ def _meta_action_dependency(
         bool,
         typer.Option(False, "--explain-tools", help=EXPLAIN_TOOLS_HELP),
     ],
-) -> MetaActionParams:
-    """Return meta-action toggles captured from CLI options."""
+) -> MetaActionToggleParams:
+    """Return boolean toggles for meta actions."""
 
-    return MetaActionParams(
+    return MetaActionToggleParams(
         doctor=doctor,
-        tool_info=tool_info,
         fetch_all_tools=fetch_all_tools,
         validate_schema=validate_schema,
         normal=normal,
         explain_tools=explain_tools,
+    )
+
+
+def _meta_action_info_dependency(
+    tool_info: Annotated[
+        str | None,
+        typer.Option(None, "--tool-info", metavar="TOOL", help=TOOL_INFO_HELP),
+    ],
+) -> MetaActionInfo:
+    """Return optional informational CLI toggles."""
+
+    return MetaActionInfo(tool_info=tool_info)
+
+
+def _meta_action_dependency(
+    toggles: Annotated[MetaActionToggleParams, Depends(_meta_action_toggle_dependency)],
+    info: Annotated[MetaActionInfo, Depends(_meta_action_info_dependency)],
+) -> MetaActionParams:
+    """Return meta-action toggles captured from CLI options."""
+
+    return MetaActionParams(
+        doctor=toggles.doctor,
+        tool_info=info.tool_info,
+        fetch_all_tools=toggles.fetch_all_tools,
+        validate_schema=toggles.validate_schema,
+        normal=toggles.normal,
+        explain_tools=toggles.explain_tools,
     )
 
 
@@ -764,7 +867,7 @@ def _meta_analysis_checks_dependency(
     )
 
 
-def _meta_runtime_checks_dependency(
+def _runtime_core_checks_dependency(
     check_closures: Annotated[
         bool,
         typer.Option(False, "--check-closures", help=CLOSURES_HELP),
@@ -779,8 +882,31 @@ def _meta_runtime_checks_dependency(
     ],
     check_value_types: Annotated[
         bool,
-        typer.Option(False, "--check-value-types", help="Verify value-type helpers expose ergonomic dunder methods."),
+        typer.Option(
+            False, "--check-value-types", help="Verify pyqa value-type helpers expose ergonomic dunder methods."
+        ),
     ],
+    check_value_types_general: Annotated[
+        bool,
+        typer.Option(
+            False,
+            "--check-value-types-general",
+            help=VALUE_TYPES_GENERAL_HELP,
+        ),
+    ],
+) -> RuntimeCoreChecks:
+    """Return the runtime core check toggles."""
+
+    return RuntimeCoreChecks(
+        check_closures=check_closures,
+        check_signatures=check_signatures,
+        check_cache_usage=check_cache_usage,
+        check_value_types=check_value_types,
+        check_value_types_general=check_value_types_general,
+    )
+
+
+def _runtime_interface_checks_dependency(
     check_interfaces: Annotated[
         bool,
         typer.Option(False, "--check-interfaces", help=CHECK_INTERFACES_HELP),
@@ -797,6 +923,18 @@ def _meta_runtime_checks_dependency(
         bool,
         typer.Option(False, "--check-pyqa-python-hygiene", help=PYQA_PYTHON_HYGIENE_HELP),
     ],
+) -> RuntimeInterfaceChecks:
+    """Return interface-oriented runtime toggles."""
+
+    return RuntimeInterfaceChecks(
+        check_interfaces=check_interfaces,
+        check_di=check_di,
+        check_module_docs=check_module_docs,
+        check_pyqa_python_hygiene=check_pyqa_python_hygiene,
+    )
+
+
+def _runtime_policy_checks_dependency(
     show_valid_suppressions: Annotated[
         bool,
         typer.Option(False, "--show-valid-suppressions", help=SHOW_VALID_SUPPRESSIONS_HELP),
@@ -813,6 +951,18 @@ def _meta_runtime_checks_dependency(
         bool,
         typer.Option(False, "--check-python-hygiene", help=PYTHON_HYGIENE_HELP),
     ],
+) -> RuntimePolicyChecks:
+    """Return policy-oriented runtime toggles."""
+
+    return RuntimePolicyChecks(
+        show_valid_suppressions=show_valid_suppressions,
+        check_license_header=check_license_header,
+        check_copyright=check_copyright,
+        check_python_hygiene=check_python_hygiene,
+    )
+
+
+def _runtime_additional_checks_dependency(
     check_file_size: Annotated[
         bool,
         typer.Option(False, "--check-file-size", help=FILE_SIZE_HELP),
@@ -825,25 +975,41 @@ def _meta_runtime_checks_dependency(
         bool,
         typer.Option(False, "--pyqa-rules", help=PYQA_RULES_HELP),
     ],
+) -> RuntimeAdditionalChecks:
+    """Return advanced runtime toggle selections."""
+
+    return RuntimeAdditionalChecks(
+        check_file_size=check_file_size,
+        check_schema_sync=check_schema_sync,
+        pyqa_rules=pyqa_rules,
+    )
+
+
+def _meta_runtime_checks_dependency(
+    core: Annotated[RuntimeCoreChecks, Depends(_runtime_core_checks_dependency)],
+    interface: Annotated[RuntimeInterfaceChecks, Depends(_runtime_interface_checks_dependency)],
+    policy: Annotated[RuntimePolicyChecks, Depends(_runtime_policy_checks_dependency)],
+    additional: Annotated[RuntimeAdditionalChecks, Depends(_runtime_additional_checks_dependency)],
 ) -> MetaRuntimeChecks:
     """Return runtime-focused meta-check toggles."""
 
     return MetaRuntimeChecks(
-        check_closures=check_closures,
-        check_signatures=check_signatures,
-        check_cache_usage=check_cache_usage,
-        check_value_types=check_value_types,
-        check_interfaces=check_interfaces,
-        check_di=check_di,
-        check_module_docs=check_module_docs,
-        check_pyqa_python_hygiene=check_pyqa_python_hygiene,
-        show_valid_suppressions=show_valid_suppressions,
-        check_license_header=check_license_header,
-        check_copyright=check_copyright,
-        check_python_hygiene=check_python_hygiene,
-        check_file_size=check_file_size,
-        check_schema_sync=check_schema_sync,
-        pyqa_rules=pyqa_rules,
+        check_closures=core.check_closures,
+        check_signatures=core.check_signatures,
+        check_cache_usage=core.check_cache_usage,
+        check_value_types=core.check_value_types,
+        check_value_types_general=core.check_value_types_general,
+        check_interfaces=interface.check_interfaces,
+        check_di=interface.check_di,
+        check_module_docs=interface.check_module_docs,
+        check_pyqa_python_hygiene=interface.check_pyqa_python_hygiene,
+        show_valid_suppressions=policy.show_valid_suppressions,
+        check_license_header=policy.check_license_header,
+        check_copyright=policy.check_copyright,
+        check_python_hygiene=policy.check_python_hygiene,
+        check_file_size=additional.check_file_size,
+        check_schema_sync=additional.check_schema_sync,
+        pyqa_rules=additional.pyqa_rules,
     )
 
 
@@ -865,6 +1031,7 @@ def _meta_params_dependency(
             check_signatures=True,
             check_cache_usage=True,
             check_value_types=True,
+            check_value_types_general=True,
             check_interfaces=True,
             check_di=True,
             check_module_docs=True,
@@ -1030,6 +1197,7 @@ __all__ = (
     "STRICTNESS_CHOICES",
     "STRICT_CONFIG_HELP",
     "SCHEMA_SYNC_HELP",
+    "VALUE_TYPES_GENERAL_HELP",
     "SHOW_VALID_SUPPRESSIONS_HELP",
     "TOOL_INFO_HELP",
     "TYPE_CHECKING_HELP",

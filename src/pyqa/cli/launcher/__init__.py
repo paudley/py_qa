@@ -69,6 +69,7 @@ class ProbeError(RuntimeError):
 
 
 LOGGER = logging.getLogger(__name__)
+_VERBOSE_LOGGER_INITIALISED = False
 
 PROBE_SCRIPT: Final[str] = (
     "import importlib\n"
@@ -79,7 +80,7 @@ PROBE_SCRIPT: Final[str] = (
     "    pyqa = importlib.import_module('pyqa')\n"
     "    cli = importlib.import_module('pyqa.cli')\n"
     "    app = importlib.import_module('pyqa.cli.app')\n"
-    "except Exception:\n"
+    "except (ImportError, AttributeError):\n"
     f"    sys.stdout.write('{ProbeStatus.MISSING.value}')\n"
     "    sys.exit(0)\n\n"
     "for module in (pyqa, cli, app):\n"
@@ -97,6 +98,20 @@ PROBE_SCRIPT: Final[str] = (
 )
 
 __all__ = ["launch"]
+
+
+def _ensure_verbose_logger() -> None:
+    """Configure the launcher logger to stream debug messages to stderr."""
+
+    global _VERBOSE_LOGGER_INITIALISED
+    if _VERBOSE_LOGGER_INITIALISED:
+        return
+    handler = logging.StreamHandler(stream=sys.stderr)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    LOGGER.addHandler(handler)
+    LOGGER.setLevel(logging.DEBUG)
+    LOGGER.propagate = False
+    _VERBOSE_LOGGER_INITIALISED = True
 
 
 def launch(command: str, argv: Iterable[str] | None = None) -> None:
@@ -130,6 +145,7 @@ def _debug(message: str) -> None:
     """
 
     if os.environ.get(VERBOSE_ENV):
+        _ensure_verbose_logger()
         LOGGER.debug(message)
 
 

@@ -12,7 +12,14 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Final, Protocol, TypeGuard, cast, runtime_checkable
+from typing import Final, Protocol, TypeAlias, cast, runtime_checkable
+
+from tooling_spec.catalog.types import JSONValue
+
+LicenseOverrideValue: TypeAlias = JSONValue
+LicenseOverrideMapping: TypeAlias = Mapping[str, LicenseOverrideValue]
+MutableLicenseOverrideMapping: TypeAlias = MutableMapping[str, LicenseOverrideValue]
+PyProjectTable: TypeAlias = Mapping[str, JSONValue]
 
 
 def _ensure_project_root_on_path() -> None:
@@ -31,24 +38,24 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
     from pyqa.config import LicenseConfig as _LicenseConfig
 
 try:
-    from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS as _EXCLUDE_DIRS
+    from pyqa.core.config import constants as _core_constants
 except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
     _ensure_project_root_on_path()
-    from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS as _EXCLUDE_DIRS
+    from pyqa.core.config import constants as _core_constants
 
 
 @runtime_checkable
 class _LicenseConfigProtocol(Protocol):
     """Contract implemented by ``pyqa.config.LicenseConfig`` for runtime checks."""
 
-    def model_dump(self, *, mode: str = "python") -> dict[str, object]:
+    def model_dump(self, *, mode: str = "python") -> dict[str, LicenseOverrideValue]:
         """Return a serialisable representation of the configuration."""
         raise NotImplementedError
 
     def model_copy(
         self,
         *,
-        update: Mapping[str, object] | None = None,
+        update: LicenseOverrideMapping | None = None,
     ) -> LicenseConfigProtocol:
         """Return a shallow copy of the configuration instance."""
         raise NotImplementedError
@@ -56,7 +63,7 @@ class _LicenseConfigProtocol(Protocol):
 
 LicenseConfigProtocol = _LicenseConfigProtocol
 LicenseConfigRuntime = cast("type[LicenseConfigProtocol]", _LicenseConfig)
-ALWAYS_EXCLUDE_DIRS: Final[frozenset[str]] = frozenset(cast(Iterable[str], _EXCLUDE_DIRS))
+DEFAULT_EXCLUDE_DIRS: Final[frozenset[str]] = frozenset(cast(Iterable[str], _core_constants.ALWAYS_EXCLUDE_DIRS))
 
 
 KNOWN_LICENSE_SNIPPETS: Final[Mapping[str, str]] = {
@@ -111,12 +118,6 @@ _YEAR_RANGE: Final[re.Pattern[str]] = re.compile(
 )
 
 
-def _is_license_config(candidate: object) -> TypeGuard[LicenseConfigProtocol]:
-    """Return ``True`` when ``candidate`` is a ``LicenseConfig`` instance."""
-
-    return isinstance(candidate, LicenseConfigRuntime)
-
-
 @dataclass(slots=True)
 class LicenseMetadata:
     """Aggregate license metadata resolved from repository configuration."""
@@ -124,7 +125,7 @@ class LicenseMetadata:
     spdx_id: str | None
     copyright_notice: str | None
     license_text: str | None
-    overrides: Mapping[str, object]
+    overrides: LicenseOverrideMapping
 
 
 @dataclass(slots=True)
@@ -155,7 +156,7 @@ class LicensePolicy:
         except ValueError:
             relative = Path(path.name)
         relative_str = str(relative)
-        if any(part in ALWAYS_EXCLUDE_DIRS for part in relative.parts):
+        if any(part in DEFAULT_EXCLUDE_DIRS for part in relative.parts):
             return True
         return any(fnmatch(relative_str, pattern) for pattern in self.skip_globs)
 
@@ -190,13 +191,14 @@ def load_project_license(root: Path) -> LicenseMetadata:
     pyproject = root / PYPROJECT_FILENAME
     spdx_id: str | None = None
     copyright_str: str | None = None
-    overrides: Mapping[str, object] = {}
+    overrides: dict[str, LicenseOverrideValue] = {}
     license_text: str | None = None
 
     if pyproject.exists():
-        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-        project = data.get(PROJECT_TABLE_KEY, {})
-        if isinstance(project, Mapping):
+        data = cast(dict[str, JSONValue], tomllib.loads(pyproject.read_text(encoding="utf-8")))
+        project_value = data.get(PROJECT_TABLE_KEY, {})
+        if isinstance(project_value, Mapping):
+            project = cast(PyProjectTable, project_value)
             spdx_id = _extract_project_license(project)
             copyright_str = _extract_authors(project)
         overrides = _extract_license_overrides(data)
@@ -220,7 +222,7 @@ def load_project_license(root: Path) -> LicenseMetadata:
 
 def load_license_policy(
     root: Path,
-    overrides: LicenseConfigProtocol | Mapping[str, object] | None = None,
+    overrides: LicenseConfigProtocol | LicenseOverrideMapping | None = None,
 ) -> LicensePolicy:
     """Derive a license enforcement policy from project metadata and overrides.
 
@@ -232,12 +234,12 @@ def load_license_policy(
         LicensePolicy: Policy describing enforcement expectations.
     """
     metadata = load_project_license(root)
-    if _is_license_config(overrides):
-        config: dict[str, object] = _license_config_to_mapping(overrides)
+    if isinstance(overrides, LicenseConfigRuntime):
+        config: dict[str, LicenseOverrideValue] = _license_config_to_mapping(overrides)
     elif isinstance(overrides, Mapping):
-        config = dict(overrides)
+        config = dict[str, LicenseOverrideValue](overrides)
     else:
-        config = dict(metadata.overrides)
+        config = dict[str, LicenseOverrideValue](metadata.overrides)
 
     spdx_id = _coerce_optional_str(config.pop("spdx", None)) or metadata.spdx_id
     allow_alternate = tuple(_coerce_str_list(config.pop("allow_alternate_spdx", ())))
@@ -269,7 +271,7 @@ def load_license_policy(
     )
 
 
-def _extract_project_license(project: Mapping[str, object]) -> str | None:
+def _extract_project_license(project: PyProjectTable) -> str | None:
     """Return the SPDX identifier derived from the project's license field.
 
     Args:
@@ -290,7 +292,7 @@ def _extract_project_license(project: Mapping[str, object]) -> str | None:
     return None
 
 
-def _extract_authors(project: Mapping[str, object]) -> str | None:
+def _extract_authors(project: PyProjectTable) -> str | None:
     """Return the first author name declared in project metadata.
 
     Args:
@@ -659,7 +661,7 @@ def _parse_notice(value: str | None) -> _NoticeParts:
 
 
 def _build_canonical_notice(
-    config: MutableMapping[str, object],
+    config: MutableLicenseOverrideMapping,
     metadata: LicenseMetadata,
 ) -> str | None:
     """Return the canonical notice derived from configuration and metadata.
@@ -708,14 +710,15 @@ def _extract_year(notice: str) -> str | None:
     return None
 
 
-def _extract_license_overrides(data: Mapping[str, object]) -> Mapping[str, object]:
+def _extract_license_overrides(data: Mapping[str, JSONValue]) -> dict[str, LicenseOverrideValue]:
     """Return license override configuration embedded within *data*.
 
     Args:
         data: Parsed ``pyproject.toml`` payload.
 
     Returns:
-        Mapping[str, object]: Extracted override mapping or an empty mapping.
+        dict[str, LicenseOverrideValue]: Extracted override mapping or an empty
+        mapping when none is declared.
     """
 
     tool = data.get("tool")
@@ -724,11 +727,11 @@ def _extract_license_overrides(data: Mapping[str, object]) -> Mapping[str, objec
         if isinstance(pyqa, Mapping):
             license_cfg = pyqa.get("license")
             if isinstance(license_cfg, Mapping):
-                return dict(license_cfg)
+                return dict[str, LicenseOverrideValue](license_cfg)
     return {}
 
 
-def _coerce_optional_str(value: object) -> str | None:
+def _coerce_optional_str(value: LicenseOverrideValue) -> str | None:
     """Return a stripped string when ``value`` is a string, otherwise ``None``.
 
     Args:
@@ -748,7 +751,7 @@ def _coerce_optional_str(value: object) -> str | None:
     raise ValueError("Expected string value")
 
 
-def _coerce_str_list(value: object) -> tuple[str, ...]:
+def _coerce_str_list(value: LicenseOverrideValue) -> tuple[str, ...]:
     """Return a tuple of stripped strings derived from ``value``.
 
     Args:
@@ -804,14 +807,15 @@ def _strip_comment_prefix(line: str) -> str:
     return cleaned.strip()
 
 
-def _license_config_to_mapping(config: LicenseConfigProtocol) -> dict[str, object]:
+def _license_config_to_mapping(config: LicenseConfigProtocol) -> dict[str, LicenseOverrideValue]:
     """Return a mapping representation of ``config`` with empty values pruned.
 
     Args:
         config: License configuration model to serialise.
 
     Returns:
-        dict[str, object]: Mapping containing only truthy configuration values.
+        dict[str, LicenseOverrideValue]: Mapping containing only truthy
+        configuration values.
     """
 
     payload = config.model_dump(mode="python")

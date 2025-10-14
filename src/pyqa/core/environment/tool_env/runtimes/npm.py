@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from pyqa.core.environment import inject_node_defaults
-from pyqa.core.runtime.process import SubprocessExecutionError, run_command
+from pyqa.core.runtime.process import CommandOptions, SubprocessExecutionError, run_command
 from pyqa.tools.base import Tool
 
 from ..models import PreparedCommand
@@ -91,8 +91,7 @@ class NpmRuntime(RuntimeHandler):
         env.setdefault("npm_config_prefix", str(prefix))
         run_command(
             ["npm", "install", "--prefix", str(prefix), *packages],
-            capture_output=True,
-            env=env,
+            options=CommandOptions(capture_output=True, env=env),
         )
         version = self._resolve_installed_version(prefix, tool, env)
         meta_path.write_text(
@@ -124,8 +123,7 @@ class NpmRuntime(RuntimeHandler):
                     "0",
                     "--json",
                 ],
-                capture_output=True,
-                env=dict(env),
+                options=CommandOptions(capture_output=True, env=dict(env)),
             )
         except (OSError, SubprocessExecutionError):
             return None

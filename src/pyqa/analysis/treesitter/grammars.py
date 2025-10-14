@@ -15,10 +15,11 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final, cast
+from types import ModuleType
+from typing import Final, cast
 from urllib.parse import urlparse
 
-from tree_sitter import Language
+from tree_sitter import Language as TSLanguage
 
 _CACHE_ROOT: Final[Path] = Path(
     os.environ.get("PYQA_TREESITTER_CACHE", Path.home() / ".cache" / "pyqa" / "tree_sitter")
@@ -49,7 +50,7 @@ _GRAMMAR_SOURCES: dict[str, GrammarSource] = {
 }
 
 
-def ensure_language(grammar_name: str) -> Language | None:
+def ensure_language(grammar_name: str) -> TSLanguage | None:
     """Resolve a :class:`Language` for ``grammar_name`` when possible.
 
     Args:
@@ -138,7 +139,7 @@ def _library_filename(grammar_name: str) -> str:
     return f"lib{grammar_name}.so"
 
 
-def _import_language_module(module_name: str) -> Any | None:
+def _import_language_module(module_name: str) -> ModuleType | None:
     """Import a packaged Tree-sitter language module when available."""
 
     try:
@@ -147,20 +148,20 @@ def _import_language_module(module_name: str) -> Any | None:
         return None
 
 
-def _language_from_module(module: Any) -> Language | None:
+def _language_from_module(module: ModuleType) -> TSLanguage | None:
     """Instantiate a ``Language`` object from a packaged module factory."""
 
     factory = getattr(module, "language", None)
     if not callable(factory):
         return None
     pointer = factory()
-    return Language(pointer)
+    return TSLanguage(pointer)
 
 
 def _resolve_build_library() -> Callable[[str, list[str]], None] | None:
     """Return the Tree-sitter build helper when exposed by the bindings."""
 
-    candidate = getattr(Language, "build_library", None)
+    candidate = getattr(TSLanguage, "build_library", None)
     if candidate is None or not callable(candidate):
         return None
     return cast(Callable[[str, list[str]], None], candidate)
@@ -178,7 +179,7 @@ def _safe_extract_tar(archive: tarfile.TarFile, destination: Path) -> None:
         archive.extract(member, path=destination)
 
 
-def _load_compiled_language(lib_path: Path, grammar_name: str) -> Language | None:
+def _load_compiled_language(lib_path: Path, grammar_name: str) -> TSLanguage | None:
     """Load the compiled Tree-sitter ``Language`` from ``lib_path``.
 
     Args:
@@ -186,7 +187,7 @@ def _load_compiled_language(lib_path: Path, grammar_name: str) -> Language | Non
         grammar_name: Name of the grammar, used to select the exported symbol.
 
     Returns:
-        Language | None: Loaded language instance or ``None`` when unavailable.
+        TSLanguage | None: Loaded language instance or ``None`` when unavailable.
     """
 
     try:
@@ -202,7 +203,7 @@ def _load_compiled_language(lib_path: Path, grammar_name: str) -> Language | Non
     if not pointer:
         return None
     _LOADED_LIBRARIES[lib_path] = handle
-    return Language(pointer)
+    return TSLanguage(pointer)
 
 
 __all__ = ["ensure_language"]

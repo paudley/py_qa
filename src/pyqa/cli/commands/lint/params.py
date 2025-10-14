@@ -162,6 +162,7 @@ class MetaRuntimeChecks:
     check_signatures: bool
     check_cache_usage: bool
     check_value_types: bool
+    check_value_types_general: bool
     check_interfaces: bool
     check_di: bool
     check_module_docs: bool
@@ -260,6 +261,12 @@ class LintMetaParams:
         """Return whether value-type ergonomics should be validated."""
 
         return self.runtime.check_value_types
+
+    @property
+    def check_value_types_general(self) -> bool:
+        """Return whether generic value-type guidance should execute."""
+
+        return self.runtime.check_value_types_general
 
     @property
     def check_interfaces(self) -> bool:

@@ -18,7 +18,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS
 
 from ..config import FileDiscoveryConfig, LicenseConfig, QualityConfigSection
-from ..core.runtime.process import run_command
+from ..config.types import ConfigFragment
+from ..core.runtime.process import CommandOptions, run_command
 from ..discovery.filesystem import FilesystemDiscovery
 from ..discovery.git import GitDiscovery, list_tracked_files
 from ..filesystem.paths import normalize_path
@@ -408,7 +409,7 @@ class PythonHygieneCheck:
                         justification = stripped.split("#", 1)[1].strip()
                     if len(justification.split()) < 3:
                         result.add_warning(
-                            f"Line {line_number}: 'except Exception' requires an inline justification explaining why a broad catch is safe.",
+                            f"Line {line_number}: Broad Exception catch requires an inline justification explaining why it is safe.",
                             path,
                             check=PYTHON_HYGIENE_BROAD_EXCEPTION,
                         )
@@ -599,7 +600,7 @@ class QualityCheckerOptions:
     """Optional parameters used to configure :class:`QualityChecker`."""
 
     license_policy: LicensePolicy | None = None
-    license_overrides: LicenseConfig | Mapping[str, object] | None = None
+    license_overrides: LicenseConfig | ConfigFragment | None = None
     files: Sequence[Path] | None = None
     checks: Iterable[str] | None = None
     staged: bool = False
@@ -775,10 +776,10 @@ def ensure_branch_protection(root: Path, quality: QualityConfigSection) -> Quali
 def _current_branch(root: Path) -> str | None:
     """Return the current git branch for *root* or ``None`` on failure."""
 
+    options = CommandOptions(check=False, capture_output=True)
     completed = run_command(
         ["git", "-C", str(root), "rev-parse", "--abbrev-ref", "HEAD"],
-        check=False,
-        capture_output=True,
+        options=options,
     )
     if completed.returncode != 0:
         return None

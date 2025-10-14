@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any, Final
+from typing import Final
 
+from pyqa.core.serialization import JsonValue
 from pyqa.core.severity import Severity
 
 from ..core.models import RawDiagnostic
@@ -41,7 +42,7 @@ REMARK_SEVERITY_MAP: Final[dict[str, Severity]] = {
 }
 
 
-def parse_sqlfluff(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_sqlfluff(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse sqlfluff JSON diagnostics into raw diagnostic objects.
 
     Args:
@@ -150,7 +151,7 @@ def parse_dotenv_linter(stdout: Sequence[str], context: ToolContext) -> Sequence
     return results
 
 
-def parse_remark(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_remark(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse remark/remark-lint JSON output into raw diagnostics.
 
     Args:
@@ -180,7 +181,7 @@ SPECCY_SEVERITY_MAP: Final[dict[str, Severity]] = {
 }
 
 
-def parse_speccy(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_speccy(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse Speccy JSON output."""
     del context
     results: list[RawDiagnostic] = []
@@ -207,7 +208,7 @@ def parse_speccy(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
     return results
 
 
-def _iter_speccy_files(payload: Any) -> Iterable[Mapping[str, Any]]:
+def _iter_speccy_files(payload: JsonValue) -> Iterable[Mapping[str, JsonValue]]:
     if isinstance(payload, list):
         return (item for item in payload if isinstance(item, Mapping))
     if isinstance(payload, Mapping):
@@ -217,11 +218,11 @@ def _iter_speccy_files(payload: Any) -> Iterable[Mapping[str, Any]]:
 
 
 def _iter_speccy_issues(
-    entry: Mapping[str, Any],
-) -> Iterable[tuple[str, Mapping[str, Any]]]:
+    entry: Mapping[str, JsonValue],
+) -> Iterable[tuple[str, Mapping[str, JsonValue]]]:
     issues = entry.get("issues") or entry.get("errors") or entry.get("problems") or []
     if isinstance(issues, Mapping):
-        combined: list[tuple[str, Mapping[str, Any]]] = []
+        combined: list[tuple[str, Mapping[str, JsonValue]]] = []
         for key, value in issues.items():
             if isinstance(value, list):
                 combined.extend((str(key), item) for item in value if isinstance(item, Mapping))
@@ -231,25 +232,25 @@ def _iter_speccy_issues(
     return ()
 
 
-def _speccy_file_path(entry: Mapping[str, Any]) -> str | None:
+def _speccy_file_path(entry: Mapping[str, JsonValue]) -> str | None:
     value = entry.get("file") or entry.get("path") or entry.get("name")
     return str(value) if value else None
 
 
-def _speccy_message(issue: Mapping[str, Any]) -> str:
+def _speccy_message(issue: Mapping[str, JsonValue]) -> str:
     primary = str(issue.get("message", "")).strip()
     if primary:
         return primary
     return str(issue.get("description", "")).strip()
 
 
-def _speccy_severity(issue: Mapping[str, Any], default_label: str) -> Severity:
+def _speccy_severity(issue: Mapping[str, JsonValue], default_label: str) -> Severity:
     raw_label = issue.get("type") or issue.get("severity") or default_label or "warning"
     label = str(raw_label).strip().lower()
     return SPECCY_SEVERITY_MAP.get(label, Severity.WARNING)
 
 
-def _speccy_location(issue: Mapping[str, Any]) -> str | None:
+def _speccy_location(issue: Mapping[str, JsonValue]) -> str | None:
     location = issue.get("location") or issue.get("path")
     if isinstance(location, list):
         return "/".join(str(part) for part in location)
@@ -258,7 +259,7 @@ def _speccy_location(issue: Mapping[str, Any]) -> str | None:
     return None
 
 
-def _remark_file_entries(payload: Any) -> tuple[Mapping[str, Any], ...]:
+def _remark_file_entries(payload: JsonValue) -> tuple[Mapping[str, JsonValue], ...]:
     """Return remark file entries extracted from ``payload``.
 
     Args:
@@ -276,7 +277,7 @@ def _remark_file_entries(payload: Any) -> tuple[Mapping[str, Any], ...]:
     return ()
 
 
-def _remark_messages(entry: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+def _remark_messages(entry: Mapping[str, JsonValue]) -> tuple[Mapping[str, JsonValue], ...]:
     """Return message mappings contained within a remark file entry.
 
     Args:
@@ -292,7 +293,7 @@ def _remark_messages(entry: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
     return ()
 
 
-def _remark_file_path(entry: Mapping[str, Any]) -> str | None:
+def _remark_file_path(entry: Mapping[str, JsonValue]) -> str | None:
     """Return the file path associated with a remark entry when available.
 
     Args:
@@ -306,7 +307,7 @@ def _remark_file_path(entry: Mapping[str, Any]) -> str | None:
     return str(value) if value else None
 
 
-def _remark_severity(message: Mapping[str, Any]) -> Severity:
+def _remark_severity(message: Mapping[str, JsonValue]) -> Severity:
     """Compute severity for a remark message mapping.
 
     Args:
@@ -323,7 +324,7 @@ def _remark_severity(message: Mapping[str, Any]) -> Severity:
     return Severity.ERROR if bool(fatal) else Severity.WARNING
 
 
-def _remark_location(message: Mapping[str, Any]) -> tuple[int | None, int | None]:
+def _remark_location(message: Mapping[str, JsonValue]) -> tuple[int | None, int | None]:
     """Return best-effort location information for a remark message.
 
     Args:
@@ -349,7 +350,7 @@ def _remark_location(message: Mapping[str, Any]) -> tuple[int | None, int | None
 
 def _build_remark_diagnostic(
     file_path: str | None,
-    message: Mapping[str, Any],
+    message: Mapping[str, JsonValue],
 ) -> RawDiagnostic | None:
     """Return a raw diagnostic derived from a remark message mapping.
 

@@ -7,9 +7,10 @@ from __future__ import annotations
 import re
 import sys
 import tomllib
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
+from datetime import date, datetime, time
 from pathlib import Path
-from typing import Final, cast
+from typing import Final, TypeAlias
 
 from ...config import ExecutionConfig
 
@@ -17,6 +18,20 @@ _PYTHON_VERSION_PATTERN = re.compile(r"(?P<major>\d{1,2})(?:[._-]?(?P<minor>\d{1
 PYPROJECT_TOML_NAME: Final[str] = "pyproject.toml"
 PYTHON_VERSION_FILENAME: Final[str] = ".python-version"
 PYTHON_VERSION_ENCODING: Final[str] = "utf-8"
+
+TomlValue: TypeAlias = str | int | float | bool | None | Sequence["TomlValue"] | Mapping[str, "TomlValue"]
+TomlDecodedValue: TypeAlias = (
+    str
+    | int
+    | float
+    | bool
+    | None
+    | date
+    | datetime
+    | time
+    | Sequence["TomlDecodedValue"]
+    | Mapping[str, "TomlDecodedValue"]
+)
 
 
 def resolve_python_version(
@@ -60,7 +75,7 @@ def _default_interpreter_python_version() -> str:
     return f"{info.major}.{info.minor}"
 
 
-def _normalize_python_version(value: object | None) -> str | None:
+def _normalize_python_version(value: TomlValue | None) -> str | None:
     """Normalise raw Python version tokens into ``major.minor`` strings.
 
     Args:
@@ -149,14 +164,14 @@ def _python_version_from_pyproject(root: Path) -> str | None:
     return _first_normalized_python_version(_iter_pyproject_python_versions(data))
 
 
-def _load_pyproject_data(path: Path) -> Mapping[str, object] | None:
+def _load_pyproject_data(path: Path) -> Mapping[str, TomlValue] | None:
     """Load ``pyproject.toml`` as a mapping when possible.
 
     Args:
         path: Resolved path to the ``pyproject.toml`` file.
 
     Returns:
-        Mapping[str, object] | None: Parsed payload when loadable and
+        Mapping[str, TomlValue] | None: Parsed payload when loadable and
         representable as a mapping; otherwise ``None``.
     """
 
@@ -165,15 +180,15 @@ def _load_pyproject_data(path: Path) -> Mapping[str, object] | None:
     except OSError:
         return None
     try:
-        parsed: object = tomllib.loads(raw)
+        parsed = tomllib.loads(raw)
     except tomllib.TOMLDecodeError:
         return None
     if isinstance(parsed, dict):
-        return cast(Mapping[str, object], parsed)
+        return _normalize_toml_mapping(parsed)
     return None
 
 
-def _iter_pyproject_python_versions(data: Mapping[str, object]) -> Iterable[str]:
+def _iter_pyproject_python_versions(data: Mapping[str, TomlValue]) -> Iterable[str]:
     """Yield Python version declarations found in ``pyproject.toml``.
 
     Args:
@@ -197,7 +212,7 @@ def _iter_pyproject_python_versions(data: Mapping[str, object]) -> Iterable[str]
     yield from _iter_hatch_python_versions(tool_section)
 
 
-def _iter_poetry_python_versions(tool_section: Mapping[str, object]) -> Iterable[str]:
+def _iter_poetry_python_versions(tool_section: Mapping[str, TomlValue]) -> Iterable[str]:
     """Yield poetry-managed Python version declarations.
 
     Args:
@@ -218,7 +233,7 @@ def _iter_poetry_python_versions(tool_section: Mapping[str, object]) -> Iterable
         yield poetry_python
 
 
-def _iter_hatch_python_versions(tool_section: Mapping[str, object]) -> Iterable[str]:
+def _iter_hatch_python_versions(tool_section: Mapping[str, TomlValue]) -> Iterable[str]:
     """Yield hatch-managed Python version declarations.
 
     Args:
@@ -240,3 +255,37 @@ def _iter_hatch_python_versions(tool_section: Mapping[str, object]) -> Iterable[
     version = default_env.get("python")
     if isinstance(version, str):
         yield version
+
+
+def _normalize_toml_mapping(data: Mapping[str, TomlDecodedValue]) -> Mapping[str, TomlValue]:
+    """Return ``data`` coerced into a TOML mapping of ``TomlValue`` instances.
+
+    Args:
+        data: Parsed TOML mapping with arbitrary Python object values.
+
+    Returns:
+        Mapping[str, TomlValue]: Normalised mapping compatible with resolver helpers.
+    """
+
+    return {str(key): _normalize_toml_value(value) for key, value in data.items()}
+
+
+def _normalize_toml_value(value: TomlDecodedValue) -> TomlValue:
+    """Return a ``TomlValue`` representation derived from ``value``.
+
+    Args:
+        value: Arbitrary object produced by :mod:`tomllib`.
+
+    Returns:
+        TomlValue: Recursively normalised TOML value.
+    """
+
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, (datetime, date, time)):
+        return value.isoformat()
+    if isinstance(value, Mapping):
+        return _normalize_toml_mapping(value)
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return tuple(_normalize_toml_value(item) for item in value)
+    raise TypeError(f"Unsupported TOML value type: {type(value).__name__}")

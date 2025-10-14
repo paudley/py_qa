@@ -4,9 +4,8 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from ..models import Config
+from ..types import ConfigValue
 
 
 def default_config() -> Config:
@@ -15,7 +14,7 @@ def default_config() -> Config:
     return Config()
 
 
-def default_config_payload() -> dict[str, Any]:
+def default_config_payload() -> dict[str, ConfigValue]:
     """Return the dictionary representation of :func:`default_config`."""
 
     return default_config().to_dict()

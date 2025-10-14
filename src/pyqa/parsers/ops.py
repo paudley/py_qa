@@ -5,11 +5,12 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Final
+from typing import Final
 
 from pyqa.core.severity import Severity
 
 from ..core.models import RawDiagnostic
+from ..core.serialization import JsonValue, coerce_optional_int
 from ..tools.base import ToolContext
 from .base import (
     DiagnosticDetails,
@@ -24,7 +25,7 @@ from .base import (
 )
 
 
-def parse_actionlint(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_actionlint(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse actionlint JSON diagnostics into raw diagnostic objects.
 
     Args:
@@ -44,8 +45,8 @@ def parse_actionlint(payload: Any, context: ToolContext) -> Sequence[RawDiagnost
         sev_enum = map_severity(severity, ACTIONLINT_SEVERITY_MAP, Severity.WARNING)
         location = DiagnosticLocation(
             file=path,
-            line=item.get("line"),
-            column=item.get("column"),
+            line=coerce_optional_int(item.get("line")),
+            column=coerce_optional_int(item.get("column")),
         )
         details = _build_actionlint_details(sev_enum, message, code)
         append_raw_diagnostic(
@@ -55,9 +56,9 @@ def parse_actionlint(payload: Any, context: ToolContext) -> Sequence[RawDiagnost
     return results
 
 
-def parse_kube_linter(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_kube_linter(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse kube-linter JSON output."""
-    reports: list[dict[str, object]] = []
+    reports: list[dict[str, JsonValue]] = []
     if isinstance(payload, dict):
         reports.extend(_coerce_dict_sequence(payload.get("Reports")))
     else:
@@ -90,12 +91,12 @@ def parse_kube_linter(payload: Any, _context: ToolContext) -> Sequence[RawDiagno
     return diagnostics
 
 
-def parse_dockerfilelint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_dockerfilelint(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse dockerfilelint JSON output."""
     results: list[RawDiagnostic] = []
     source = payload.get("files") if isinstance(payload, Mapping) else payload
     for entry in iter_dicts(source):
-        file_path = entry.get("file")
+        file_path = _coerce_optional_str(entry.get("file"))
         issues = entry.get("issues")
         if not isinstance(issues, list):
             continue
@@ -115,7 +116,7 @@ def parse_dockerfilelint(payload: Any, _context: ToolContext) -> Sequence[RawDia
             results.append(
                 RawDiagnostic(
                     file=file_path,
-                    line=int(issue.get("line", 0)) or None,
+                    line=coerce_optional_int(issue.get("line")),
                     column=None,
                     severity=Severity.WARNING,
                     message=message,
@@ -136,7 +137,7 @@ ACTIONLINT_SEVERITY_MAP: Final[dict[str, Severity]] = {
 def _build_actionlint_details(
     severity: Severity,
     message: str,
-    code: object | None,
+    code: JsonValue | None,
 ) -> DiagnosticDetails:
     """Return normalised actionlint diagnostic metadata."""
 

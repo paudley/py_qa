@@ -18,10 +18,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
+from ...analysis.providers import NullAnnotationProvider
 from ...analysis.services import resolve_function_scale_estimator
 from ...catalog.metadata import catalog_duplicate_hint_codes
 from ...filesystem.paths import normalize_path
-from ...analysis.providers import NullAnnotationProvider
 from ...interfaces.analysis import AnnotationProvider, FunctionScaleEstimator
 
 if TYPE_CHECKING:  # pragma: no cover - types only
@@ -120,10 +120,12 @@ PYQA_DI_ALLOWED_ROOTS: Final[tuple[str, ...]] = (
     "pyqa.analysis.bootstrap",
 )
 PYQA_DI_ALLOWED_SUFFIX: Final[str] = ".bootstrap"
-PYTHON_HYGIENE_TOOLS: Final[frozenset[str]] = frozenset({
-    "python-hygiene",
-    "pyqa-python-hygiene",
-})
+PYTHON_HYGIENE_TOOLS: Final[frozenset[str]] = frozenset(
+    {
+        "python-hygiene",
+        "pyqa-python-hygiene",
+    }
+)
 PYTHON_HYGIENE_PRINT_SUFFIX: Final[str] = "PYTHON-HYGIENE:PRINT"
 PYTHON_HYGIENE_SYSTEM_EXIT_SUFFIX: Final[str] = "PYTHON-HYGIENE:SYSTEM-EXIT"
 PYQA_INTERFACES_TOOL: Final[str] = "pyqa-interfaces"
@@ -588,9 +590,7 @@ def _append_di_guidance(
 ) -> None:
     """Encourage DI wiring to remain inside approved composition roots."""
 
-    includes_di = any(
-        record.tool == PYQA_DI_TOOL or record.code == PYQA_DI_CODE for record in diagnostics
-    )
+    includes_di = any(record.tool == PYQA_DI_TOOL or record.code == PYQA_DI_CODE for record in diagnostics)
     if not includes_di:
         return
     allowed = ", ".join((*PYQA_DI_ALLOWED_ROOTS, f"*{PYQA_DI_ALLOWED_SUFFIX}"))

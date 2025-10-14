@@ -6,6 +6,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Protocol, runtime_checkable
 
+from pyqa.core.models import Diagnostic
+
 
 @runtime_checkable
 class DiagnosticPresenter(Protocol):
@@ -16,7 +18,7 @@ class DiagnosticPresenter(Protocol):
         """Return the name of the format produced by the presenter."""
         raise NotImplementedError
 
-    def render(self, diagnostics: Iterable[object]) -> str:
+    def render(self, diagnostics: Iterable[Diagnostic]) -> str:
         """Return rendered output for ``diagnostics``."""
         raise NotImplementedError
 
@@ -30,7 +32,7 @@ class AdviceProvider(Protocol):
         """Return the identifier of the advice provider."""
         raise NotImplementedError
 
-    def advise(self, diagnostics: Iterable[object]) -> Iterable[str]:
+    def advise(self, diagnostics: Iterable[Diagnostic]) -> Iterable[str]:
         """Return textual advice for the supplied diagnostics."""
         raise NotImplementedError
 

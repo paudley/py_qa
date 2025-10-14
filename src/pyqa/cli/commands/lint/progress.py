@@ -15,7 +15,6 @@ from rich.text import Text
 from pyqa.runtime.console.manager import get_console_manager
 
 from ...core.runtime import ServiceResolutionError
-from .literals import OUTPUT_MODE_CONCISE
 
 ProgressStatusLiteral = Literal[
     "waiting",

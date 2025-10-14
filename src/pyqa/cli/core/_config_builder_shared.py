@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Mapping
 from pathlib import Path
 from typing import TypeVar
 
@@ -18,10 +18,18 @@ ModelT = TypeVar("ModelT", bound=BaseModel)
 ValueT = TypeVar("ValueT")
 
 
-def model_clone(instance: ModelT, **updates: object) -> ModelT:
-    """Return a defensive copy of a Pydantic model applying field updates."""
+def model_clone(instance: ModelT, updates: Mapping[str, ValueT] | None = None) -> ModelT:
+    """Return a defensive copy of a Pydantic model applying field updates.
 
-    return instance.model_copy(update=updates, deep=True)
+    Args:
+        instance: Pydantic model instance being cloned.
+        updates: Mapping of field overrides applied to the cloned instance.
+
+    Returns:
+        ModelT: Deep-cloned instance with requested updates.
+    """
+
+    return instance.model_copy(update=dict(updates or {}), deep=True)
 
 
 def select_flag(

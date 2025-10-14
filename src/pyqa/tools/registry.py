@@ -54,9 +54,6 @@ class ToolRegistry(Mapping[str, Tool]):
         names = self._by_language.get(language, [])
         return tuple(self._tools[name] for name in names if name in self._tools)
 
-    def __contains__(self, name: object) -> bool:
-        return isinstance(name, str) and name in self._tools
-
     def __len__(self) -> int:
         return len(self._tools)
 

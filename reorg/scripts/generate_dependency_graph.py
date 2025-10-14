@@ -30,6 +30,15 @@ _INIT_FILENAME = "__init__"
 
 
 def _module_name_from_path(path: Path) -> str:
+    """Return the fully-qualified module name for ``path``.
+
+    Args:
+        path: Absolute path to a Python module residing beneath ``PACKAGE_ROOT``.
+
+    Returns:
+        str: Dotted module name using the project prefix.
+    """
+
     relative = path.relative_to(PACKAGE_ROOT)
     parts = list(relative.with_suffix("").parts)
     if parts[-1] == _INIT_FILENAME:
@@ -38,6 +47,18 @@ def _module_name_from_path(path: Path) -> str:
 
 
 def _resolve_relative(module: str | None, level: int, current: str) -> str | None:
+    """Resolve a relative import target to an absolute module path.
+
+    Args:
+        module: Optional module suffix present in the import statement.
+        level: Count of leading dots describing the relative depth.
+        current: Fully-qualified module issuing the import.
+
+    Returns:
+        str | None: Absolute module name when the resolution succeeds; otherwise
+        ``None`` when the relative import escapes the package boundary.
+    """
+
     base_parts = current.split(".")[:-1]
     if level > len(base_parts) + 1:
         return None
@@ -50,6 +71,16 @@ def _resolve_relative(module: str | None, level: int, current: str) -> str | Non
 
 
 def _collect_dependencies(path: Path, module_name: str) -> set[str]:
+    """Return intra-package dependency names discovered in ``path``.
+
+    Args:
+        path: Absolute path to the module being inspected.
+        module_name: Fully-qualified name for ``path``.
+
+    Returns:
+        set[str]: Unique set of modules imported from inside the project.
+    """
+
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     deps: set[str] = set()
     for node in ast.walk(tree):
@@ -68,7 +99,16 @@ def _collect_dependencies(path: Path, module_name: str) -> set[str]:
 
 
 def build_graph(root: Path) -> dict[str, list[str]]:
-    """Return adjacency list mapping modules to intra-package dependencies."""
+    """Return adjacency list mapping modules to intra-package dependencies.
+
+    Args:
+        root: Repository root containing the ``pyqa`` package.
+
+    Returns:
+        dict[str, list[str]]: Sorted mapping from module name to dependency
+        names.
+    """
+
     graph: dict[str, set[str]] = defaultdict(set)
     for path in root.rglob("*.py"):
         module_name = _module_name_from_path(path)
@@ -77,12 +117,27 @@ def build_graph(root: Path) -> dict[str, list[str]]:
 
 
 def _dependency_histogram(graph: Mapping[str, Sequence[str]]) -> dict[str, int]:
-    """Return mapping of modules to dependency counts."""
+    """Return mapping of modules to dependency counts.
+
+    Args:
+        graph: Adjacency list describing intra-package dependencies.
+
+    Returns:
+        dict[str, int]: Count of dependencies for each module present in
+        ``graph``.
+    """
+
     return {module: len(deps) for module, deps in graph.items()}
 
 
-def main() -> None:
-    """Generate the dependency graph JSON artefact."""
+def main(arguments: Sequence[str] | None = None) -> None:
+    """Generate the dependency graph JSON artefact.
+
+    Args:
+        arguments: Optional CLI arguments supplied by external callers. When
+            ``None`` the active ``sys.argv`` values are used.
+    """
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--output",
@@ -90,7 +145,7 @@ def main() -> None:
         default=Path("reorg/artifacts/phase0/pyqa_dependency_graph.json"),
         help="Path to the JSON file that will store the dependency graph.",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(arguments)
 
     graph = build_graph(PACKAGE_ROOT)
     histogram = _dependency_histogram(graph)
@@ -104,7 +159,3 @@ def main() -> None:
         "dependency_histogram": histogram,
     }
     output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-
-
-if __name__ == "__main__":
-    main()

@@ -9,7 +9,7 @@ import importlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Final, cast
 
 from ..analysis.spacy.loader import load_language
 from ..analysis.treesitter.grammars import ensure_language
@@ -36,8 +36,23 @@ _MAX_SUMMARY_LENGTH: Final[int] = 120
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from tree_sitter import Node
-else:  # pragma: no cover - runtime fallback uses ``Any`` to avoid hard dependency
-    Node = Any
+    from tree_sitter import Parser as TreeSitterParser
+else:  # pragma: no cover - runtime fallback avoids hard dependency
+
+    class Node:  # type: ignore[too-many-instance-attributes]
+        """Fallback Tree-sitter node placeholder used when bindings are missing."""
+
+        type: str
+        start_point: tuple[int, int]
+        children: Sequence[Node]
+        named_children: Sequence[Node]
+
+        def child_by_field_name(self, _name: str) -> Node | None:
+            return None
+
+    class TreeSitterParser:  # pragma: no cover - placeholder
+        def parse(self, _source: bytes):
+            raise NotImplementedError
 
 
 @dataclass(slots=True)
@@ -63,7 +78,7 @@ class _DocstringRecord:
 class _TreeSitterDocstrings:
     """Index docstring information extracted with Tree-sitter."""
 
-    def __init__(self, source: str, parser: Any) -> None:
+    def __init__(self, source: str, parser: TreeSitterParser) -> None:
         """Build the index for ``source`` using the provided ``parser``.
 
         Args:
@@ -229,7 +244,7 @@ class _TreeSitterDocstrings:
         return self._module_record
 
 
-def _resolve_python_parser() -> Any:
+def _resolve_python_parser() -> TreeSitterParser:
     """Return a Tree-sitter parser capable of parsing Python source.
 
     Returns:
@@ -246,7 +261,7 @@ def _resolve_python_parser() -> Any:
         )
     parser = factory.create("python")
     if parser is not None:
-        return parser
+        return cast(TreeSitterParser, parser)
     language = ensure_language("python")
     if language is None:
         raise RuntimeError(
@@ -257,7 +272,7 @@ def _resolve_python_parser() -> Any:
         raise RuntimeError("tree_sitter.Parser not available even after grammar compilation")
     parser = parser_cls()
     parser.set_language(language)
-    return parser
+    return cast(TreeSitterParser, parser)
 
 
 class DocstringLinter:
@@ -267,7 +282,7 @@ class DocstringLinter:
         """Initialise the linter by resolving grammar and language resources."""
 
         self._model_name = "en_core_web_sm"
-        self._parser = _resolve_python_parser()
+        self._parser: TreeSitterParser = _resolve_python_parser()
         self._nlp = load_language(self._model_name)
         self._nlp_missing = self._nlp is None
         self._warnings: set[str] = set()

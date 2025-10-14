@@ -11,8 +11,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
+from pyqa.core.serialization import JsonValue
 from pyqa.tools.base import Tool
 
 from ..constants import ToolCacheLayout
@@ -240,7 +241,7 @@ class RuntimeHandler(ABC):
         return PreparedCommand.from_parts(cmd=command, env=env, version=version, source="local")
 
     @staticmethod
-    def _load_json(path: Path) -> dict[str, Any] | None:
+    def _load_json(path: Path) -> dict[str, JsonValue] | None:
         """Return JSON content from *path* or ``None`` when parsing fails."""
 
         try:
@@ -248,11 +249,11 @@ class RuntimeHandler(ABC):
         except (FileNotFoundError, json.JSONDecodeError):
             return None
         if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
+            return cast(dict[str, JsonValue], payload)
         return None
 
     @staticmethod
-    def _parse_json(text: str) -> dict[str, Any] | None:
+    def _parse_json(text: str) -> dict[str, JsonValue] | None:
         """Return JSON payload parsed from *text* or ``None`` when invalid."""
 
         try:
@@ -260,7 +261,7 @@ class RuntimeHandler(ABC):
         except json.JSONDecodeError:
             return None
         if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
+            return cast(dict[str, JsonValue], payload)
         return None
 
 

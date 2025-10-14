@@ -10,7 +10,7 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
-from pyqa.core.runtime.process import run_command
+from pyqa.core.runtime.process import CommandOptions, run_command
 from pyqa.tools.base import Tool
 
 from ..constants import RuntimeCachePaths
@@ -104,7 +104,7 @@ class LuaRuntime(RuntimeHandler):
         ]
         if version:
             args.append(version)
-        run_command(args, capture_output=True)
+        run_command(args, options=CommandOptions(capture_output=True))
         target = lua_paths.prefix / "bin" / binary_name
         if not target.exists():
             msg = f"Failed to install lua tool '{tool.name}'"

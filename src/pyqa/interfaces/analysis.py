@@ -5,10 +5,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
+
+from pyqa.core.models import Diagnostic, RunResult
 
 HighlightKind = Literal[
     "file",
@@ -24,36 +26,17 @@ HighlightKind = Literal[
 class MessageSpan(Protocol):
     """Lightweight structure describing a span highlighted in a message."""
 
-    @property
-    def start(self) -> int:
-        """Return the inclusive start offset of the span."""
-
-        raise NotImplementedError
-
-    @property
-    def end(self) -> int:
-        """Return the exclusive end offset of the span."""
-
-        raise NotImplementedError
-
-    @property
-    def style(self) -> str:
-        """Return the presentation style hint for the span."""
-
-        raise NotImplementedError
-
-    @property
-    def kind(self) -> str | None:
-        """Return the semantic kind associated with the span."""
-
-        raise NotImplementedError
+    start: int
+    end: int
+    style: str
+    kind: str | None
 
 
 @runtime_checkable
 class AnnotationProvider(Protocol):
     """Protocol implemented by services that annotate diagnostic messages."""
 
-    def annotate_run(self, result: Any) -> dict[int, Any]:
+    def annotate_run(self, result: RunResult) -> Mapping[int, DiagnosticAnnotation]:
         """Annotate diagnostics contained within ``result``."""
         raise NotImplementedError
 
@@ -70,7 +53,7 @@ class AnnotationProvider(Protocol):
 class ContextResolver(Protocol):
     """Protocol describing Tree-sitter context resolution services."""
 
-    def annotate(self, diagnostics: Iterable[Any], *, root: Path) -> None:
+    def annotate(self, diagnostics: Iterable[Diagnostic], *, root: Path) -> None:
         """Populate contextual information on ``diagnostics``."""
         raise NotImplementedError
 
@@ -119,6 +102,15 @@ class SimpleMessageSpan(MessageSpan):
     kind: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class DiagnosticAnnotation:
+    """Annotation metadata attached to a diagnostic message."""
+
+    function: str | None
+    class_name: str | None
+    message_spans: tuple[SimpleMessageSpan, ...]
+
+
 __all__ = [
     "AnnotationProvider",
     "ContextResolver",
@@ -126,4 +118,5 @@ __all__ = [
     "HighlightKind",
     "MessageSpan",
     "SimpleMessageSpan",
+    "DiagnosticAnnotation",
 ]

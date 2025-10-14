@@ -160,6 +160,7 @@ The new Typer application exposes a `lint` command with a modular configuration 
 ./py-qa/lint --pr-summary-min-severity error --pr-summary-template "* [{severity}] {message}"
 ./py-qa/lint --bail --quiet
 ./py-qa/lint --validate-schema --no-color --no-emoji
+./py-qa/lint --check-value-types-general --dir src
 ./py-qa/security-scan --no-bandit --no-staged ./path/to/file
 ./py-qa/check-quality --staged
 uv run pyqa check-quality commit-msg .git/COMMIT_EDITMSG
@@ -167,6 +168,31 @@ uv run pyqa update --dry-run
 ```
 
 Run `./py-qa/lint install` to install the preferred development dependencies, pinned type stubs, and generated `stubgen` packages used by the workflow.
+
+Enable the Tree-sitter powered value-type guidance by opting in through `pyproject.toml` and wiring the dedicated flag when you want recommendations locally:
+
+```toml
+# pyproject.toml
+[tool.pyqa.generic_value_types]
+enabled = true
+
+[[tool.pyqa.generic_value_types.rules]]
+pattern = "myapp.repositories.*"
+traits = ["iterable", "value"]
+require = ["__len__", "__contains__"]
+recommend = ["__repr__"]
+
+[[tool.pyqa.generic_value_types.implications]]
+trigger = "method:__len__"
+require = ["__bool__"]
+severity = "warning"
+```
+
+```bash
+./py-qa/lint --check-value-types-general
+```
+
+The analyser emits `generic-value-types:missing-required` and `generic-value-types:missing-recommended` diagnostics, honouring `suppression_valid:` justifications when exceptions are unavoidable.
 
 Additional quality-of-life flags mirror the original shell workflow:
 

@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from operator import attrgetter
 from pathlib import Path
-from typing import Any, Final, Generic, cast
+from typing import Final, Generic, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,6 +23,7 @@ from pyqa.config.sections import (
     _SectionMerger,
     build_section_mergers,
 )
+from pyqa.config.types import ConfigFragment, ConfigValue
 from pyqa.config.utils import (
     _deep_merge,
     _normalise_fragment,
@@ -44,7 +45,7 @@ class _SectionProcessor(Generic[ModelT]):
     def merge_into(
         self,
         config: Config,
-        data: Mapping[str, Any],
+        data: ConfigFragment,
         *,
         source: str,
     ) -> tuple[Config, list[FieldUpdate]]:
@@ -80,7 +81,7 @@ class FieldUpdate(BaseModel):
     section: SectionName
     field: FieldName
     source: str
-    value: Any
+    value: ConfigValue
 
 
 class ConfigLoadResult(BaseModel):
@@ -91,7 +92,7 @@ class ConfigLoadResult(BaseModel):
     config: Config
     updates: list[FieldUpdate] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
-    snapshots: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    snapshots: dict[str, dict[str, ConfigValue]] = Field(default_factory=dict)
 
 
 class ConfigLoader:
@@ -178,7 +179,7 @@ class ConfigLoader:
         config = Config().model_copy(deep=True)
         updates: list[FieldUpdate] = []
         warnings: list[str] = []
-        snapshots: dict[str, dict[str, Any]] = {}
+        snapshots: dict[str, dict[str, ConfigValue]] = {}
         for source in self._sources:
             if not (fragment := source.load()):
                 continue
@@ -217,7 +218,7 @@ class _ConfigMerger:
     def apply(
         self,
         config: Config,
-        data: Mapping[str, Any],
+        data: ConfigFragment,
         source: str,
     ) -> tuple[Config, list[FieldUpdate], list[str]]:
         """Apply ``data`` to ``config`` returning the updated model.
@@ -250,7 +251,7 @@ class _ConfigMerger:
         )
         warnings.extend(tool_warnings)
         if tool_updates:
-            merged_config = _model_replace(merged_config, tool_settings=tool_settings)
+            merged_config = _model_replace(merged_config, updates={"tool_settings": tool_settings})
             for tool, value in tool_updates.items():
                 updates.append(
                     FieldUpdate(
@@ -266,7 +267,7 @@ class _ConfigMerger:
             data.get("severity_rules"),
         )
         if severity_rules != merged_config.severity_rules:
-            merged_config = _model_replace(merged_config, severity_rules=severity_rules)
+            merged_config = _model_replace(merged_config, updates={"severity_rules": severity_rules})
             updates.append(
                 FieldUpdate(
                     section="root",
@@ -299,7 +300,7 @@ class _ConfigMerger:
         getter = cast(Callable[[Config], ModelT], attrgetter(attr_name))
 
         def setter(config: Config, value: ModelT, *, name: str = attr_name) -> Config:
-            return _model_replace(config, **{name: value})
+            return _model_replace(config, updates={name: value})
 
         return _SectionProcessor[ModelT](
             name=merger.section,
@@ -309,7 +310,7 @@ class _ConfigMerger:
         )
 
 
-def _merge_severity_rules(current: list[str], raw: Any) -> list[str]:
+def _merge_severity_rules(current: list[str], raw: ConfigValue | Sequence[str] | None) -> list[str]:
     """Return the merged severity rules list while validating inputs.
 
     Args:
@@ -322,7 +323,9 @@ def _merge_severity_rules(current: list[str], raw: Any) -> list[str]:
 
     if raw is None:
         return list(current)
-    if not isinstance(raw, Iterable) or isinstance(raw, (str, bytes)):
+    if isinstance(raw, (str, bytes)):
+        raise ConfigError("severity_rules must be an array of strings")
+    if not isinstance(raw, Iterable):
         raise ConfigError("severity_rules must be an array of strings")
     rules: list[str] = []
     for value in raw:
@@ -333,10 +336,10 @@ def _merge_severity_rules(current: list[str], raw: Any) -> list[str]:
 
 
 def _merge_tool_settings(
-    current: Mapping[str, Mapping[str, Any]],
-    raw: Any,
+    current: Mapping[str, Mapping[str, ConfigValue]],
+    raw: ConfigValue,
     source: str,
-) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]], list[str]]:
+) -> tuple[dict[str, dict[str, ConfigValue]], dict[str, dict[str, ConfigValue]], list[str]]:
     """Merge tool-specific configuration dictionaries.
 
     Args:
@@ -345,16 +348,16 @@ def _merge_tool_settings(
         source: Source identifier used for warning messages.
 
     Returns:
-        tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]], list[str]]:
+        tuple[dict[str, dict[str, ConfigValue]], dict[str, dict[str, ConfigValue]], list[str]]:
             Updated tool settings, per-tool diffs, and warnings.
     """
 
-    result: dict[str, dict[str, Any]] = {tool: dict(settings) for tool, settings in current.items()}
+    result: dict[str, dict[str, ConfigValue]] = {tool: dict(settings) for tool, settings in current.items()}
     if raw is None:
         return result, {}, []
     if not isinstance(raw, Mapping):
         raise ConfigError("tools section must be a table")
-    updates: dict[str, dict[str, Any]] = {}
+    updates: dict[str, dict[str, ConfigValue]] = {}
     warnings: list[str] = []
     for tool, value in raw.items():
         merged, tool_update, tool_warnings = _merge_tool_entry(
@@ -375,10 +378,10 @@ _RESERVED_TOOL_KEYS: Final[frozenset[str]] = frozenset({"duplicates", "complexit
 
 def _merge_tool_entry(
     tool: str,
-    raw_value: Any,
-    existing: Mapping[str, Any],
+    raw_value: ConfigValue,
+    existing: Mapping[str, ConfigValue],
     source: str,
-) -> tuple[dict[str, Any], dict[str, Any] | None, list[str]]:
+) -> tuple[dict[str, ConfigValue], dict[str, ConfigValue] | None, list[str]]:
     """Merge a single tool configuration mapping while collecting warnings."""
 
     if tool in _RESERVED_TOOL_KEYS:
@@ -404,14 +407,14 @@ def _merge_tool_entry(
     return merged, update, warnings
 
 
-def _config_to_snapshot(config: Config) -> dict[str, Any]:
+def _config_to_snapshot(config: Config) -> dict[str, ConfigValue]:
     """Produce a serialisable snapshot of the configuration model.
 
     Args:
         config: Configuration model to serialise.
 
     Returns:
-        dict[str, Any]: Serialisable payload capturing the configuration.
+        dict[str, ConfigValue]: Serialisable payload capturing the configuration.
     """
 
     snapshot = config.to_dict()
@@ -493,9 +496,6 @@ AUTO_TOOL_CONFIG_FILES: dict[str, list[str]] = {
         "golangci.yaml",
     ],
 }
-
-
-_TOML_CACHE: dict[tuple[Path, int], Mapping[str, Any]] = {}
 
 
 __all__ = [

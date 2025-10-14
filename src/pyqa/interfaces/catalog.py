@@ -6,7 +6,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
+
+from pyqa.core.serialization import JsonValue
+
+StrategyConfig = Mapping[str, JsonValue]
 
 
 @runtime_checkable
@@ -28,7 +32,7 @@ class ToolDefinition(Protocol):
         """Return the languages supported by the tool."""
         raise NotImplementedError("ToolDefinition.languages must be implemented")
 
-    def to_dict(self) -> Mapping[str, Any]:
+    def to_dict(self) -> Mapping[str, JsonValue]:
         """Return a JSON-serialisable representation of the tool."""
         raise NotImplementedError
 
@@ -42,7 +46,13 @@ class StrategyFactory(Protocol):
         """Return the canonical name of the strategy."""
         raise NotImplementedError("StrategyFactory.strategy_name must be implemented")
 
-    def __call__(self, config: Mapping[str, Any] | None = None, /, **overrides: Any) -> Any:
+    # suppression_valid: lint=internal-signatures protocol requires variadic configuration arguments so existing strategy factories remain type compatible without adapters.
+    def __call__(
+        self,
+        config: StrategyConfig | None = None,
+        /,
+        **overrides: JsonValue,
+    ) -> JsonValue | None:
         """Return a strategy object using catalogue-provided configuration."""
         raise NotImplementedError
 

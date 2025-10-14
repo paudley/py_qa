@@ -9,8 +9,9 @@ import importlib
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final, Literal, cast
+from typing import Final, Literal, cast
 
+from ..config.types import ConfigValue
 from ..diagnostics.json_import import JsonDiagnosticExtractor, JsonDiagnosticsConfigError
 from ..discovery.planners import build_project_scanner
 from ..discovery.rules import is_under_any, normalize_path_requirement, path_matches_requirements
@@ -25,6 +26,7 @@ from .command_options import (
 )
 from .loader import CatalogIntegrityError
 from .types import JSONValue
+from .utils import expect_mapping, freeze_json_mapping, thaw_json_value
 
 TargetSelectorMode = Literal["filePattern"]
 _TARGET_SELECTOR_MODE_FILE_PATTERN: Final[TargetSelectorMode] = "filePattern"
@@ -83,10 +85,14 @@ def install_download_artifact(config: Mapping[str, JSONValue]) -> Callable[[Tool
     if not isinstance(plain_config, Mapping):
         raise CatalogIntegrityError("install_download_artifact: configuration must be an object")
 
-    download_config = plain_config.get("download")
-    if not isinstance(download_config, Mapping):
-        raise CatalogIntegrityError("install_download_artifact: 'download' must be an object")
-    download_mapping: Mapping[str, JSONValue] = download_config
+    download_mapping = freeze_json_mapping(
+        expect_mapping(
+            plain_config.get("download"),
+            key="download",
+            context="install_download_artifact",
+        ),
+        context="install_download_artifact.download",
+    )
 
     version_value = plain_config.get("version")
     if version_value is not None and not isinstance(version_value, str):
@@ -111,38 +117,7 @@ def install_download_artifact(config: Mapping[str, JSONValue]) -> Callable[[Tool
     )
 
 
-def _load_attribute(path: str, *, context: str) -> Any:
-    """Import an attribute from a dotted path with contextual errors.
-
-    Args:
-        path: Fully qualified dotted path to the target attribute.
-        context: Human-readable location used to annotate raised errors.
-
-    Returns:
-        Any: Imported attribute referenced by ``path``.
-
-    Raises:
-        CatalogIntegrityError: If the module cannot be imported or the
-            attribute is missing.
-
-    """
-
-    module_path, _, attribute = path.rpartition(".")
-    if not module_path:
-        raise CatalogIntegrityError(f"{context}: '{path}' is not a valid import path")
-    try:
-        module = importlib.import_module(module_path)
-    except ImportError as exc:
-        raise CatalogIntegrityError(f"{context}: unable to import module '{module_path}'") from exc
-    try:
-        return getattr(module, attribute)
-    except AttributeError as exc:
-        raise CatalogIntegrityError(
-            f"{context}: module '{module_path}' has no attribute '{attribute}'",
-        ) from exc
-
-
-def json_parser(config: Mapping[str, Any]) -> JsonParser:
+def json_parser(config: Mapping[str, JSONValue]) -> JsonParser:
     """Construct a ``JsonParser`` wrapping the configured transform callable.
 
     Args:
@@ -156,14 +131,28 @@ def json_parser(config: Mapping[str, Any]) -> JsonParser:
 
     """
     transform_path = require_str(config, "transform", context="json_parser")
-    transform_candidate = _load_attribute(transform_path, context="json_parser.transform")
-    if not callable(transform_candidate):
+    module_path, _, attribute = transform_path.rpartition(".")
+    if not module_path:
+        raise CatalogIntegrityError(f"json_parser.transform: '{transform_path}' is not a valid import path")
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as exc:
+        raise CatalogIntegrityError(
+            f"json_parser.transform: unable to import module '{module_path}'",
+        ) from exc
+    try:
+        candidate = getattr(module, attribute)
+    except AttributeError as exc:
+        raise CatalogIntegrityError(
+            f"json_parser.transform: module '{module_path}' has no attribute '{attribute}'",
+        ) from exc
+    if not callable(candidate):
         raise CatalogIntegrityError(f"json_parser: transform '{transform_path}' is not callable")
-    json_transform = cast(JsonTransform, transform_candidate)
+    json_transform = cast(JsonTransform, candidate)
     return JsonParser(json_transform)
 
 
-def text_parser(config: Mapping[str, Any]) -> TextParser:
+def text_parser(config: Mapping[str, JSONValue]) -> TextParser:
     """Construct a ``TextParser`` wrapping the configured transform callable.
 
     Args:
@@ -177,14 +166,28 @@ def text_parser(config: Mapping[str, Any]) -> TextParser:
 
     """
     transform_path = require_str(config, "transform", context="text_parser")
-    transform_candidate = _load_attribute(transform_path, context="text_parser.transform")
-    if not callable(transform_candidate):
+    module_path, _, attribute = transform_path.rpartition(".")
+    if not module_path:
+        raise CatalogIntegrityError(f"text_parser.transform: '{transform_path}' is not a valid import path")
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as exc:
+        raise CatalogIntegrityError(
+            f"text_parser.transform: unable to import module '{module_path}'",
+        ) from exc
+    try:
+        candidate = getattr(module, attribute)
+    except AttributeError as exc:
+        raise CatalogIntegrityError(
+            f"text_parser.transform: module '{module_path}' has no attribute '{attribute}'",
+        ) from exc
+    if not callable(candidate):
         raise CatalogIntegrityError(f"text_parser: transform '{transform_path}' is not callable")
-    text_transform = cast(TextTransform, transform_candidate)
+    text_transform = cast(TextTransform, candidate)
     return TextParser(text_transform)
 
 
-def parser_json_diagnostics(config: Mapping[str, Any]) -> JsonParser:
+def parser_json_diagnostics(config: Mapping[str, JSONValue]) -> JsonParser:
     """Construct a JSON parser that maps entries to ``RawDiagnostic`` objects.
 
     The returned parser iterates over the configured JSON path, applies field
@@ -232,14 +235,18 @@ def parser_json_diagnostics(config: Mapping[str, Any]) -> JsonParser:
             "parser_json_diagnostics: 'inputFormat' must be a string when provided",
         )
 
-    mappings = plain_config.get("mappings")
-    if not isinstance(mappings, Mapping):
+    raw_mappings = plain_config.get("mappings")
+    if not isinstance(raw_mappings, Mapping):
         raise CatalogIntegrityError("parser_json_diagnostics: 'mappings' must be an object")
+    mapping_config = freeze_json_mapping(
+        expect_mapping(raw_mappings, key="mappings", context="parser_json_diagnostics"),
+        context="parser_json_diagnostics.mappings",
+    )
 
     try:
         extractor = JsonDiagnosticExtractor(
             item_path=path_value,
-            mapping_config=_as_plain_json(mappings),
+            mapping_config=mapping_config,
             input_format=normalized_input_format,
         )
     except JsonDiagnosticsConfigError as exc:
@@ -255,7 +262,7 @@ class _DownloadBinaryStrategy(CommandBuilder):
     """Command builder that executes downloaded binaries with mapped options."""
 
     version: str | None
-    download: Mapping[str, Any]
+    download: Mapping[str, JSONValue]
     base: tuple[str, ...]
     placeholder: str
     options: tuple[OptionMapping, ...]
@@ -281,16 +288,21 @@ class _DownloadBinaryStrategy(CommandBuilder):
         return tuple(command)
 
 
-def command_download_binary(config: Mapping[str, Any]) -> CommandBuilder:
+def command_download_binary(config: Mapping[str, JSONValue]) -> CommandBuilder:
     """Return a command builder that downloads a binary and applies option maps."""
 
     plain_config = _as_plain_json(config)
     if not isinstance(plain_config, Mapping):
         raise CatalogIntegrityError("command_download_binary: configuration must be an object")
 
-    download_config = plain_config.get("download")
-    if not isinstance(download_config, Mapping):
-        raise CatalogIntegrityError("command_download_binary: 'download' must be an object")
+    download_config = freeze_json_mapping(
+        expect_mapping(
+            plain_config.get("download"),
+            key="download",
+            context="command_download_binary",
+        ),
+        context="command_download_binary.download",
+    )
 
     version_value = plain_config.get("version")
     if version_value is not None and not isinstance(version_value, str):
@@ -319,7 +331,7 @@ def command_download_binary(config: Mapping[str, Any]) -> CommandBuilder:
     if placeholder not in base_parts:
         base_parts = (placeholder,) + base_parts
 
-    raw_options = cast(JSONValue | None, plain_config.get("options"))
+    raw_options = plain_config.get("options")
     option_mappings = compile_option_mappings(
         raw_options,
         context="command_download_binary.options",
@@ -396,24 +408,44 @@ class _TargetSelector:
 
 
 def _coerce_string_tuple(
-    value: Any,
+    value: JSONValue,
     *,
     field_name: str,
     context: str,
 ) -> tuple[str, ...]:
-    """Return tuple of strings parsed from ``value``."""
+    """Return tuple of strings parsed from ``value``.
+
+    Args:
+        value: Raw configuration value to validate.
+        field_name: Name of the field being processed for error reporting.
+        context: Context identifier included in raised errors.
+
+    Returns:
+        tuple[str, ...]: Tuple containing the string entries, or empty when
+        ``value`` is falsy.
+
+    Raises:
+        CatalogIntegrityError: If ``value`` cannot be interpreted as strings.
+    """
 
     if value in (None, ()):  # treat empty as no entries
         return ()
     if isinstance(value, str):
         return (value,)
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return tuple(str(item) for item in value if item is not None)
+        entries: list[str] = []
+        for index, item in enumerate(value):
+            if not isinstance(item, str):
+                raise CatalogIntegrityError(
+                    f"{context}: expected '{field_name}[{index}]' to be a string",
+                )
+            entries.append(item)
+        return tuple(entries)
     raise CatalogIntegrityError(f"{context}: '{field_name}' must be a string or array of strings")
 
 
 def _coerce_optional_non_empty_string(
-    value: Any,
+    value: JSONValue,
     *,
     field_name: str,
     context: str,
@@ -429,7 +461,7 @@ def _coerce_optional_non_empty_string(
     )
 
 
-def _parse_target_selector(entry: Any, *, context: str) -> _TargetSelector:
+def _parse_target_selector(entry: JSONValue, *, context: str) -> _TargetSelector:
     """Parse target selector configuration for binary download commands."""
 
     if not isinstance(entry, Mapping):
@@ -480,18 +512,27 @@ def _parse_target_selector(entry: Any, *, context: str) -> _TargetSelector:
     )
 
 
-def command_project_scanner(config: Mapping[str, Any]) -> CommandBuilder:
+def command_project_scanner(config: Mapping[str, JSONValue]) -> CommandBuilder:
     """Return a project-aware scanner command builder driven by catalog data."""
 
     plain_config = _as_plain_json(config)
     if not isinstance(plain_config, Mapping):
         raise CatalogIntegrityError("command_project_scanner: configuration must be an object")
 
-    return build_project_scanner(cast(Mapping[str, Any], plain_config))
+    normalized_config = freeze_json_mapping(
+        expect_mapping(
+            plain_config,
+            key="command_project_scanner",
+            context="command_project_scanner",
+        ),
+        context="command_project_scanner",
+    )
+
+    return build_project_scanner(normalized_config)
 
 
 def _download_artifact_for_tool(
-    download_config: Mapping[str, Any],
+    download_config: Mapping[str, JSONValue],
     *,
     version: str | None,
     cache_root: Path,
@@ -515,9 +556,10 @@ def _download_artifact_for_tool(
 
     """
 
-    plain_config = _as_plain_json(download_config)
-    if not isinstance(plain_config, Mapping):
+    plain_config_raw = _as_plain_json(download_config)
+    if not isinstance(plain_config_raw, Mapping):
         raise CatalogIntegrityError(f"{context}: download configuration must be a mapping")
+    plain_config: dict[str, ConfigValue] = {str(key): value for key, value in plain_config_raw.items()}
     return download_tool_artifact(
         plain_config,
         version=version,
@@ -526,20 +568,7 @@ def _download_artifact_for_tool(
     )
 
 
-def _as_plain_json(value: Any) -> Any:
-    """Return ``value`` converted into a JSON-compatible structure.
+def _as_plain_json(value: JSONValue) -> JSONValue:
+    """Return plain Python containers for ``value``."""
 
-    Args:
-        value: Arbitrary configuration object.
-
-    Returns:
-        Any: Structure comprised exclusively of plain Python types suitable for
-        JSON serialisation.
-
-    """
-
-    if isinstance(value, Mapping):
-        return {str(key): _as_plain_json(item) for key, item in value.items()}
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return [_as_plain_json(item) for item in value]
-    return value
+    return thaw_json_value(value)

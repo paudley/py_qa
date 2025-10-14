@@ -10,6 +10,7 @@ import shutil
 from dataclasses import dataclass
 from importlib import metadata as importlib_metadata
 from pathlib import Path
+from types import ModuleType
 from typing import Final, Literal
 
 import typer
@@ -24,7 +25,7 @@ from pyqa.core.config.loader import ConfigLoader, ConfigLoadResult
 
 from ....analysis.treesitter import TreeSitterContextResolver
 from ....config import Config, ConfigError
-from ....core.runtime.process import run_command
+from ....core.runtime.process import CommandOptions, run_command
 from ....tools.builtins import initialize_registry
 from ....tools.registry import DEFAULT_REGISTRY
 from ...core.utils import ToolAvailability, ToolStatus, check_tool_status
@@ -334,7 +335,7 @@ def _resolve_grammar_module(module_name: str) -> tuple[bool, str | None]:
     return True, version
 
 
-def _grammar_version(module_name: str, module: object) -> str | None:
+def _grammar_version(module_name: str, module: ModuleType) -> str | None:
     dist_name = module_name.replace("_", "-")
     try:
         return importlib_metadata.version(dist_name)
@@ -351,8 +352,7 @@ def _capture_version(executable: str) -> str | None:
         try:
             completed = run_command(
                 candidate,
-                capture_output=True,
-                check=False,
+                options=CommandOptions(capture_output=True, check=False),
             )
         except (OSError, ValueError):
             continue

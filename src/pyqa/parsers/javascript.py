@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from typing import Any, Final
+from typing import Final
 
+from pyqa.core.serialization import JsonValue
 from pyqa.core.severity import Severity
 
 from ..core.models import RawDiagnostic
@@ -22,7 +23,7 @@ _ESLINT_WARNING_LEVEL: Final[int] = 1
 _TSC_ERROR_LABEL: Final[str] = "error"
 
 
-def parse_eslint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_eslint(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse ESLint JSON output."""
     items = payload if isinstance(payload, list) else []
     results: list[RawDiagnostic] = []
@@ -55,7 +56,7 @@ def parse_eslint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]
     return results
 
 
-def parse_stylelint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_stylelint(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse stylelint JSON output."""
     items = payload if isinstance(payload, list) else []
     results: list[RawDiagnostic] = []

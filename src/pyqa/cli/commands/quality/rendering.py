@@ -60,7 +60,7 @@ def render_py_qa_skip_warning(
     )
 
 
-def _format_issue_location(path: object | None, root: Path) -> str:
+def _format_issue_location(path: str | Path | None, root: Path) -> str:
     """Return a human-readable issue location string."""
 
     path_obj = _to_path(path)
@@ -70,7 +70,7 @@ def _format_issue_location(path: object | None, root: Path) -> str:
     return f" [{relative}]"
 
 
-def _to_path(value: object) -> Path | None:
+def _to_path(value: str | Path | None) -> Path | None:
     """Return ``value`` as a path when possible."""
 
     if isinstance(value, Path):
