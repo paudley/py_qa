@@ -49,6 +49,8 @@ class ToolCatalogLoader:
     _scanner: CatalogScanner = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
+        """Initialize schema repositories and scanners after dataclass setup."""
+
         self._schemas = SchemaRepository.load(
             catalog_root=self.catalog_root,
             schema_root=self.schema_root,
@@ -57,7 +59,11 @@ class ToolCatalogLoader:
         self._scanner = CatalogScanner(self.catalog_root)
 
     def load_fragments(self) -> tuple[CatalogFragment, ...]:
-        """Load shared catalog fragments."""
+        """Collect catalog fragments from disk.
+
+        Returns:
+            tuple[CatalogFragment, ...]: Fragments contributed by the catalog.
+        """
 
         fragments: list[CatalogFragment] = []
         for path in self._scanner.fragment_documents():
@@ -74,7 +80,11 @@ class ToolCatalogLoader:
         return tuple(fragments)
 
     def load_strategy_definitions(self) -> tuple[StrategyDefinition, ...]:
-        """Load catalog-defined strategies from disk."""
+        """Collect catalog-defined strategies from disk.
+
+        Returns:
+            tuple[StrategyDefinition, ...]: Strategy definitions discovered under ``catalog_root``.
+        """
 
         definitions: list[StrategyDefinition] = []
         for path in self._scanner.strategy_documents():
@@ -91,7 +101,14 @@ class ToolCatalogLoader:
         *,
         fragments: Sequence[CatalogFragment] | None = None,
     ) -> tuple[ToolDefinition, ...]:
-        """Load all tool definitions contained in the catalog root."""
+        """Load all tool definitions contained in the catalog root.
+
+        Args:
+            fragments: Optional pre-loaded fragments used to resolve ``extends`` directives.
+
+        Returns:
+            tuple[ToolDefinition, ...]: Tool definitions discovered under ``catalog_root``.
+        """
 
         fragment_sequence = fragments if fragments is not None else self.load_fragments()
         fragment_lookup = {fragment.name: fragment for fragment in fragment_sequence}
@@ -120,7 +137,11 @@ class ToolCatalogLoader:
         return tuple(definitions)
 
     def load_snapshot(self) -> CatalogSnapshot:
-        """Load tools, strategies, and fragments with checksum metadata."""
+        """Produce a catalog snapshot containing tools, strategies, and fragments.
+
+        Returns:
+            CatalogSnapshot: Snapshot containing catalog artifacts and checksums.
+        """
 
         fragments = self.load_fragments()
         strategies = self.load_strategy_definitions()
@@ -153,7 +174,11 @@ class ToolCatalogLoader:
         )
 
     def compute_checksum(self) -> str:
-        """Return a checksum representing the current catalog contents."""
+        """Calculate a checksum representing the current catalog contents.
+
+        Returns:
+            str: Hex-encoded checksum covering catalog-relevant files.
+        """
 
         paths = self._scanner.catalog_files()
         return compute_catalog_checksum(self.catalog_root, paths)
@@ -165,6 +190,18 @@ class ToolCatalogLoader:
         validator: ValidatorKind,
         path: Path,
     ) -> None:
+        """Validate a document against the requested schema validator.
+
+        Args:
+            document: Raw JSON payload to validate.
+            validator: Validator kind indicating whether the document is a tool or strategy.
+            path: Filesystem path used in error reporting.
+
+        Raises:
+            CatalogValidationError: When the document fails schema validation.
+            ValueError: If an unknown validator kind is supplied.
+        """
+
         if validator is TOOL_VALIDATOR:
             schema_validator = self._schemas.tool_validator
         elif validator is STRATEGY_VALIDATOR:

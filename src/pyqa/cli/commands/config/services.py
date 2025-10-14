@@ -11,6 +11,7 @@ from typing import Final, Literal, cast
 
 import typer
 
+from pyqa.config.types import ConfigValue
 from pyqa.core.config.loader import (
     ConfigError,
     ConfigLoader,
@@ -41,7 +42,7 @@ def load_config_with_trace(
     strict: bool,
     logger: CLILogger,
 ) -> ConfigLoadResult:
-    """Load configuration with provenance, raising ``CLIError`` on failure.
+    """Perform configuration loading with provenance metadata.
 
     Args:
         root: Project root directory used to locate configuration files.
@@ -64,7 +65,7 @@ def load_config_with_trace(
 
 
 def validate_config(root: Path, *, strict: bool, logger: CLILogger) -> None:
-    """Validate configuration loading, raising ``CLIError`` on failure.
+    """Perform configuration validation, raising ``CLIError`` on failure.
 
     Args:
         root: Project root directory used to locate configuration files.
@@ -177,7 +178,7 @@ def render_schema(fmt: SchemaFormatLiteral) -> str:
     raise typer.BadParameter("Unknown schema format. Use 'json', 'json-tools', or 'markdown'.")
 
 
-def schema_to_markdown(schema: Mapping[str, JsonValue]) -> str:
+def schema_to_markdown(schema: Mapping[str, ConfigValue]) -> str:
     """Convert a schema mapping into markdown documentation.
 
     Args:
@@ -248,7 +249,7 @@ def build_tool_schema_payload() -> dict[str, JsonValue]:
 
 
 def collect_layer_snapshots(result: ConfigLoadResult) -> dict[str, JsonValue]:
-    """Return configuration snapshots normalised to lower-case keys.
+    """Create configuration snapshots normalised to lower-case keys.
 
     Args:
         result: Configuration load result containing snapshot data.
@@ -329,7 +330,7 @@ def diff_snapshots(
 
 @dataclass(slots=True)
 class ConfigDiffComputation:
-    """Result payload describing configuration diff metadata."""
+    """Provide configuration diff metadata."""
 
     diff: dict[str, JsonValue]
     available_layers: list[str]
@@ -339,6 +340,14 @@ class UnknownConfigLayerError(ValueError):
     """Raised when a requested configuration layer does not exist."""
 
     def __init__(self, layer: str, *, available: list[str]) -> None:
+        """Initialise the error with context about available layers.
+
+        Args:
+            layer: Name of the missing configuration layer requested by caller.
+            available: Sorted list of layers present in the configuration
+                snapshots.
+        """
+
         super().__init__(layer)
         self.layer = layer
         self.available = available
@@ -350,7 +359,7 @@ def build_config_diff(
     from_layer: str,
     to_layer: str,
 ) -> ConfigDiffComputation:
-    """Compute a diff payload between two configuration layers.
+    """Construct a diff payload between two configuration layers.
 
     Args:
         result: Configuration load result containing all layer snapshots.

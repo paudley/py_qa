@@ -24,7 +24,7 @@ from ..analysis.services import (
     resolve_function_scale_estimator,
 )
 from ..analysis.suppression import apply_suppression_hints
-from ..cache.context import build_cache_context, load_cached_outcome, save_versions, update_tool_version
+from ..cache.context import CacheContext, build_cache_context, load_cached_outcome, save_versions, update_tool_version
 from ..config import Config
 from ..core.logging import warn
 from ..core.models import RunResult, ToolOutcome
@@ -60,6 +60,28 @@ _FETCH_EVENT_ERROR: Final[FetchEvent] = "error"
 
 FetchCallback = Callable[[FetchEvent, str, str, int, int, str | None], None]
 CommandPreparationFn = Callable[[CommandPreparationRequest], PreparedCommand]
+
+
+def _resolve_cache_builder(services: ServiceContainer | None) -> Callable[[Config, Path], CacheContext]:
+    """Return the cache context builder available from ``services``.
+
+    Args:
+        services: Optional service container supplied to the orchestrator.
+
+    Returns:
+        Callable[[Config, Path], CacheContext]: Cache builder callable capable of
+            initialising cache state for orchestrator actions.
+    """
+
+    if services is None:
+        return build_cache_context
+    try:
+        builder_candidate = services.resolve("cache_context_builder")
+    except ServiceResolutionError:
+        return build_cache_context
+    if not callable(builder_candidate):
+        return build_cache_context
+    return cast(Callable[[Config, Path], CacheContext], builder_candidate)
 
 
 @dataclass(slots=True)
@@ -392,12 +414,7 @@ class Orchestrator:
         root_path = prepare_runtime(root)
         matched_files = discover_files(self._context.discovery, cfg, root_path)
         severity_rules = build_severity_rules(cfg.severity_rules)
-        cache_builder = build_cache_context
-        if self._services is not None:
-            try:
-                cache_builder = self._services.resolve("cache_context_builder")
-            except ServiceResolutionError:
-                cache_builder = build_cache_context
+        cache_builder = _resolve_cache_builder(self._services)
         cache_ctx = cache_builder(cfg, root_path)
         environment = ExecutionEnvironment(
             config=cfg,

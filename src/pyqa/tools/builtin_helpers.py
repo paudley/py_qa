@@ -9,11 +9,11 @@ import shutil
 import stat
 import tarfile
 import tempfile
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Final, Protocol, cast
 
 from pyqa.core.severity import Severity
 
@@ -68,7 +68,27 @@ class _HttpResponse(Protocol):
         return (self.content,)
 
 
-_RequestsGet = Callable[..., _HttpResponse]
+class _RequestsGet(Protocol):
+    """Callable compatible with ``requests.get`` for the subset of parameters we use."""
+
+    def __call__(
+        self,
+        url: str | bytes,
+        params: Mapping[str, str] | Sequence[tuple[str, str]] | None = None,
+        *,
+        timeout: float | tuple[float | None, float | None] | None = None,
+    ) -> _HttpResponse:
+        """Return an HTTP response for ``url``.
+
+        Args:
+            url: Request URL or fully qualified endpoint string.
+            params: Optional query parameters encoded with the request.
+            timeout: Optional timeout in seconds or connect/read tuple.
+
+        Returns:
+            _HttpResponse: HTTP response wrapper provided by ``requests``.
+        """
+        ...
 
 
 @lru_cache(maxsize=1)
@@ -76,7 +96,7 @@ def _load_requests_get() -> _RequestsGet:
     """Return the cached ``requests.get`` callable.
 
     Returns:
-        Callable[..., _HttpResponse]: Requests GET function used for downloads.
+        _RequestsGet: Requests GET function used for downloads.
 
     Raises:
         RuntimeError: If the ``requests`` package is not available.
@@ -86,7 +106,8 @@ def _load_requests_get() -> _RequestsGet:
         import requests
     except ModuleNotFoundError as exc:
         raise RuntimeError("requests package is required to download tool artifacts") from exc
-    return requests.get
+    get_callable: _RequestsGet = cast(_RequestsGet, requests.get)
+    return get_callable
 
 
 SettingsMapping = Mapping[str, ConfigValue]

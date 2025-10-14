@@ -265,11 +265,7 @@ class _InterfaceVisitor(BaseAstLintVisitor):
 
     # --- Constructor bans ----------------------------------------------------------------
 
-    def visit_call(
-        self, node: ast.Call
-    ) -> (
-        None
-    ):  # noqa: D401 suppression_valid: Call visitor adheres to NodeVisitor API and its behaviour is fully described by the base class.
+    def visit_call(self, node: ast.Call) -> None:  # noqa: D401 suppression_valid: Call visitor adheres to NodeVisitor API and its behaviour is fully described by the base class.
         fully_qualified = _call_qualifier(node.func)
         if fully_qualified is None:
             self.generic_visit(node)

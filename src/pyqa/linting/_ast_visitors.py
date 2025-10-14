@@ -15,7 +15,7 @@ if TYPE_CHECKING:  # pragma: no cover
 else:  # pragma: no cover
     PreparedLintState = object
 
-from pyqa.core.models import Diagnostic
+from pyqa.core.models import Diagnostic, JsonValue
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path_key
 

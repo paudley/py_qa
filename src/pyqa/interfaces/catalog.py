@@ -10,8 +10,6 @@ from typing import Protocol, runtime_checkable
 
 from pyqa.core.serialization import JsonValue
 
-StrategyConfig = Mapping[str, JsonValue]
-
 
 @runtime_checkable
 class ToolDefinition(Protocol):
@@ -49,7 +47,7 @@ class StrategyFactory(Protocol):
     # suppression_valid: lint=internal-signatures protocol requires variadic configuration arguments so existing strategy factories remain type compatible without adapters.
     def __call__(
         self,
-        config: StrategyConfig | None = None,
+        config: Mapping[str, JsonValue] | None = None,
         /,
         **overrides: JsonValue,
     ) -> JsonValue | None:

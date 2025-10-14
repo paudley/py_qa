@@ -11,7 +11,15 @@ from pathlib import Path
 
 
 def compute_catalog_checksum(catalog_root: Path, paths: Sequence[Path]) -> str:
-    """Return a deterministic checksum for *paths* relative to *catalog_root*."""
+    """Calculate the catalog checksum for the provided paths.
+
+    Args:
+        catalog_root: Root directory anchoring the catalog.
+        paths: Sequence of paths contributing to the checksum.
+
+    Returns:
+        str: Hex-encoded SHA-256 checksum covering the provided files.
+    """
     hasher = hashlib.sha256()
     for path in paths:
         relative_path = path.relative_to(catalog_root).as_posix().encode("utf-8")

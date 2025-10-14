@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from enum import Enum
 from pathlib import Path
 from re import Pattern
@@ -16,9 +16,8 @@ from pyqa.core.metrics import FileMetrics
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path
 
-JsonScalar = str | int | float | bool | None
-JsonArray = list[JsonScalar]
-JsonValue = JsonScalar | JsonArray | dict[str, JsonScalar | JsonArray]
+type JsonScalar = str | int | float | bool | None
+type JsonValue = JsonScalar | list[JsonValue] | dict[str, JsonValue]
 
 
 class OutputFilter(BaseModel):

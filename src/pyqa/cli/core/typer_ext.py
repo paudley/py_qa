@@ -12,7 +12,6 @@ from types import EllipsisType, GenericAlias, UnionType
 from typing import (
     Annotated,
     Final,
-    Literal,
     Protocol,
     TypeAlias,
     TypeVar,
@@ -28,7 +27,7 @@ import typer.main
 from click.core import Argument, Context, Option, Parameter
 from click.formatting import HelpFormatter
 from typer.core import TyperCommand, TyperGroup
-from typer.models import OptionInfo, ParamMeta, ParameterInfo
+from typer.models import OptionInfo, ParameterInfo, ParamMeta
 
 from .shared import (
     CommandCallable,
@@ -51,9 +50,7 @@ TyperParamShim: TypeAlias = Callable[..., ParamsMetadata]
 TyperCallbackShim: TypeAlias = Callable[..., Callable[..., CLIParameterValue] | None]
 DependencyCallable: TypeAlias = Callable[..., CLIParameterValue]
 AnalyzableCallable: TypeAlias = Callable[..., CLIParameterValue]
-TyperContextValue: TypeAlias = bool | int | float | str | Sequence[str] | None
-TyperContextSettings: TypeAlias = Mapping[str, TyperContextValue]
-GetClickParamCallable: TypeAlias = Callable[[ParamMeta], tuple[Argument | Option, CLIParameterValue]]
+GetClickParamCallable: TypeAlias = Callable[[ParamMeta], tuple[Argument | Option, CLIConvertor | None]]
 
 
 @dataclass(slots=True)
@@ -155,8 +152,9 @@ def _sanitize_param_decl(
         sanitized = tuple(decl for decl in param_decls if isinstance(decl, str))
         if len(sanitized) != len(param_decls):
             setattr(param.default, "param_decls", sanitized)
-    click_param, convertor = original_get_click_param(param)
-    return click_param, cast(CLIParameterValue, convertor)
+    click_param, raw_convertor = original_get_click_param(param)
+    convertor: CLIConvertor | None = raw_convertor if callable(raw_convertor) else None
+    return click_param, convertor
 
 
 @dataclass(frozen=True)
@@ -477,9 +475,7 @@ class _DependencyResolver:
             annotation=updated_parameter.annotation,
         )
         click_param, convertor_value = self._get_click_param(param_meta)
-        typed_param = cast(Argument | Option, click_param)
-        convertor = cast(CLIConvertor | None, convertor_value)
-        return typed_param, convertor
+        return click_param, convertor_value
 
     def _extract_dependency_values(
         self,
@@ -654,166 +650,50 @@ class SortedTyperGroup(TyperGroup):
 CommandCallback = TypeVar("CommandCallback", bound=CommandCallable)
 
 
-class TyperCallback(Protocol):
-    """Protocol describing callbacks consumed by Typer."""
+@dataclass(frozen=True)
+class TyperAppConfig:
+    """Configuration payload used when constructing :class:`SortedTyper`."""
 
-    def __call__(self, *args: CLIParameterValue, **kwargs: CLIParameterValue) -> CLIParameterValue | None:
-        """Invoke the callback returning an optional CLI parameter value."""
+    name: str | None = None
+    help_text: str | None = None
+    invoke_without_command: bool = False
+    no_args_is_help: bool = False
 
 
 class SortedTyper(typer.Typer):
     """Typer application that emits sorted option listings by default."""
 
-    def __init__(
-        self,
-        *,
-        name: str | None = None,
-        cls: type[TyperGroup] | None = None,
-        invoke_without_command: bool = False,
-        no_args_is_help: bool = False,
-        subcommand_metavar: str | None = None,
-        chain: bool = False,
-        result_callback: TyperCallback | None = None,
-        context_settings: TyperContextSettings | None = None,
-        callback: TyperCallback | None = None,
-        help: str | None = None,
-        epilog: str | None = None,
-        short_help: str | None = None,
-        options_metavar: str = "[OPTIONS]",
-        add_help_option: bool = True,
-        hidden: bool = False,
-        deprecated: bool = False,
-        add_completion: bool = True,
-        rich_markup_mode: Literal["markdown", "rich", None] | None = None,
-        rich_help_panel: str | None = None,
-        pretty_exceptions_enable: bool = True,
-        pretty_exceptions_show_locals: bool = True,
-        pretty_exceptions_short: bool = True,
-    ) -> None:
+    def __init__(self, config: TyperAppConfig | None = None, *, group_cls: type[TyperGroup] | None = None) -> None:
         """Initialise the Typer application with sorted help semantics."""
 
-        final_cls = cls or SortedTyperGroup
-        settings_dict = dict(context_settings) if context_settings is not None else None
+        cfg = config or TyperAppConfig()
+        final_cls = group_cls or SortedTyperGroup
         super().__init__(
-            name=name,
+            name=cfg.name,
+            help=cfg.help_text,
             cls=final_cls,
-            invoke_without_command=invoke_without_command,
-            no_args_is_help=no_args_is_help,
-            subcommand_metavar=subcommand_metavar,
-            chain=chain,
-            result_callback=result_callback,
-            context_settings=settings_dict,
-            callback=callback,
-            help=help,
-            epilog=epilog,
-            short_help=short_help,
-            options_metavar=options_metavar,
-            add_help_option=add_help_option,
-            hidden=hidden,
-            deprecated=deprecated,
-            add_completion=add_completion,
-            rich_markup_mode=rich_markup_mode,
-            rich_help_panel=rich_help_panel,
-            pretty_exceptions_enable=pretty_exceptions_enable,
-            pretty_exceptions_show_locals=pretty_exceptions_show_locals,
-            pretty_exceptions_short=pretty_exceptions_short,
-        )
-
-    def command(
-        self,
-        name: str | None = None,
-        *,
-        cls: type[TyperCommand] | None = None,
-        context_settings: TyperContextSettings | None = None,
-        help: str | None = None,
-        epilog: str | None = None,
-        short_help: str | None = None,
-        options_metavar: str = "[OPTIONS]",
-        add_help_option: bool = True,
-        no_args_is_help: bool = False,
-        hidden: bool = False,
-        deprecated: bool = False,
-        rich_help_panel: str | None = None,
-    ) -> Callable[[CommandCallback], CommandCallback]:
-        """Return a decorator that registers commands using sorted help output."""
-
-        final_cls = cls or SortedTyperCommand
-        settings_dict = dict(context_settings) if context_settings is not None else None
-        return super().command(
-            name,
-            cls=final_cls,
-            context_settings=settings_dict,
-            help=help,
-            epilog=epilog,
-            short_help=short_help,
-            options_metavar=options_metavar,
-            add_help_option=add_help_option,
-            no_args_is_help=no_args_is_help,
-            hidden=hidden,
-            deprecated=deprecated,
-            rich_help_panel=rich_help_panel,
+            invoke_without_command=cfg.invoke_without_command,
+            no_args_is_help=cfg.no_args_is_help,
         )
 
 
 # suppression_valid: lint=internal-signatures factory intentionally forwards arbitrary kwargs to maintain Typer compatibility while enforcing sorted command help.
 def create_typer(
     *,
-    name: str | None = None,
-    cls: type[TyperGroup] | None = None,
-    invoke_without_command: bool = False,
-    no_args_is_help: bool = False,
-    subcommand_metavar: str | None = None,
-    chain: bool = False,
-    result_callback: TyperCallback | None = None,
-    context_settings: TyperContextSettings | None = None,
-    callback: TyperCallback | None = None,
-    help: str | None = None,
-    epilog: str | None = None,
-    short_help: str | None = None,
-    options_metavar: str = "[OPTIONS]",
-    add_help_option: bool = True,
-    hidden: bool = False,
-    deprecated: bool = False,
-    add_completion: bool = True,
-    rich_markup_mode: Literal["markdown", "rich", None] | None = None,
-    rich_help_panel: str | None = None,
-    pretty_exceptions_enable: bool = True,
-    pretty_exceptions_show_locals: bool = True,
-    pretty_exceptions_short: bool = True,
+    config: TyperAppConfig | None = None,
+    group_cls: type[TyperGroup] | None = None,
 ) -> SortedTyper:
     """Return a :class:`SortedTyper` configured to emit sorted help listings.
 
     Args:
-        **kwargs: Additional arguments forwarded to :class:`SortedTyper`.
+        config: Optional application configuration payload.
+        group_cls: Optional Typer group subclass to override the default sorted group.
 
     Returns:
         SortedTyper: Configured Typer application with sorted help output.
 
     """
-    return SortedTyper(
-        name=name,
-        cls=cls,
-        invoke_without_command=invoke_without_command,
-        no_args_is_help=no_args_is_help,
-        subcommand_metavar=subcommand_metavar,
-        chain=chain,
-        result_callback=result_callback,
-        context_settings=context_settings,
-        callback=callback,
-        help=help,
-        epilog=epilog,
-        short_help=short_help,
-        options_metavar=options_metavar,
-        add_help_option=add_help_option,
-        hidden=hidden,
-        deprecated=deprecated,
-        add_completion=add_completion,
-        rich_markup_mode=rich_markup_mode,
-        rich_help_panel=rich_help_panel,
-        pretty_exceptions_enable=pretty_exceptions_enable,
-        pretty_exceptions_show_locals=pretty_exceptions_show_locals,
-        pretty_exceptions_short=pretty_exceptions_short,
-    )
+    return SortedTyper(config=config, group_cls=group_cls)
 
 
 def _primary_option_name(param: Parameter) -> str:

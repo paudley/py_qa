@@ -11,7 +11,7 @@ from typing import Final
 from pyqa.core.severity import Severity
 
 from ..core.models import RawDiagnostic
-from ..core.serialization import JsonValue, coerce_optional_int
+from ..core.serialization import JsonValue, coerce_optional_int, coerce_optional_str
 from ..tools.base import ToolContext
 from .base import (
     DiagnosticDetails,
@@ -35,6 +35,22 @@ CHECKMAKE_SEVERITY_MAP: Final[dict[str, Severity]] = {
     "warning": Severity.WARNING,
     "info": Severity.NOTICE,
 }
+
+
+def _mapping_sequence(value: JsonValue | None) -> tuple[Mapping[str, JsonValue], ...]:
+    """Return tuple of mapping entries extracted from ``value`` when possible."""
+
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return tuple(item for item in value if isinstance(item, Mapping))
+    if isinstance(value, Mapping):
+        return (value,)
+    return ()
+
+
+def _first_mapping(value: JsonValue | None) -> Mapping[str, JsonValue]:
+    """Return ``value`` when it is a mapping, otherwise an empty mapping."""
+
+    return value if isinstance(value, Mapping) else {}
 
 
 def parse_shfmt(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
@@ -196,10 +212,10 @@ def _iter_checkmake_entries(payload: JsonValue) -> Iterator[Mapping[str, JsonVal
     """Yield checkmake file entries from ``payload``."""
 
     if isinstance(payload, Mapping):
-        candidates = payload.get("files") or payload.get("results") or []
-    else:
-        candidates = payload
-    yield from iter_dicts(candidates)
+        candidates = payload.get("files") or payload.get("results")
+        yield from _mapping_sequence(candidates)
+        return
+    yield from _mapping_sequence(payload)
 
 
 _CPPLINT_PATTERN = re.compile(
@@ -342,10 +358,10 @@ def _iter_golangci_entries(payload: JsonValue) -> Iterator[Mapping[str, JsonValu
     """Yield golangci-lint issue entries from ``payload``."""
 
     if isinstance(payload, Mapping):
-        candidates = payload.get("Issues") or payload.get("issues") or []
-    else:
-        candidates = payload
-    yield from iter_dicts(candidates)
+        candidates = payload.get("Issues") or payload.get("issues")
+        yield from _mapping_sequence(candidates)
+        return
+    yield from _mapping_sequence(payload)
 
 
 def _build_golangci_diagnostic(issue: Mapping[str, JsonValue]) -> RawDiagnostic | None:
@@ -383,42 +399,31 @@ def parse_cargo_clippy(payload: JsonValue, context: ToolContext) -> Sequence[Raw
     """Parse Cargo clippy JSON payloads."""
     del context
     results: list[RawDiagnostic] = []
-    if isinstance(payload, list):
-        source = payload
-    elif isinstance(payload, dict):
-        source = [payload]
-    else:
-        source = []
-    for record in iter_dicts(source):
+    for record in _mapping_sequence(payload):
         if record.get("reason") != CARGO_CLIPPY_DIAGNOSTIC_REASON:
             continue
-        message = record.get("message", {})
-        if not isinstance(message, dict):
-            continue
-        level = message.get("level", "warning")
-        spans = message.get("spans") or []
-        primary = next(
-            (span for span in spans if span.get("is_primary")),
-            spans[0] if spans else None,
-        )
-        file_name = primary.get("file_name") if isinstance(primary, dict) else None
-        line = coerce_optional_int(primary.get("line_start")) if isinstance(primary, dict) else None
-        column = coerce_optional_int(primary.get("column_start")) if isinstance(primary, dict) else None
-        code_obj = message.get("code") or {}
-        code = code_obj.get("code") if isinstance(code_obj, dict) else None
+        message_mapping = _first_mapping(record.get("message"))
+        level = str(message_mapping.get("level", "warning")).lower()
+        spans = _mapping_sequence(message_mapping.get("spans"))
+        primary = next((span for span in spans if span.get("is_primary")), spans[0] if spans else None)
+        file_name = coerce_optional_str(primary.get("file_name")) if primary else None
+        line = coerce_optional_int(primary.get("line_start")) if primary else None
+        column = coerce_optional_int(primary.get("column_start")) if primary else None
+        code_mapping = _first_mapping(message_mapping.get("code"))
+        code = coerce_optional_str(code_mapping.get("code"))
         sev_enum = {
             "error": Severity.ERROR,
             "warning": Severity.WARNING,
             "note": Severity.NOTE,
             "help": Severity.NOTE,
-        }.get(str(level).lower(), Severity.WARNING)
+        }.get(level, Severity.WARNING)
         results.append(
             RawDiagnostic(
                 file=file_name,
                 line=line,
                 column=column,
                 severity=sev_enum,
-                message=str(message.get("message", "")).strip(),
+                message=(coerce_optional_str(message_mapping.get("message")) or "").strip(),
                 code=code,
                 tool="cargo-clippy",
             ),

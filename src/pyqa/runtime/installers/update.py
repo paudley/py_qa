@@ -100,12 +100,10 @@ class CommandSpec(BaseModel):
     @field_validator("args", mode="before")
     @classmethod
     def _coerce_args(cls, value: Sequence[str] | str) -> tuple[str, ...]:
-        if isinstance(value, tuple):
-            return tuple(str(entry) for entry in value)
-        if isinstance(value, (list, Sequence)):
-            return tuple(str(entry) for entry in value)
         if isinstance(value, str):
             return (value,)
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            return tuple(str(entry) for entry in value)
         raise TypeError("CommandSpec.args must be a sequence of strings")
 
     @field_validator("requires", mode="before")
@@ -113,12 +111,12 @@ class CommandSpec(BaseModel):
     def _coerce_requires(cls, value: Sequence[str] | set[str] | str | None) -> tuple[str, ...]:
         if value is None:
             return ()
-        if isinstance(value, tuple):
-            return tuple(str(entry) for entry in value)
-        if isinstance(value, (list, Sequence, set)):
-            return tuple(str(entry) for entry in value)
         if isinstance(value, str):
             return (value,)
+        if isinstance(value, set):
+            return tuple(str(entry) for entry in value)
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            return tuple(str(entry) for entry in value)
         raise TypeError("CommandSpec.requires must be a sequence of strings")
 
 

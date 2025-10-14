@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import shlex
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -22,13 +24,14 @@ from ..cache.result_store import CacheRequest
 from ..config import Config
 from ..core.logging import warn
 from ..core.metrics import FileMetrics, compute_file_metrics
-from ..core.models import Diagnostic, RawDiagnostic, ToolExitCategory, ToolOutcome
+from ..core.models import Diagnostic, JsonValue, RawDiagnostic, ToolExitCategory, ToolOutcome
 from ..core.runtime.process import CommandOptions, CommandOverrideMapping
 from ..diagnostics.pipeline import DiagnosticPipeline as DiagnosticPipelineImpl
 from ..filesystem.paths import normalize_path_key
 from ..interfaces.analysis import ContextResolver
 from ..interfaces.diagnostics import DiagnosticPipeline as DiagnosticPipelineProtocol
 from ..interfaces.diagnostics import DiagnosticPipelineRequest
+from ..parsers.base import JsonParser
 from ..tools import InternalActionRunner, ToolAction, ToolContext
 
 _DIAGNOSTIC_PIPELINE: Final[DiagnosticPipelineProtocol] = DiagnosticPipelineImpl()
@@ -431,7 +434,12 @@ class ActionExecutor:
                 ),
             )
             stdout_lines, stderr_lines = self._filter_outputs(invocation, completed, filters)
-            raw_candidates = self._parse_diagnostics(invocation, stdout_lines, stderr_lines)
+            raw_candidates = self._parse_diagnostics(
+                invocation,
+                stdout_lines,
+                stderr_lines,
+                cache_context=environment.cache,
+            )
             base_returncode = completed.returncode
 
         pipeline_request = DiagnosticPipelineRequest(
@@ -572,6 +580,8 @@ class ActionExecutor:
         invocation: ActionInvocation,
         stdout_lines: Sequence[str],
         stderr_lines: Sequence[str],
+        *,
+        cache_context: CacheContext,
     ) -> Sequence[RawDiagnostic | Diagnostic]:
         """Parse diagnostics emitted by the tool invocation.
 
@@ -583,13 +593,84 @@ class ActionExecutor:
         Returns:
             Sequence[RawDiagnostic | Diagnostic]: Parsed diagnostics when a parser is available.
         """
-        if invocation.action.parser is None:
+        parser = invocation.action.parser
+        if parser is None:
             return ()
-        return invocation.action.parser.parse(
+        cache = cache_context.cache
+        token = cache_context.token
+        if cache is not None and token is not None and isinstance(parser, JsonParser):
+            stdout_text = "\n".join(stdout_lines)
+            digest = hashlib.sha256(stdout_text.encode("utf-8")).hexdigest()
+            request = CacheRequest(
+                tool=f"{invocation.tool_name}:parser",
+                action=invocation.action.name,
+                command=tuple(invocation.command) + (digest,),
+                files=(),
+                token=f"{token}:parser",
+            )
+            cached_entry = cache.load(request)
+            if cached_entry is not None:
+                cached_payload = cached_entry.outcome.stdout[0] if cached_entry.outcome.stdout else None
+                restored = ActionExecutor._deserialize_cached_candidates(cached_payload)
+                if restored is not None:
+                    return restored
+            diagnostics = tuple(
+                parser.parse(
+                    stdout_lines,
+                    stderr_lines,
+                    context=invocation.context,
+                )
+            )
+            serialised = ActionExecutor._serialise_candidates(diagnostics)
+            outcome = ToolOutcome(
+                tool=f"{invocation.tool_name}:parser",
+                action=invocation.action.name,
+                returncode=0,
+                stdout=[json.dumps(serialised, sort_keys=True)],
+                stderr=[],
+                diagnostics=[],
+                exit_category=ToolExitCategory.SUCCESS,
+            )
+            cache.store(request=request, outcome=outcome, file_metrics={})
+            return diagnostics
+        return parser.parse(
             stdout_lines,
             stderr_lines,
             context=invocation.context,
         )
+
+    @staticmethod
+    def _serialise_candidates(candidates: Sequence[RawDiagnostic | Diagnostic]) -> list[dict[str, JsonValue]]:
+        serialised: list[dict[str, JsonValue]] = []
+        for item in candidates:
+            if isinstance(item, RawDiagnostic):
+                serialised.append({"kind": "raw", "data": item.model_dump(mode="json")})
+            elif isinstance(item, Diagnostic):
+                serialised.append({"kind": "diagnostic", "data": item.model_dump(mode="json")})
+        return serialised
+
+    @staticmethod
+    def _deserialize_cached_candidates(payload: JsonValue | None) -> tuple[RawDiagnostic | Diagnostic, ...] | None:
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except json.JSONDecodeError:
+                return None
+        if not isinstance(payload, Sequence):
+            return None
+        restored: list[RawDiagnostic | Diagnostic] = []
+        for entry in payload:
+            if not isinstance(entry, Mapping):
+                return None
+            kind = entry.get("kind")
+            data = entry.get("data")
+            if kind == "raw" and isinstance(data, Mapping):
+                restored.append(RawDiagnostic.model_validate(data))
+            elif kind == "diagnostic" and isinstance(data, Mapping):
+                restored.append(Diagnostic.model_validate(data))
+            else:
+                return None
+        return tuple(restored)
 
     @staticmethod
     def _evaluate_exit_status(

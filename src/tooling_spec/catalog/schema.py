@@ -16,9 +16,12 @@ from .types import JSONValue
 
 
 class SchemaValidationError(Protocol):
-    """Protocol capturing jsonschema validation error payloads."""
+    """Represent schema validation errors surfaced by jsonschema."""
 
-    message: str
+    @property
+    def message(self) -> str:
+        """Return the descriptive validation error message."""
+        raise NotImplementedError
 
 
 @runtime_checkable
@@ -26,10 +29,26 @@ class SchemaValidator(Protocol):
     """Protocol describing the minimal interface exposed by jsonschema validators."""
 
     def validate(self, instance: JSONValue) -> None:
-        """Validate ``instance`` against the bound schema."""
+        """Validate ``instance`` against the bound schema.
+
+        Args:
+            instance: JSON payload to validate against the schema.
+
+        Raises:
+            Exception: Implementations may raise jsonschema validation errors when invalid.
+        """
+        raise NotImplementedError
 
     def iter_errors(self, instance: JSONValue) -> Iterable[SchemaValidationError]:
-        """Yield validation errors for ``instance`` without raising immediately."""
+        """Iterate over validation errors for ``instance``.
+
+        Args:
+            instance: JSON payload to validate against the schema.
+
+        Returns:
+            Iterable[SchemaValidationError]: Iterator yielding validation errors.
+        """
+        raise NotImplementedError
 
 
 SchemaValidatorFactory = Callable[[JSONValue], SchemaValidator]
@@ -41,7 +60,7 @@ Draft202012Validator = cast(SchemaValidatorFactory, jsonschema_module.Draft20201
 
 @dataclass(slots=True)
 class SchemaRepository:
-    """Container for catalog JSON schema validators."""
+    """Manage catalog JSON schema validators for tools and strategies."""
 
     schema_root: Path
     tool_validator: SchemaValidator
@@ -49,7 +68,15 @@ class SchemaRepository:
 
     @classmethod
     def load(cls, *, catalog_root: Path, schema_root: Path | None = None) -> SchemaRepository:
-        """Load schema validators from disk."""
+        """Load schema validators from disk.
+
+        Args:
+            catalog_root: Root directory containing the catalog.
+            schema_root: Optional override for the schema directory.
+
+        Returns:
+            SchemaRepository: Repository configured with tool and strategy validators.
+        """
         resolved_root = schema_root or (catalog_root.parent / "schema")
         tool_schema_path = resolved_root / "tool_definition.schema.json"
         strategy_schema_path = resolved_root / "strategy_definition.schema.json"

@@ -69,7 +69,7 @@ def merge_json_objects(
     *,
     context: str,
 ) -> Mapping[str, JSONValue]:
-    """Recursively merge JSON mappings without mutating inputs.
+    """Merge JSON mappings recursively without mutating inputs.
 
     Args:
         base: Base JSON mapping.
@@ -102,7 +102,14 @@ def merge_json_objects(
 
 
 def to_plain_json(value: JSONValue) -> JSONValue:
-    """Convert frozen JSON structures into mutable equivalents for schema validation."""
+    """Convert frozen JSON structures into mutable equivalents for validation.
+
+    Args:
+        value: JSON value potentially containing frozen structures.
+
+    Returns:
+        JSONValue: Mutable JSON-compatible representation of ``value``.
+    """
     if isinstance(value, Mapping):
         return {key: to_plain_json(item) for key, item in value.items()}
     if isinstance(value, tuple):

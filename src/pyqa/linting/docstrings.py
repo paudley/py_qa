@@ -9,11 +9,13 @@ import importlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, cast
+from threading import Lock
+from typing import Final, Protocol, cast
 
 from ..analysis.spacy.loader import load_language
 from ..analysis.treesitter.grammars import ensure_language
 from ..analysis.treesitter.resolver import _build_parser_loader
+from ..cache.result_store import CacheRequest, ResultCache
 from ..cli.commands.lint.preparation import PreparedLintState
 from ..core.models import Diagnostic, ToolExitCategory, ToolOutcome
 from ..core.severity import Severity
@@ -33,26 +35,64 @@ _CLASS_LABEL: Final[str] = "class"
 _FUNCTION_LABEL: Final[str] = "function"
 _NONE_LITERAL: Final[str] = "None"
 _MAX_SUMMARY_LENGTH: Final[int] = 120
+_DOCSTRING_CACHE_TOKEN: Final[str] = "docstrings:v1"
+_DOCSTRING_CACHE_SUBDIR: Final[str] = "internal/docstrings"
+_DOCSTRING_FILE_COMMAND: Final[tuple[str, ...]] = ("internal", "docstrings", "file")
 
-if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from tree_sitter import Node
-    from tree_sitter import Parser as TreeSitterParser
-else:  # pragma: no cover - runtime fallback avoids hard dependency
 
-    class Node:  # type: ignore[too-many-instance-attributes]
-        """Fallback Tree-sitter node placeholder used when bindings are missing."""
+class TreeSitterLanguage(Protocol):
+    """Protocol describing a Tree-sitter language binding."""
 
-        type: str
-        start_point: tuple[int, int]
-        children: Sequence[Node]
-        named_children: Sequence[Node]
 
-        def child_by_field_name(self, _name: str) -> Node | None:
-            return None
+class TreeSitterNode(Protocol):
+    """Protocol describing the Tree-sitter node interface used by the linter."""
 
-    class TreeSitterParser:  # pragma: no cover - placeholder
-        def parse(self, _source: bytes):
-            raise NotImplementedError
+    type: str
+    start_point: tuple[int, int]
+    start_byte: int
+    end_byte: int
+    children: Sequence[TreeSitterNode]
+    named_children: Sequence[TreeSitterNode]
+
+    def child_by_field_name(self, name: str) -> TreeSitterNode | None:
+        """Return the child node registered for ``name`` when present."""
+        ...
+
+
+class TreeSitterTree(Protocol):
+    """Protocol describing the syntax tree returned by a Tree-sitter parser."""
+
+    root_node: TreeSitterNode
+
+
+class TreeSitterParser(Protocol):
+    """Protocol describing the parser interface leveraged by the linter."""
+
+    def parse(self, source: bytes) -> TreeSitterTree:
+        """Return the syntax tree for ``source``."""
+        ...
+
+    def set_language(self, language: TreeSitterLanguage) -> None:
+        """Configure the parser to use ``language``."""
+        ...
+
+
+class _ParserWrapper:
+    """Adapter that exposes a Tree-sitter parser through the local protocol."""
+
+    def __init__(self, parser: TreeSitterParser) -> None:
+        self._parser = parser
+
+    def parse(self, source: bytes) -> TreeSitterTree:
+        return self._parser.parse(source)
+
+    def set_language(self, language: TreeSitterLanguage) -> None:
+        self._parser.set_language(language)
+
+
+_PARSER_CACHE: TreeSitterParser | None = None
+_PARSER_LOCK = Lock()
+_PARSER_USE_LOCK = Lock()
 
 
 @dataclass(slots=True)
@@ -89,12 +129,13 @@ class _TreeSitterDocstrings:
         self._source = source
         self._source_bytes = source.encode("utf-8")
         self._parser = parser
-        tree = self._parser.parse(self._source_bytes)
+        with _PARSER_USE_LOCK:
+            tree = self._parser.parse(self._source_bytes)
         self._records: dict[tuple[str, str | None, int], _DocstringRecord] = {}
         self._module_record = self._extract_module_record(tree.root_node)
         self._visit(tree.root_node)
 
-    def _visit(self, node: Node) -> None:
+    def _visit(self, node: TreeSitterNode) -> None:
         """Traverse ``node`` to register docstring-bearing definitions.
 
         Args:
@@ -115,7 +156,7 @@ class _TreeSitterDocstrings:
             if child.children:
                 self._visit(child)
 
-    def _extract_module_record(self, root: Node) -> _DocstringRecord:
+    def _extract_module_record(self, root: TreeSitterNode) -> _DocstringRecord:
         """Return the module-level record anchored at ``root``.
 
         Args:
@@ -141,7 +182,7 @@ class _TreeSitterDocstrings:
         self._records[("module", None, lineno)] = record
         return record
 
-    def _register_definition(self, node: Node) -> None:
+    def _register_definition(self, node: TreeSitterNode) -> None:
         """Register a function or class definition node within the index.
 
         Args:
@@ -158,7 +199,7 @@ class _TreeSitterDocstrings:
         record = _DocstringRecord(kind=kind, name=name, lineno=lineno, docstring=doc, doc_lineno=doc_lineno)
         self._records[(kind, name, lineno)] = record
 
-    def _extract_docstring_node(self, node: Node) -> Node | None:
+    def _extract_docstring_node(self, node: TreeSitterNode) -> TreeSitterNode | None:
         """Return the docstring node for ``node`` if one exists.
 
         Args:
@@ -180,7 +221,7 @@ class _TreeSitterDocstrings:
                 break
         return None
 
-    def _string_literal_child(self, node: Node) -> Node | None:
+    def _string_literal_child(self, node: TreeSitterNode) -> TreeSitterNode | None:
         """Return the first string literal child of ``node``.
 
         Args:
@@ -195,7 +236,7 @@ class _TreeSitterDocstrings:
                 return child
         return None
 
-    def _slice(self, node: Node | None) -> str | None:
+    def _slice(self, node: TreeSitterNode | None) -> str | None:
         """Return source text represented by ``node``.
 
         Args:
@@ -210,7 +251,7 @@ class _TreeSitterDocstrings:
         start, end = node.start_byte, node.end_byte
         return self._source_bytes[start:end].decode("utf-8")
 
-    def _literal_from_node(self, node: Node | None) -> str | None:
+    def _literal_from_node(self, node: TreeSitterNode | None) -> str | None:
         """Return the evaluated literal string represented by ``node``.
 
         Args:
@@ -261,7 +302,7 @@ def _resolve_python_parser() -> TreeSitterParser:
         )
     parser = factory.create("python")
     if parser is not None:
-        return cast(TreeSitterParser, parser)
+        return _ParserWrapper(cast(TreeSitterParser, parser))
     language = ensure_language("python")
     if language is None:
         raise RuntimeError(
@@ -270,22 +311,34 @@ def _resolve_python_parser() -> TreeSitterParser:
     parser_cls = getattr(importlib.import_module("tree_sitter"), "Parser", None)
     if parser_cls is None:
         raise RuntimeError("tree_sitter.Parser not available even after grammar compilation")
-    parser = parser_cls()
-    parser.set_language(language)
-    return cast(TreeSitterParser, parser)
+    raw_parser = parser_cls()
+    wrapper = _ParserWrapper(cast(TreeSitterParser, raw_parser))
+    wrapper.set_language(cast(TreeSitterLanguage, language))
+    return wrapper
+
+
+def _get_shared_python_parser() -> TreeSitterParser:
+    """Return a cached Tree-sitter parser initialised for Python."""
+
+    global _PARSER_CACHE
+    with _PARSER_LOCK:
+        if _PARSER_CACHE is None:
+            _PARSER_CACHE = _resolve_python_parser()
+        return _PARSER_CACHE
 
 
 class DocstringLinter:
     """Perform docstring quality checks using Tree-sitter and spaCy."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, cache: ResultCache | None = None) -> None:
         """Initialise the linter by resolving grammar and language resources."""
 
         self._model_name = "en_core_web_sm"
-        self._parser: TreeSitterParser = _resolve_python_parser()
+        self._parser: TreeSitterParser = _get_shared_python_parser()
         self._nlp = load_language(self._model_name)
         self._nlp_missing = self._nlp is None
         self._warnings: set[str] = set()
+        self._cache = cache
 
     def lint_paths(self, files: Sequence[Path]) -> list[DocstringIssue]:
         """Return docstring issues for each file in ``files``.
@@ -299,7 +352,7 @@ class DocstringLinter:
 
         issues: list[DocstringIssue] = []
         for path in files:
-            issues.extend(self._lint_file(path))
+            issues.extend(self._lint_file_cached(path))
         if self._nlp_missing:
             self._warnings.add(
                 f"spaCy model '{self._model_name}' unavailable; docstring analysis is running without NLP enrichment.",
@@ -346,6 +399,64 @@ class DocstringLinter:
         for node in module.body:
             issues.extend(self._lint_definition(path, node, ts_index))
         return issues
+
+    def _lint_file_cached(self, path: Path) -> list[DocstringIssue]:
+        cache = self._cache
+        if cache is None:
+            return self._lint_file(path)
+        request = CacheRequest(
+            tool="docstrings",
+            action="file",
+            command=_DOCSTRING_FILE_COMMAND,
+            files=(path.resolve(),),
+            token=_DOCSTRING_CACHE_TOKEN,
+        )
+        cached_entry = cache.load(request)
+        if cached_entry is not None:
+            return self._diagnostics_to_issues(cached_entry.outcome.diagnostics)
+        issues = self._lint_file(path)
+        outcome = self._issues_to_outcome(issues)
+        cache.store(request=request, outcome=outcome, file_metrics={})
+        return issues
+
+    @staticmethod
+    def _diagnostics_to_issues(diagnostics: Sequence[Diagnostic]) -> list[DocstringIssue]:
+        cached: list[DocstringIssue] = []
+        for diagnostic in diagnostics:
+            if diagnostic.file is None:
+                continue
+            cached.append(
+                DocstringIssue(
+                    path=Path(diagnostic.file),
+                    line=diagnostic.line or 1,
+                    message=diagnostic.message,
+                )
+            )
+        return cached
+
+    @staticmethod
+    def _issues_to_outcome(issues: Sequence[DocstringIssue]) -> ToolOutcome:
+        diagnostics = [
+            Diagnostic(
+                file=issue.path.as_posix(),
+                line=issue.line,
+                column=None,
+                severity=Severity.WARNING,
+                message=issue.message,
+                tool="docstrings",
+            )
+            for issue in issues
+        ]
+        stdout = [f"{issue.path.as_posix()}:{issue.line}: {issue.message}" for issue in issues]
+        return ToolOutcome(
+            tool="docstrings",
+            action="file",
+            returncode=1 if issues else 0,
+            stdout=stdout,
+            stderr=[],
+            diagnostics=diagnostics,
+            exit_category=ToolExitCategory.DIAGNOSTIC if issues else ToolExitCategory.SUCCESS,
+        )
 
     def _lint_definition(
         self,
@@ -726,8 +837,17 @@ def run_docstring_linter(
     if not files:
         return _report_docstrings_empty(files)
 
+    runtime_options = state.options.execution_options.runtime
+    cache: ResultCache | None = None
+    if files and not runtime_options.no_cache:
+        cache_dir = runtime_options.cache_dir
+        if not cache_dir.is_absolute():
+            cache_dir = state.root / cache_dir
+        cache_path = (cache_dir / Path(_DOCSTRING_CACHE_SUBDIR)).resolve()
+        cache = ResultCache(cache_path)
+
     try:
-        linter = DocstringLinter()
+        linter = DocstringLinter(cache=cache)
     except RuntimeError as exc:
         return _report_docstrings_failure(files, str(exc))
 

@@ -225,7 +225,7 @@ def _coerce_section_builder(
     if value is None:
         return default
     if callable(value):
-        return cast(Callable[[Sequence[AdviceEntry]], Sequence[str]], value)
+        return value
     raise TypeError(f"{name} must be callable or None")
 
 

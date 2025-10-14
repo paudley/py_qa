@@ -15,12 +15,16 @@ CATALOG_CACHE_FILENAME: Final[str] = "cache.json"
 
 @dataclass(slots=True)
 class CatalogScanner:
-    """Locate catalog documents on disk."""
+    """Scan the catalog directory tree for relevant JSON documents."""
 
     catalog_root: Path
 
     def tool_documents(self) -> tuple[Path, ...]:
-        """Return sorted tool definition document paths."""
+        """Return sorted tool definition document paths.
+
+        Returns:
+            tuple[Path, ...]: Sorted tool definition file paths.
+        """
         docs_root = self.catalog_root / "docs"
         strategies_root = self.catalog_root / "strategies"
         paths: list[Path] = []
@@ -37,7 +41,11 @@ class CatalogScanner:
         return tuple(sorted(paths))
 
     def strategy_documents(self) -> tuple[Path, ...]:
-        """Return sorted strategy definition document paths."""
+        """Return sorted strategy definition document paths.
+
+        Returns:
+            tuple[Path, ...]: Strategy definition file paths.
+        """
         strategies_root = self.catalog_root / "strategies"
         if not strategies_root.exists():
             return ()
@@ -45,7 +53,11 @@ class CatalogScanner:
         return tuple(sorted(paths))
 
     def fragment_documents(self) -> tuple[Path, ...]:
-        """Return sorted catalog fragment document paths."""
+        """Return sorted catalog fragment document paths.
+
+        Returns:
+            tuple[Path, ...]: Fragment document paths sorted lexicographically.
+        """
         strategies_root = self.catalog_root / "strategies"
         docs_root = self.catalog_root / "docs"
         fragments: list[Path] = []
@@ -60,14 +72,22 @@ class CatalogScanner:
         return tuple(sorted(fragments))
 
     def documentation_files(self) -> tuple[Path, ...]:
-        """Return supporting documentation file paths."""
+        """Return supporting documentation file paths.
+
+        Returns:
+            tuple[Path, ...]: Documentation file paths sorted lexicographically.
+        """
         docs_root = self.catalog_root / "docs"
         if not docs_root.exists():
             return ()
         return tuple(sorted(path for path in docs_root.rglob("*") if path.is_file()))
 
     def catalog_files(self) -> tuple[Path, ...]:
-        """Return all catalog file paths contributing to checksums."""
+        """Return all catalog file paths contributing to checksums.
+
+        Returns:
+            tuple[Path, ...]: Aggregate of all catalog-related file paths.
+        """
         paths: list[Path] = []
         paths.extend(self.tool_documents())
         paths.extend(self.fragment_documents())
@@ -77,6 +97,7 @@ class CatalogScanner:
 
 
 def _dedupe(paths: Iterable[Path]) -> Sequence[Path]:
+    """Return ``paths`` with duplicates removed while preserving order."""
     seen: set[Path] = set()
     ordered: list[Path] = []
     for path in paths:

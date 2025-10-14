@@ -129,7 +129,7 @@ class ToolContext(BaseModel):
 class InstallerCallable(Protocol):
     """Protocol implemented by installer callbacks."""
 
-    def __call__(self, ctx: "ToolContext") -> None:
+    def __call__(self, ctx: ToolContext) -> None:
         """Perform installation steps for the tool using *ctx*."""
 
         ...
@@ -139,7 +139,7 @@ class InstallerCallable(Protocol):
 class InternalActionRunner(Protocol):
     """Protocol implemented by internal tool action runners."""
 
-    def __call__(self, ctx: "ToolContext") -> ToolOutcome:
+    def __call__(self, ctx: ToolContext) -> ToolOutcome:
         """Execute the action and return a :class:`ToolOutcome`."""
 
         ...
@@ -680,7 +680,7 @@ class Tool(BaseModel):
         raise TypeError("installers must be a sequence of callables")
 
     @staticmethod
-    def _require_installer(candidate: object) -> InstallerCallable:
+    def _require_installer(candidate: InstallerCallable) -> InstallerCallable:
         """Return ``candidate`` when it satisfies the :class:`InstallerCallable` protocol."""
 
         if not isinstance(candidate, InstallerCallable):

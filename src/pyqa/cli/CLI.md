@@ -20,7 +20,7 @@ entry-point seams for plugins to register additional commands.
 * Register built-in commands (lint, clean, install-hooks, quality, etc.) while
   deferring implementation specifics to feature packages.
 
-## Dependency Injection Seams
+## DI Seams
 
 * Commands resolve collaborators from `ServiceContainer` instances seeded in
   `cli/core/runtime.py`.

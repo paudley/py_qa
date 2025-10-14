@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
 from subprocess import CompletedProcess
-from types import SimpleNamespace
 
 from pyqa.core.environment import find_venv_bin
 from pyqa.core.environment.tool_env.constants import PROJECT_MARKER_FILENAME
@@ -357,9 +356,4 @@ def install_with_preferred_manager(
     if pip_exe:
         return runner([pip_exe, "install", "-U", *args_list])
 
-    return SimpleNamespace(
-        args=[],
-        returncode=1,
-        stdout="",
-        stderr="pip not found",
-    )
+    return CompletedProcess(args=[], returncode=1, stdout="", stderr="pip not found")

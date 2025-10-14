@@ -17,7 +17,7 @@ from .types import JSONValue
 
 @dataclass(frozen=True, slots=True)
 class CatalogFragment:
-    """Shared catalog fragment intended for reuse across tool definitions."""
+    """Represent a shared catalog fragment for reuse across tool definitions."""
 
     name: str
     data: Mapping[str, JSONValue]
@@ -26,7 +26,7 @@ class CatalogFragment:
 
 @dataclass(frozen=True, slots=True)
 class CatalogSnapshot:
-    """Materialised catalog data paired with a deterministic checksum."""
+    """Maintain materialised catalog data alongside a deterministic checksum."""
 
     _tools: tuple[ToolDefinition, ...]
     _strategies: tuple[StrategyDefinition, ...]
@@ -35,7 +35,7 @@ class CatalogSnapshot:
     _strategy_factories: Mapping[str, StrategyCallable] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        """Validate strategy identifiers and cache factory callables."""
+        """Ensure strategy identifiers are unique and cache factory callables."""
 
         factories: dict[str, StrategyCallable] = {}
         for definition in self._strategies:
@@ -49,19 +49,31 @@ class CatalogSnapshot:
 
     @property
     def tools(self) -> tuple[ToolDefinition, ...]:
-        """Return the tool definitions contained in the snapshot."""
+        """Return the tool definitions contained in the snapshot.
+
+        Returns:
+            tuple[ToolDefinition, ...]: Tool definitions present in the snapshot.
+        """
 
         return self._tools
 
     @property
     def strategies(self) -> tuple[StrategyDefinition, ...]:
-        """Return the strategy definitions contained in the snapshot."""
+        """Return the strategy definitions contained in the snapshot.
+
+        Returns:
+            tuple[StrategyDefinition, ...]: Strategy definitions present in the snapshot.
+        """
 
         return self._strategies
 
     @property
     def fragments(self) -> tuple[CatalogFragment, ...]:
-        """Return fragment definitions available to catalog tools."""
+        """Return fragment definitions available to catalog tools.
+
+        Returns:
+            tuple[CatalogFragment, ...]: Fragment definitions associated with the snapshot.
+        """
 
         return self._fragments
 

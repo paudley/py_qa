@@ -9,13 +9,21 @@ from ..types import ConfigValue
 
 
 def default_config() -> Config:
-    """Return a fresh configuration instance populated with project defaults."""
+    """Create a configuration instance populated with project defaults.
+
+    Returns:
+        Config: Newly constructed configuration model containing project defaults.
+    """
 
     return Config()
 
 
 def default_config_payload() -> dict[str, ConfigValue]:
-    """Return the dictionary representation of :func:`default_config`."""
+    """Produce a serialisable payload representing :func:`default_config`.
+
+    Returns:
+        dict[str, ConfigValue]: Dictionary representation of the default configuration.
+    """
 
     return default_config().to_dict()
 

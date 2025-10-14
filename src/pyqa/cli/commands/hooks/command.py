@@ -10,14 +10,16 @@ from typing import Annotated
 import typer
 
 from ...core.shared import CLIError, Depends, build_cli_logger, register_callback
-from ...core.typer_ext import create_typer
+from ...core.typer_ext import TyperAppConfig, create_typer
 from .models import HookCLIOptions, build_hook_options
 from .services import emit_hooks_summary, perform_installation
 
 hooks_app = create_typer(
-    name="install-hooks",
-    help="Install py-qa git hooks (pre-commit, pre-push, commit-msg).",
-    invoke_without_command=True,
+    config=TyperAppConfig(
+        name="install-hooks",
+        help_text="Install py-qa git hooks (pre-commit, pre-push, commit-msg).",
+        invoke_without_command=True,
+    ),
 )
 
 

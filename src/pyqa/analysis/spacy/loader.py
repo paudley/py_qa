@@ -9,6 +9,7 @@ from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from importlib import import_module
 from shutil import which
+from threading import Lock
 from types import ModuleType
 from typing import Final, Protocol, cast, runtime_checkable
 
@@ -88,6 +89,8 @@ class _UnsetSentinel:
 _SENTINEL: Final[_UnsetSentinel] = _UnsetSentinel()
 _LOADER_CACHE: Callable[[str], SpacyLanguage] | None | _UnsetSentinel = _SENTINEL
 _VERSION_CACHE: str | None | _UnsetSentinel = _SENTINEL
+_LANGUAGE_CACHE: dict[str, SpacyLanguage] = {}
+_LANGUAGE_CACHE_LOCK = Lock()
 
 
 def load_language(model_name: str) -> SpacyLanguage | None:
@@ -101,21 +104,31 @@ def load_language(model_name: str) -> SpacyLanguage | None:
         not possible.
     """
 
+    with _LANGUAGE_CACHE_LOCK:
+        if model_name in _LANGUAGE_CACHE:
+            return _LANGUAGE_CACHE[model_name]
     loader = _resolve_loader()
     if loader is None:
         return None
+    language: SpacyLanguage
     try:
-        return loader(model_name)
+        language = loader(model_name)
     except OSError:  # pragma: no cover - spaCy optional
-        if _download_spacy_model(model_name):
-            loader = _resolve_loader(force=True)
-            if loader is None:
-                return None
-            try:
-                return loader(model_name)
-            except OSError:  # pragma: no cover - spaCy optional
-                return None
-    return None
+        if not _download_spacy_model(model_name):
+            return None
+        loader = _resolve_loader(force=True)
+        if loader is None:
+            return None
+        try:
+            language = loader(model_name)
+        except OSError:  # pragma: no cover - spaCy optional
+            return None
+    with _LANGUAGE_CACHE_LOCK:
+        cached = _LANGUAGE_CACHE.get(model_name)
+        if cached is None:
+            _LANGUAGE_CACHE[model_name] = language
+            cached = language
+    return cached
 
 
 def _download_spacy_model(model_name: str) -> bool:

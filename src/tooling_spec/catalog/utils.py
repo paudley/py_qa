@@ -13,14 +13,38 @@ from .types import JSONValue
 
 
 def expect_string(value: JSONValue | None, *, key: str, context: str) -> str:
-    """Return *value* as a string or raise :class:`CatalogIntegrityError`."""
+    """Return ``value`` coerced to ``str`` or raise a catalog error.
+
+    Args:
+        value: Raw JSON value extracted from the catalog payload.
+        key: Attribute name used in error messages.
+        context: Human-friendly prefix describing the validation context.
+
+    Returns:
+        str: Value coerced to a string.
+
+    Raises:
+        CatalogIntegrityError: If ``value`` is not a string.
+    """
     if not isinstance(value, str):
         raise CatalogIntegrityError(f"{context}: expected '{key}' to be a string")
     return value
 
 
 def optional_string(value: JSONValue | None, *, key: str, context: str) -> str | None:
-    """Return *value* as an optional string with validation."""
+    """Return ``value`` as an optional string with validation.
+
+    Args:
+        value: Raw JSON value extracted from the catalog payload.
+        key: Attribute name used in error messages.
+        context: Human-friendly prefix describing the validation context.
+
+    Returns:
+        str | None: ``value`` coerced to ``str`` when present, otherwise ``None``.
+
+    Raises:
+        CatalogIntegrityError: If ``value`` is present but not a string.
+    """
     if value is None:
         return None
     if not isinstance(value, str):
@@ -35,7 +59,21 @@ def optional_bool(
     context: str,
     default: bool | None = None,
 ) -> bool:
-    """Return *value* as a boolean with optional default handling."""
+    """Return ``value`` coerced to ``bool`` with an optional default.
+
+    Args:
+        value: Raw JSON value extracted from the catalog payload.
+        key: Attribute name used in error messages.
+        context: Human-friendly prefix describing the validation context.
+        default: Value returned when ``value`` is ``None``.
+
+    Returns:
+        bool: Boolean value derived from ``value`` or ``default``.
+
+    Raises:
+        CatalogIntegrityError: If ``value`` is not ``None`` and not a bool,
+            or ``value`` is ``None`` and no ``default`` was provided.
+    """
     if value is None:
         if default is None:
             raise CatalogIntegrityError(f"{context}: expected '{key}' to be a boolean")
@@ -46,7 +84,19 @@ def optional_bool(
 
 
 def string_array(value: JSONValue | None, *, key: str, context: str) -> tuple[str, ...]:
-    """Return *value* as a tuple of strings with validation."""
+    """Return ``value`` as a tuple of strings with validation.
+
+    Args:
+        value: Raw JSON value extracted from the catalog payload.
+        key: Attribute name used in error messages.
+        context: Human-friendly prefix describing the validation context.
+
+    Returns:
+        tuple[str, ...]: Tuple containing all string entries from ``value``.
+
+    Raises:
+        CatalogIntegrityError: If ``value`` is not a sequence of strings.
+    """
     if value is None:
         return ()
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
@@ -60,14 +110,37 @@ def string_array(value: JSONValue | None, *, key: str, context: str) -> tuple[st
 
 
 def expect_mapping(value: JSONValue | None, *, key: str, context: str) -> Mapping[str, JSONValue]:
-    """Return *value* as a mapping of JSON values or raise an integrity error."""
+    """Return ``value`` as a mapping of JSON values or raise an error.
+
+    Args:
+        value: Raw JSON value extracted from the catalog payload.
+        key: Attribute name used in error messages.
+        context: Human-friendly prefix describing the validation context.
+
+    Returns:
+        Mapping[str, JSONValue]: Mapping derived from ``value``.
+
+    Raises:
+        CatalogIntegrityError: If ``value`` is not a mapping.
+    """
     if not isinstance(value, Mapping):
         raise CatalogIntegrityError(f"{context}: expected '{key}' to be an object")
     return value
 
 
 def freeze_json_mapping(value: Mapping[str, JSONValue], *, context: str) -> Mapping[str, JSONValue]:
-    """Return an immutable mapping with recursively frozen JSON values."""
+    """Return an immutable mapping with recursively frozen JSON values.
+
+    Args:
+        value: Mapping to freeze.
+        context: Human-friendly prefix describing the validation context.
+
+    Returns:
+        Mapping[str, JSONValue]: Mapping with recursively frozen entries.
+
+    Raises:
+        CatalogIntegrityError: If any key is not a string.
+    """
     frozen: dict[str, JSONValue] = {}
     for key, item in value.items():
         if not isinstance(key, str):
@@ -77,7 +150,18 @@ def freeze_json_mapping(value: Mapping[str, JSONValue], *, context: str) -> Mapp
 
 
 def freeze_json_value(value: JSONValue, *, context: str) -> JSONValue:
-    """Return an immutable JSON value."""
+    """Return a recursively frozen view of ``value``.
+
+    Args:
+        value: JSON value to normalise.
+        context: Human-friendly prefix describing the validation context.
+
+    Returns:
+        JSONValue: Frozen JSON value (mappings become mapping proxies, sequences tuples).
+
+    Raises:
+        CatalogIntegrityError: If ``value`` is not JSON compatible.
+    """
     if isinstance(value, Mapping):
         return freeze_json_mapping(value, context=context)
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
@@ -88,7 +172,19 @@ def freeze_json_value(value: JSONValue, *, context: str) -> JSONValue:
 
 
 def optional_number(value: JSONValue | None, *, key: str, context: str) -> float | None:
-    """Return *value* as an optional float."""
+    """Return ``value`` as an optional float.
+
+    Args:
+        value: Raw JSON value extracted from the catalog payload.
+        key: Attribute name used in error messages.
+        context: Human-friendly prefix describing the validation context.
+
+    Returns:
+        float | None: Floating point representation of ``value`` or ``None``.
+
+    Raises:
+        CatalogIntegrityError: If ``value`` is present but not numeric.
+    """
     if value is None:
         return None
     if isinstance(value, (int, float)):
@@ -97,7 +193,19 @@ def optional_number(value: JSONValue | None, *, key: str, context: str) -> float
 
 
 def string_mapping(value: JSONValue | None, *, key: str, context: str) -> Mapping[str, str]:
-    """Return *value* as a mapping of strings."""
+    """Return ``value`` as a mapping of strings.
+
+    Args:
+        value: Raw JSON value extracted from the catalog payload.
+        key: Attribute name used in error messages.
+        context: Human-friendly prefix describing the validation context.
+
+    Returns:
+        Mapping[str, str]: Mapping containing string keys and string values.
+
+    Raises:
+        CatalogIntegrityError: If ``value`` is not a mapping of strings.
+    """
     if value is None:
         return {}
     if not isinstance(value, Mapping):

@@ -372,8 +372,7 @@ def test_pyqa_python_hygiene_ignores_system_exit_literals(tmp_path: Path) -> Non
     _write_repo_layout(tmp_path)
     target = tmp_path / "library.py"
     target.write_text(
-        "message = \"avoid raise SystemExit in modules\"\n"
-        "check = 'os._exit' in message\n",
+        'message = "avoid raise SystemExit in modules"\n' "check = 'os._exit' in message\n",
         encoding="utf-8",
     )
 

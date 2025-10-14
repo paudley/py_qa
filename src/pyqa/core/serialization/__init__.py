@@ -8,7 +8,7 @@ import json
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from pathlib import Path
-from typing import TypeAlias
+from typing import Protocol, TypeAlias, runtime_checkable
 
 from pydantic import BaseModel
 
@@ -21,9 +21,24 @@ from pyqa.core.models import (
 )
 from pyqa.core.severity import Severity
 
-SerializableMapping: TypeAlias = dict[str, JsonValue | None]
+
+@runtime_checkable
+class SupportsToDict(Protocol):
+    """Protocol describing values that expose a ``to_dict`` JSON conversion hook."""
+
+    def to_dict(self) -> SerializableValue:
+        """Return an object that can be serialized via :func:`jsonify`."""
+
+
+SerializableMapping: TypeAlias = dict[str, JsonValue]
 SerializableValue: TypeAlias = (
-    JsonValue | Path | BaseModel | Mapping[str, JsonValue] | Sequence[JsonValue] | AbstractSet[JsonValue]
+    JsonValue
+    | Path
+    | BaseModel
+    | Mapping[str, "SerializableValue"]
+    | Sequence["SerializableValue"]
+    | AbstractSet["SerializableValue"]
+    | SupportsToDict
 )
 
 
@@ -159,30 +174,38 @@ def _coerce_diagnostic_payload(value: JsonValue | Sequence[JsonValue] | None) ->
 
 
 def jsonify(value: SerializableValue) -> JsonValue:
-    """Convert ``value`` into a JSON-serializable payload."""
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        result: JsonValue = value
-    elif isinstance(value, Path):
-        result = str(value)
-    elif isinstance(value, BaseModel):
-        result = jsonify(value.model_dump(mode="python", by_alias=True))
-    elif hasattr(value, "to_dict"):
-        to_dict = getattr(value, "to_dict")
-        dumped = to_dict() if callable(to_dict) else value
-        result = jsonify(dumped)
-    elif isinstance(value, Mapping):
-        result = {str(key): jsonify(item) for key, item in value.items()}
-    elif isinstance(value, AbstractSet):
+    """Convert ``value`` into a JSON-compatible structure.
+
+    Args:
+        value: Value produced by runtime components that must be convertible into a
+            JSON-compatible representation.
+
+    Returns:
+        JsonValue: Representation that can be serialized by JSON encoders.
+    """
+
+    if value is None:
+        return None
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Path):
+        return value.as_posix()
+    if isinstance(value, BaseModel):
+        model_payload = value.model_dump(mode="python", by_alias=True)
+        return jsonify(model_payload)
+    if isinstance(value, SupportsToDict):
+        return jsonify(value.to_dict())
+    if isinstance(value, Mapping):
+        return {str(key): jsonify(item) for key, item in value.items()}
+    if isinstance(value, AbstractSet):
         serialised = [jsonify(item) for item in value]
         try:
-            result = sorted(serialised, key=lambda item: json.dumps(item, sort_keys=True))
+            return sorted(serialised, key=lambda item: json.dumps(item, sort_keys=True))
         except TypeError:
-            result = serialised
-    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        result = [jsonify(item) for item in value]
-    else:
-        result = str(value)
-    return result
+            return serialised
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [jsonify(item) for item in value]
+    return str(value)
 
 
 __all__ = [

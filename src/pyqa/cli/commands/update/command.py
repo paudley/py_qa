@@ -28,10 +28,12 @@ from pyqa.runtime.installers.update import (
 from ....core.logging import fail, ok, warn
 from ....core.runtime.process import CommandOptions, run_command
 from ...core.shared import Depends
-from ...core.typer_ext import create_typer
+from ...core.typer_ext import TyperAppConfig, create_typer
 from .models import UpdateOptions, build_update_options
 
-update_app = create_typer(name="update", help="Update dependencies across detected workspaces.")
+update_app = create_typer(
+    config=TyperAppConfig(name="update", help_text="Update dependencies across detected workspaces."),
+)
 
 ManagerNameLiteral = Literal["go", "rust", "yarn", "npm", "pnpm", "python"]
 

@@ -10,10 +10,12 @@ import typer
 
 from ....compliance.banned import BannedWordChecker
 from ...core.shared import Depends
-from ...core.typer_ext import create_typer
+from ...core.typer_ext import TyperAppConfig, create_typer
 from .models import BannedCLIOptions, build_banned_options
 
-banned_app = create_typer(name="check-banned-words", help="Check text for banned words or phrases.")
+banned_app = create_typer(
+    config=TyperAppConfig(name="check-banned-words", help_text="Check text for banned words or phrases."),
+)
 
 
 @banned_app.command()

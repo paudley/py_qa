@@ -25,7 +25,7 @@ PLUGIN_GROUP = "pyqa.catalog.plugins"
 
 @dataclass(frozen=True, slots=True)
 class CatalogPluginContext:
-    """Execution context shared with catalog plugin factories."""
+    """Represent the execution context shared with catalog plugins."""
 
     catalog_root: Path
     schema_root: Path
@@ -37,14 +37,18 @@ class CatalogPluginContext:
 
 @dataclass(frozen=True, slots=True)
 class CatalogContribution:
-    """Payload contributed by a catalog plugin."""
+    """Represent the payload contributed by a catalog plugin."""
 
     fragments: tuple[CatalogFragment, ...] = ()
     strategies: tuple[StrategyDefinition, ...] = ()
     tools: tuple[ToolDefinition, ...] = ()
 
     def is_empty(self) -> bool:
-        """Return ``True`` when the contribution is empty."""
+        """Return ``True`` when this contribution contains no artifacts.
+
+        Returns:
+            bool: ``True`` when the contribution has no fragments, strategies, or tools.
+        """
 
         return not (self.fragments or self.strategies or self.tools)
 
@@ -57,13 +61,19 @@ def load_plugin_contributions(
     *,
     plugin_factories: Sequence[PluginFactory] | None = None,
 ) -> tuple[CatalogContribution, ...]:
-    """Return contributions sourced from discovered catalog plugins."""
+    """Load plugin contributions from the registered entry points.
 
-    factories: Sequence[PluginFactory]
-    if plugin_factories is not None:
-        factories = plugin_factories
-    else:
-        factories = _discover_plugin_factories()
+    Args:
+        context: Execution context passed to each plugin factory.
+        plugin_factories: Optional factory overrides used for testing.
+
+    Returns:
+        tuple[CatalogContribution, ...]: Contributions emitted by the factories.
+    """
+
+    factories: Sequence[PluginFactory] = (
+        plugin_factories if plugin_factories is not None else _discover_plugin_factories()
+    )
     contributions: list[CatalogContribution] = []
     for factory in factories:
         contribution = _invoke_plugin(factory, context)
@@ -80,7 +90,20 @@ def merge_contributions(
     base_tools: Sequence[ToolDefinition],
     contributions: Sequence[CatalogContribution],
 ) -> tuple[tuple[CatalogFragment, ...], tuple[StrategyDefinition, ...], tuple[ToolDefinition, ...]]:
-    """Merge plugin contributions with base catalog data."""
+    """Merge plugin contributions with the baseline catalog artifacts.
+
+    Args:
+        base_fragments: Fragments supplied by the base catalog snapshot.
+        base_strategies: Strategy definitions provided by the base catalog.
+        base_tools: Tool definitions present in the base catalog.
+        contributions: Plugin contributions to merge into the base artifacts.
+
+    Returns:
+        tuple: Merged fragments, strategies, and tools preserving original order.
+
+    Raises:
+        CatalogIntegrityError: If a plugin attempts to register a duplicate entry.
+    """
 
     merged_fragments = _merge_unique(
         base_fragments,
@@ -104,7 +127,15 @@ def merge_contributions(
 
 
 def combine_checksums(base_checksum: str, contributions: Sequence[CatalogContribution]) -> str:
-    """Return a checksum that incorporates plugin contributions."""
+    """Combine the base checksum with plugin contributions.
+
+    Args:
+        base_checksum: Hash representing the baseline catalog snapshot.
+        contributions: Plugin contributions included in the final catalog.
+
+    Returns:
+        str: Deterministic checksum incorporating plugin payloads.
+    """
 
     if not contributions:
         return base_checksum
@@ -116,6 +147,11 @@ def combine_checksums(base_checksum: str, contributions: Sequence[CatalogContrib
 
 
 def _discover_plugin_factories() -> tuple[PluginFactory, ...]:
+    """Discover plugin factories registered under the catalog entry point.
+
+    Returns:
+        tuple[PluginFactory, ...]: Tuple of discovered plugin factories.
+    """
     try:
         entries = metadata.entry_points()
     except metadata.PackageNotFoundError:  # pragma: no cover - metadata failure fallback
@@ -131,6 +167,18 @@ def _discover_plugin_factories() -> tuple[PluginFactory, ...]:
 
 
 def _invoke_plugin(factory: PluginFactory, context: CatalogPluginContext) -> CatalogContribution | None:
+    """Invoke ``factory`` with the appropriate calling convention.
+
+    Args:
+        factory: Plugin factory callable discovered from entry points.
+        context: Execution context supplied to the plugin.
+
+    Returns:
+        CatalogContribution | None: Contribution emitted by the plugin, or ``None`` when skipped.
+
+    Raises:
+        CatalogIntegrityError: If the plugin returns an unexpected payload type.
+    """
     try:
         signature = inspect.signature(factory)
     except (TypeError, ValueError):  # pragma: no cover - C extensions without metadata
@@ -155,6 +203,15 @@ def _invoke_plugin(factory: PluginFactory, context: CatalogPluginContext) -> Cat
 
 
 def _accepts_no_arguments(signature: inspect.Signature) -> bool:
+    """Return ``True`` when ``signature`` accepts no positional arguments.
+
+    Args:
+        signature: Signature reported by the candidate plugin factory.
+
+    Returns:
+        bool: ``True`` if the factory can be invoked without arguments.
+    """
+
     return not signature.parameters or all(
         parameter.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
         for parameter in signature.parameters.values()
@@ -168,6 +225,21 @@ def _merge_unique(
     key: Callable[[_T], str],
     description: str,
 ) -> tuple[_T, ...]:
+    """Merge ``additions`` into ``base`` ensuring keys remain unique.
+
+    Args:
+        base: Existing sequence of catalog artifacts.
+        additions: Additional artifacts contributed by plugins.
+        key: Callable returning the unique identifier for an artifact.
+        description: Human-readable description used in error messages.
+
+    Returns:
+        tuple[_T, ...]: Combined sequence preserving the order of additions.
+
+    Raises:
+        CatalogIntegrityError: If a duplicate identifier is encountered.
+    """
+
     merged = list(base)
     seen = {key(item) for item in base}
     for item in additions:
@@ -182,6 +254,15 @@ def _merge_unique(
 
 
 def _serialise_contributions(contributions: Sequence[CatalogContribution]) -> bytes:
+    """Serialise contributions into bytes for checksum generation.
+
+    Args:
+        contributions: Contributions to serialise for hashing.
+
+    Returns:
+        bytes: UTF-8 encoded JSON payload representing the contributions.
+    """
+
     payload = []
     for contribution in contributions:
         payload.append(

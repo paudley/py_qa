@@ -68,14 +68,14 @@ _UNDERSCORE_CHAR: Final[str] = "_"
 
 @dataclass(frozen=True)
 class MessageAnalysis:
-    """Cached NLP artefacts for a diagnostic message."""
+    """Represent cached NLP artefacts for a diagnostic message."""
 
     spans: tuple[SimpleMessageSpan, ...]
     signature: tuple[str, ...]
 
 
 class AnnotationEngine(AnnotationProvider):
-    """Annotate diagnostics using Tree-sitter context and spaCy NLP."""
+    """Provide annotation logic that leverages Tree-sitter and spaCy."""
 
     def __init__(
         self,
@@ -103,7 +103,7 @@ class AnnotationEngine(AnnotationProvider):
         self._nlp_missing = False
 
     def annotate_run(self, result: RunResult) -> dict[int, DiagnosticAnnotation]:
-        """Return annotations for each diagnostic in ``result`` keyed by ``id``.
+        """Annotate the diagnostics contained in ``result``.
 
         Args:
             result: Aggregated lint outcome produced by the orchestrator.
@@ -136,7 +136,7 @@ class AnnotationEngine(AnnotationProvider):
         return annotations
 
     def message_spans(self, message: str) -> Sequence[MessageSpan]:
-        """Return cached highlight spans for ``message``.
+        """Retrieve cached highlight spans for ``message``.
 
         Args:
             message: Diagnostic text to analyse.
@@ -150,7 +150,7 @@ class AnnotationEngine(AnnotationProvider):
         return analysis.spans
 
     def message_signature(self, message: str) -> Sequence[str]:
-        """Return a semantic signature extracted from ``message``.
+        """Build a semantic signature extracted from ``message``.
 
         Args:
             message: Diagnostic text to transform into semantic tokens.
@@ -164,7 +164,7 @@ class AnnotationEngine(AnnotationProvider):
 
     @memoize(maxsize=2048)
     def _analyse_message(self, message: str) -> MessageAnalysis:
-        """Return cached heuristics and spaCy results for ``message``.
+        """Analyse ``message`` using heuristics and spaCy when available.
 
         Args:
             message: Diagnostic text under analysis.
@@ -259,7 +259,7 @@ def _build_span(start: int, end: int, style: str, kind: str | None) -> SimpleMes
 
 
 def _heuristic_spans(message: str) -> tuple[list[SimpleMessageSpan], list[str]]:
-    """Heuristically derive spans and signature tokens from ``message``.
+    """Derive heuristic spans and signature tokens from ``message``.
 
     Args:
         message: Diagnostic message text awaiting annotation.
@@ -276,6 +276,8 @@ def _heuristic_spans(message: str) -> tuple[list[SimpleMessageSpan], list[str]]:
 
 @dataclass(slots=True)
 class _SpanCollector:
+    """Collect span candidates for heuristic annotation passes."""
+
     message: str
     spans: list[SimpleMessageSpan]
     tokens: list[str]

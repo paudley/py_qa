@@ -198,7 +198,7 @@ def load_project_license(root: Path) -> LicenseMetadata:
         data = cast(dict[str, JSONValue], tomllib.loads(pyproject.read_text(encoding="utf-8")))
         project_value = data.get(PROJECT_TABLE_KEY, {})
         if isinstance(project_value, Mapping):
-            project = cast(PyProjectTable, project_value)
+            project = _normalize_pyproject_table(project_value)
             spdx_id = _extract_project_license(project)
             copyright_str = _extract_authors(project)
         overrides = _extract_license_overrides(data)
@@ -218,6 +218,17 @@ def load_project_license(root: Path) -> LicenseMetadata:
         license_text=license_text,
         overrides=overrides,
     )
+
+
+def _normalize_pyproject_table(value: Mapping[str, JSONValue]) -> PyProjectTable:
+    """Return ``value`` coerced into a mapping of string keys to JSON values."""
+
+    table: dict[str, JSONValue] = {}
+    for key, item in value.items():
+        if not isinstance(key, str):
+            raise ValueError("pyproject project table keys must be strings")
+        table[key] = item
+    return table
 
 
 def load_license_policy(

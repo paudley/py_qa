@@ -16,7 +16,7 @@ from pyqa.core.config.loader import ConfigLoadResult, FieldUpdate
 from pyqa.core.serialization import JsonValue
 
 from ...core.shared import CLIError, build_cli_logger, register_command
-from ...core.typer_ext import create_typer
+from ...core.typer_ext import TyperAppConfig, create_typer
 from .services import (
     JSON_FORMAT,
     SchemaFormatLiteral,
@@ -34,7 +34,7 @@ from .services import (
     write_output,
 )
 
-config_app = create_typer(help="Inspect, validate, and document configuration layers.")
+config_app = create_typer(config=TyperAppConfig(help_text="Inspect, validate, and document configuration layers."))
 
 
 @register_command(
@@ -248,19 +248,41 @@ def config_export_tools(
 
 
 def _config_to_mapping(result: ConfigLoadResult) -> Mapping[str, JsonValue]:
-    """Backwards compatible wrapper used by older callers."""
+    """Produce config mappings for legacy callers.
+
+    Args:
+        result: Configuration load result returned by the loader.
+
+    Returns:
+        Mapping[str, JsonValue]: Serialisable configuration sections.
+    """
 
     return render_config_mapping(result)
 
 
 def _summarise_updates(updates: list[FieldUpdate]) -> list[str]:
-    """Backwards compatible wrapper around :func:`summarise_updates`."""
+    """Produce update summaries for legacy imports.
+
+    Args:
+        updates: Sequence of field updates produced by the configuration diff.
+
+    Returns:
+        list[str]: Human-readable descriptions of each update.
+    """
 
     return summarise_updates(updates)
 
 
 def _summarise_value(field_path: str, value: JsonValue) -> str:
-    """Backwards compatible wrapper around :func:`summarise_value`."""
+    """Render update values for legacy imports.
+
+    Args:
+        field_path: Dot-delimited configuration field path.
+        value: Value associated with the configuration update.
+
+    Returns:
+        str: Text representation suitable for CLI output.
+    """
 
     return summarise_value(field_path, value)
 
@@ -269,19 +291,34 @@ def _diff_snapshots(
     left: Mapping[str, JsonValue],
     right: Mapping[str, JsonValue],
 ) -> dict[str, JsonValue]:
-    """Backwards compatible wrapper for older imports."""
+    """Build snapshot diffs for legacy callers.
+
+    Args:
+        left: Baseline snapshot mapping.
+        right: Comparison snapshot mapping.
+
+    Returns:
+        dict[str, JsonValue]: Differences between the provided snapshots.
+    """
 
     return diff_snapshots(left, right)
 
 
 def _schema_to_markdown(schema: Mapping[str, JsonValue]) -> str:
-    """Backwards compatible wrapper mirroring previous behaviour."""
+    """Render schema markdown for legacy callers.
+
+    Args:
+        schema: Mapping produced by :func:`generate_config_schema`.
+
+    Returns:
+        str: Markdown-formatted documentation.
+    """
 
     return schema_to_markdown(schema)
 
 
 class ToolSettingsDoc(BaseModel):
-    """Documentation model for tool settings schema output."""
+    """Define the documentation payload for tool settings output."""
 
     model_config = ConfigDict(extra="allow")
 

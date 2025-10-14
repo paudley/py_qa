@@ -11,7 +11,15 @@ from pyqa.analysis import AnnotationEngine, MessageSpan
 from pyqa.config import OutputConfig
 from pyqa.core.models import Diagnostic, RunResult, ToolOutcome
 from pyqa.core.severity import Severity
-from pyqa.reporting import AdviceBuilder, AdviceEntry, generate_advice, render, write_json_report, write_pr_summary, write_sarif_report
+from pyqa.reporting import (
+    AdviceBuilder,
+    AdviceEntry,
+    generate_advice,
+    render,
+    write_json_report,
+    write_pr_summary,
+    write_sarif_report,
+)
 from pyqa.reporting.presenters.emitters import PRSummaryOptions
 
 
@@ -54,11 +62,7 @@ def _captured_lines(capsys) -> list[str]:
     """Return sanitized CLI output lines for assertions."""
 
     captured = capsys.readouterr().out.splitlines()
-    return [
-        line.strip()
-        for line in captured
-        if line.strip() and not line.strip().startswith("⚠️ spaCy model")
-    ]
+    return [line.strip() for line in captured if line.strip() and not line.strip().startswith("⚠️ spaCy model")]
 
 
 def test_write_json_report(tmp_path: Path) -> None:
@@ -1373,6 +1377,8 @@ def test_advice_builder_delegates_to_generate_advice() -> None:
 
     assert result == expected
     assert dummy.calls
+
+
 def _write_summary(result: RunResult, path: Path, **kwargs: object) -> None:
     options = PRSummaryOptions(**kwargs)
     write_pr_summary(result, path, options=options)

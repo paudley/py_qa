@@ -15,6 +15,7 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Lock
 from types import ModuleType
 from typing import Final, cast
 from urllib.parse import urlparse
@@ -30,6 +31,8 @@ _DARWIN_PLATFORM: Final[str] = "darwin"
 
 # Keep shared library handles alive so ctypes does not unload them prematurely.
 _LOADED_LIBRARIES: dict[Path, ctypes.CDLL] = {}
+_LANGUAGE_CACHE: dict[str, TSLanguage] = {}
+_LANGUAGE_CACHE_LOCK = Lock()
 
 
 @dataclass(frozen=True)
@@ -60,12 +63,19 @@ def ensure_language(grammar_name: str) -> TSLanguage | None:
         Language | None: Compiled grammar if loadable, otherwise ``None``.
     """
 
+    with _LANGUAGE_CACHE_LOCK:
+        cached = _LANGUAGE_CACHE.get(grammar_name)
+        if cached is not None:
+            return cached
+
     module_name = f"tree_sitter_{grammar_name.replace('-', '_')}"
     module = _import_language_module(module_name)
     if module is not None:
         language = _language_from_module(module)
         if language is not None:
-            return language
+            with _LANGUAGE_CACHE_LOCK:
+                _LANGUAGE_CACHE.setdefault(grammar_name, language)
+                return _LANGUAGE_CACHE[grammar_name]
 
     source = _GRAMMAR_SOURCES.get(grammar_name)
     if source is None:
@@ -78,7 +88,12 @@ def ensure_language(grammar_name: str) -> TSLanguage | None:
         _build_language_library(source, lib_path, cache_dir)
     if not lib_path.exists():
         return None
-    return _load_compiled_language(lib_path, grammar_name)
+    language = _load_compiled_language(lib_path, grammar_name)
+    if language is not None:
+        with _LANGUAGE_CACHE_LOCK:
+            _LANGUAGE_CACHE.setdefault(grammar_name, language)
+            return _LANGUAGE_CACHE[grammar_name]
+    return None
 
 
 def _build_language_library(source: GrammarSource, lib_path: Path, cache_dir: Path) -> None:

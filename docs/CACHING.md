@@ -1,3 +1,7 @@
+<!-- SPDX-License-Identifier: MIT -->
+
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # Caching Strategy Roadmap
 
 This document describes how PyQA should evolve its caching story across both internal

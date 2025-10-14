@@ -72,25 +72,9 @@ class _ProgressHandler:
 
     handler: Callable[[ProgressPayload], None]
 
-    def __call__(
-        self,
-        event: str,
-        tool_name: str,
-        action_name: str,
-        index: int,
-        total: int,
-        message: str | None,
-    ) -> None:
-        """Convert raw event arguments into :class:`ProgressPayload` tuples."""
+    def process(self, data: ProgressEventData) -> None:
+        """Convert *data* into a :class:`ProgressPayload` and dispatch it."""
 
-        data = ProgressEventData(
-            event=event,
-            tool_name=tool_name,
-            action_name=action_name,
-            index=index,
-            total=total,
-            message=message,
-        )
         payload = _progress_payload_from_data(data)
         self.handler(payload)
 
@@ -108,7 +92,17 @@ def _wrap_progress_handler(
         orchestrator's progress callback signature.
     """
 
-    return _ProgressHandler(handler)
+    adapter = _ProgressHandler(handler)
+    return lambda event, tool_name, action_name, index, total, message: adapter.process(
+        ProgressEventData(
+            event=event,
+            tool_name=tool_name,
+            action_name=action_name,
+            index=index,
+            total=total,
+            message=message,
+        ),
+    )
 
 
 def _progress_payload_from_data(data: ProgressEventData) -> ProgressPayload:

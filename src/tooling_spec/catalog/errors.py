@@ -10,16 +10,24 @@ from typing import cast
 
 
 class _FallbackCatalogIntegrityError(RuntimeError):
-    """Fallback integrity error used when the pyqa runtime is unavailable."""
+    """Provide a fallback integrity error when the pyqa runtime is unavailable."""
 
     def __init__(self, message: str | None = None) -> None:
-        """Create the integrity error with an optional ``message``."""
+        """Initialise the fallback integrity error with an optional message.
+
+        Args:
+            message: Human-readable description of the integrity violation.
+        """
 
         super().__init__(message or "catalog integrity violation")
 
 
 def _load_catalog_integrity_error() -> type[RuntimeError]:
-    """Return the integrity error class shared with the pyqa runtime."""
+    """Resolve the runtime-provided ``CatalogIntegrityError`` implementation.
+
+    Returns:
+        type[RuntimeError]: Concrete exception type used for catalog integrity errors.
+    """
 
     try:  # pragma: no cover - dependency optional for tooling_spec
         module = import_module("pyqa.catalog.errors")

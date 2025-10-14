@@ -8,7 +8,7 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Final
 
-from pyqa.core.serialization import JsonValue
+from pyqa.core.serialization import JsonValue, coerce_optional_int, coerce_optional_str
 from pyqa.core.severity import Severity
 
 from ..core.models import RawDiagnostic
@@ -42,6 +42,22 @@ REMARK_SEVERITY_MAP: Final[dict[str, Severity]] = {
 }
 
 
+def _mapping_sequence(value: JsonValue | None) -> tuple[Mapping[str, JsonValue], ...]:
+    """Return a tuple of mapping entries extracted from ``value`` when possible."""
+
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return tuple(item for item in value if isinstance(item, Mapping))
+    if isinstance(value, Mapping):
+        return (value,)
+    return ()
+
+
+def _first_mapping(value: JsonValue | None) -> Mapping[str, JsonValue]:
+    """Return ``value`` when it is a mapping, otherwise an empty mapping."""
+
+    return value if isinstance(value, Mapping) else {}
+
+
 def parse_sqlfluff(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse sqlfluff JSON diagnostics into raw diagnostic objects.
 
@@ -56,7 +72,7 @@ def parse_sqlfluff(payload: JsonValue, context: ToolContext) -> Sequence[RawDiag
     results: list[RawDiagnostic] = []
     for item in iter_dicts(payload):
         violations = item.get("violations")
-        path = item.get("filepath")
+        path_value = item.get("filepath")
         if not isinstance(violations, list):
             continue
         for violation in violations:
@@ -68,12 +84,16 @@ def parse_sqlfluff(payload: JsonValue, context: ToolContext) -> Sequence[RawDiag
             column = violation.get("line_pos")
             severity = violation.get("severity", "error")
             sev_enum = map_severity(severity, SQLFLUFF_SEVERITY_MAP, Severity.WARNING)
-            location = DiagnosticLocation(file=path, line=line, column=column)
+            location = DiagnosticLocation(
+                file=coerce_optional_str(path_value) if path_value is not None else None,
+                line=coerce_optional_int(line) if line is not None else None,
+                column=coerce_optional_int(column) if column is not None else None,
+            )
             details = DiagnosticDetails(
                 severity=sev_enum,
                 message=message,
                 tool="sqlfluff",
-                code=str(code) if code else None,
+                code=coerce_optional_str(code) if code is not None else None,
             )
             results.append(create_spec(location=location, details=details).build())
     return results
@@ -194,6 +214,8 @@ def parse_speccy(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagno
             severity = _speccy_severity(issue, severity_key)
             location = _speccy_location(issue)
             augmented_message = message if location is None else f"{location}: {message}"
+            code_value = issue.get("code") or issue.get("rule")
+            code_str = coerce_optional_str(code_value) if code_value is not None else None
             results.append(
                 RawDiagnostic(
                     file=file_path,
@@ -201,7 +223,7 @@ def parse_speccy(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagno
                     column=None,
                     severity=severity,
                     message=augmented_message,
-                    code=issue.get("code") or issue.get("rule"),
+                    code=code_str,
                     tool="speccy",
                 ),
             )
@@ -209,32 +231,28 @@ def parse_speccy(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagno
 
 
 def _iter_speccy_files(payload: JsonValue) -> Iterable[Mapping[str, JsonValue]]:
-    if isinstance(payload, list):
-        return (item for item in payload if isinstance(item, Mapping))
     if isinstance(payload, Mapping):
-        intermediate = payload.get("files") or payload.get("lint") or payload.get("results") or []
-        return (item for item in intermediate if isinstance(item, Mapping))
-    return ()
+        intermediate = payload.get("files") or payload.get("lint") or payload.get("results")
+        return _mapping_sequence(intermediate)
+    return _mapping_sequence(payload)
 
 
 def _iter_speccy_issues(
     entry: Mapping[str, JsonValue],
 ) -> Iterable[tuple[str, Mapping[str, JsonValue]]]:
-    issues = entry.get("issues") or entry.get("errors") or entry.get("problems") or []
+    issues = entry.get("issues") or entry.get("errors") or entry.get("problems")
     if isinstance(issues, Mapping):
         combined: list[tuple[str, Mapping[str, JsonValue]]] = []
         for key, value in issues.items():
-            if isinstance(value, list):
+            if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
                 combined.extend((str(key), item) for item in value if isinstance(item, Mapping))
-        return combined
-    if isinstance(issues, list):
-        return [("error", issue) for issue in issues if isinstance(issue, Mapping)]
-    return ()
+        return tuple(combined)
+    return tuple(("error", issue) for issue in _mapping_sequence(issues))
 
 
 def _speccy_file_path(entry: Mapping[str, JsonValue]) -> str | None:
     value = entry.get("file") or entry.get("path") or entry.get("name")
-    return str(value) if value else None
+    return coerce_optional_str(value)
 
 
 def _speccy_message(issue: Mapping[str, JsonValue]) -> str:
@@ -245,18 +263,17 @@ def _speccy_message(issue: Mapping[str, JsonValue]) -> str:
 
 
 def _speccy_severity(issue: Mapping[str, JsonValue], default_label: str) -> Severity:
-    raw_label = issue.get("type") or issue.get("severity") or default_label or "warning"
-    label = str(raw_label).strip().lower()
+    raw_label = coerce_optional_str(issue.get("type")) or coerce_optional_str(issue.get("severity")) or default_label
+    label = raw_label.strip().lower()
     return SPECCY_SEVERITY_MAP.get(label, Severity.WARNING)
 
 
 def _speccy_location(issue: Mapping[str, JsonValue]) -> str | None:
     location = issue.get("location") or issue.get("path")
-    if isinstance(location, list):
-        return "/".join(str(part) for part in location)
-    if location:
-        return str(location)
-    return None
+    if isinstance(location, Sequence) and not isinstance(location, (str, bytes, bytearray)):
+        parts = [coerce_optional_str(part) for part in location]
+        return "/".join(part for part in parts if part)
+    return coerce_optional_str(location)
 
 
 def _remark_file_entries(payload: JsonValue) -> tuple[Mapping[str, JsonValue], ...]:
@@ -269,12 +286,10 @@ def _remark_file_entries(payload: JsonValue) -> tuple[Mapping[str, JsonValue], .
         tuple[Mapping[str, Any], ...]: Iterable of mapping entries describing files.
     """
 
-    if isinstance(payload, list):
-        return tuple(entry for entry in payload if isinstance(entry, Mapping))
     if isinstance(payload, Mapping):
-        intermediate = payload.get("files") or payload.get("results") or []
-        return tuple(entry for entry in intermediate if isinstance(entry, Mapping))
-    return ()
+        intermediate = payload.get("files") or payload.get("results")
+        return _mapping_sequence(intermediate)
+    return _mapping_sequence(payload)
 
 
 def _remark_messages(entry: Mapping[str, JsonValue]) -> tuple[Mapping[str, JsonValue], ...]:
@@ -287,10 +302,7 @@ def _remark_messages(entry: Mapping[str, JsonValue]) -> tuple[Mapping[str, JsonV
         tuple[Mapping[str, Any], ...]: Message mappings extracted from ``entry``.
     """
 
-    messages = entry.get("messages")
-    if isinstance(messages, list):
-        return tuple(message for message in messages if isinstance(message, Mapping))
-    return ()
+    return _mapping_sequence(entry.get("messages"))
 
 
 def _remark_file_path(entry: Mapping[str, JsonValue]) -> str | None:
@@ -304,7 +316,7 @@ def _remark_file_path(entry: Mapping[str, JsonValue]) -> str | None:
     """
 
     value = entry.get("name") or entry.get("path") or entry.get("file")
-    return str(value) if value else None
+    return coerce_optional_str(value)
 
 
 def _remark_severity(message: Mapping[str, JsonValue]) -> Severity:
@@ -334,17 +346,16 @@ def _remark_location(message: Mapping[str, JsonValue]) -> tuple[int | None, int 
         tuple[int | None, int | None]: Line and column numbers when available.
     """
 
-    line = message.get("line")
-    column = message.get("column")
+    line = coerce_optional_int(message.get("line"))
+    column = coerce_optional_int(message.get("column"))
     if line is not None or column is not None:
         return line, column
-    location = message.get("location")
-    if isinstance(location, Mapping):
-        start = location.get("start")
-        if isinstance(start, Mapping):
-            start_line = start.get("line")
-            start_column = start.get("column")
-            return start_line, start_column
+    start_mapping = _first_mapping(message.get("location")).get("start")
+    start = _first_mapping(start_mapping)
+    start_line = coerce_optional_int(start.get("line"))
+    start_column = coerce_optional_int(start.get("column"))
+    if start_line is not None or start_column is not None:
+        return start_line, start_column
     return None, None
 
 

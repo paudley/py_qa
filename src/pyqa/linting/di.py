@@ -14,6 +14,8 @@ if TYPE_CHECKING:  # pragma: no cover - import for typing only
 else:  # pragma: no cover - runtime hinting only
     PreparedLintState = object
 
+from pyqa.core.models import JsonValue
+
 from ._ast_visitors import BaseAstLintVisitor, VisitorMetadata, run_ast_linter
 from ._module_utils import module_name_from_path
 from .base import InternalLintReport
@@ -84,16 +86,17 @@ class _DiVisitor(BaseAstLintVisitor):
                     f"must move into an approved composition root ({_ALLOWED_SERVICE_REGISTERERS_DISPLAY})."
                 )
                 hints = self._service_hints(service_label)
+                meta: dict[str, JsonValue] = {
+                    "service": service_label,
+                    "module": self._module,
+                    "allowed_roots": [*sorted(_ALLOWED_SERVICE_REGISTERERS)],
+                    "allowed_suffixes": list(_ALLOWED_SERVICE_SUFFIXES),
+                }
                 self.record_issue(
                     node,
                     message,
                     hints=hints,
-                    meta={
-                        "service": service_label,
-                        "module": self._module,
-                        "allowed_roots": sorted(_ALLOWED_SERVICE_REGISTERERS),
-                        "allowed_suffixes": _ALLOWED_SERVICE_SUFFIXES,
-                    },
+                    meta=meta,
                 )
         self.generic_visit(node)
 

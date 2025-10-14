@@ -10,11 +10,11 @@ import shutil
 # external tool execution, normalising arguments and disabling ``shell=True``.
 import subprocess  # nosec B404 suppression_valid: The subprocess module is standard library code and the wrapper enforces safe, shell-free invocation semantics.
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-CommandOverrideValue = Path | Mapping[str, str] | bool | float | None
+CommandOverrideValue = Path | Mapping[str, str] | bool | float | int | None
 CommandOverrideMapping = Mapping[str, CommandOverrideValue]
 
 if TYPE_CHECKING:
@@ -46,7 +46,9 @@ class CommandOptions:
             CommandOptions: Updated options instance with overrides applied.
 
         Raises:
-            TypeError: If ``overrides`` includes an unknown option name.
+            TypeError: If ``overrides`` includes an unknown option name or a value
+                with an incompatible type.
+            ValueError: When a timeout override is negative.
         """
 
         valid_keys = {
@@ -62,7 +64,116 @@ class CommandOptions:
         if unknown:
             message = ", ".join(sorted(unknown))
             raise TypeError(f"Unknown command option(s): {message}")
-        return replace(self, **overrides)
+        cwd = self.cwd if "cwd" not in overrides else self._coerce_cwd_override(overrides["cwd"])
+        env = self.env if "env" not in overrides else self._coerce_env_override(overrides["env"])
+        check = self.check if "check" not in overrides else self._coerce_bool_override(overrides["check"], "check")
+        capture_output = (
+            self.capture_output
+            if "capture_output" not in overrides
+            else self._coerce_bool_override(overrides["capture_output"], "capture_output")
+        )
+        text = self.text if "text" not in overrides else self._coerce_bool_override(overrides["text"], "text")
+        timeout = self.timeout if "timeout" not in overrides else self._coerce_timeout_override(overrides["timeout"])
+        discard_stdin = (
+            self.discard_stdin
+            if "discard_stdin" not in overrides
+            else self._coerce_bool_override(overrides["discard_stdin"], "discard_stdin")
+        )
+        return CommandOptions(
+            cwd=cwd,
+            env=env,
+            check=check,
+            capture_output=capture_output,
+            text=text,
+            timeout=timeout,
+            discard_stdin=discard_stdin,
+        )
+
+    @staticmethod
+    def _coerce_cwd_override(value: CommandOverrideValue) -> Path | None:
+        """Return a validated override for ``cwd``.
+
+        Args:
+            value: Override candidate provided by the caller.
+
+        Returns:
+            Path | None: Normalised working directory override.
+
+        Raises:
+            TypeError: If ``value`` is neither ``None`` nor a :class:`pathlib.Path`.
+        """
+
+        if value is None or isinstance(value, Path):
+            return value
+        raise TypeError("cwd override must be a pathlib.Path or None")
+
+    @staticmethod
+    def _coerce_env_override(value: CommandOverrideValue) -> Mapping[str, str] | None:
+        """Return a validated override for ``env``.
+
+        Args:
+            value: Override candidate supplied for the environment mapping.
+
+        Returns:
+            Mapping[str, str] | None: Validated environment overrides.
+
+        Raises:
+            TypeError: If the override is not a mapping of string keys to string values.
+        """
+
+        if value is None:
+            return None
+        if not isinstance(value, Mapping):
+            raise TypeError("env override must be a mapping of strings to strings")
+        validated: dict[str, str] = {}
+        for key, entry in value.items():
+            if not isinstance(key, str) or not isinstance(entry, str):
+                raise TypeError("env override must map strings to strings")
+            validated[key] = entry
+        return validated
+
+    @staticmethod
+    def _coerce_bool_override(value: CommandOverrideValue, option: str) -> bool:
+        """Return a validated bool override for ``option``.
+
+        Args:
+            value: Override candidate extracted from the overrides mapping.
+            option: Option name used when constructing error messages.
+
+        Returns:
+            bool: Validated boolean override.
+
+        Raises:
+            TypeError: If the override is not a boolean value.
+        """
+
+        if isinstance(value, bool):
+            return value
+        raise TypeError(f"{option} override must be a boolean value")
+
+    @staticmethod
+    def _coerce_timeout_override(value: CommandOverrideValue) -> float | None:
+        """Return a validated timeout override.
+
+        Args:
+            value: Override candidate for the timeout value.
+
+        Returns:
+            float | None: Normalised timeout value in seconds.
+
+        Raises:
+            TypeError: If the override is not numeric.
+            ValueError: When the override is negative.
+        """
+
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            coerced = float(value)
+            if coerced < 0:
+                raise ValueError("timeout override must be non-negative")
+            return coerced
+        raise TypeError("timeout override must be a number or None")
 
 
 class SubprocessExecutionError(RuntimeError):

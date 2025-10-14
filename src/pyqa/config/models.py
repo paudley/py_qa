@@ -23,7 +23,7 @@ class ConfigError(Exception):
 
 
 class StrictnessLevel(str, Enum):
-    """Enumerate supported type-checking strictness levels."""
+    """Define supported type-checking strictness levels."""
 
     LENIENT = "lenient"
     STANDARD = "standard"
@@ -31,7 +31,7 @@ class StrictnessLevel(str, Enum):
 
 
 class SensitivityLevel(str, Enum):
-    """Enumerate sensitivity presets available to callers."""
+    """Define sensitivity presets available to callers."""
 
     LOW = "low"
     MEDIUM = "medium"
@@ -40,7 +40,7 @@ class SensitivityLevel(str, Enum):
 
 
 class BanditLevel(str, Enum):
-    """Enumerate severity levels supported by Bandit."""
+    """Define severity levels supported by Bandit."""
 
     LOW = "low"
     MEDIUM = "medium"
@@ -48,7 +48,7 @@ class BanditLevel(str, Enum):
 
 
 class BanditConfidence(str, Enum):
-    """Enumerate confidence levels supported by Bandit."""
+    """Define confidence levels supported by Bandit."""
 
     LOW = "low"
     MEDIUM = "medium"
@@ -56,7 +56,7 @@ class BanditConfidence(str, Enum):
 
 
 class ConfigOverrideKey(str, Enum):
-    """Enumerate override keys recognised by sensitivity profiles."""
+    """Define override keys recognised by sensitivity profiles."""
 
     LINE_LENGTH = "line_length"
     MAX_COMPLEXITY = "max_complexity"
@@ -191,7 +191,7 @@ def _expected_mypy_value_for(
 
 
 class FileDiscoveryConfig(BaseModel):
-    """Configuration for how to discover and filter files within a project."""
+    """Define file discovery and filtering configuration for a project."""
 
     model_config = ConfigDict(validate_assignment=True)
 
@@ -209,7 +209,7 @@ class FileDiscoveryConfig(BaseModel):
 
 
 class OutputConfig(BaseModel):
-    """Configuration for controlling output, reporting, and artifact creation."""
+    """Define output, reporting, and artifact creation configuration."""
 
     model_config = ConfigDict(validate_assignment=True)
 
@@ -237,7 +237,7 @@ class OutputConfig(BaseModel):
 
 
 class ExecutionConfig(BaseModel):
-    """Execution behaviour and lint tool selection configuration."""
+    """Define execution behaviour and lint tool selection configuration."""
 
     model_config = ConfigDict(validate_assignment=True)
 
@@ -261,7 +261,7 @@ class ExecutionConfig(BaseModel):
 
 
 class DedupeConfig(BaseModel):
-    """Configuration knobs for deduplicating diagnostics."""
+    """Define configuration knobs for deduplicating diagnostics."""
 
     model_config = ConfigDict(validate_assignment=True)
 
@@ -360,7 +360,7 @@ class StrictnessConfig(BaseModel):
 
 
 class SeverityConfig(BaseModel):
-    """Shared severity thresholds for supported tools."""
+    """Define severity thresholds shared across supported tools."""
 
     model_config = ConfigDict(validate_assignment=True)
 
@@ -372,7 +372,7 @@ class SeverityConfig(BaseModel):
 
 
 class ValueTypeFindingSeverity(str, Enum):
-    """Enumerate severities used by the generic value-type recommender."""
+    """Define severities used by the generic value-type recommender."""
 
     ERROR = "error"
     WARNING = "warning"
@@ -386,7 +386,7 @@ class ValueTypeTriggerKind(str, Enum):
 
 
 class GenericValueTypesImplication(BaseModel):
-    """Configuration describing a derived method recommendation."""
+    """Describe a derived method recommendation for value types."""
 
     trigger: str
     require: tuple[str, ...] = Field(default_factory=tuple)
@@ -396,7 +396,11 @@ class GenericValueTypesImplication(BaseModel):
 
     @model_validator(mode="after")
     def _normalise(self) -> GenericValueTypesImplication:
-        """Normalise trigger metadata and enforce canonical formatting."""
+        """Normalise trigger metadata and enforce canonical formatting.
+
+        Returns:
+            GenericValueTypesImplication: The normalised implication instance.
+        """
 
         trigger = self.trigger.strip()
         if not trigger:
@@ -409,7 +413,11 @@ class GenericValueTypesImplication(BaseModel):
         return self
 
     def parsed_trigger(self) -> tuple[ValueTypeTriggerKind, str]:
-        """Return the trigger kind/value pair derived from configuration."""
+        """Return the trigger kind/value pair derived from configuration.
+
+        Returns:
+            tuple[ValueTypeTriggerKind, str]: Trigger kind and trigger value pair.
+        """
 
         token = self.trigger
         if ":" not in token:
@@ -426,7 +434,7 @@ class GenericValueTypesImplication(BaseModel):
 
 
 class GenericValueTypesRule(BaseModel):
-    """Configuration rule describing explicit dunder expectations."""
+    """Describe explicit dunder expectations for value-type rules."""
 
     pattern: str
     traits: tuple[str, ...] = Field(default_factory=tuple)
@@ -437,7 +445,11 @@ class GenericValueTypesRule(BaseModel):
 
     @model_validator(mode="after")
     def _normalise(self) -> GenericValueTypesRule:
-        """Normalise rule inputs and enforce sorted unique collections."""
+        """Normalise rule inputs and enforce sorted unique collections.
+
+        Returns:
+            GenericValueTypesRule: The normalised rule instance.
+        """
 
         pattern = self.pattern.strip()
         if not pattern:
@@ -455,7 +467,7 @@ class GenericValueTypesRule(BaseModel):
 
 
 class GenericValueTypesConfig(BaseModel):
-    """Configuration namespace for the generic value-type recommender."""
+    """Define configuration for the generic value-type recommender."""
 
     enabled: bool = False
     rules: tuple[GenericValueTypesRule, ...] = Field(default_factory=tuple)
@@ -465,7 +477,11 @@ class GenericValueTypesConfig(BaseModel):
 
     @staticmethod
     def _default_implications() -> tuple[GenericValueTypesImplication, ...]:
-        """Return conservative default implications for value-type ergonomics."""
+        """Build conservative default implications for value-type ergonomics.
+
+        Returns:
+            tuple[GenericValueTypesImplication, ...]: Default implication definitions.
+        """
 
         base_implications = (
             GenericValueTypesImplication(
@@ -488,16 +504,15 @@ class GenericValueTypesConfig(BaseModel):
         return base_implications
 
 
-class _ConfigSentinel(Enum):
-    """Sentinel values used to distinguish absent and unmanaged settings."""
+class ConfigSentinel(Enum):
+    """Define sentinel values used to distinguish absent and unmanaged settings."""
 
     UNSET = "UNSET"
     NO_BASELINE = "NO_BASELINE"
 
 
-ConfigSentinel: TypeAlias = _ConfigSentinel
-UNSET: Final[ConfigSentinel] = _ConfigSentinel.UNSET
-NO_BASELINE: Final[ConfigSentinel] = _ConfigSentinel.NO_BASELINE
+UNSET: Final[ConfigSentinel] = ConfigSentinel.UNSET
+NO_BASELINE: Final[ConfigSentinel] = ConfigSentinel.NO_BASELINE
 MYPY_TOOL_KEY: Final[str] = "mypy"
 
 

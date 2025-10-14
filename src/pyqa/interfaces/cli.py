@@ -6,13 +6,17 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import ParamSpec, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
-P = ParamSpec("P")
+
+class CliParameterValue(Protocol):
+    """Marker protocol for values exchanged with CLI command callables."""
+
+    ...
 
 
 @runtime_checkable
-class CliCommand(Protocol[P]):
+class CliCommand(Protocol):
     """Represent a Typer-compatible command callable."""
 
     @property
@@ -21,13 +25,13 @@ class CliCommand(Protocol[P]):
         raise NotImplementedError("CliCommand.name must be implemented")
 
     # suppression_valid: lint=internal-signatures CLI protocols expose Typer-compatible call signatures so implementations can accept arbitrary options without wrapper glue.
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> int | None:
+    def __call__(self, *args: CliParameterValue, **kwargs: CliParameterValue) -> int | None:
         """Execute the command and optionally return an exit code."""
         raise NotImplementedError
 
 
 @runtime_checkable
-class CliCommandFactory(Protocol[P]):
+class CliCommandFactory(Protocol):
     """Factory used to construct CLI commands with injected dependencies."""
 
     @property
@@ -35,6 +39,6 @@ class CliCommandFactory(Protocol[P]):
         """Return the name of the command constructed by the factory."""
         raise NotImplementedError("CliCommandFactory.command_name must be implemented")
 
-    def create(self, argv: Sequence[str] | None = None) -> CliCommand[P]:
+    def create(self, argv: Sequence[str] | None = None) -> CliCommand:
         """Return a CLI command configured for the provided arguments."""
         raise NotImplementedError

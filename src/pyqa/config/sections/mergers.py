@@ -8,14 +8,13 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Generic, TypeVar, cast
+from typing import Generic, TypeAlias, TypeVar, cast
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from ..models import (
     CleanConfig,
     ConfigError,
-    ConfigValue,
     DedupeConfig,
     ExecutionConfig,
     FileDiscoveryConfig,
@@ -27,6 +26,7 @@ from ..models import (
     QualityConfigSection,
     UpdateConfig,
 )
+from ..types import ConfigValue
 from ..utils import (
     _coerce_iterable,
     _coerce_optional_int,
@@ -38,7 +38,10 @@ from ..utils import (
     _unique_paths,
 )
 
-ModelUpdateValue = ConfigValue | BaseModel | Mapping[str, ConfigValue] | Sequence[ConfigValue]
+ModelScalarUpdate: TypeAlias = ConfigValue | Path | BaseModel
+ModelSequenceUpdate: TypeAlias = Sequence[ConfigValue | Path | BaseModel]
+ModelMappingUpdate: TypeAlias = Mapping[str, ConfigValue | Path | BaseModel]
+ModelUpdateValue: TypeAlias = ModelScalarUpdate | ModelSequenceUpdate | ModelMappingUpdate
 
 SectionName = str
 FieldName = str
@@ -73,7 +76,7 @@ GENERIC_VALUE_TYPES_IMPLICATIONS_KEY: SectionName = "implications"
 
 
 ConfigMapping = Mapping[str, ConfigValue]
-SectionDiff = dict[str, object]
+SectionDiff = dict[str, ConfigValue]
 
 
 class PathResolver(BaseModel):
@@ -362,7 +365,7 @@ class _FileDiscoverySection(_SectionMerger[FileDiscoveryConfig]):
             )
             limit_to = _unique_paths(self._resolver.resolve_iterable(raw_limits))
 
-        updates = {
+        updates: dict[str, ModelUpdateValue] = {
             "roots": roots,
             "excludes": excludes,
             "explicit_files": explicit_files,
@@ -497,7 +500,7 @@ class _OutputSection(_SectionMerger[OutputConfig]):
         quiet = _coerce_optional_bool(data.get("quiet"), current.quiet, "output.quiet")
         advice = _coerce_optional_bool(data.get("advice"), current.advice, "output.advice")
 
-        updates = {
+        updates: dict[str, ModelUpdateValue] = {
             "verbose": verbose,
             "emoji": emoji,
             "color": color,
@@ -580,7 +583,7 @@ class _ExecutionSection(_SectionMerger[ExecutionConfig]):
             else list(current.enable)
         )
 
-        updates = {
+        updates: dict[str, ModelUpdateValue] = {
             "only": only,
             "languages": languages,
             "enable": enable,
@@ -661,7 +664,7 @@ class _LicenseSection(_SectionMerger[LicenseConfig]):
                 "license.exceptions",
             )
 
-        updates = {
+        updates: dict[str, ModelUpdateValue] = {
             "spdx": spdx,
             "notice": notice,
             "copyright": copyright_value,
@@ -733,7 +736,7 @@ class _QualitySection(_SectionMerger[QualityConfigSection]):
                 "quality.protected_branches",
             )
 
-        updates = {
+        updates: dict[str, ModelUpdateValue] = {
             "checks": checks,
             "skip_globs": skip_globs,
             "schema_targets": schema_targets,
@@ -818,7 +821,7 @@ class _GenericValueTypesSection(_SectionMerger[GenericValueTypesConfig]):
             else:
                 raise ConfigError("generic_value_types.implications must be an array")
 
-        updates = {
+        updates: dict[str, ModelUpdateValue] = {
             "enabled": enabled_raw,
             "rules": rules,
             "implications": implications,
@@ -885,7 +888,7 @@ class _UpdateSection(_SectionMerger[UpdateConfig]):
                 "update.enabled_managers",
             )
 
-        updates = {
+        updates: dict[str, ModelUpdateValue] = {
             "skip_patterns": skip_patterns,
             "enabled_managers": enabled_managers,
         }
@@ -912,7 +915,7 @@ class _DedupeSection(_SectionMerger[DedupeConfig]):
         if DEDUPE_PREFER_KEY in data:
             dedupe_prefer = _coerce_string_sequence(data[DEDUPE_PREFER_KEY], "dedupe.dedupe_prefer")
 
-        updates = {
+        updates: dict[str, ModelUpdateValue] = {
             "dedupe": _coerce_optional_bool(data.get("dedupe"), current.dedupe, "dedupe.dedupe"),
             "dedupe_by": _coerce_optional_str_value(
                 data.get("dedupe_by"),

@@ -17,6 +17,7 @@ from pyqa.runtime.console.manager import get_console_manager
 from ...config import OutputConfig
 from ...core.metrics import SUPPRESSION_LABELS, FileMetrics, compute_file_metrics
 from ...core.models import RunResult
+from ...core.serialization import safe_int
 from ...filesystem.paths import normalize_path_key
 
 
@@ -76,7 +77,7 @@ def compute_stats_snapshot(result: RunResult, diagnostics_count: int) -> StatsSn
     }
     warnings_per_loc = diagnostics_count / loc_count if loc_count else 0.0
     outcomes = result.outcomes
-    extra_failures = int(result.analysis.get("aux_tool_failures", 0))
+    extra_failures = safe_int(result.analysis.get("aux_tool_failures"), default=0)
     actions = ActionSummary(
         total=len(outcomes),
         failed=sum(1 for outcome in outcomes if outcome.indicates_failure()) + extra_failures,

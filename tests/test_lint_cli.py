@@ -33,9 +33,8 @@ from pyqa.cli.commands.lint.preparation import PROVIDED_FLAG_INTERNAL_LINTERS
 from pyqa.config import Config
 from pyqa.core.config.loader import ConfigLoader
 from pyqa.core.environment.tool_env.models import PreparedCommand
-from pyqa.core.models import Diagnostic, RunResult, ToolOutcome, ToolExitCategory
+from pyqa.core.models import RunResult, ToolOutcome
 from pyqa.core.severity import Severity
-from pyqa.linting.base import InternalLintReport
 from pyqa.linting.interfaces import run_pyqa_interface_linter
 from pyqa.linting.quality import (
     run_file_size_linter,
@@ -991,14 +990,15 @@ def test_ensure_internal_tools_registered(tmp_path: Path) -> None:
     ensure_internal_tools_registered(registry=registry, state=state, config=config)
     ensure_internal_tools_registered(registry=registry, state=state, config=config)
 
-    internal_tool = registry.try_get('docstrings')
+    internal_tool = registry.try_get("docstrings")
     assert internal_tool is not None
     action = internal_tool.actions[0]
     assert action.is_internal
 
     context = ToolContext(cfg=config, root=tmp_path, files=tuple(), settings={})
     outcome = action.internal_runner(context)
-    assert outcome.tool == 'docstrings'
+    assert outcome.tool == "docstrings"
+
 
 def test_lint_meta_normal_applies_defaults(monkeypatch, tmp_path: Path) -> None:
     runner = CliRunner()
@@ -1216,9 +1216,9 @@ def test_concise_mode_renders_progress_status(monkeypatch, tmp_path: Path) -> No
     assert any(event[0] == "start" for event in records)
     advances = [event for event in records if event[0] == "advance"]
     assert len(advances) == 4, "two actions plus post-processing and rendering phases should advance"
-    assert any(event[0] == "update" and event[2] == 4 for event in records), (
-        "progress total should include tool actions and extra phases"
-    )
+    assert any(
+        event[0] == "update" and event[2] == 4 for event in records
+    ), "progress total should include tool actions and extra phases"
     assert any(event[0] == "update" and event[1].startswith("Linting ruff") for event in records)
     status_updates = [event for event in records if event[0] == "update" and isinstance(event[3], dict)]
     status_values = [event[3].get("current_status", "") for event in status_updates]

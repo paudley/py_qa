@@ -50,7 +50,7 @@ def _load_json_stream(stdout: str) -> JsonValue:
 
 def _coerce_object_mapping(value: JsonValue) -> dict[str, JsonValue]:
     if isinstance(value, MappingABC):
-        return {str(key): cast(JsonValue, entry) for key, entry in value.items()}
+        return {str(key): entry for key, entry in value.items()}
     return {}
 
 

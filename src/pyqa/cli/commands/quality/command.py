@@ -13,7 +13,7 @@ import typer
 from ....compliance.quality import check_commit_message, ensure_branch_protection
 from ....config import QualityConfigSection
 from ...core.shared import CLIError, Depends, build_cli_logger, register_callback
-from ...core.typer_ext import create_typer
+from ...core.typer_ext import TyperAppConfig, create_typer
 from .models import (
     EMOJI_OPTION,
     ROOT_OPTION,
@@ -31,9 +31,11 @@ from .services import (
 )
 
 quality_app = create_typer(
-    name="check-quality",
-    help="Run repository quality checks (license headers, schema, hygiene).",
-    invoke_without_command=True,
+    config=TyperAppConfig(
+        name="check-quality",
+        help_text="Run repository quality checks (license headers, schema, hygiene).",
+        invoke_without_command=True,
+    ),
 )
 
 

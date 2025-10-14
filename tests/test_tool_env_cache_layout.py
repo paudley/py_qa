@@ -6,9 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from collections.abc import Mapping
 from pathlib import Path
-from typing import cast
 from typing import cast
 
 import pytest
@@ -146,5 +144,7 @@ def _execute_preparer(workspace_state: dict[str, object]) -> None:
 
 def _legacy_prepare(preparer: CommandPreparer, **kwargs: object):
     return preparer.prepare_from_mapping(cast(Mapping[str, object], kwargs))
+
+
 def _legacy_prepare(preparer: CommandPreparer, **kwargs: object):
     return preparer.prepare_from_mapping(cast(Mapping[str, object], kwargs))

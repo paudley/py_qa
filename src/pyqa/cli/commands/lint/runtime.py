@@ -9,6 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 from ....analysis.bootstrap import register_analysis_services
 from ....catalog.model_catalog import CatalogSnapshot
@@ -233,6 +234,28 @@ DEFAULT_LINT_DEPENDENCIES = LintRuntimeDependencies(
 )
 
 
+def _resolve_plugin_namespace(services: ServiceContainer | None) -> SimpleNamespace | None:
+    """Return the plugin namespace resolved from ``services`` when available.
+
+    Args:
+        services: Optional container providing service resolution helpers.
+
+    Returns:
+        SimpleNamespace | None: Loaded plugin namespace when resolvable; otherwise ``None``.
+    """
+
+    if services is None:
+        return None
+    try:
+        plugin_candidate = services.resolve("all_plugins")
+    except ServiceResolutionError:
+        return None
+    if not callable(plugin_candidate):
+        return None
+    plugin_loader = cast(Callable[[], SimpleNamespace], plugin_candidate)
+    return plugin_loader()
+
+
 def build_lint_runtime_context(
     state: PreparedLintState,
     *,
@@ -265,14 +288,7 @@ def build_lint_runtime_context(
         state.logger.debug,
     )
     services = deps.services
-    plugins: SimpleNamespace | None = None
-    if services is not None:
-        try:
-            load_plugins = services.resolve("all_plugins")
-        except ServiceResolutionError:
-            load_plugins = None
-        if callable(load_plugins):
-            plugins = load_plugins()
+    plugins = _resolve_plugin_namespace(services)
     return LintRuntimeContext(
         state=state,
         config=config,

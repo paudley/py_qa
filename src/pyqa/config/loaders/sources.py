@@ -30,6 +30,8 @@ class DefaultConfigSource(ConfigSource):
     """Return the built-in defaults as a configuration fragment."""
 
     def __init__(self) -> None:
+        """Initialise the source with a descriptive name."""
+
         self.name = "defaults"
 
     def load(self) -> ConfigFragment:
@@ -62,13 +64,22 @@ class TomlConfigSource(ConfigSource):
         include_key: str = DEFAULT_INCLUDE_KEY,
         env: Mapping[str, str] | None = None,
     ) -> None:
+        """Initialise the TOML configuration source.
+
+        Args:
+            path: Path to the root TOML document.
+            name: Optional human-readable name for the source.
+            include_key: TOML key used to declare include directives.
+            env: Environment mapping used for variable expansion.
+        """
+
         self._root_path = path
         self.name = name or str(path)
         self._include_key = include_key
         self._env = env or os.environ
 
     def load(self) -> ConfigFragment:
-        """Return configuration data resolved from the root TOML document.
+        """Load configuration data resolved from the root TOML document.
 
         Returns:
             Mapping representing the merged configuration result.
@@ -113,7 +124,7 @@ class TomlConfigSource(ConfigSource):
         return _expand_env(merged, self._env)
 
     def _coerce_includes(self, raw: ConfigValue, base_dir: Path) -> Iterable[Path]:
-        """Return include paths derived from ``raw`` relative to ``base_dir``.
+        """Compute include paths derived from ``raw`` relative to ``base_dir``.
 
         Args:
             raw: Include declaration in the TOML document.
@@ -131,8 +142,19 @@ class TomlConfigSource(ConfigSource):
             return [self._coerce_include_value(item, base_dir) for item in raw]
         return [self._coerce_include_value(raw, base_dir)]
 
-    def _coerce_include_value(self, value: ConfigValue, base_dir: Path) -> Path:
-        """Return a resolved include path for ``value`` relative to ``base_dir``."""
+    def _coerce_include_value(self, value: ConfigValue | Path, base_dir: Path) -> Path:
+        """Return a resolved include path for ``value`` relative to ``base_dir``.
+
+        Args:
+            value: Raw include declaration taken from the parsed configuration.
+            base_dir: Directory used to resolve relative include declarations.
+
+        Returns:
+            Path: Absolute path pointing to the include file.
+
+        Raises:
+            ConfigError: If ``value`` is not a supported include declaration.
+        """
 
         if isinstance(value, Path):
             return self._resolve_path(value, base_dir)
@@ -142,7 +164,7 @@ class TomlConfigSource(ConfigSource):
 
     @staticmethod
     def _resolve_path(path: Path, base_dir: Path) -> Path:
-        """Return an absolute path for ``path`` relative to ``base_dir``.
+        """Resolve ``path`` relative to ``base_dir``.
 
         Args:
             path: Include path originating from a TOML document.
@@ -155,7 +177,7 @@ class TomlConfigSource(ConfigSource):
         return path if path.is_absolute() else (base_dir / path)
 
     def describe(self) -> str:
-        """Return a description string for the TOML source.
+        """Describe the TOML configuration source.
 
         Returns:
             Description string referencing the underlying file path.
@@ -168,10 +190,16 @@ class PyProjectConfigSource(TomlConfigSource):
     """Read configuration from ``[tool.pyqa]`` within ``pyproject.toml``."""
 
     def __init__(self, path: Path) -> None:
+        """Initialise the pyproject configuration source.
+
+        Args:
+            path: Path to the ``pyproject.toml`` file.
+        """
+
         super().__init__(path, name=str(path))
 
     def load(self) -> ConfigFragment:
-        """Return configuration extracted from ``[tool.pyqa]`` sections.
+        """Load configuration extracted from ``[tool.pyqa]`` sections.
 
         Returns:
             Mapping representing the normalised pyqa configuration payload.
@@ -187,7 +215,7 @@ class PyProjectConfigSource(TomlConfigSource):
         return _normalise_pyproject_payload(dict(pyqa_section))
 
     def describe(self) -> str:
-        """Return a human-readable description of the pyproject source.
+        """Describe the pyproject configuration source.
 
         Returns:
             Description string referencing the pyproject file path.

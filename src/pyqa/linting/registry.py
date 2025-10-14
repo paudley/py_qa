@@ -7,11 +7,19 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from pyqa.config import Config
 from pyqa.core.models import ToolOutcome
-from pyqa.tools.base import DeferredCommand, PhaseLiteral, Tool, ToolAction, ToolContext
+from pyqa.platform.workspace import is_py_qa_workspace
+from pyqa.tools.base import (
+    DeferredCommand,
+    InternalActionRunner,
+    PhaseLiteral,
+    Tool,
+    ToolAction,
+    ToolContext,
+)
 from pyqa.tools.registry import ToolRegistry
 
 from .base import InternalLintReport, InternalLintRunner, as_internal_runner
@@ -22,6 +30,7 @@ from .docstrings import run_docstring_linter
 from .generic_value_types import run_generic_value_type_linter
 from .interfaces import run_pyqa_interface_linter
 from .module_docs import run_pyqa_module_doc_linter
+from .missing import run_missing_linter
 from .quality import (
     run_copyright_linter,
     run_file_size_linter,
@@ -47,6 +56,7 @@ class InternalLinterOptions:
     tags: tuple[str, ...] = ("internal-linter",)
     default_enabled: bool = False
     requires_config: bool = False
+    pyqa_default_enabled: bool = False
 
 
 @dataclass(slots=True)
@@ -164,6 +174,17 @@ INTERNAL_LINTERS: tuple[InternalLinterDefinition, ...] = (
         selection_tokens=("types", "typing", "strict-types"),
         runner=run_typing_linter,
         description="Detect banned Any/object annotations in code paths.",
+    ),
+    InternalLinterDefinition(
+        name="missing",
+        meta_attribute="check_missing",
+        selection_tokens=("missing", "todo"),
+        runner=run_missing_linter,
+        description="Flag TODO markers and other missing implementation placeholders.",
+        options=InternalLinterOptions(
+            tags=("internal-linter", "missing"),
+            pyqa_default_enabled=True,
+        ),
     ),
     InternalLinterDefinition(
         name="closures",
@@ -333,11 +354,17 @@ def _build_internal_tool(
 def configure_internal_tool_defaults(*, registry: ToolRegistry, state: PreparedLintState) -> None:
     """Toggle default-enabled flags for internal tools based on CLI meta."""
 
+    pyqa_scope_active = is_py_qa_workspace(state.root)
+    meta_runtime = getattr(state.meta, "runtime", None)
+    if meta_runtime is not None and getattr(meta_runtime, "pyqa_rules", False):
+        pyqa_scope_active = True
     for definition in INTERNAL_LINTERS:
         tool = registry.try_get(definition.name)
         if tool is None:
             continue
         enable = definition.options.default_enabled
+        if definition.options.pyqa_default_enabled and pyqa_scope_active:
+            enable = True
         if getattr(state.meta, "normal", False):
             enable = True
         tool.default_enabled = enable
@@ -347,10 +374,10 @@ def _wrap_internal_runner(
     definition: InternalLinterDefinition,
     state: PreparedLintState,
     runner: InternalLintRunner,
-) -> Callable[[ToolContext], ToolOutcome]:
+) -> InternalActionRunner:
     """Return an action runner compatible with :class:`ToolAction`."""
 
-    return _InternalRunnerAction(definition=definition, state=state, runner=runner)
+    return cast(InternalActionRunner, _InternalRunnerAction(definition=definition, state=state, runner=runner))
 
 
 def _bind_runner_callable(

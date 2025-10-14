@@ -37,7 +37,7 @@ class IssueTag(str, Enum):
 
 
 class NavigatorDiagnosticPayload(TypedDict):
-    """Typed representation of diagnostic details within the navigator."""
+    """Describe diagnostic details stored inside the navigator payload."""
 
     tool: str
     code: str
@@ -47,7 +47,7 @@ class NavigatorDiagnosticPayload(TypedDict):
 
 
 class NavigatorPayload(TypedDict):
-    """Typed representation of a refactor navigator entry."""
+    """Represent a refactor navigator entry in JSON-safe form."""
 
     file: str
     function: str
@@ -68,7 +68,11 @@ class NavigatorDiagnosticEntry:
     severity: str
 
     def to_payload(self) -> NavigatorDiagnosticPayload:
-        """Return a serialisable mapping for the diagnostic entry."""
+        """Build a serialisable mapping for the diagnostic entry.
+
+        Returns:
+            NavigatorDiagnosticPayload: JSON-safe mapping describing the diagnostic.
+        """
 
         return NavigatorDiagnosticPayload(
             tool=self.tool,
@@ -91,7 +95,7 @@ class NavigatorBucket:
     diagnostics: list[NavigatorDiagnosticEntry] = field(default_factory=list)
 
     def __len__(self) -> int:
-        """Return the number of diagnostics aggregated within the bucket.
+        """Compute the number of diagnostics aggregated within the bucket.
 
         Returns:
             int: Count of aggregated diagnostics.
@@ -100,7 +104,7 @@ class NavigatorBucket:
         return len(self.diagnostics)
 
     def __iter__(self) -> Iterator[NavigatorDiagnosticEntry]:
-        """Yield diagnostics contained in the bucket.
+        """Iterate over diagnostics contained in the bucket.
 
         Returns:
             Iterator[NavigatorDiagnosticEntry]: Iterator across stored diagnostics.
@@ -109,7 +113,12 @@ class NavigatorBucket:
         return iter(self.diagnostics)
 
     def add_diagnostic(self, diag: Diagnostic, tag: IssueTag | None) -> None:
-        """Record ``diag`` in the bucket and increment the associated tag."""
+        """Record ``diag`` in the bucket and increment the associated tag.
+
+        Args:
+            diag: Diagnostic to store in the bucket.
+            tag: Issue tag derived from the diagnostic, when available.
+        """
 
         self.file = diag.file or self.file
         self.function = diag.function or self.function
@@ -127,12 +136,20 @@ class NavigatorBucket:
 
     @property
     def total_issue_count(self) -> int:
-        """Return the total number of issues aggregated under this bucket."""
+        """Return the total number of issues aggregated under this bucket.
+
+        Returns:
+            int: Total issue count across all detected tags.
+        """
 
         return sum(self.issue_tags.values())
 
     def to_payload(self) -> NavigatorPayload:
-        """Return a serialisable payload representing this bucket."""
+        """Build a serialisable payload representing this bucket.
+
+        Returns:
+            NavigatorPayload: JSON-safe structure describing the bucket.
+        """
 
         return NavigatorPayload(
             file=self.file,

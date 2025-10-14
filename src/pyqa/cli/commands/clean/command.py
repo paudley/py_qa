@@ -11,7 +11,7 @@ import typer
 
 from ....clean import sparkly_clean
 from ...core.shared import CLIError, Depends, build_cli_logger, register_callback
-from ...core.typer_ext import create_typer
+from ...core.typer_ext import TyperAppConfig, create_typer
 from .models import CleanCLIOptions, build_clean_options
 from .services import (
     emit_dry_run_summary,
@@ -20,9 +20,11 @@ from .services import (
 )
 
 clean_app = create_typer(
-    name="sparkly-clean",
-    help="Remove temporary build/cache artefacts.",
-    invoke_without_command=True,
+    config=TyperAppConfig(
+        name="sparkly-clean",
+        help_text="Remove temporary build/cache artefacts.",
+        invoke_without_command=True,
+    ),
 )
 
 

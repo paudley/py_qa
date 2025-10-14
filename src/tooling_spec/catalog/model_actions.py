@@ -23,7 +23,7 @@ from .utils import (
 
 @dataclass(frozen=True, slots=True)
 class ActionExecution:
-    """Execution behaviour for a tool action."""
+    """Capture execution behaviour for a tool action."""
 
     append_files: bool
     is_fix: bool
@@ -35,7 +35,7 @@ class ActionExecution:
 
 @dataclass(frozen=True, slots=True)
 class ActionDefinition:
-    """Executable action backed by strategies."""
+    """Represent an executable catalog action backed by strategies."""
 
     name: str
     description: str | None
@@ -116,32 +116,56 @@ class ActionDefinition:
 
     @property
     def append_files(self) -> bool:
-        """Return ``True`` when file arguments should be appended to the command."""
+        """Return whether file arguments should be appended to the command.
+
+        Returns:
+            bool: ``True`` when file arguments should be appended to the command.
+        """
         return self.execution.append_files
 
     @property
     def is_fix(self) -> bool:
-        """Return ``True`` when the action is expected to modify files in-place."""
+        """Return whether the action is expected to modify files in-place.
+
+        Returns:
+            bool: ``True`` when the action modifies files.
+        """
         return self.execution.is_fix
 
     @property
     def ignore_exit(self) -> bool:
-        """Return ``True`` when non-zero exit codes should be ignored."""
+        """Return whether non-zero exit codes should be ignored.
+
+        Returns:
+            bool: ``True`` when non-zero exit codes should be ignored.
+        """
         return self.execution.ignore_exit
 
     @property
     def timeout_seconds(self) -> float | None:
-        """Return the maximum execution time allowed for the action."""
+        """Return the maximum execution time allowed for the action.
+
+        Returns:
+            float | None: Timeout in seconds, or ``None`` when unset.
+        """
         return self.execution.timeout_seconds
 
     @property
     def env(self) -> Mapping[str, str]:
-        """Return environment variables injected when invoking the action."""
+        """Provide environment variables injected when invoking the action.
+
+        Returns:
+            Mapping[str, str]: Environment variables applied to the action.
+        """
         return self.execution.env
 
     @property
     def filters(self) -> tuple[str, ...]:
-        """Return glob-style filters limiting the files passed to the action."""
+        """Provide glob-style filters limiting files passed to the action.
+
+        Returns:
+            tuple[str, ...]: Glob patterns restricting the file list.
+        """
         return self.execution.filters
 
 

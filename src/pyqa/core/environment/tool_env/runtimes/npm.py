@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from pyqa.core.environment import inject_node_defaults
+from pyqa.core.models import JsonValue
 from pyqa.core.runtime.process import CommandOptions, SubprocessExecutionError, run_command
 from pyqa.tools.base import Tool
 
@@ -79,8 +80,10 @@ class NpmRuntime(RuntimeHandler):
         bin_dir = prefix / "node_modules" / ".bin"
         if meta_path.is_file() and bin_dir.exists():
             data = self._load_json(meta_path)
-            if data and data.get("requirement") == requirement:
-                return prefix, data.get("version")
+            if data:
+                requirement_value = data.get("requirement")
+                if isinstance(requirement_value, str) and requirement_value == requirement:
+                    return prefix, self._coerce_version_value(data.get("version"))
 
         prefix.mkdir(parents=True, exist_ok=True)
         env = os.environ.copy()
@@ -130,10 +133,23 @@ class NpmRuntime(RuntimeHandler):
         payload = self._parse_json(result.stdout)
         if payload is None:
             return None
-        deps = payload.get("dependencies") or {}
-        entry = deps.get(package_name)
-        if isinstance(entry, dict):
-            return self._versions.normalize(entry.get("version"))
+        deps = payload.get("dependencies")
+        if isinstance(deps, Mapping):
+            entry = deps.get(package_name)
+            if isinstance(entry, Mapping):
+                version_value = entry.get("version")
+                coerced = self._coerce_version_value(version_value)
+                if coerced is not None:
+                    return self._versions.normalize(coerced)
+        return None
+
+    @staticmethod
+    def _coerce_version_value(value: JsonValue | None) -> str | None:
+        """Return a version string extracted from ``value`` when possible."""
+
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
         return None
 
     @staticmethod

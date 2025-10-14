@@ -183,9 +183,7 @@ def _load_pyproject_data(path: Path) -> Mapping[str, TomlValue] | None:
         parsed = tomllib.loads(raw)
     except tomllib.TOMLDecodeError:
         return None
-    if isinstance(parsed, dict):
-        return _normalize_toml_mapping(parsed)
-    return None
+    return _normalize_toml_mapping(parsed)
 
 
 def _iter_pyproject_python_versions(data: Mapping[str, TomlValue]) -> Iterable[str]:

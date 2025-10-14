@@ -5,13 +5,14 @@
 from __future__ import annotations
 
 import re
+from collections import OrderedDict
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 from pydantic import BaseModel
 
-from ..core.serialization import JsonValue, jsonify
+from ..core.serialization import jsonify
 from ..filesystem.paths import normalize_path
 from ..tools.settings import tool_setting_schema_as_dict
 from .models import Config, ConfigError
@@ -79,16 +80,19 @@ def _coerce_string_sequence(value: ConfigValue, context: str) -> list[str]:
 
     if value is None:
         return []
+    items: list[str]
     if isinstance(value, str):
-        candidates: Iterable[str] = (value,)
+        items = [value]
     elif isinstance(value, Iterable) and not isinstance(value, (bytes, str)):
-        candidates = tuple(value)
+        items = []
+        for entry in value:
+            if not isinstance(entry, str):
+                raise ConfigError(f"{context} entries must be strings")
+            items.append(entry)
     else:
         raise ConfigError(f"{context} must be a string or array of strings")
     result: list[str] = []
-    for item in candidates:
-        if not isinstance(item, str):
-            raise ConfigError(f"{context} entries must be strings")
+    for item in items:
         trimmed = item.strip()
         if trimmed:
             result.append(trimmed)
@@ -425,7 +429,7 @@ def _expand_env_string(value: str, env: Mapping[str, str]) -> str:
     return _ENV_VAR_PATTERN.sub(_replace, value)
 
 
-def generate_config_schema() -> dict[str, JsonValue]:
+def generate_config_schema() -> dict[str, ConfigValue]:
     """Return a JSON-serialisable schema describing configuration sections.
 
     Returns:
@@ -434,27 +438,33 @@ def generate_config_schema() -> dict[str, JsonValue]:
 
     defaults = Config()
     tool_defaults = dict(defaults.tool_settings)
-    return {
-        "file_discovery": _describe_model(defaults.file_discovery),
-        "output": _describe_model(defaults.output),
-        "execution": _describe_model(defaults.execution),
-        "dedupe": _describe_model(defaults.dedupe),
-        "complexity": _describe_model(defaults.complexity),
-        "strictness": _describe_model(defaults.strictness),
-        "severity": _describe_model(defaults.severity),
-        "severity_rules": {
+    schema: OrderedDict[str, ConfigValue] = OrderedDict()
+    schema["file_discovery"] = cast(ConfigValue, _describe_model(defaults.file_discovery))
+    schema["output"] = cast(ConfigValue, _describe_model(defaults.output))
+    schema["execution"] = cast(ConfigValue, _describe_model(defaults.execution))
+    schema["dedupe"] = cast(ConfigValue, _describe_model(defaults.dedupe))
+    schema["complexity"] = cast(ConfigValue, _describe_model(defaults.complexity))
+    schema["strictness"] = cast(ConfigValue, _describe_model(defaults.strictness))
+    schema["severity"] = cast(ConfigValue, _describe_model(defaults.severity))
+    schema["severity_rules"] = cast(
+        ConfigValue,
+        {
             "type": "list[str]",
             "default": list(defaults.severity_rules),
         },
-        "tool_settings": {
+    )
+    schema["tool_settings"] = cast(
+        ConfigValue,
+        {
             "type": "dict[str, dict[str, ConfigValue]]",
             "default": {tool: dict(settings) for tool, settings in tool_defaults.items()},
             "tools": tool_setting_schema_as_dict(),
         },
-    }
+    )
+    return dict(schema)
 
 
-def _describe_model(instance: BaseModel) -> dict[str, JsonValue]:
+def _describe_model(instance: BaseModel) -> dict[str, ConfigValue]:
     """Return a schema description for a Pydantic model instance.
 
     Args:
@@ -464,17 +474,20 @@ def _describe_model(instance: BaseModel) -> dict[str, JsonValue]:
         Mapping describing field names, types, and default values.
     """
 
-    description: dict[str, JsonValue] = {}
+    description: OrderedDict[str, ConfigValue] = OrderedDict()
     fields = dict(instance.__class__.model_fields)
     for name in fields:
         field_info = fields[name]
         value = getattr(instance, name)
         annotation = getattr(field_info, "annotation", None) or type(value)
-        description[name] = {
-            "type": _render_field_type(annotation),
-            "default": jsonify(value),
-        }
-    return description
+        description[name] = cast(
+            ConfigValue,
+            {
+                "type": _render_field_type(annotation),
+                "default": jsonify(value),
+            },
+        )
+    return dict(description)
 
 
 def _render_field_type(annotation: type | str | None) -> str:

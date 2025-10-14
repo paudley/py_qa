@@ -10,7 +10,7 @@ from typing import Final
 from pyqa.core.severity import Severity, severity_from_code
 
 from ..core.models import RawDiagnostic
-from ..core.serialization import JsonValue, coerce_optional_int
+from ..core.serialization import JsonValue, coerce_optional_int, coerce_optional_str
 from ..tools.base import ToolContext
 from .base import (
     DiagnosticDetails,
@@ -18,6 +18,28 @@ from .base import (
     append_diagnostic,
     iter_dicts,
 )
+
+
+def _mapping_from_json(value: JsonValue | None) -> Mapping[str, JsonValue]:
+    """Return ``value`` when it is a mapping, otherwise an empty mapping."""
+
+    return value if isinstance(value, Mapping) else {}
+
+
+def _iter_mapping_sequence(value: JsonValue | None) -> tuple[Mapping[str, JsonValue], ...]:
+    """Return tuple of mappings extracted from ``value`` when iterable."""
+
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return tuple(entry for entry in value if isinstance(entry, Mapping))
+    return ()
+
+
+def _iter_json_sequence(value: JsonValue | None) -> tuple[JsonValue, ...]:
+    """Return non-string sequence items derived from ``value``."""
+
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return tuple(value)
+    return ()
 
 
 def parse_ruff(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
@@ -32,17 +54,21 @@ def parse_ruff(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnost
     """
     del context
     results: list[RawDiagnostic] = []
-    source = payload.get("diagnostics") if isinstance(payload, Mapping) else payload
+    source: JsonValue | None
+    if isinstance(payload, Mapping):
+        source = payload.get("diagnostics")
+    else:
+        source = payload
     for item in iter_dicts(source):
-        filename = item.get("filename") or item.get("file")
-        location = item.get("location") or {}
-        code = item.get("code")
-        severity = severity_from_code(code or "", Severity.WARNING)
-        message = str(item.get("message", "")).strip()
+        filename = coerce_optional_str(item.get("filename")) or coerce_optional_str(item.get("file"))
+        location = _mapping_from_json(item.get("location"))
+        code = coerce_optional_str(item.get("code"))
+        severity = severity_from_code(code, Severity.WARNING)
+        message = coerce_optional_str(item.get("message")) or ""
         diag_location = DiagnosticLocation(
             file=filename,
-            line=location.get("row"),
-            column=location.get("column"),
+            line=coerce_optional_int(location.get("row")),
+            column=coerce_optional_int(location.get("column")),
         )
         details = _build_python_details(
             "ruff",
@@ -80,12 +106,12 @@ def parse_pylint(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagno
     del context
     results: list[RawDiagnostic] = []
     for item in iter_dicts(payload):
-        path = item.get("path") or item.get("filename")
+        path = coerce_optional_str(item.get("path")) or coerce_optional_str(item.get("filename"))
         line = coerce_optional_int(item.get("line"))
         column = coerce_optional_int(item.get("column"))
         symbol = item.get("symbol")
         code = _normalise_pylint_code(symbol, item)
-        message = str(item.get("message", "")).strip()
+        message = coerce_optional_str(item.get("message")) or ""
         sev = str(item.get("type", "warning")).lower()
         severity = {
             "fatal": Severity.ERROR,
@@ -118,17 +144,16 @@ def parse_pyright(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagn
     """
     del context
     if isinstance(payload, Mapping):
-        diagnostics_value = payload.get("generalDiagnostics", []) or payload.get("diagnostics", [])
-        diagnostics = [entry for entry in diagnostics_value if isinstance(entry, Mapping)]
+        diagnostics = _iter_mapping_sequence(payload.get("generalDiagnostics"))
+        if not diagnostics:
+            diagnostics = _iter_mapping_sequence(payload.get("diagnostics"))
     else:
-        diagnostics = [entry for entry in iter_dicts(payload)]
+        diagnostics = tuple(iter_dicts(payload))
     results: list[RawDiagnostic] = []
     for item in diagnostics:
-        path = item.get("file") or item.get("path")
-        rng_value = item.get("range")
-        rng = rng_value if isinstance(rng_value, Mapping) else {}
-        start_value = rng.get("start")
-        start = start_value if isinstance(start_value, Mapping) else {}
+        path = coerce_optional_str(item.get("file")) or coerce_optional_str(item.get("path"))
+        rng = _mapping_from_json(item.get("range"))
+        start = _mapping_from_json(rng.get("start"))
         severity = str(item.get("severity", "warning")).lower()
         sev_enum = {
             "error": Severity.ERROR,
@@ -136,7 +161,7 @@ def parse_pyright(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagn
             "information": Severity.NOTICE,
             "hint": Severity.NOTE,
         }.get(severity, Severity.WARNING)
-        rule = item.get("rule")
+        rule = coerce_optional_str(item.get("rule"))
         diag_location = DiagnosticLocation(
             file=path,
             line=coerce_optional_int(start.get("line")),
@@ -145,7 +170,7 @@ def parse_pyright(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagn
         details = _build_python_details(
             "pyright",
             severity=sev_enum,
-            message=str(item.get("message", "")).strip(),
+            message=coerce_optional_str(item.get("message")) or "",
             code=rule,
         )
         append_diagnostic(results, location=diag_location, details=details)
@@ -201,19 +226,16 @@ def parse_mypy(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnost
     del context
     results: list[RawDiagnostic] = []
     if isinstance(payload, Mapping):
-        error_entries = payload.get("errors")
-        if isinstance(error_entries, Sequence):
-            sources = [entry for entry in error_entries if isinstance(entry, Mapping)]
-        else:
-            sources = [payload]
+        error_entries = _iter_mapping_sequence(payload.get("errors"))
+        sources = error_entries if error_entries else (payload,)
     else:
-        sources = list(iter_dicts(payload))
+        sources = tuple(iter_dicts(payload))
 
     for item in sources:
-        path = item.get("path") or item.get("file")
-        message = str(item.get("message", "")).strip()
+        path = coerce_optional_str(item.get("path")) or coerce_optional_str(item.get("file"))
+        message = coerce_optional_str(item.get("message")) or ""
         severity = str(item.get("severity", "error")).lower()
-        code = item.get("code") or item.get("error_code")
+        code = coerce_optional_str(item.get("code")) or coerce_optional_str(item.get("error_code"))
         function = _extract_mypy_function(item)
         sev_enum = {
             "error": Severity.ERROR,
@@ -263,25 +285,25 @@ def _extract_selene_location(entry: Mapping[str, JsonValue]) -> tuple[str | None
     if not isinstance(primary, Mapping):
         return None, None, None
     span_value = primary.get("span")
-    span_mapping = span_value if isinstance(span_value, Mapping) else {}
+    span_mapping = _mapping_from_json(span_value)
     line = coerce_optional_int(span_mapping.get("start_line"))
     column = coerce_optional_int(span_mapping.get("start_column"))
     if line is not None:
         line += 1
     if column is not None:
         column += 1
-    return primary.get("filename"), line, column
+    return coerce_optional_str(primary.get("filename")), line, column
 
 
 def _collect_selene_notes(entry: Mapping[str, JsonValue]) -> list[str]:
     notes: list[str] = []
-    for note in entry.get("notes", []) or []:
-        text = str(note).strip()
+    for note in _iter_json_sequence(entry.get("notes")):
+        text = coerce_optional_str(note) or ""
         if text:
             notes.append(text)
-    for label in entry.get("secondary_labels", []) or []:
+    for label in _iter_json_sequence(entry.get("secondary_labels")):
         if isinstance(label, Mapping):
-            message = str(label.get("message", "")).strip()
+            message = coerce_optional_str(label.get("message")) or ""
             if message:
                 notes.append(message)
     return notes
@@ -311,7 +333,7 @@ def _parse_selene_entry(entry: Mapping[str, JsonValue]) -> RawDiagnostic | None:
         column=column,
         severity=severity,
         message=message,
-        code=entry.get("code"),
+        code=coerce_optional_str(entry.get("code")),
         tool="selene",
     )
 

@@ -71,12 +71,16 @@ def _select_entry_points(entries: _EntryPointSource, group: str) -> Iterable[Ent
     return ()
 
 
-def _discover_entry_points(group: str) -> tuple[_FactoryT, ...]:
-    """Return callables exposed by the entry-point *group*.
+def _discover_entry_points(group: str, loader: Callable[[EntryPoint], _FactoryT]) -> tuple[_FactoryT, ...]:
+    """Return callables exposed by the entry-point ``group``.
 
-    The helper tolerates importlib API differences between Python versions
-    (``entry_points`` returning a mapping vs. an ``EntryPoints`` object) and
-    gracefully ignores plugins that fail to resolve.
+    Args:
+        group: Entry-point group name to inspect.
+        loader: Callable that converts an :class:`EntryPoint` into the desired plugin type.
+
+    Returns:
+        tuple[_FactoryT, ...]: Loaded plugins associated with ``group``. Entries that fail to import
+        are skipped silently to avoid destabilising the caller.
     """
 
     entries_raw = metadata.entry_points()
@@ -85,23 +89,29 @@ def _discover_entry_points(group: str) -> tuple[_FactoryT, ...]:
     callables: list[_FactoryT] = []
     for entry in selected:
         try:
-            plugin = entry.load()
+            plugin = loader(entry)
         except (AttributeError, ImportError, ValueError, RuntimeError):
             continue
-        callables.append(cast(_FactoryT, plugin))
+        callables.append(plugin)
     return tuple(callables)
 
 
 def load_catalog_plugins() -> tuple[CatalogPluginFactory, ...]:
     """Return catalog plugin factories discovered via entry points."""
 
-    return _discover_entry_points(CATALOG_PLUGIN_GROUP)
+    return _discover_entry_points(
+        CATALOG_PLUGIN_GROUP,
+        loader=lambda entry: cast(CatalogPluginFactory, entry.load()),
+    )
 
 
 def load_cli_plugins() -> tuple[CLIPluginFactory, ...]:
     """Return CLI plugin factories discovered via entry points."""
 
-    return _discover_entry_points(CLI_PLUGIN_GROUP)
+    return _discover_entry_points(
+        CLI_PLUGIN_GROUP,
+        loader=lambda entry: cast(CLIPluginFactory, entry.load()),
+    )
 
 
 def load_diagnostics_plugins() -> tuple[DiagnosticsPlugin, ...]:
@@ -111,7 +121,10 @@ def load_diagnostics_plugins() -> tuple[DiagnosticsPlugin, ...]:
     consuming subsystem, so the helper preserves their native types.
     """
 
-    return _discover_entry_points(DIAGNOSTICS_PLUGIN_GROUP)
+    return _discover_entry_points(
+        DIAGNOSTICS_PLUGIN_GROUP,
+        loader=lambda entry: cast(DiagnosticsPlugin, entry.load()),
+    )
 
 
 def load_all_plugins() -> SimpleNamespace:

@@ -1,3 +1,7 @@
+<!-- SPDX-License-Identifier: MIT -->
+
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # Phase 12 – Interface Realignment & SOLID Enforcement
 
 ## Guiding Principles

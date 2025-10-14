@@ -355,9 +355,10 @@ def _convert_documentation(bundle: DocumentationBundle | None) -> ToolDocumentat
 def _to_tool_doc_entry(entry: DocumentationEntry | None) -> ToolDocumentationEntry | None:
     if entry is None:
         return None
-    if entry.content is None:
+    content = entry.content.strip()
+    if not content:
         return None
-    return ToolDocumentationEntry(format=entry.format, content=entry.content)
+    return ToolDocumentationEntry(format=entry.format, content=content)
 
 
 def _resolve_strategy_callable(definition: StrategyDefinition) -> StrategyCallable:
