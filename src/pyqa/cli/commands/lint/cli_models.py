@@ -59,6 +59,7 @@ EXPLAIN_TOOLS_HELP: Final[str] = "Show the tool selection plan with reasons and 
 DOCSTRINGS_HELP: Final[str] = "Run the internal docstring quality linter and exit."
 SUPPRESSIONS_HELP: Final[str] = "Run the internal suppression checker and exit."
 TYPING_HELP: Final[str] = "Run the strict typing checker and exit."
+MISSING_HELP: Final[str] = "Run the missing functionality detector and exit."
 CLOSURES_HELP: Final[str] = "Run the closure/partial usage checker and exit."
 SIGNATURES_HELP: Final[str] = "Run the function signature width checker and exit."
 CACHE_HELP: Final[str] = "Run the functools cache usage checker and exit."
@@ -857,6 +858,10 @@ def _meta_analysis_checks_dependency(
         bool,
         typer.Option(False, "--check-types-strict", help=TYPING_HELP),
     ],
+    check_missing: Annotated[
+        bool,
+        typer.Option(False, "--check-missing", help=MISSING_HELP),
+    ],
 ) -> MetaAnalysisChecks:
     """Return analysis-focused meta-check toggles."""
 
@@ -864,6 +869,7 @@ def _meta_analysis_checks_dependency(
         check_docstrings=check_docstrings,
         check_suppressions=check_suppressions,
         check_types_strict=check_types_strict,
+        check_missing=check_missing,
     )
 
 
@@ -1025,6 +1031,7 @@ def _meta_params_dependency(
             check_docstrings=True,
             check_suppressions=True,
             check_types_strict=True,
+            check_missing=True,
         )
         runtime = MetaRuntimeChecks(
             check_closures=True,
@@ -1164,6 +1171,7 @@ __all__ = (
     "BANDIT_SEVERITY_HELP",
     "CACHE_DIR_HELP",
     "DOCSTRINGS_HELP",
+    "MISSING_HELP",
     "SUPPRESSIONS_HELP",
     "TYPING_HELP",
     "CLOSURES_HELP",

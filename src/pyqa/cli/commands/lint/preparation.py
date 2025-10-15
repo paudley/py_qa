@@ -732,6 +732,7 @@ def _collect_provided_flags(
         "check_docstrings",
         "check_suppressions",
         "check_types_strict",
+        "check_missing",
         "check_closures",
         "check_signatures",
         "check_cache_usage",

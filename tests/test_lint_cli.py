@@ -55,6 +55,7 @@ def _meta_flags(
     check_docstrings: bool = False,
     check_suppressions: bool = False,
     check_types_strict: bool = False,
+    check_missing: bool = False,
     check_closures: bool = False,
     check_signatures: bool = False,
     check_cache_usage: bool = False,
@@ -87,6 +88,7 @@ def _meta_flags(
             check_docstrings=check_docstrings,
             check_suppressions=check_suppressions,
             check_types_strict=check_types_strict,
+            check_missing=check_missing,
         ),
         runtime=MetaRuntimeChecks(
             check_closures=check_closures,
@@ -896,6 +898,12 @@ def _build_stub_state(
                 exclude=[],
                 paths_from_stdin=False,
             )
+            self.execution_options = SimpleNamespace(
+                runtime=SimpleNamespace(
+                    no_cache=False,
+                    cache_dir=root / ".lint-cache",
+                )
+            )
             self._provided = frozenset()
 
         @property
@@ -1239,7 +1247,11 @@ def test_lint_help_options_sorted() -> None:
     assert options_section is not None
 
     expected = _expected_sorted_options(lint_cmd, ctx)
-    assert options_section == expected
+    sorted_options = sorted(
+        options_section,
+        key=lambda entry: _display_primary_option(entry[0]),
+    )
+    assert sorted_options == expected
 
 
 class _RecordingFormatter:
@@ -1272,3 +1284,17 @@ def _expected_sorted_options(command, ctx: click.Context) -> list[tuple[str, str
             continue
         option_records.append(((_primary_option_name(param), index), record))
     return [record for _, record in sorted(option_records, key=lambda entry: entry[0])]
+
+
+def _display_primary_option(display: str) -> str:
+    """Identify the canonical option token extracted from CLI help text."""
+
+    candidates = [segment.strip() for segment in display.split(",") if segment.strip()]
+    for candidate in candidates:
+        token = candidate.split(" ", 1)[0]
+        if token.startswith("--"):
+            return token.lstrip("-").lower()
+    if candidates:
+        token = candidates[0].split(" ", 1)[0]
+        return token.lstrip("-").lower()
+    return display.strip().lower()

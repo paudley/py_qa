@@ -13,6 +13,10 @@ __all__ = ["register"]
 
 
 def register(app: Typer) -> None:
-    """Attach clean subcommands to ``app``."""
+    """Register clean subcommands on the provided Typer application.
+
+    Args:
+        app: Typer application receiving the clean command group.
+    """
 
     app.add_typer(clean_app, name="sparkly-clean")

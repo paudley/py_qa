@@ -53,7 +53,7 @@ class ToolSummary:
 
 @dataclass(slots=True)
 class GrammarStatus:
-    """Availability information for Tree-sitter grammars."""
+    """Describe the availability information for Tree-sitter grammars."""
 
     language: str
     module: str
@@ -62,7 +62,15 @@ class GrammarStatus:
 
 
 def run_doctor(root: Path, *, console: Console | None = None) -> int:
-    """Run diagnostic checks and return an exit status (0 healthy, 1 otherwise)."""
+    """Execute diagnostic checks and return an exit status.
+
+    Args:
+        root: Project root used to initialise configuration loading and probes.
+        console: Optional Rich console for rendering output. Defaults to a new console.
+
+    Returns:
+        int: ``0`` when all checks pass, otherwise ``1`` if any failures occur.
+    """
     console = console or Console()
     console.print(Rule("[bold cyan]pyqa Doctor[/bold cyan]"))
 
@@ -83,7 +91,7 @@ def run_doctor(root: Path, *, console: Console | None = None) -> int:
 def doctor_command(
     root: Path = typer.Option(Path.cwd(), "--root", "-r", help="Project root."),
 ) -> None:
-    """Typer entry point that executes the doctor diagnostics command.
+    """Execute the doctor diagnostics command via the Typer entry point.
 
     Args:
         root: Repository root directory supplied via CLI options.
@@ -107,6 +115,17 @@ PROGRAM_PROBES: Final[tuple[tuple[str, bool], ...]] = (
 
 
 def _load_configuration(root: Path, console: Console) -> ConfigLoadResult | None:
+    """Load the repository configuration and report errors to ``console``.
+
+    Args:
+        root: Repository root used to discover configuration files.
+        console: Rich console for emitting diagnostic panels.
+
+    Returns:
+        ConfigLoadResult | None: Loaded configuration payload when successful,
+        otherwise ``None`` if validation fails.
+    """
+
     loader = ConfigLoader.for_root(root)
     try:
         return loader.load_with_trace()
@@ -122,6 +141,12 @@ def _load_configuration(root: Path, console: Console) -> ConfigLoadResult | None
 
 
 def _render_environment_section(console: Console) -> None:
+    """Render environment diagnostics (interpreters, tools) to ``console``.
+
+    Args:
+        console: Rich console used for displaying the environment table.
+    """
+
     table = Table(title="Environment", box=box.SIMPLE, expand=True)
     table.add_column("Check", style="bold")
     table.add_column("Status", style="bold")
@@ -135,6 +160,12 @@ def _render_environment_section(console: Console) -> None:
 
 
 def _render_grammar_section(console: Console) -> None:
+    """Render Tree-sitter grammar availability data to ``console``.
+
+    Args:
+        console: Rich console used for displaying grammar status information.
+    """
+
     statuses = _collect_grammar_statuses()
     if not statuses:
         return
@@ -156,6 +187,13 @@ def _render_grammar_section(console: Console) -> None:
 
 
 def _render_configuration_section(console: Console, result: ConfigLoadResult) -> None:
+    """Render configuration overrides and warnings to ``console``.
+
+    Args:
+        console: Rich console used for displaying configuration panels.
+        result: Full configuration load result containing warnings and updates.
+    """
+
     if result.warnings:
         console.print(
             Panel(
@@ -240,6 +278,13 @@ def _render_tooling_section(console: Console, config: Config) -> bool:
 
 
 def _render_summary(console: Console, unhealthy: bool) -> None:
+    """Render the final doctor summary panel.
+
+    Args:
+        console: Rich console receiving the summary panel.
+        unhealthy: ``True`` when any probes reported an unhealthy status.
+    """
+
     overall_style = "green" if not unhealthy else "red"
     console.print(
         Panel(
@@ -250,6 +295,13 @@ def _render_summary(console: Console, unhealthy: bool) -> None:
 
 
 def _collect_environment_checks() -> list[EnvironmentCheck]:
+    """Collect environment checks for interpreters and external tools.
+
+    Returns:
+        list[EnvironmentCheck]: Ordered checks describing interpreter and
+        executable availability.
+    """
+
     checks: list[EnvironmentCheck] = []
     checks.append(
         EnvironmentCheck(
@@ -266,6 +318,16 @@ def _collect_environment_checks() -> list[EnvironmentCheck]:
 
 
 def _probe_program(executable: str, required: bool) -> EnvironmentCheck:
+    """Probe the availability of ``executable`` on ``PATH``.
+
+    Args:
+        executable: Program name to locate.
+        required: Whether the program is mandatory for healthy status.
+
+    Returns:
+        EnvironmentCheck: Check result detailing program location or missing state.
+    """
+
     path = shutil.which(executable)
     if path:
         version = _capture_version(executable)
@@ -281,6 +343,16 @@ def _probe_program(executable: str, required: bool) -> EnvironmentCheck:
 
 
 def _probe_module(module: str, optional: bool) -> EnvironmentCheck:
+    """Probe importability of ``module`` and classify the result.
+
+    Args:
+        module: Fully qualified module name to import.
+        optional: Whether the module is optional for healthy status.
+
+    Returns:
+        EnvironmentCheck: Import success or failure annotated with severity.
+    """
+
     try:
         importlib.import_module(module)
     except ImportError as exc:
@@ -291,6 +363,15 @@ def _probe_module(module: str, optional: bool) -> EnvironmentCheck:
 
 
 def _collect_tool_summaries(config: Config) -> list[ToolSummary]:
+    """Collect tooling availability summaries for doctor output.
+
+    Args:
+        config: Loaded configuration providing tool overrides.
+
+    Returns:
+        list[ToolSummary]: Ordered summaries of tool availability and versions.
+    """
+
     summaries: list[ToolSummary] = []
     overrides = set(config.tool_settings.keys())
     for tool in sorted(DEFAULT_REGISTRY.tools(), key=lambda item: item.name):
@@ -306,7 +387,11 @@ def _collect_tool_summaries(config: Config) -> list[ToolSummary]:
 
 
 def _collect_grammar_statuses() -> list[GrammarStatus]:
-    """Return the availability and version status for bundled Tree-sitter grammars."""
+    """Collect availability information for bundled Tree-sitter grammars.
+
+    Returns:
+        list[GrammarStatus]: Grammar status entries describing language support.
+    """
 
     resolver = TreeSitterContextResolver()
     statuses: list[GrammarStatus] = []
@@ -325,7 +410,15 @@ def _collect_grammar_statuses() -> list[GrammarStatus]:
 
 
 def _resolve_grammar_module(module_name: str) -> tuple[bool, str | None]:
-    """Return availability flag and version for the requested grammar module."""
+    """Resolve availability and version information for a grammar module.
+
+    Args:
+        module_name: Canonical module name for the Tree-sitter grammar.
+
+    Returns:
+        tuple[bool, str | None]: Pair containing availability flag and detected
+        version (or ``None`` when unavailable).
+    """
 
     try:
         module = importlib.import_module(module_name)
@@ -336,6 +429,16 @@ def _resolve_grammar_module(module_name: str) -> tuple[bool, str | None]:
 
 
 def _grammar_version(module_name: str, module: ModuleType) -> str | None:
+    """Resolve the version string for the given grammar module.
+
+    Args:
+        module_name: Module import path used to derive the canonical package name.
+        module: Imported module object used for attribute-based fallbacks.
+
+    Returns:
+        str | None: Version string when metadata is available; otherwise ``None``.
+    """
+
     dist_name = module_name.replace("_", "-")
     try:
         return importlib_metadata.version(dist_name)
@@ -344,6 +447,15 @@ def _grammar_version(module_name: str, module: ModuleType) -> str | None:
 
 
 def _capture_version(executable: str) -> str | None:
+    """Capture the version string for ``executable`` when available.
+
+    Args:
+        executable: Program name to execute with version flags.
+
+    Returns:
+        str | None: First line of version output, or ``None`` if detection fails.
+    """
+
     for candidate in (
         [executable, "--version"],
         [executable, "-V"],

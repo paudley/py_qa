@@ -21,7 +21,7 @@ _HASH_ENCODING: Final[str] = "utf-8"
 
 @dataclass(slots=True)
 class CacheContext:
-    """Stateful view of cache configuration for a single orchestrator run."""
+    """Represent cache configuration for a single orchestrator run."""
 
     cache: ResultCache | None
     token: str | None
@@ -51,7 +51,7 @@ def build_cache_context(cfg: Config, root: Path) -> CacheContext:
 
 
 def update_tool_version(context: CacheContext, tool_name: str, version: str | None) -> None:
-    """Persist tool version information if it changed during execution.
+    """Use this helper to update tool version metadata for the active cache context.
 
     Args:
         context: Cache context tracking version metadata.
@@ -101,7 +101,7 @@ def load_cached_outcome(
 
 
 def build_cache_token(cfg: Config) -> str:
-    """Compute the cache token representing the effective execution options.
+    """Generate the cache token representing the effective execution options.
 
     Args:
         cfg: Configuration whose relevant properties influence caching.
@@ -128,7 +128,7 @@ def build_cache_token(cfg: Config) -> str:
 
 
 def load_versions(cache_dir: Path) -> dict[str, str]:
-    """Load previously stored tool version information.
+    """Use this helper to return tool version metadata previously persisted to disk.
 
     Args:
         cache_dir: Directory where tool version metadata is stored.

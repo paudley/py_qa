@@ -28,7 +28,7 @@ MAGIC_SIGNATURES: Final[set[str]] = {"magic"}
 
 
 class IssueTag(str, Enum):
-    """Enumerate recognised navigator issue tags."""
+    """List recognised navigator issue tags."""
 
     COMPLEXITY = "complexity"
     TYPING = "typing"
@@ -37,7 +37,7 @@ class IssueTag(str, Enum):
 
 
 class NavigatorDiagnosticPayload(TypedDict):
-    """Describe diagnostic details stored inside the navigator payload."""
+    """Capture diagnostic details stored inside the navigator payload."""
 
     tool: str
     code: str
@@ -47,7 +47,7 @@ class NavigatorDiagnosticPayload(TypedDict):
 
 
 class NavigatorPayload(TypedDict):
-    """Represent a refactor navigator entry in JSON-safe form."""
+    """Capture a refactor navigator entry in JSON-safe form."""
 
     file: str
     function: str
@@ -59,7 +59,7 @@ class NavigatorPayload(TypedDict):
 
 @dataclass(slots=True)
 class NavigatorDiagnosticEntry:
-    """Describe a diagnostic included in the refactor navigator payload."""
+    """Capture a diagnostic included in the refactor navigator payload."""
 
     tool: str
     code: str
@@ -104,7 +104,7 @@ class NavigatorBucket:
         return len(self.diagnostics)
 
     def __iter__(self) -> Iterator[NavigatorDiagnosticEntry]:
-        """Iterate over diagnostics contained in the bucket.
+        """Return an iterator across diagnostics contained in the bucket.
 
         Returns:
             Iterator[NavigatorDiagnosticEntry]: Iterator across stored diagnostics.
@@ -113,7 +113,7 @@ class NavigatorBucket:
         return iter(self.diagnostics)
 
     def add_diagnostic(self, diag: Diagnostic, tag: IssueTag | None) -> None:
-        """Record ``diag`` in the bucket and increment the associated tag.
+        """Add ``diag`` to the bucket and increment the associated tag.
 
         Args:
             diag: Diagnostic to store in the bucket.
@@ -178,8 +178,28 @@ def build_refactor_navigator(
     """
 
     estimator = function_scale or resolve_function_scale_estimator()
-    hotspots: defaultdict[tuple[str, str], NavigatorBucket] = defaultdict(NavigatorBucket)
+    summary = _build_navigator_summary(result, engine, estimator)
+    navigator_payload = [bucket.to_payload() for bucket in summary[:MAX_NAVIGATOR_ENTRIES]]
+    result.analysis["refactor_navigator"] = jsonify(cast(SerializableValue, navigator_payload))
 
+
+def _build_navigator_summary(
+    result: RunResult,
+    engine: AnnotationProvider,
+    estimator: FunctionScaleEstimator,
+) -> list[NavigatorBucket]:
+    """Build navigator buckets summarising diagnostics by function.
+
+    Args:
+        result: Run outcome containing diagnostic data.
+        engine: Annotation engine used to derive diagnostic message signatures.
+        estimator: Callable used to approximate function size and complexity.
+
+    Returns:
+        list[NavigatorBucket]: Sorted list of navigator buckets ranked by severity.
+    """
+
+    hotspots: defaultdict[tuple[str, str], NavigatorBucket] = defaultdict(NavigatorBucket)
     for outcome in result.outcomes:
         for diag in outcome.diagnostics:
             tag = _issue_tag(diag, engine)
@@ -188,8 +208,8 @@ def build_refactor_navigator(
             bucket = hotspots[(diag.file or "", diag.function or "")]
             bucket.add_diagnostic(diag, tag)
 
-    summary: list[NavigatorBucket] = []
     root_path = Path(result.root)
+    summary: list[NavigatorBucket] = []
     for (file_path, function), bucket in hotspots.items():
         if not bucket.issue_tags:
             continue
@@ -205,12 +225,19 @@ def build_refactor_navigator(
             f"{bucket.file}::{bucket.function}",
         ),
     )
-    navigator_payload = [bucket.to_payload() for bucket in summary[:MAX_NAVIGATOR_ENTRIES]]
-    result.analysis["refactor_navigator"] = jsonify(cast(SerializableValue, navigator_payload))
+    return summary
 
 
 def _issue_tag(diag: Diagnostic, engine: AnnotationProvider) -> IssueTag | None:
-    """Return the navigator issue tag for ``diag`` when recognised."""
+    """Return the navigator issue tag for ``diag`` when recognised.
+
+    Args:
+        diag: Diagnostic whose message should be classified.
+        engine: Annotation engine used to derive message signatures.
+
+    Returns:
+        IssueTag | None: Matching navigator issue tag when available.
+    """
 
     code = (diag.code or "").upper()
     signature = set(engine.message_signature(diag.message))

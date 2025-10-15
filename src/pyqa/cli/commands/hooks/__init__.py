@@ -13,6 +13,10 @@ __all__ = ["register"]
 
 
 def register(app: Typer) -> None:
-    """Attach hooks subcommands to ``app``."""
+    """Register Git hook subcommands on the Typer application.
+
+    Args:
+        app: Typer application receiving the hooks command group.
+    """
 
     app.add_typer(hooks_app, name="install-hooks")

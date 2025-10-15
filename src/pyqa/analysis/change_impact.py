@@ -26,7 +26,7 @@ def apply_change_impact(
     *,
     context_resolver: ContextResolver | None = None,
 ) -> None:
-    """Attach impact metadata to diagnostics inside ``result``.
+    """Annotate diagnostics inside ``result`` with impact metadata.
 
     Args:
         result: Run outcome containing diagnostics to enrich.

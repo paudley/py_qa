@@ -45,6 +45,11 @@ _PYTHON_NOT_IMPLEMENTED_PATTERN: Final[re.Pattern[str]] = re.compile(
     re.IGNORECASE,
 )
 _PYTHON_SUFFIXES: Final[frozenset[str]] = frozenset({".py", ".pyi"})
+_DOC_SUFFIXES: Final[frozenset[str]] = frozenset({".md", ".markdown", ".rst"})
+_ESCAPE_CHAR: Final[str] = "\\"
+_SINGLE_QUOTE: Final[str] = "'"
+_DOUBLE_QUOTE: Final[str] = '"'
+_BACKTICK: Final[str] = "`"
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,14 +63,15 @@ class _Finding:
 
 
 def run_missing_linter(
-    state: "PreparedLintState",
+    state: PreparedLintState,
     *,
     emit_to_logger: bool,
 ) -> InternalLintReport:
     """Execute the missing functionality linter and return its report.
 
     Args:
-        state: Prepared lint state describing the current invocation.
+        state: Prepared lint state describing the current invocation. Markdown
+            and other documentation files are ignored automatically.
         emit_to_logger: Unused compatibility flag for the internal runner API.
 
     Returns:
@@ -76,7 +82,9 @@ def run_missing_linter(
     findings: list[_Finding] = []
     target_files = collect_target_files(state)
     for file_path in target_files:
-        findings.extend(_scan_file(file_path, root=state.root))
+        if file_path.suffix.lower() in _DOC_SUFFIXES:
+            continue
+        findings.extend(_scan_file(file_path))
 
     diagnostics: list[Diagnostic] = []
     stdout_lines: list[str] = []
@@ -103,8 +111,15 @@ def run_missing_linter(
     )
 
 
-def _scan_file(path: Path, *, root: Path) -> list[_Finding]:
-    """Return findings detected in ``path``."""
+def _scan_file(path: Path) -> list[_Finding]:
+    """Collect missing-functionality findings from ``path``.
+
+    Args:
+        path: File path under inspection.
+
+    Returns:
+        list[_Finding]: Findings detected within the file.
+    """
 
     try:
         text = path.read_text(encoding="utf-8")
@@ -114,8 +129,8 @@ def _scan_file(path: Path, *, root: Path) -> list[_Finding]:
     findings: list[_Finding] = []
     suffix = path.suffix.lower()
     for line_number, raw_line in enumerate(lines, start=1):
-        line = raw_line.strip()
-        generic_marker = _match_generic_marker(line)
+        stripped = raw_line.strip()
+        generic_marker = _match_generic_marker(raw_line)
         if generic_marker is not None:
             findings.append(
                 _Finding(
@@ -127,29 +142,20 @@ def _scan_file(path: Path, *, root: Path) -> list[_Finding]:
             )
             continue
 
-        if _NOT_IMPLEMENTED_PATTERN.search(line):
+        python_match = _PYTHON_NOT_IMPLEMENTED_PATTERN.search(raw_line) if suffix in _PYTHON_SUFFIXES else None
+        if python_match is not None and not _is_within_string(raw_line, python_match.start()):
             findings.append(
                 _Finding(
                     file=path,
                     line=line_number,
-                    message="Line references 'not implemented', suggesting incomplete functionality.",
-                    code="missing:not-implemented-text",
+                    message="Raising NotImplementedError indicates missing functionality.",
+                    code="missing:not-implemented-error",
                 ),
             )
             continue
 
-        if _RUST_PLACEHOLDER_PATTERN.search(line):
-            findings.append(
-                _Finding(
-                    file=path,
-                    line=line_number,
-                    message="Placeholder macro indicates missing implementation.",
-                    code="missing:placeholder-macro",
-                ),
-            )
-            continue
-
-        if _CS_NOT_IMPLEMENTED_PATTERN.search(line) or _CS_NOT_SUPPORTED_PATTERN.search(line):
+        cs_match = _CS_NOT_IMPLEMENTED_PATTERN.search(raw_line) or _CS_NOT_SUPPORTED_PATTERN.search(raw_line)
+        if cs_match is not None and not _is_within_string(raw_line, cs_match.start()):
             findings.append(
                 _Finding(
                     file=path,
@@ -160,25 +166,80 @@ def _scan_file(path: Path, *, root: Path) -> list[_Finding]:
             )
             continue
 
-        if suffix in _PYTHON_SUFFIXES and _PYTHON_NOT_IMPLEMENTED_PATTERN.search(line):
+        if _RUST_PLACEHOLDER_PATTERN.search(stripped):
             findings.append(
                 _Finding(
                     file=path,
                     line=line_number,
-                    message="Raising NotImplementedError indicates missing functionality.",
-                    code="missing:not-implemented-error",
+                    message="Placeholder macro indicates missing implementation.",
+                    code="missing:placeholder-macro",
                 ),
             )
+            continue
+
+        not_impl_match = _NOT_IMPLEMENTED_PATTERN.search(raw_line)
+        if not_impl_match is not None and not _is_within_string(raw_line, not_impl_match.start()):
+            findings.append(
+                _Finding(
+                    file=path,
+                    line=line_number,
+                    message="Line references 'not implemented', suggesting incomplete functionality.",
+                    code="missing:not-implemented-text",
+                ),
+            )
+            continue
     return findings
 
 
 def _match_generic_marker(line: str) -> str | None:
-    """Return the matched missing-work marker when present."""
+    """Identify the missing-work marker present within ``line``.
+
+    Args:
+        line: Line of source text to inspect.
+
+    Returns:
+        str | None: Matched marker text when detected; otherwise ``None``.
+    """
 
     marker_match = _GENERIC_MARKER_PATTERN.search(line)
-    if marker_match is not None:
+    if marker_match is not None and not _is_within_string(line, marker_match.start()):
         return marker_match.group(0)
     return None
+
+
+def _is_within_string(line: str, index: int) -> bool:
+    """Determine whether ``index`` is located within a string literal.
+
+    Args:
+        line: Source line containing potential string delimiters.
+        index: Character index to evaluate for string membership.
+
+    Returns:
+        bool: ``True`` when ``index`` resides within a quoted string region.
+    """
+
+    in_single = False
+    in_double = False
+    in_backtick = False
+    escape = False
+    for position, char in enumerate(line):
+        if position == index:
+            return in_single or in_double or in_backtick
+        if escape:
+            escape = False
+            continue
+        if char == _ESCAPE_CHAR:
+            escape = True
+            continue
+        if char == _SINGLE_QUOTE and not in_double and not in_backtick:
+            in_single = not in_single
+            continue
+        if char == _DOUBLE_QUOTE and not in_single and not in_backtick:
+            in_double = not in_double
+            continue
+        if char == _BACKTICK and not in_single and not in_double:
+            in_backtick = not in_backtick
+    return in_single or in_double or in_backtick
 
 
 __all__ = ["run_missing_linter"]

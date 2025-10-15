@@ -47,3 +47,4 @@ from tooling_spec.catalog.models import (
 CATALOG_MODEL_EXPORTS: Final[tuple[str, ...]]
 
 __all__: Final[tuple[str, ...]]
+"""Type definitions for catalog models."""

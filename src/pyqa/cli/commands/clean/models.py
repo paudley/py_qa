@@ -46,7 +46,7 @@ EMOJI_OPTION = Annotated[
 
 
 def normalize_cli_values(values: Sequence[str] | None) -> tuple[str, ...]:
-    """Return sanitized CLI values preserving order.
+    """Provide normalized CLI values while preserving their original order.
 
     Args:
         values: Optional sequence of CLI-provided strings.
@@ -69,7 +69,7 @@ def normalize_cli_values(values: Sequence[str] | None) -> tuple[str, ...]:
 
 @dataclass(slots=True)
 class CleanCLIOptions:
-    """Capture CLI overrides supplied to the sparkly-clean command."""
+    """Provide CLI overrides supplied to the sparkly-clean command."""
 
     root: Path
     extra_patterns: tuple[str, ...]
@@ -82,7 +82,7 @@ def _build_clean_path_options(
     pattern: PATTERN_OPTION,
     include_tree: TREE_OPTION,
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Normalise pattern and tree option values.
+    """Provide normalized pattern and tree option values.
 
     Args:
         pattern: Optional repeatable pattern option values.

@@ -7,10 +7,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 from typing import Final
 
+from pyqa.cache.providers import InMemoryCacheProvider
 from pyqa.platform.paths import get_pyqa_root
 
 from .errors import CatalogIntegrityError
@@ -22,7 +22,7 @@ LOGGER = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class CatalogOption:
-    """Option metadata captured from the catalog for runtime consumers."""
+    """Represent option metadata captured from the catalog."""
 
     name: str
     option_type: str
@@ -32,10 +32,23 @@ class CatalogOption:
 
 _DUPLICATE_HINT_KEY: Final[str] = "duplicateHints"
 
+_TOOL_OPTIONS_CACHE = InMemoryCacheProvider[dict[str, tuple[CatalogOption, ...]]]()
+_SNAPSHOT_CACHE = InMemoryCacheProvider[CatalogSnapshot | None]()
 
-@lru_cache(maxsize=1)
+
+@_memoize_singleton
 def _cached_tool_options() -> dict[str, tuple[CatalogOption, ...]]:
-    """Return cached catalog-defined option metadata keyed by tool name."""
+    """Return cached catalog-defined option metadata keyed by tool name.
+
+    Returns:
+        dict[str, tuple[CatalogOption, ...]]: Mapping of tool names to catalog
+        options captured from the snapshot.
+    """
+
+    cached = _TOOL_OPTIONS_CACHE.get("tool-options")
+    if cached is not None:
+        return cached
+
     snapshot = _snapshot_or_error()
     options: dict[str, tuple[CatalogOption, ...]] = {}
     for definition in snapshot.tools:
@@ -51,6 +64,7 @@ def _cached_tool_options() -> dict[str, tuple[CatalogOption, ...]]:
             for option in definition.options
         )
         options[definition.name] = entries
+    _TOOL_OPTIONS_CACHE.set("tool-options", options)
     return options
 
 
@@ -190,11 +204,10 @@ def catalog_tool_options() -> dict[str, tuple[CatalogOption, ...]]:
 
 def clear_catalog_metadata_cache() -> None:
     """Clear cached catalog metadata to force a reload on next access."""
-    _load_snapshot.cache_clear()
-    _cached_tool_options.cache_clear()
+    _SNAPSHOT_CACHE.clear()
+    _TOOL_OPTIONS_CACHE.clear()
 
 
-@lru_cache(maxsize=1)
 def _load_snapshot() -> CatalogSnapshot | None:
     """Load the catalog snapshot from disk if available.
 
@@ -203,6 +216,10 @@ def _load_snapshot() -> CatalogSnapshot | None:
         present and valid; otherwise ``None``.
 
     """
+    cached = _SNAPSHOT_CACHE.get("snapshot")
+    if cached is not None:
+        return cached
+
     catalog_root, schema_root = _catalog_paths()
     if not catalog_root.exists():
         return None
@@ -211,10 +228,12 @@ def _load_snapshot() -> CatalogSnapshot | None:
     except FileNotFoundError:
         return None
     try:
-        return loader.load_snapshot()
+        snapshot = loader.load_snapshot()
     except (CatalogIntegrityError, ValueError, OSError) as exc:
         LOGGER.warning("catalog snapshot load failed: %s", exc)
         return None
+    _SNAPSHOT_CACHE.set("snapshot", snapshot)
+    return snapshot
 
 
 def _snapshot_or_error() -> CatalogSnapshot:

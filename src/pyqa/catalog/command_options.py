@@ -40,7 +40,7 @@ _OUTPUT_FLAG: Final[str] = "--output"
 
 
 class OptionKind(str, Enum):
-    """Enumerate supported command-option mapping behaviours."""
+    """Define supported command-option mapping behaviours."""
 
     VALUE = "value"
     PATH = "path"
@@ -50,7 +50,7 @@ class OptionKind(str, Enum):
 
 
 class TransformName(str, Enum):
-    """Enumerate transforms available to option mappings."""
+    """Define transforms available to option mappings."""
 
     PYTHON_VERSION_TAG = "python_version_tag"
     PYTHON_VERSION_NUMBER = "python_version_number"
@@ -62,13 +62,25 @@ class TransformName(str, Enum):
 
 
 class _OptionBehavior(Protocol):
-    """Behaviour contract responsible for appending CLI fragments."""
+    """Define behaviour contracts responsible for appending CLI fragments."""
 
     def extend_command(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
-        """Mutate ``command`` to reflect ``value`` in the current context."""
+        """Mutate ``command`` to reflect ``value`` within the current context.
+
+        Args:
+            ctx: Tool execution context providing settings and metadata.
+            command: Mutable command list that will be emitted downstream.
+            value: Raw configuration value that should influence the command.
+        """
 
     def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
-        """Invoke the behaviour using callable syntax."""
+        """Invoke the behaviour using callable syntax.
+
+        Args:
+            ctx: Tool execution context forwarded to ``extend_command``.
+            command: Mutable command list forwarded to the behaviour.
+            value: Option value forwarded unchanged.
+        """
 
 
 @dataclass(slots=True, frozen=True)
@@ -100,7 +112,7 @@ class _ArgsOptionBehavior:
             append_value(str(entry))
 
     def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
-        """Delegate callable invocation to :meth:`extend_command`.
+        """Invoke ``extend_command`` to handle callable usage.
 
         Args:
             ctx: Tool execution context forwarded to ``extend_command``.
@@ -143,7 +155,7 @@ class _PathOptionBehavior:
             append_value(resolved)
 
     def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
-        """Delegate callable invocation to :meth:`extend_command`.
+        """Invoke ``extend_command`` to handle callable usage.
 
         Args:
             ctx: Tool execution context forwarded to ``extend_command``.
@@ -174,7 +186,7 @@ class _ValueOptionBehavior:
         append_value(str(value))
 
     def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
-        """Delegate callable invocation to :meth:`extend_command`.
+        """Invoke ``extend_command`` to handle callable usage.
 
         Args:
             ctx: Tool execution context forwarded to ``extend_command``.
@@ -209,7 +221,7 @@ class _FlagOptionBehavior:
             command.append(selected_flag)
 
     def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
-        """Delegate callable invocation to :meth:`extend_command`.
+        """Invoke ``extend_command`` to handle callable usage.
 
         Args:
             ctx: Tool execution context forwarded to ``extend_command``.
@@ -258,7 +270,7 @@ class _RepeatFlagBehavior:
 
 @dataclass(slots=True, frozen=True)
 class _ParsedOptionConfig:
-    """Intermediate representation of option configuration values."""
+    """Store intermediate representation of option configuration values."""
 
     names: tuple[str, ...]
     kind: OptionKind
@@ -268,7 +280,7 @@ class _ParsedOptionConfig:
 
 @dataclass(slots=True, frozen=True)
 class _OptionFlags:
-    """CLI flag metadata associated with an option."""
+    """Store CLI flag metadata associated with an option."""
 
     flag: str | None
     join_with: str | None
@@ -278,7 +290,7 @@ class _OptionFlags:
 
 @dataclass(slots=True, frozen=True)
 class _OptionDefaults:
-    """Default behaviour metadata for an option."""
+    """Store default behaviour metadata for an option."""
 
     value: JSONValue | None
     reference: str | None
@@ -287,7 +299,7 @@ class _OptionDefaults:
 
 @dataclass(slots=True)
 class OptionMapping:
-    """Declarative mapping between tool settings and CLI arguments."""
+    """Define the declarative mapping between tool settings and CLI arguments."""
 
     settings: tuple[str, ...]
     behavior: _OptionBehavior
@@ -351,7 +363,7 @@ class OptionMapping:
 
 @dataclass(slots=True)
 class _OptionCommandStrategy(CommandBuilder):
-    """Command builder driven by declarative option mappings."""
+    """Implement the command builder driven by declarative option mappings."""
 
     base: tuple[str, ...]
     append_files: bool
@@ -474,7 +486,16 @@ def require_string_sequence(
     *,
     context: str,
 ) -> tuple[str, ...]:
-    """Return the required sequence of strings for ``key`` in ``config``."""
+    """Return the required sequence of strings for ``key`` in ``config``.
+
+    Args:
+        config: Mapping containing raw JSON configuration values.
+        key: Configuration key whose value must be a sequence of strings.
+        context: Context string used for error reporting.
+
+    Returns:
+        tuple[str, ...]: Sequence of string values extracted from the mapping.
+    """
 
     value = config.get(key)
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
@@ -486,7 +507,16 @@ def require_string_sequence(
 
 
 def require_str(config: Mapping[str, JSONValue], key: str, *, context: str) -> str:
-    """Return the required string value for ``key`` in ``config``."""
+    """Return the required string value for ``key`` in ``config``.
+
+    Args:
+        config: Mapping containing raw JSON configuration values.
+        key: Configuration key whose value must be a string.
+        context: Context string used for error reporting.
+
+    Returns:
+        str: String value extracted from the mapping.
+    """
 
     value = config.get(key)
     if not isinstance(value, str):

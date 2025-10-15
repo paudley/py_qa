@@ -13,7 +13,7 @@ __all__ = ["register"]
 
 
 def register(app: Typer) -> None:
-    """Attach configuration sub-commands to the CLI application.
+    """Register configuration subcommands on the CLI application.
 
     Args:
         app: Typer application receiving the configuration command group.

@@ -17,7 +17,7 @@ from pyqa.interfaces.analysis import (
 
 
 class NullAnnotationProvider(AnnotationProvider):
-    """Annotation provider that performs no enrichment."""
+    """Implement a no-op annotation provider."""
 
     def annotate_run(self, result: RunResult) -> dict[int, DiagnosticAnnotation]:
         """Return an empty annotation map for ``result``.
@@ -60,7 +60,7 @@ class NullAnnotationProvider(AnnotationProvider):
 
 
 class NullContextResolver(ContextResolver):
-    """Context resolver that provides no additional diagnostic metadata."""
+    """Implement a no-op context resolver."""
 
     def annotate(self, diagnostics: Iterable[Diagnostic], *, root: Path) -> None:
         """Ignore ``diagnostics`` leaving context unchanged.

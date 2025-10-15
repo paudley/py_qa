@@ -16,69 +16,129 @@ from typing import Final, Protocol, cast, runtime_checkable
 
 @runtime_checkable
 class TokenLike(Protocol):
-    """Protocol describing the spaCy token API relied upon by pyqa."""
+    """Define the spaCy token API relied upon by pyqa."""
 
     @property
     def text(self) -> str:
-        """Return the raw token text value."""
+        """Return the raw token text value.
 
-        raise NotImplementedError  # pragma: no cover - protocol definition
+        Returns:
+            str: Raw token text value.
+        """
+
+        return ""
 
     @property
     def idx(self) -> int:
-        """Return the character offset in the original document."""
+        """Return the character offset in the original document.
 
-        raise NotImplementedError  # pragma: no cover - protocol definition
+        Returns:
+            int: Character offset within the original document.
+        """
+
+        return 0
 
     @property
     def is_stop(self) -> bool:
-        """Return ``True`` when the token represents a stop word."""
-        raise NotImplementedError("TokenLike.is_stop must be implemented")
+        """Return ``True`` when the token represents a stop word.
+
+        Returns:
+            bool: ``True`` when the token is a stop word.
+        """
+
+        return False
 
     @property
     def pos_(self) -> str:
-        """Return the coarse part-of-speech tag for the token."""
-        raise NotImplementedError("TokenLike.pos_ must be implemented")
+        """Return the coarse part-of-speech tag for the token.
+
+        Returns:
+            str: Coarse part-of-speech tag.
+        """
+
+        return ""
 
     @property
     def lemma_(self) -> str:
-        """Return the lemmatised token form."""
-        raise NotImplementedError("TokenLike.lemma_ must be implemented")
+        """Return the lemmatised token form.
+
+        Returns:
+            str: Lemmatised token form.
+        """
+
+        return ""
 
     def __len__(self) -> int:
-        """Return the number of characters comprising the token."""
-        raise NotImplementedError("TokenLike.__len__ must be implemented")
+        """Return the number of characters comprising the token.
+
+        Returns:
+            int: Character count of the token.
+        """
+
+        return 0
 
 
 @runtime_checkable
 class DocLike(Protocol):
-    """Protocol representing iterable spaCy documents used in analysis."""
+    """Define iterable spaCy document behaviour used in analysis."""
 
-    def __iter__(self) -> Iterator[TokenLike]:  # pragma: no cover - protocol definition
-        """Return an iterator across contained tokens."""
-        raise NotImplementedError("DocLike.__iter__ must be implemented")
+    def __iter__(self) -> Iterator[TokenLike]:
+        """Return an iterator across contained tokens.
 
-    def __len__(self) -> int:  # pragma: no cover - protocol definition
-        """Return the number of tokens contained within the document."""
-        raise NotImplementedError("DocLike.__len__ must be implemented")
+        Returns:
+            Iterator[TokenLike]: Iterator across contained tokens.
+        """
 
-    def __getitem__(self, index: int) -> TokenLike:  # pragma: no cover - protocol definition
-        """Return the token located at ``index``."""
-        raise NotImplementedError("DocLike.__getitem__ must be implemented")
+        return iter(cast(tuple[TokenLike, ...], ()))
+
+    def __len__(self) -> int:
+        """Return the number of tokens contained within the document.
+
+        Returns:
+            int: Token count contained within the document.
+        """
+
+        return 0
+
+    def __getitem__(self, index: int) -> TokenLike:
+        """Return the token located at ``index``.
+
+        Args:
+            index: Position of the requested token.
+
+        Returns:
+            TokenLike: Token located at the requested index.
+        """
+
+        return cast(TokenLike, object())
 
 
 class SpacyLanguage(Protocol):
-    """Callable NLP pipeline contract used by pyqa."""
+    """Define callable NLP pipeline contract used by pyqa."""
 
-    def __call__(self, text: str) -> DocLike:  # pragma: no cover - protocol definition
-        """Return a spaCy document for ``text``."""
+    def __call__(self, text: str) -> DocLike:
+        """Return a spaCy document for ``text``.
 
-        raise NotImplementedError
+        Args:
+            text: Text to convert into a document.
 
-    def pipe(self, texts: Iterable[str]) -> Iterable[DocLike]:  # pragma: no cover - protocol definition
-        """Return documents generated for ``texts`` in sequence."""
+        Returns:
+            DocLike: spaCy document representing ``text``.
+        """
 
-        raise NotImplementedError
+        return cast(DocLike, object())
+
+    def pipe(self, texts: Iterable[str]) -> Iterable[DocLike]:
+        """Return documents generated for ``texts`` in sequence.
+
+        Args:
+            texts: Iterable of text fragments to process.
+
+        Returns:
+            Iterable[DocLike]: Documents produced for ``texts``.
+        """
+
+        return cast(Iterable[DocLike], ())
 
 
 @dataclass(frozen=True)

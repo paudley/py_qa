@@ -29,7 +29,7 @@ SIZE_FIELD: Final[Literal["size"]] = "size"
 
 
 class StatePayload(TypedDict, total=False):
-    """Serialized file state captured in the cache payload."""
+    """Use this payload to describe serialized file state."""
 
     path: str
     mtime_ns: int
@@ -37,7 +37,7 @@ class StatePayload(TypedDict, total=False):
 
 
 class MetricPayload(TypedDict, total=False):
-    """Serialized file metrics stored in the cache payload."""
+    """Use this payload to describe serialized file metrics."""
 
     path: str
     line_count: int
@@ -50,7 +50,7 @@ CachePayload: TypeAlias = dict[str, CacheJsonValue]
 
 @dataclass(frozen=True, slots=True)
 class CacheRequest:
-    """Normalized inputs that identify a cached command outcome."""
+    """Use this payload to identify cached command inputs."""
 
     tool: str
     action: str
@@ -61,7 +61,7 @@ class CacheRequest:
 
 @dataclass(frozen=True, slots=True)
 class CachedEntry:
-    """Cached outcome and associated metrics retrieved from disk."""
+    """Use this payload to represent cached outcomes and metrics."""
 
     outcome: ToolOutcome
     file_metrics: dict[str, FileMetrics]
@@ -72,7 +72,7 @@ class _CacheMiss(Exception):
 
 
 class FileState(BaseModel):
-    """Filesystem metadata used to validate cache entries."""
+    """Use this model to represent filesystem metadata for cache validation."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
@@ -160,9 +160,15 @@ def _state_to_payload(state: FileState) -> StatePayload:
 
 
 class ResultCache:
-    """Persist tool outcomes to disk and reload them when inputs are unchanged."""
+    """Use this helper to handle persisted tool outcomes when inputs are unchanged."""
 
     def __init__(self, directory: Path) -> None:
+        """Initialise the cache store rooted at ``directory``.
+
+        Args:
+            directory: Filesystem directory used to persist cache entries.
+        """
+
         self._dir = directory
 
     def load(self, request: CacheRequest) -> CachedEntry | None:
@@ -203,7 +209,7 @@ class ResultCache:
         outcome: ToolOutcome,
         file_metrics: Mapping[str, FileMetrics] | None = None,
     ) -> None:
-        """Persist *outcome* for *request*, ignoring disk errors.
+        """Persist the outcome for the provided request, ignoring disk errors.
 
         Args:
             request: Cache request describing the tool invocation.
@@ -225,6 +231,15 @@ class ResultCache:
             return
 
     def _entry_path(self, request: CacheRequest) -> Path:
+        """Compute the cache file path associated with ``request``.
+
+        Args:
+            request: Cache request describing the tool invocation.
+
+        Returns:
+            Path: Filesystem location used to store the cached entry.
+        """
+
         hasher = hashlib.sha256()
         hasher.update(request.tool.encode("utf-8"))
         hasher.update(COMMAND_DELIMITER)
@@ -260,7 +275,15 @@ class ResultCache:
 
 
 def _files_available(files: Sequence[Path], states: tuple[FileState, ...]) -> bool:
-    """Return ``True`` when all requested files were successfully stat'ed."""
+    """Return whether all requested files were successfully stat'ed.
+
+    Args:
+        files: Files whose presence must be verified.
+        states: Collected filesystem metadata for ``files``.
+
+    Returns:
+        bool: ``True`` when metadata exists for every file, ``False`` otherwise.
+    """
 
     return not files or bool(states)
 
@@ -269,7 +292,15 @@ def _states_match(
     current_states: tuple[FileState, ...],
     stored_states: tuple[StatePayload, ...],
 ) -> bool:
-    """Return ``True`` when ``stored_states`` matches ``current_states``."""
+    """Return whether ``stored_states`` matches ``current_states``.
+
+    Args:
+        current_states: Filesystem metadata gathered for the current run.
+        stored_states: Serialized metadata recovered from the cache entry.
+
+    Returns:
+        bool: ``True`` when the cached metadata aligns with the current state.
+    """
 
     if len(current_states) != len(stored_states):
         return False
@@ -315,7 +346,7 @@ def _outcome_to_payload(
 
 
 def _coerce_state_payload(value: CacheJsonValue | None) -> tuple[StatePayload, ...]:
-    """Return normalized state payloads extracted from *value*.
+    """Use this helper to return normalized state payloads extracted from ``value``.
 
     Args:
         value: Raw JSON value recovered from the cache payload.
@@ -367,7 +398,7 @@ def _metrics_to_payload(metrics: Mapping[str, FileMetrics]) -> list[MetricPayloa
 
 
 def _coerce_metrics_payload(value: CacheJsonValue | None) -> dict[str, FileMetrics]:
-    """Return ``FileMetrics`` instances recreated from serialized payload.
+    """Use this helper to return ``FileMetrics`` instances from serialized payloads.
 
     Args:
         value: Raw JSON value recovered from the cache payload.

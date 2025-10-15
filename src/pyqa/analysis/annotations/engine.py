@@ -68,7 +68,7 @@ _UNDERSCORE_CHAR: Final[str] = "_"
 
 @dataclass(frozen=True)
 class MessageAnalysis:
-    """Represent cached NLP artefacts for a diagnostic message."""
+    """Store cached NLP artefacts for a diagnostic message."""
 
     spans: tuple[SimpleMessageSpan, ...]
     signature: tuple[str, ...]
@@ -136,7 +136,7 @@ class AnnotationEngine(AnnotationProvider):
         return annotations
 
     def message_spans(self, message: str) -> Sequence[MessageSpan]:
-        """Retrieve cached highlight spans for ``message``.
+        """Return cached highlight spans for ``message``.
 
         Args:
             message: Diagnostic text to analyse.
@@ -164,7 +164,7 @@ class AnnotationEngine(AnnotationProvider):
 
     @memoize(maxsize=2048)
     def _analyse_message(self, message: str) -> MessageAnalysis:
-        """Analyse ``message`` using heuristics and spaCy when available.
+        """Return message analysis using heuristics and spaCy when available.
 
         Args:
             message: Diagnostic text under analysis.
@@ -259,7 +259,7 @@ def _build_span(start: int, end: int, style: str, kind: str | None) -> SimpleMes
 
 
 def _heuristic_spans(message: str) -> tuple[list[SimpleMessageSpan], list[str]]:
-    """Derive heuristic spans and signature tokens from ``message``.
+    """Return heuristic spans and signature tokens from ``message``.
 
     Args:
         message: Diagnostic message text awaiting annotation.

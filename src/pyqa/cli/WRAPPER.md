@@ -143,10 +143,10 @@
 
 | Scenario                                  | Command (illustrative)                                                       | Outcome                                                                                            |
 | ----------------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Explicit override below minimum version   | `PYQA_PYTHON=/tmp/python311_stub PYQA_UV=/tmp/fake_uv.sh ./lint --help`      | Probe reports `(3, 11)`, launcher switches to uv fallback without touching the repo interpreter.   |
-| Interpreter resolves modules outside repo | `PYQA_PYTHON=/tmp/python_outside_stub PYQA_UV=/tmp/fake_uv.sh ./lint --help` | Probe emits `outside`, launcher delegates to uv fallback to avoid stale environments.              |
-| uv override missing                       | `PYQA_PYTHON=/tmp/python_outside_stub PYQA_UV=/does/not/exist ./lint --help` | Launcher aborts with `PYQA_UV executable not found` and exits non-zero, preventing silent failure. |
+| Explicit override below minimum version   | `PYQA_PYTHON=/tmp/python311_mock PYQA_UV=/tmp/fake_uv.sh ./lint --help`      | Probe reports `(3, 11)`, launcher switches to uv fallback without touching the repo interpreter.   |
+| Interpreter resolves modules outside repo | `PYQA_PYTHON=/tmp/python_outside_mock PYQA_UV=/tmp/fake_uv.sh ./lint --help` | Probe emits `outside`, launcher delegates to uv fallback to avoid stale environments.              |
+| uv override missing                       | `PYQA_PYTHON=/tmp/python_outside_mock PYQA_UV=/does/not/exist ./lint --help` | Launcher aborts with `PYQA_UV executable not found` and exits non-zero, preventing silent failure. |
 
-> **Note:** The wrapper BDD tests synthesise these stub interpreters and uv scripts in a
+> **Note:** The wrapper BDD tests synthesise these mock interpreters and uv scripts in a
 > temporary directory. Re-create lightweight Python/bash stubs when manually exercising
 > the scenarios.

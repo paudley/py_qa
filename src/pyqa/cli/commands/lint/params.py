@@ -152,6 +152,7 @@ class MetaAnalysisChecks:
     check_docstrings: bool
     check_suppressions: bool
     check_types_strict: bool
+    check_missing: bool
 
 
 @dataclass(slots=True)
@@ -237,6 +238,12 @@ class LintMetaParams:
         """Return whether the strict typing checker should execute."""
 
         return self.analysis.check_types_strict
+
+    @property
+    def check_missing(self) -> bool:
+        """Return whether the missing functionality checker should execute."""
+
+        return self.analysis.check_missing
 
     @property
     def check_closures(self) -> bool:

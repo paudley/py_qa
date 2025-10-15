@@ -14,6 +14,10 @@ __all__ = ["register"]
 
 
 def register(app: Typer) -> None:
-    """Register the doctor command with ``app``."""
+    """Register the doctor diagnostics command on the Typer application.
+
+    Args:
+        app: Typer application receiving the doctor command.
+    """
 
     register_command(app, doctor_command, name="doctor")

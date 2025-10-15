@@ -29,8 +29,8 @@ from .di import run_pyqa_di_linter
 from .docstrings import run_docstring_linter
 from .generic_value_types import run_generic_value_type_linter
 from .interfaces import run_pyqa_interface_linter
-from .module_docs import run_pyqa_module_doc_linter
 from .missing import run_missing_linter
+from .module_docs import run_pyqa_module_doc_linter
 from .quality import (
     run_copyright_linter,
     run_file_size_linter,

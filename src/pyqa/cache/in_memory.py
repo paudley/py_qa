@@ -32,7 +32,7 @@ CacheKey = Hashable
 
 @dataclass(frozen=True, slots=True)
 class CacheInfo:
-    """Metadata describing the state of a cache.
+    """Use this container to describe cache state metadata.
 
     Attributes:
         current_size: Number of cached entries currently stored.
@@ -81,21 +81,42 @@ def _ensure_hashable(value: HashableCandidate, *, label: str) -> HashableCandida
 
 
 def _hashable_args(args: tuple[ArgT, ...]) -> tuple[Hashable, ...]:
-    """Return ``args`` coerced to a hashable tuple for cache keys."""
+    """Convert positional arguments into a hashable tuple for cache keys.
+
+    Args:
+        args: Positional arguments provided to the cached callable.
+
+    Returns:
+        tuple[Hashable, ...]: Tuple of hashable positional argument values.
+    """
 
     return tuple(_ensure_hashable(arg, label=f"positional argument {index}") for index, arg in enumerate(args))
 
 
 def _hashable_kwargs(kwargs: Mapping[str, KwargT]) -> dict[str, Hashable]:
-    """Return keyword arguments coerced to hashable values for cache keys."""
+    """Convert keyword arguments into hashable values for cache keys.
+
+    Args:
+        kwargs: Keyword arguments provided to the cached callable.
+
+    Returns:
+        dict[str, Hashable]: Mapping of keyword names to hashable values.
+    """
 
     return {key: _ensure_hashable(value, label=f"keyword argument '{key}'") for key, value in kwargs.items()}
 
 
 class _MemoizedCallable(Generic[P, R]):
-    """Callable that implements an optional-size LRU cache."""
+    """Implement an optional-size LRU cache for callables."""
 
     def __init__(self, func: Callable[P, R], maxsize: int | None) -> None:
+        """Initialise the memoized callable wrapper.
+
+        Args:
+            func: Callable whose results should be memoized.
+            maxsize: Maximum number of cache entries allowed, ``None`` for unbounded caches.
+        """
+
         self._func = func
         self._maxsize = maxsize
         self._store: OrderedDict[CacheKey, R] = OrderedDict()
@@ -103,7 +124,7 @@ class _MemoizedCallable(Generic[P, R]):
         self._hits = 0
         update_wrapper(self, func)
 
-    # suppression_valid: lint=internal-signatures method mirrors functools decorator API to maintain external compatibility while leveraging typed registry semantics.
+    # suppression_valid: lint=internal-signatures because decorators must keep functools APIs while exposing __call__.
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Invoke the wrapped callable applying memoization semantics.
 
@@ -147,11 +168,7 @@ class _MemoizedCallable(Generic[P, R]):
         return cast(Callable[P, R], MethodType(self, instance))
 
     def cache_clear(self) -> None:
-        """Clear cached entries and reset hit tracking.
-
-        Returns:
-            None
-        """
+        """Reset cached entries and hit tracking."""
 
         with self._lock:
             self._store.clear()
@@ -168,23 +185,35 @@ class _MemoizedCallable(Generic[P, R]):
         return metadata.current_size, metadata.current_size, metadata.maxsize
 
     def cache_metadata(self) -> CacheInfo:
-        """Return cache metadata in a ``CacheInfo`` payload including hits."""
+        """Return cache metadata in a ``CacheInfo`` payload including hits.
+
+        Returns:
+            CacheInfo: Cache metadata including current cache size, hits, and
+            configured max size.
+        """
 
         with self._lock:
             return CacheInfo(current_size=len(self._store), hits=self._hits, maxsize=self._maxsize)
 
 
 class _TTLCacheCallable(Generic[P, R]):
-    """Callable that applies a time-to-live cache policy."""
+    """Implement a time-to-live cache policy for callables."""
 
     def __init__(self, func: Callable[P, R], ttl_seconds: float) -> None:
+        """Initialise the TTL cache wrapper.
+
+        Args:
+            func: Callable whose results should be cached.
+            ttl_seconds: Time-to-live window in seconds for cached entries.
+        """
+
         self._func = func
         self._ttl_seconds = ttl_seconds
         self._store: dict[CacheKey, tuple[float, R]] = {}
         self._lock = Lock()
         update_wrapper(self, func)
 
-    # suppression_valid: lint=internal-signatures method preserves functools-compatible descriptor behaviour required by decorated callables across the codebase.
+    # suppression_valid: lint=internal-signatures because decorators must expose descriptors for compatibility.
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Invoke the wrapped callable applying TTL caching semantics.
 
@@ -227,11 +256,7 @@ class _TTLCacheCallable(Generic[P, R]):
         return cast(Callable[P, R], MethodType(self, instance))
 
     def cache_clear(self) -> None:
-        """Clear cached TTL values.
-
-        Returns:
-            None
-        """
+        """Reset cached TTL values."""
 
         with self._lock:
             self._store.clear()
