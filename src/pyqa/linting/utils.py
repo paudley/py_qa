@@ -22,7 +22,7 @@ def collect_target_files(
     *,
     extensions: Iterable[str] | None = None,
 ) -> list[Path]:
-    """Return lint target files filtered by optional extensions.
+    """Collect lint target files filtered by optional extensions.
 
     Args:
         state: Prepared lint state exposing user-supplied targets.
@@ -41,25 +41,36 @@ def collect_target_files(
     if not paths and not options.dirs:
         paths.append(root)
 
-    def _maybe_add(file_path: Path) -> None:
-        if extension_filter is None or file_path.suffix.lower() in extension_filter:
-            candidates.add(file_path)
-
     for path in paths:
-        if _is_excluded(path, options.exclude, root):
-            continue
-        if path.is_file():
-            _maybe_add(path)
-        elif path.is_dir():
-            candidates.update(_walk_files(path, options.exclude, root, extension_filter))
+        _include_candidate(
+            candidates,
+            path,
+            excluded=options.exclude,
+            root=root,
+            extension_filter=extension_filter,
+        )
+        if path.is_dir():
+            resolved_dir = _resolve_within_root(path, root)
+            if resolved_dir is None:
+                continue
+            candidates.update(_walk_files(resolved_dir, options.exclude, root, extension_filter))
     for directory in options.dirs:
-        dir_path = directory.resolve()
-        candidates.update(_walk_files(dir_path, options.exclude, root, extension_filter))
+        resolved_dir = _resolve_within_root(directory, root)
+        if resolved_dir is None:
+            continue
+        candidates.update(_walk_files(resolved_dir, options.exclude, root, extension_filter))
     return sorted(candidates)
 
 
 def collect_python_files(state: PreparedLintState) -> list[Path]:
-    """Return Python source files addressed by the current lint invocation."""
+    """Collect Python source files addressed by the current lint invocation.
+
+    Args:
+        state: Prepared lint state exposing user-supplied targets.
+
+    Returns:
+        list[Path]: Python source files drawn from the lint invocation.
+    """
 
     return collect_target_files(state, extensions=_PYTHON_EXTENSIONS)
 
@@ -70,7 +81,17 @@ def _walk_files(
     root: Path,
     extension_filter: set[str] | None,
 ) -> set[Path]:
-    """Return files beneath ``directory`` while applying exclusions."""
+    """Collect files beneath ``directory`` while applying exclusions.
+
+    Args:
+        directory: Directory explored for candidate files.
+        exclude: Iterable of paths explicitly excluded by the caller.
+        root: Workspace root used to constrain traversal.
+        extension_filter: Optional set of extensions used to filter results.
+
+    Returns:
+        set[Path]: Resolved file paths discovered within ``directory``.
+    """
 
     excluded = [path.resolve() for path in exclude]
     results: set[Path] = set()
@@ -79,9 +100,12 @@ def _walk_files(
             continue
         if _is_excluded(candidate, excluded, root):
             continue
-        if extension_filter and candidate.suffix.lower() not in extension_filter:
+        resolved = _resolve_within_root(candidate, root)
+        if resolved is None:
             continue
-        results.add(candidate.resolve())
+        if extension_filter and resolved.suffix.lower() not in extension_filter:
+            continue
+        results.add(resolved)
     return results
 
 
@@ -107,10 +131,58 @@ def _is_excluded(path: Path, excluded: Iterable[Path], root: Path) -> bool:
     try:
         relative = path.relative_to(root)
     except ValueError:
-        relative = path
+        return True
     if any(part in ALWAYS_EXCLUDE_DIRS for part in relative.parts):
         return True
     return False
+
+
+def _resolve_within_root(path: Path, root: Path) -> Path | None:
+    """Resolve ``path`` ensuring it remains within ``root``.
+
+    Args:
+        path: Candidate path supplied by the caller.
+        root: Workspace root constraining traversal.
+
+    Returns:
+        Path | None: Resolved path when ``path`` resides within ``root``;
+        otherwise ``None``.
+    """
+
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError:
+        return None
+    return resolved
+
+
+def _include_candidate(
+    candidates: set[Path],
+    path: Path,
+    *,
+    excluded: Iterable[Path],
+    root: Path,
+    extension_filter: set[str] | None,
+) -> None:
+    """Include ``path`` in ``candidates`` when it is an eligible file.
+
+    Args:
+        candidates: Accumulator tracking resolved candidate paths.
+        path: Candidate path supplied by the caller.
+        excluded: Iterable of paths explicitly excluded by the caller.
+        root: Workspace root constraining traversal.
+        extension_filter: Optional set of extensions used to filter results.
+    """
+
+    if _is_excluded(path, excluded, root):
+        return
+    resolved = _resolve_within_root(path, root)
+    if resolved is None or not resolved.is_file():
+        return
+    if extension_filter and resolved.suffix.lower() not in extension_filter:
+        return
+    candidates.add(resolved)
 
 
 __all__ = ["collect_target_files", "collect_python_files"]

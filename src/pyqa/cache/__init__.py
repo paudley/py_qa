@@ -116,13 +116,12 @@ def create_cache_provider(settings: CacheProviderSettings | None = None) -> Cach
 
     resolved = resolve_cache_provider_settings(settings)
     if resolved.kind == _MEMORY_KIND:
-        provider: CacheProvider[SerializableValue] = cast(CacheProvider[SerializableValue], InMemoryCacheProvider())
-        return provider
+        return cast(CacheProvider[SerializableValue], InMemoryCacheProvider())
 
     if resolved.directory is None:
         raise ValueError("CacheProviderSettings.directory must be set for directory-backed providers")
     provider = DirectoryCacheProvider(resolved.directory)
-    return provider
+    return cast(CacheProvider[SerializableValue], provider)
 
 
 # suppression_valid: lint=internal-cache reason=Reuse functools.lru_cache to preserve the default provider singleton.
