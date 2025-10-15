@@ -1,58 +1,144 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Blackcat Informatics® Inc.
-"""Configuration models and helpers for the pyqa lint orchestration package."""
+"""Provide the aggregate configuration container and related helpers."""
 
 from __future__ import annotations
 
-import math
-import os
 from collections.abc import Collection, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
-from typing import Final, Literal, cast
+from typing import Final, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..catalog.metadata import catalog_duplicate_preference
-from .types import ConfigValue
+from ...catalog.metadata import catalog_duplicate_preference
+from ..models.sections import (
+    CleanConfig,
+    ComplexityConfig,
+    DedupeConfig,
+    ExecutionConfig,
+    FileDiscoveryConfig,
+    LicenseConfig,
+    OutputConfig,
+    QualityConfigSection,
+    SeverityConfig,
+    StrictnessConfig,
+    UpdateConfig,
+)
+from ..types import ConfigValue
+from .enums import BanditConfidence, BanditLevel, SensitivityLevel, StrictnessLevel
+from .sentinels import NO_BASELINE, UNSET, ConfigSentinel
+from .value_types import GenericValueTypesConfig
+
+SensitivityOverrideValue = int | float | None | StrictnessLevel | BanditLevel | BanditConfidence
+ToolOverrideValue = bool | int | float | str | Sequence[str] | None
+
+MYPY_TOOL_KEY: Final[str] = "mypy"
 
 
-class ConfigError(Exception):
-    """Raised when configuration input is invalid."""
+def _default_tool_settings() -> dict[str, dict[str, ConfigValue]]:
+    """Return baseline tool settings aligning with the legacy runner.
+
+    Returns:
+        dict[str, dict[str, ConfigValue]]: Mapping of tool identifiers to
+        their default configuration payloads.
+
+    """
+
+    return {}
 
 
-class StrictnessLevel(str, Enum):
-    """Define supported type-checking strictness levels."""
+def _normalize_override_keys(
+    cli_overrides: Collection[str] | None,
+) -> set[ConfigOverrideKey]:
+    """Return structured override keys derived from CLI tokens.
 
-    LENIENT = "lenient"
-    STANDARD = "standard"
-    STRICT = "strict"
+    Args:
+        cli_overrides: Raw override tokens supplied via the command line.
+
+    Returns:
+        set[ConfigOverrideKey]: Recognised override keys corresponding to the
+        provided CLI tokens.
+
+    """
+
+    overrides: set[ConfigOverrideKey] = set()
+    if not cli_overrides:
+        return overrides
+    for token in cli_overrides:
+        key = ConfigOverrideKey.from_raw(token)
+        if key is not None:
+            overrides.add(key)
+    return overrides
 
 
-class SensitivityLevel(str, Enum):
-    """Define sensitivity presets available to callers."""
+def _load_duplicate_preference() -> tuple[str, ...]:
+    """Return catalog-provided duplicate preference metadata.
 
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    MAXIMUM = "maximum"
+    Returns:
+        tuple[str, ...]: Ordered tool identifiers expressing duplicate
+        resolution preference.
 
+    """
 
-class BanditLevel(str, Enum):
-    """Define severity levels supported by Bandit."""
-
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
+    return catalog_duplicate_preference()
 
 
-class BanditConfidence(str, Enum):
-    """Define confidence levels supported by Bandit."""
+_MYPY_BASE_TRUE_FLAGS: Final[tuple[str, ...]] = (
+    "exclude-gitignore",
+    "sqlite-cache",
+    "show-error-codes",
+    "show-column-numbers",
+)
+_MYPY_STRICT_FLAGS: Final[tuple[str, ...]] = (
+    "warn-redundant-casts",
+    "warn-unused-ignores",
+    "warn-unreachable",
+    "disallow-untyped-decorators",
+    "disallow-any-generics",
+    "check-untyped-defs",
+    "no-implicit-reexport",
+)
 
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
+
+def _expected_mypy_profile(strict_level: StrictnessLevel) -> dict[str, ConfigValue]:
+    """Build the expected mypy settings for a given strictness level.
+
+    Args:
+        strict_level: Strictness profile used to derive default values.
+
+    Returns:
+        dict[str, ConfigValue]: Mapping of configuration keys to their default
+        mypy values.
+
+    """
+
+    profile: dict[str, ConfigValue] = {flag: True for flag in _MYPY_BASE_TRUE_FLAGS}
+    profile["strict"] = strict_level is StrictnessLevel.STRICT
+    for flag in _MYPY_STRICT_FLAGS:
+        profile[flag] = strict_level is StrictnessLevel.STRICT
+    profile["ignore-missing-imports"] = strict_level is StrictnessLevel.LENIENT
+    return profile
+
+
+def _expected_mypy_value_for(
+    key: str,
+    strict_level: StrictnessLevel,
+) -> ConfigValue | ConfigSentinel:
+    """Return the default mypy setting for a specific configuration key.
+
+    Args:
+        key: Target mypy configuration option name.
+        strict_level: Strictness profile used to derive defaults.
+
+    Returns:
+        ConfigValue | ConfigSentinel: Default value when known; otherwise
+        ``NO_BASELINE``.
+
+    """
+
+    profile = _expected_mypy_profile(strict_level)
+    return profile.get(key, NO_BASELINE)
 
 
 class ConfigOverrideKey(str, Enum):
@@ -72,13 +158,14 @@ class ConfigOverrideKey(str, Enum):
         """Return the enum member matching a raw CLI override token.
 
         Args:
-            raw: String token provided via CLI overrides.
+            raw: String token supplied via CLI overrides.
 
         Returns:
             ConfigOverrideKey | None: Matching enum instance when recognised;
             otherwise ``None``.
 
         """
+
         try:
             return cls(raw)
         except ValueError:
@@ -88,10 +175,11 @@ class ConfigOverrideKey(str, Enum):
         """Apply the override value to the appropriate config section.
 
         Args:
-            config: Mutable configuration instance receiving the override.
+            config: Configuration instance receiving the override.
             value: Override value resolved from the sensitivity preset.
 
         """
+
         if self is ConfigOverrideKey.LINE_LENGTH:
             numeric_value = cast(int | float, value)
             config.execution = config.execution.model_copy(
@@ -119,403 +207,6 @@ class ConfigOverrideKey(str, Enum):
             config.update_severity(max_warnings=cast(int | None, value))
 
 
-SensitivityOverrideValue = int | float | None | StrictnessLevel | BanditLevel | BanditConfidence
-ToolOverrideValue = bool | int | float | str | Sequence[str] | None
-
-
-def default_parallel_jobs() -> int:
-    """Return a CPU count scaled down for concurrent linting.
-
-    Returns:
-        int: Rounded-down count representing roughly 75% of available CPU
-        cores while guaranteeing a minimum of one worker.
-
-    """
-    cores = os.cpu_count() or 1
-    proposed = max(1, math.floor(cores * 0.75))
-    return proposed
-
-
-_MYPY_BASE_TRUE_FLAGS: Final[tuple[str, ...]] = (
-    "exclude-gitignore",
-    "sqlite-cache",
-    "show-error-codes",
-    "show-column-numbers",
-)
-_MYPY_STRICT_FLAGS: Final[tuple[str, ...]] = (
-    "warn-redundant-casts",
-    "warn-unused-ignores",
-    "warn-unreachable",
-    "disallow-untyped-decorators",
-    "disallow-any-generics",
-    "check-untyped-defs",
-    "no-implicit-reexport",
-)
-
-
-def _expected_mypy_profile(strict_level: StrictnessLevel) -> dict[str, ConfigValue]:
-    """Return the expected mypy settings for a given strictness level.
-
-    Args:
-        strict_level: Desired strictness level for type checking.
-
-    Returns:
-        dict[str, ConfigValue]: Expected mypy INI-style configuration values.
-
-    """
-    profile: dict[str, ConfigValue] = {flag: True for flag in _MYPY_BASE_TRUE_FLAGS}
-    profile["strict"] = strict_level is StrictnessLevel.STRICT
-    for flag in _MYPY_STRICT_FLAGS:
-        profile[flag] = strict_level is StrictnessLevel.STRICT
-    profile["ignore-missing-imports"] = strict_level is StrictnessLevel.LENIENT
-    return profile
-
-
-def _expected_mypy_value_for(
-    key: str,
-    strict_level: StrictnessLevel,
-) -> ConfigValue | ConfigSentinel:
-    """Return the default mypy setting for a specific configuration key.
-
-    Args:
-        key: Target mypy configuration key.
-        strict_level: Strictness profile used to derive defaults.
-
-    Returns:
-        ConfigValue | ConfigSentinel: Default value when known; otherwise
-        ``NO_BASELINE``.
-
-    """
-    profile = _expected_mypy_profile(strict_level)
-    return profile.get(key, NO_BASELINE)
-
-
-class FileDiscoveryConfig(BaseModel):
-    """Define file discovery and filtering configuration for a project."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    roots: list[Path] = Field(default_factory=lambda: [Path()])
-    excludes: list[Path] = Field(default_factory=list)
-    paths_from_stdin: bool = False
-    changed_only: bool = False
-    diff_ref: str = "HEAD"
-    include_untracked: bool = True
-    base_branch: str | None = None
-    pre_commit: bool = False
-    respect_gitignore: bool = False
-    explicit_files: list[Path] = Field(default_factory=list)
-    limit_to: list[Path] = Field(default_factory=list)
-
-
-class OutputConfig(BaseModel):
-    """Define output, reporting, and artifact creation configuration."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    verbose: bool = False
-    emoji: bool = True
-    color: bool = True
-    show_passing: bool = False
-    show_stats: bool = True
-    output: Literal["pretty", "raw", "concise"] = "concise"
-    pretty_format: Literal["text", "jsonl", "markdown"] = "text"
-    group_by_code: bool = False
-    report: Literal["json"] | None = None
-    report_out: Path | None = None
-    report_include_raw: bool = False
-    sarif_out: Path | None = None
-    pr_summary_out: Path | None = None
-    pr_summary_limit: int = 100
-    pr_summary_min_severity: Literal["error", "warning", "notice", "note"] = "warning"
-    pr_summary_template: str = "- **{severity}** `{tool}` {message} ({location})"
-    gha_annotations: bool = False
-    annotations_use_json: bool = False
-    quiet: bool = False
-    tool_filters: dict[str, list[str]] = Field(default_factory=dict)
-    advice: bool = False
-
-
-class ExecutionConfig(BaseModel):
-    """Define execution behaviour and lint tool selection configuration."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    only: list[str] = Field(default_factory=list)
-    languages: list[str] = Field(default_factory=list)
-    enable: list[str] = Field(default_factory=list)
-    pyqa_rules: bool = False
-    strict: bool = False
-    jobs: int = Field(default_factory=default_parallel_jobs)
-    fix_only: bool = False
-    check_only: bool = False
-    force_all: bool = False
-    respect_config: bool = False
-    cache_enabled: bool = True
-    cache_dir: Path = Field(default_factory=lambda: Path(".lint-cache"))
-    bail: bool = False
-    use_local_linters: bool = False
-    line_length: int = 120
-    sql_dialect: str = "postgresql"
-    python_version: str | None = None
-
-
-class DedupeConfig(BaseModel):
-    """Define configuration knobs for deduplicating diagnostics."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    dedupe: bool = False
-    dedupe_by: Literal["first", "severity", "prefer"] = "first"
-    dedupe_prefer: list[str] = Field(default_factory=list)
-    dedupe_line_fuzz: int = 2
-    dedupe_same_file_only: bool = True
-
-
-DEFAULT_QUALITY_CHECKS: Final[list[str]] = ["license", "file-size", "schema", "python"]
-DEFAULT_SCHEMA_TARGETS: Final[list[Path]] = [Path("ref_docs/tool-schema.json")]
-DEFAULT_PROTECTED_BRANCHES: Final[list[str]] = ["main", "master"]
-
-DEFAULT_CLEAN_PATTERNS: Final[list[str]] = [
-    "*.log",
-    ".*cache",
-    ".claude*.json",
-    ".coverage",
-    ".hypothesis",
-    ".stream*.json",
-    ".venv",
-    "__pycache__",
-    "chroma*db",
-    "coverage*",
-    "dist",
-    "filesystem_store",
-    "htmlcov*",
-]
-
-DEFAULT_CLEAN_TREES: Final[list[str]] = ["examples", "packages", "build"]
-
-DEFAULT_UPDATE_SKIP_PATTERNS: Final[list[str]] = ["pyreadstat", ".git/modules"]
-
-
-def _default_tool_settings() -> dict[str, dict[str, ConfigValue]]:
-    """Return baseline tool settings that mirror the legacy lint script.
-
-    Returns:
-        dict[str, dict[str, ConfigValue]]: Default tool configuration mapping.
-
-    """
-    return {}
-
-
-def _normalize_override_keys(
-    cli_overrides: Collection[str] | None,
-) -> set[ConfigOverrideKey]:
-    """Translate CLI override tokens into structured override keys.
-
-    Args:
-        cli_overrides: Raw override tokens supplied via the command line.
-
-    Returns:
-        set[ConfigOverrideKey]: Normalised override keys recognised by the
-        configuration layer.
-
-    """
-    overrides: set[ConfigOverrideKey] = set()
-    if not cli_overrides:
-        return overrides
-    for token in cli_overrides:
-        key = ConfigOverrideKey.from_raw(token)
-        if key is not None:
-            overrides.add(key)
-    return overrides
-
-
-def _load_duplicate_preference() -> tuple[str, ...]:
-    """Return tool duplicate preference metadata when available.
-
-    Returns:
-        tuple[str, ...]: Ordered tool identifiers expressing duplicate
-        resolution preference. An empty tuple is returned when no preference is
-        defined.
-
-    """
-    return catalog_duplicate_preference()
-
-
-class ComplexityConfig(BaseModel):
-    """Shared complexity thresholds applied to compatible tools."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    max_complexity: int | None = 10
-    max_arguments: int | None = 5
-
-
-class StrictnessConfig(BaseModel):
-    """Shared strictness controls for type-checking tools."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    type_checking: StrictnessLevel = StrictnessLevel.STANDARD
-
-
-class SeverityConfig(BaseModel):
-    """Define severity thresholds shared across supported tools."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    bandit_level: BanditLevel = BanditLevel.MEDIUM
-    bandit_confidence: BanditConfidence = BanditConfidence.MEDIUM
-    pylint_fail_under: float | None = 9.5
-    max_warnings: int | None = None
-    sensitivity: SensitivityLevel = SensitivityLevel.MEDIUM
-
-
-class ValueTypeFindingSeverity(str, Enum):
-    """Define severities used by the generic value-type recommender."""
-
-    ERROR = "error"
-    WARNING = "warning"
-
-
-class ValueTypeTriggerKind(str, Enum):
-    """Describe the supported trigger categories for implications."""
-
-    METHOD = "method"
-    TRAIT = "trait"
-
-
-class GenericValueTypesImplication(BaseModel):
-    """Describe a derived method recommendation for value types."""
-
-    trigger: str
-    require: tuple[str, ...] = Field(default_factory=tuple)
-    recommend: tuple[str, ...] = Field(default_factory=tuple)
-    severity: ValueTypeFindingSeverity = ValueTypeFindingSeverity.WARNING
-    traits: tuple[str, ...] = Field(default_factory=tuple)
-
-    @model_validator(mode="after")
-    def _normalise(self) -> GenericValueTypesImplication:
-        """Normalise trigger metadata and enforce canonical formatting.
-
-        Returns:
-            GenericValueTypesImplication: The normalised implication instance.
-        """
-
-        trigger = self.trigger.strip()
-        if not trigger:
-            msg = "generic_value_types.implications.trigger cannot be blank"
-            raise ConfigError(msg)
-        self.trigger = trigger.lower()
-        self.traits = tuple(sorted({trait.strip() for trait in self.traits if trait.strip()}))
-        self.require = tuple(sorted({method.strip() for method in self.require if method.strip()}))
-        self.recommend = tuple(sorted({method.strip() for method in self.recommend if method.strip()}))
-        return self
-
-    def parsed_trigger(self) -> tuple[ValueTypeTriggerKind, str]:
-        """Return the trigger kind/value pair derived from configuration.
-
-        Returns:
-            tuple[ValueTypeTriggerKind, str]: Trigger kind and trigger value pair.
-        """
-
-        token = self.trigger
-        if ":" not in token:
-            return ValueTypeTriggerKind.METHOD, token
-        prefix, value = (segment.strip() for segment in token.split(":", 1))
-        try:
-            kind = ValueTypeTriggerKind(prefix)
-        except ValueError as exc:  # pragma: no cover - defensive guard
-            raise ConfigError(f"Unsupported implication trigger kind '{prefix}'") from exc
-        if not value:
-            msg = "generic_value_types.implications.trigger must include a value"
-            raise ConfigError(msg)
-        return kind, value
-
-
-class GenericValueTypesRule(BaseModel):
-    """Describe explicit dunder expectations for value-type rules."""
-
-    pattern: str
-    traits: tuple[str, ...] = Field(default_factory=tuple)
-    require: tuple[str, ...] = Field(default_factory=tuple)
-    recommend: tuple[str, ...] = Field(default_factory=tuple)
-    allow_missing: tuple[str, ...] = Field(default_factory=tuple)
-    description: str | None = None
-
-    @model_validator(mode="after")
-    def _normalise(self) -> GenericValueTypesRule:
-        """Normalise rule inputs and enforce sorted unique collections.
-
-        Returns:
-            GenericValueTypesRule: The normalised rule instance.
-        """
-
-        pattern = self.pattern.strip()
-        if not pattern:
-            msg = "generic_value_types.rules.pattern cannot be blank"
-            raise ConfigError(msg)
-        self.pattern = pattern
-        self.traits = tuple(sorted({trait.strip() for trait in self.traits if trait.strip()}))
-        self.require = tuple(sorted({method.strip() for method in self.require if method.strip()}))
-        self.recommend = tuple(sorted({method.strip() for method in self.recommend if method.strip()}))
-        self.allow_missing = tuple(sorted({method.strip() for method in self.allow_missing if method.strip()}))
-        if self.description is not None:
-            description = self.description.strip()
-            self.description = description or None
-        return self
-
-
-class GenericValueTypesConfig(BaseModel):
-    """Define configuration for the generic value-type recommender."""
-
-    enabled: bool = False
-    rules: tuple[GenericValueTypesRule, ...] = Field(default_factory=tuple)
-    implications: tuple[GenericValueTypesImplication, ...] = Field(
-        default_factory=lambda: GenericValueTypesConfig._default_implications()
-    )
-
-    @staticmethod
-    def _default_implications() -> tuple[GenericValueTypesImplication, ...]:
-        """Build conservative default implications for value-type ergonomics.
-
-        Returns:
-            tuple[GenericValueTypesImplication, ...]: Default implication definitions.
-        """
-
-        base_implications = (
-            GenericValueTypesImplication(
-                trigger="method:__iter__",
-                require=("__len__", "__contains__"),
-                severity=ValueTypeFindingSeverity.WARNING,
-            ),
-            GenericValueTypesImplication(
-                trigger="method:__len__",
-                require=("__bool__",),
-                severity=ValueTypeFindingSeverity.WARNING,
-            ),
-            GenericValueTypesImplication(
-                trigger="method:__eq__",
-                require=("__hash__",),
-                recommend=("__repr__", "__str__"),
-                severity=ValueTypeFindingSeverity.WARNING,
-            ),
-        )
-        return base_implications
-
-
-class ConfigSentinel(Enum):
-    """Define sentinel values used to distinguish absent and unmanaged settings."""
-
-    UNSET = "UNSET"
-    NO_BASELINE = "NO_BASELINE"
-
-
-UNSET: Final[ConfigSentinel] = ConfigSentinel.UNSET
-NO_BASELINE: Final[ConfigSentinel] = ConfigSentinel.NO_BASELINE
-MYPY_TOOL_KEY: Final[str] = "mypy"
-
-
 @dataclass(frozen=True, slots=True)
 class ToolSpecificOverride:
     """Describe a tool-specific override applied by sensitivity presets."""
@@ -531,6 +222,7 @@ class ToolSpecificOverride:
             tool_settings: Mutable mapping of tool configuration values.
 
         """
+
         existing = tool_settings.get(self.key, UNSET)
         if existing is not UNSET:
             if self.skip_if_truthy and bool(existing):
@@ -545,7 +237,7 @@ class ToolSpecificOverride:
 
 @dataclass(frozen=True, slots=True)
 class SensitivityPreset:
-    """Preset values driven by overall sensitivity."""
+    """Define sensitivity-driven configuration preset values."""
 
     config_overrides: Mapping[ConfigOverrideKey, SensitivityOverrideValue] = field(
         default_factory=dict,
@@ -561,10 +253,11 @@ class SensitivityPreset:
         """Apply overrides contained in the preset to the provided config.
 
         Args:
-            config: Configuration instance receiving the overrides.
+            config: Configuration instance receiving the preset overrides.
             skip_keys: Override keys that should be skipped due to CLI input.
 
         """
+
         for key, value in self.config_overrides.items():
             if key in skip_keys:
                 continue
@@ -635,7 +328,6 @@ _STRICT_DEDUPE_SENSITIVITY_LEVELS: Final[set[SensitivityLevel]] = {
     SensitivityLevel.MAXIMUM,
 }
 
-
 _TOOL_KNOB_MAPPING: Final[dict[tuple[str, str], ConfigOverrideKey]] = {
     ("black", "line-length"): ConfigOverrideKey.LINE_LENGTH,
     ("isort", "line-length"): ConfigOverrideKey.LINE_LENGTH,
@@ -661,7 +353,7 @@ _TOOL_KNOB_MAPPING: Final[dict[tuple[str, str], ConfigOverrideKey]] = {
 
 @dataclass(frozen=True, slots=True)
 class SharedKnobSnapshot:
-    """Snapshot of shared configuration knobs before recalculating defaults."""
+    """Capture shared configuration knob values prior to recalculation."""
 
     knob_values: Mapping[ConfigOverrideKey, SensitivityOverrideValue]
     pylint_init_import: bool | None
@@ -675,10 +367,10 @@ class SharedKnobSnapshot:
 
         Returns:
             ConfigValue | ConfigSentinel: Baseline value when maintained, or
-            ``NO_BASELINE`` when the shared configuration does not manage the
-            requested key.
+            ``NO_BASELINE`` when unmanaged.
 
         """
+
         mapping_key = (tool, key)
         if mapping_key in _TOOL_KNOB_MAPPING:
             knob = _TOOL_KNOB_MAPPING[mapping_key]
@@ -719,60 +411,14 @@ class SharedKnobSnapshot:
             downstream comparisons.
 
         """
+
         if isinstance(value, Enum):
             return cast(ConfigValue, value.value)
         return value
 
 
-class LicenseConfig(BaseModel):
-    """Project-wide licensing policy configuration."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    spdx: str | None = None
-    notice: str | None = None
-    copyright: str | None = None
-    year: str | None = None
-    require_spdx: bool = True
-    require_notice: bool = True
-    allow_alternate_spdx: list[str] = Field(default_factory=list)
-    exceptions: list[str] = Field(default_factory=list)
-
-
-class QualityConfigSection(BaseModel):
-    """Quality enforcement configuration shared across commands."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    checks: list[str] = Field(default_factory=lambda: list(DEFAULT_QUALITY_CHECKS))
-    skip_globs: list[str] = Field(default_factory=list)
-    schema_targets: list[Path] = Field(default_factory=lambda: list(DEFAULT_SCHEMA_TARGETS))
-    warn_file_size: int = 5 * 1024 * 1024
-    max_file_size: int = 10 * 1024 * 1024
-    protected_branches: list[str] = Field(default_factory=lambda: list(DEFAULT_PROTECTED_BRANCHES))
-    enforce_in_lint: bool = False
-
-
-class CleanConfig(BaseModel):
-    """Configuration for repository cleanup patterns."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_CLEAN_PATTERNS))
-    trees: list[str] = Field(default_factory=lambda: list(DEFAULT_CLEAN_TREES))
-
-
-class UpdateConfig(BaseModel):
-    """Configuration for workspace dependency updates."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    skip_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_UPDATE_SKIP_PATTERNS))
-    enabled_managers: list[str] = Field(default_factory=list)
-
-
 class Config(BaseModel):
-    """Primary configuration container used by the orchestrator."""
+    """Aggregate orchestrator configuration into a single container."""
 
     model_config = ConfigDict(validate_assignment=True)
 
@@ -795,9 +441,11 @@ class Config(BaseModel):
         """Return a dictionary representation suitable for serialization.
 
         Returns:
-            dict[str, ConfigValue]: Serialisable mapping of configuration values.
+            dict[str, ConfigValue]: Serialisable mapping of configuration
+            values.
 
         """
+
         payload: dict[str, ConfigValue] = dict(self.model_dump(mode="python"))
         payload["severity_rules"] = list(self.severity_rules)
         raw_tool_settings = payload.get("tool_settings", {})
@@ -821,6 +469,7 @@ class Config(BaseModel):
             Config: Configuration instance with shared defaults applied.
 
         """
+
         self.apply_shared_defaults()
         return self
 
@@ -829,13 +478,14 @@ class Config(BaseModel):
         *,
         cli_overrides: Collection[str] | None = None,
     ) -> None:
-        """Mutate shared knobs based on the selected sensitivity preset.
+        """Apply sensitivity presets to shared configuration knobs.
 
         Args:
             cli_overrides: Raw override tokens supplied by the CLI to opt out
                 of specific preset-provided values.
 
         """
+
         preset = SENSITIVITY_PRESETS.get(self.severity.sensitivity)
         if preset is None:
             return
@@ -852,6 +502,7 @@ class Config(BaseModel):
             settings that influence multiple tools.
 
         """
+
         knob_values: dict[ConfigOverrideKey, SensitivityOverrideValue] = {
             ConfigOverrideKey.LINE_LENGTH: self.execution.line_length,
             ConfigOverrideKey.MAX_COMPLEXITY: self.complexity.max_complexity,
@@ -880,10 +531,11 @@ class Config(BaseModel):
         """Ensure shared configuration defaults are reflected in tool settings.
 
         Args:
-            override: When ``True`` override values that match the baseline.
+            override: When ``True`` apply updates even when settings exist.
             baseline: Snapshot representing previously applied shared values.
 
         """
+
         duplicate_preference = _load_duplicate_preference()
         if duplicate_preference:
             self._merge_dedupe_preferences(duplicate_preference)
@@ -906,6 +558,7 @@ class Config(BaseModel):
             max_warnings: Optional override for maximum tolerable warnings.
 
         """
+
         self._update_severity(
             bandit_level=bandit_level,
             bandit_confidence=bandit_confidence,
@@ -930,6 +583,7 @@ class Config(BaseModel):
             max_warnings: Optional override for maximum tolerable warnings.
 
         """
+
         updates: dict[str, ConfigValue | None] = {}
         if bandit_level is not UNSET:
             updates["bandit_level"] = cast(ConfigValue, bandit_level)
@@ -944,6 +598,7 @@ class Config(BaseModel):
 
     def _enable_strict_dedupe(self) -> None:
         """Tighten dedupe behaviour for strict sensitivity presets."""
+
         self.dedupe.dedupe = True
         self.dedupe.dedupe_by = "prefer"
         prefer_list = list(self.dedupe.dedupe_prefer)
@@ -953,13 +608,14 @@ class Config(BaseModel):
         self.dedupe.dedupe_prefer = prefer_list
 
     def _merge_dedupe_preferences(self, preferred_order: Sequence[str]) -> None:
-        """Merge catalog-provided dedupe preferences with user settings.
+        """Merge dedupe preferences using catalog-provided ordering.
 
         Args:
             preferred_order: Ordered sequence of tool identifiers drawn from
                 catalog metadata.
 
         """
+
         prefer_list = list(self.dedupe.dedupe_prefer)
         for tool_name in preferred_order:
             if tool_name not in prefer_list:
@@ -972,13 +628,14 @@ class Config(BaseModel):
         override: bool,
         baseline: SharedKnobSnapshot | None,
     ) -> None:
-        """Synchronise mypy configuration defaults with shared settings.
+        """Synchronize mypy configuration defaults with shared settings.
 
         Args:
             override: When ``True`` apply updates even when settings exist.
             baseline: Prior snapshot to respect manual adjustments.
 
         """
+
         mypy_settings = self.tool_settings.setdefault("mypy", {})
         baseline_profile: Mapping[str, ConfigValue] = {}
         strictness = self.strictness.type_checking
@@ -1017,9 +674,10 @@ class _MypySettingManager:
 
         Args:
             key: Name of the mypy configuration option to manage.
-            value: Desired default value, or ``None`` to remove the key.
+            value: Desired default value or ``None`` to remove the key.
 
         """
+
         existing: ConfigValue | ConfigSentinel = self.settings.get(key, UNSET)
         baseline_value: ConfigValue | ConfigSentinel = self.baseline.get(key, NO_BASELINE)
         if value is None:
@@ -1036,26 +694,15 @@ class _MypySettingManager:
 
 
 __all__ = [
-    "BanditConfidence",
-    "BanditLevel",
-    "CleanConfig",
-    "ComplexityConfig",
     "Config",
-    "ConfigError",
     "ConfigOverrideKey",
-    "DedupeConfig",
-    "ExecutionConfig",
-    "FileDiscoveryConfig",
-    "LicenseConfig",
-    "OutputConfig",
-    "QualityConfigSection",
-    "SensitivityLevel",
+    "MYPY_TOOL_KEY",
+    "SENSITIVITY_PRESETS",
+    "SensitivityOverrideValue",
     "SensitivityPreset",
-    "SeverityConfig",
     "SharedKnobSnapshot",
-    "StrictnessConfig",
-    "StrictnessLevel",
+    "ToolOverrideValue",
     "ToolSpecificOverride",
-    "UpdateConfig",
-    "default_parallel_jobs",
+    "_STRICT_DEDUPE_SENSITIVITY_LEVELS",
+    "_TOOL_KNOB_MAPPING",
 ]

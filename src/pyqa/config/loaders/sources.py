@@ -54,7 +54,7 @@ class DefaultConfigSource(ConfigSource):
 
 
 class TomlConfigSource(ConfigSource):
-    """Load configuration data from a TOML document with include support."""
+    """Provide configuration data from a TOML document with include support."""
 
     def __init__(
         self,
@@ -124,7 +124,7 @@ class TomlConfigSource(ConfigSource):
         return _expand_env(merged, self._env)
 
     def _coerce_includes(self, raw: ConfigValue, base_dir: Path) -> Iterable[Path]:
-        """Compute include paths derived from ``raw`` relative to ``base_dir``.
+        """Resolve include paths derived from ``raw`` relative to ``base_dir``.
 
         Args:
             raw: Include declaration in the TOML document.
@@ -187,7 +187,7 @@ class TomlConfigSource(ConfigSource):
 
 
 class PyProjectConfigSource(TomlConfigSource):
-    """Read configuration from ``[tool.pyqa]`` within ``pyproject.toml``."""
+    """Provide configuration from ``[tool.pyqa]`` within ``pyproject.toml``."""
 
     def __init__(self, path: Path) -> None:
         """Initialise the pyproject configuration source.
