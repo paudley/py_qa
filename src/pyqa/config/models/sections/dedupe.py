@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class DedupeConfig(BaseModel):
-    """Provide deduplication heuristics applied to tool diagnostics."""
+    """Manage deduplication heuristics applied to tool diagnostics."""
 
     model_config = ConfigDict(validate_assignment=True)
 

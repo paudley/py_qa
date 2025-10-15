@@ -39,7 +39,7 @@ class GenericValueTypesImplication(BaseModel):
 
     @model_validator(mode="after")
     def _normalize(self) -> GenericValueTypesImplication:
-        """Normalize trigger metadata and enforce canonical formatting.
+        """Canonicalize implication trigger metadata.
 
         Returns:
             GenericValueTypesImplication: The normalized implication instance.
@@ -91,7 +91,7 @@ class GenericValueTypesRule(BaseModel):
 
     @model_validator(mode="after")
     def _normalize(self) -> GenericValueTypesRule:
-        """Normalize rule inputs and enforce sorted unique collections.
+        """Return rule configuration inputs in canonical order.
 
         Returns:
             GenericValueTypesRule: The normalized rule instance.

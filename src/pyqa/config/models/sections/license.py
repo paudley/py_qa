@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class LicenseConfig(BaseModel):
-    """Provide repository-wide licensing policy settings."""
+    """Manage repository-wide licensing policy settings."""
 
     model_config = ConfigDict(validate_assignment=True)
 

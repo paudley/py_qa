@@ -12,7 +12,7 @@ DEFAULT_UPDATE_SKIP_PATTERNS: Final[list[str]] = ["pyreadstat", ".git/modules"]
 
 
 class UpdateConfig(BaseModel):
-    """Provide configuration inputs for dependency update commands."""
+    """Manage inputs for dependency update commands."""
 
     model_config = ConfigDict(validate_assignment=True)
 

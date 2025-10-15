@@ -79,7 +79,7 @@ class TomlConfigSource(ConfigSource):
         self._env = env or os.environ
 
     def load(self) -> ConfigFragment:
-        """Load configuration data resolved from the root TOML document.
+        """Use this source to load configuration data from the root TOML document.
 
         Returns:
             Mapping representing the merged configuration result.
@@ -199,7 +199,7 @@ class PyProjectConfigSource(TomlConfigSource):
         super().__init__(path, name=str(path))
 
     def load(self) -> ConfigFragment:
-        """Load configuration extracted from ``[tool.pyqa]`` sections.
+        """Use this loader to extract configuration from ``[tool.pyqa]`` sections.
 
         Returns:
             Mapping representing the normalised pyqa configuration payload.

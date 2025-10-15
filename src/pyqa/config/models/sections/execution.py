@@ -26,7 +26,7 @@ def default_parallel_jobs() -> int:
 
 
 class ExecutionConfig(BaseModel):
-    """Provide execution controls dictating which tools run and how they behave."""
+    """Manage execution controls dictating which tools run and how they behave."""
 
     model_config = ConfigDict(validate_assignment=True)
 

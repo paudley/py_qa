@@ -276,7 +276,7 @@ def _coerce_iterable(value: ConfigValue, context: str) -> list[ConfigValue]:
 
 
 def _normalise_pyproject_payload(data: ConfigFragment) -> dict[str, ConfigValue]:
-    """Return normalised ``pyproject`` payload splitting tool sections.
+    """Normalize ``pyproject`` payloads by splitting tool sections.
 
     Args:
         data: Raw configuration mapping extracted from ``pyproject.toml``.
@@ -292,7 +292,7 @@ def _normalise_pyproject_payload(data: ConfigFragment) -> dict[str, ConfigValue]
 
 
 def _normalise_fragment(fragment: ConfigFragment) -> dict[str, ConfigValue]:
-    """Normalise config fragments produced by catalog loaders.
+    """Canonicalize configuration fragments for catalog loaders.
 
     Args:
         fragment: Configuration mapping returned by loader plug-ins.
@@ -310,7 +310,7 @@ def _normalise_fragment(fragment: ConfigFragment) -> dict[str, ConfigValue]:
 def _partition_sections(
     items: Iterable[tuple[str, ConfigValue]],
 ) -> tuple[dict[str, ConfigValue], dict[str, ConfigValue]]:
-    """Separate known config sections from tool-specific entries.
+    """Return partitioned configuration sections and tool-specific entries.
 
     Args:
         items: Iterable of key/value pairs from configuration payloads.
@@ -350,7 +350,7 @@ def _canonical_section(key: str) -> str:
 
 
 def _validate_tool_section(value: ConfigValue) -> dict[str, ConfigValue]:
-    """Validate and normalise the ``tools`` configuration table.
+    """Return a normalized representation of the ``tools`` configuration table.
 
     Args:
         value: Raw configuration payload associated with the ``tools`` section.
@@ -373,7 +373,7 @@ def _validate_tool_section(value: ConfigValue) -> dict[str, ConfigValue]:
 
 
 def _expand_env(data: Mapping[str, ConfigValue], env: Mapping[str, str]) -> dict[str, ConfigValue]:
-    """Return configuration data with environment variables expanded.
+    """Produce configuration data with environment variables expanded.
 
     Args:
         data: Configuration mapping containing string values to expand.
@@ -390,7 +390,7 @@ def _expand_env(data: Mapping[str, ConfigValue], env: Mapping[str, str]) -> dict
 
 
 def _expand_env_value(value: ConfigValue, env: Mapping[str, str]) -> ConfigValue:
-    """Return ``value`` with embedded environment variables expanded.
+    """Return values with embedded environment variables expanded.
 
     Args:
         value: Configuration value that might contain environment references.
@@ -410,7 +410,7 @@ def _expand_env_value(value: ConfigValue, env: Mapping[str, str]) -> ConfigValue
 
 
 def _expand_env_string(value: str, env: Mapping[str, str]) -> str:
-    """Return ``value`` after applying shell-style environment expansion.
+    """Expand shell-style environment variables contained within ``value``.
 
     Args:
         value: String value containing optional ``$VARNAME`` tokens.
@@ -421,6 +421,15 @@ def _expand_env_string(value: str, env: Mapping[str, str]) -> str:
     """
 
     def _replace(match: re.Match[str]) -> str:
+        """Return replacement text for a single environment variable match.
+
+        Args:
+            match: Regex match containing the captured environment variable.
+
+        Returns:
+            str: Replacement text for the matched token.
+
+        """
         key = match.group(1) or match.group(2)
         if key is None:
             return match.group(0)

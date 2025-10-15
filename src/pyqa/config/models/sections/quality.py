@@ -15,7 +15,7 @@ DEFAULT_PROTECTED_BRANCHES: Final[list[str]] = ["main", "master"]
 
 
 class QualityConfigSection(BaseModel):
-    """Provide shared quality enforcement settings."""
+    """Manage shared quality enforcement settings."""
 
     model_config = ConfigDict(validate_assignment=True)
 

@@ -3,7 +3,7 @@
 
 """Section merger utilities for configuration handling."""
 
-from .mergers import (
+from .constants import (
     CLEAN_PATTERNS_KEY,
     CLEAN_TREES_KEY,
     DEDUPE_PREFER_KEY,
@@ -25,14 +25,23 @@ from .mergers import (
     QUALITY_PROTECTED_BRANCHES_KEY,
     QUALITY_SCHEMA_TARGETS_KEY,
     QUALITY_SKIP_GLOBS_KEY,
+    UPDATE_ENABLED_MANAGERS_KEY,
+    UPDATE_SKIP_PATTERNS_KEY,
+)
+from .merge_utils import (
     FieldName,
     ModelT,
+    ModelUpdateValue,
     PathResolver,
+    SectionDiff,
     SectionName,
+    _coerce_optional_bool,
+    _coerce_optional_str_value,
+    _ensure_optional_path,
     _model_replace,
     _SectionMerger,
-    build_section_mergers,
 )
+from .mergers import build_section_mergers
 
 __all__ = [
     "CLEAN_PATTERNS_KEY",
@@ -56,11 +65,18 @@ __all__ = [
     "QUALITY_PROTECTED_BRANCHES_KEY",
     "QUALITY_SCHEMA_TARGETS_KEY",
     "QUALITY_SKIP_GLOBS_KEY",
-    "_SectionMerger",
-    "_model_replace",
+    "UPDATE_ENABLED_MANAGERS_KEY",
+    "UPDATE_SKIP_PATTERNS_KEY",
+    "ModelUpdateValue",
+    "PathResolver",
+    "SectionDiff",
     "SectionName",
     "FieldName",
     "ModelT",
-    "PathResolver",
+    "_SectionMerger",
+    "_coerce_optional_bool",
+    "_coerce_optional_str_value",
+    "_ensure_optional_path",
+    "_model_replace",
     "build_section_mergers",
 ]

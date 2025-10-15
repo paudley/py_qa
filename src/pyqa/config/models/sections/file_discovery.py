@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class FileDiscoveryConfig(BaseModel):
-    """Provide discovery inputs that control which files pyqa inspects."""
+    """Manage discovery inputs that control which files pyqa inspects."""
 
     model_config = ConfigDict(validate_assignment=True)
 

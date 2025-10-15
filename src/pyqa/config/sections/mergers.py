@@ -5,12 +5,11 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Generic, TypeAlias, TypeVar, cast
+from typing import ClassVar, cast
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel
 
 from ..models import (
     CleanConfig,
@@ -37,259 +36,49 @@ from ..utils import (
     _normalize_tool_filters,
     _unique_paths,
 )
-
-ModelScalarUpdate: TypeAlias = ConfigValue | Path | BaseModel
-ModelSequenceUpdate: TypeAlias = Sequence[ConfigValue | Path | BaseModel]
-ModelMappingUpdate: TypeAlias = Mapping[str, ConfigValue | Path | BaseModel]
-ModelUpdateValue: TypeAlias = ModelScalarUpdate | ModelSequenceUpdate | ModelMappingUpdate
-
-SectionName = str
-FieldName = str
-ModelT = TypeVar("ModelT", bound=BaseModel)
-
-FILE_DISCOVERY_ROOTS_KEY: SectionName = "roots"
-FILE_DISCOVERY_EXCLUDES_KEY: SectionName = "excludes"
-FILE_DISCOVERY_EXPLICIT_KEY: SectionName = "explicit_files"
-FILE_DISCOVERY_LIMIT_KEY: SectionName = "limit_to"
-OUTPUT_TOOL_FILTERS_KEY: SectionName = "tool_filters"
-OUTPUT_MIN_SEVERITY_KEY: SectionName = "pr_summary_min_severity"
-OUTPUT_REPORT_OUT_KEY: SectionName = "report_out"
-OUTPUT_SARIF_OUT_KEY: SectionName = "sarif_out"
-OUTPUT_PR_SUMMARY_OUT_KEY: SectionName = "pr_summary_out"
-EXECUTION_ONLY_KEY: SectionName = "only"
-EXECUTION_LANGUAGES_KEY: SectionName = "languages"
-EXECUTION_ENABLE_KEY: SectionName = "enable"
-LICENSE_ALLOW_ALTERNATE_KEY: SectionName = "allow_alternate_spdx"
-LICENSE_EXCEPTIONS_KEY: SectionName = "exceptions"
-QUALITY_CHECKS_KEY: SectionName = "checks"
-QUALITY_SKIP_GLOBS_KEY: SectionName = "skip_globs"
-QUALITY_SCHEMA_TARGETS_KEY: SectionName = "schema_targets"
-QUALITY_PROTECTED_BRANCHES_KEY: SectionName = "protected_branches"
-CLEAN_PATTERNS_KEY: SectionName = "patterns"
-CLEAN_TREES_KEY: SectionName = "trees"
-UPDATE_SKIP_PATTERNS_KEY: SectionName = "skip_patterns"
-UPDATE_ENABLED_MANAGERS_KEY: SectionName = "enabled_managers"
-DEDUPE_PREFER_KEY: SectionName = "dedupe_prefer"
-GENERIC_VALUE_TYPES_ENABLED_KEY: SectionName = "enabled"
-GENERIC_VALUE_TYPES_RULES_KEY: SectionName = "rules"
-GENERIC_VALUE_TYPES_IMPLICATIONS_KEY: SectionName = "implications"
-
-
-ConfigMapping = Mapping[str, ConfigValue]
-SectionDiff = dict[str, ConfigValue]
-
-
-class PathResolver(BaseModel):
-    """Convert path-like values relative to the project root."""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    project_root: Path
-
-    @model_validator(mode="after")
-    def _normalise_root(self) -> PathResolver:
-        """Return a resolver with an absolute project root.
-
-        Returns:
-            PathResolver: Instance with :attr:`project_root` resolved.
-        """
-
-        object.__setattr__(self, "project_root", self.project_root.resolve())
-        return self
-
-    def resolve(self, value: Path | str) -> Path:
-        """Return an absolute path relative to the project root.
-
-        Args:
-            value: Path-like object to resolve.
-
-        Returns:
-            Path: Absolute path derived from ``value``.
-        """
-
-        candidate = value if isinstance(value, Path) else Path(value)
-        candidate = candidate.expanduser()
-        if candidate.is_absolute():
-            return candidate.resolve()
-        return (self.project_root / candidate).resolve()
-
-    def resolve_optional(self, value: Path | str | None) -> Path | None:
-        """Resolve ``value`` while preserving ``None`` inputs.
-
-        Args:
-            value: Path-like object that may be ``None``.
-
-        Returns:
-            Optional absolute path corresponding to ``value``.
-        """
-
-        if value is None:
-            return None
-        return self.resolve(value)
-
-    def resolve_iterable(self, values: Iterable[Path | str]) -> list[Path]:
-        """Resolve a collection of path-like values.
-
-        Args:
-            values: Iterable of path-like objects to resolve.
-
-        Returns:
-            List of absolute paths corresponding to ``values``.
-        """
-
-        return [self.resolve(value) for value in values]
-
-
-def _ensure_optional_path(value: ConfigValue | Path | None, context: str) -> Path | str | None:
-    """Return path-like configuration values with validation."""
-
-    if value is None:
-        return None
-    if isinstance(value, (str, Path)):
-        return value
-    raise ConfigError(f"{context} must be a path-like string")
-
-
-def _model_replace(
-    instance: ModelT,
-    updates: Mapping[str, ModelUpdateValue] | None = None,
-) -> ModelT:
-    """Return a defensive deep copy of ``instance`` with ``updates`` applied.
-
-    Args:
-        instance: Pydantic model instance to clone.
-        updates: Mapping of field overrides applied to the clone.
-
-    Returns:
-        ModelT: Cloned instance containing requested overrides.
-    """
-
-    if not isinstance(instance, BaseModel):  # defensive guard for legacy usage
-        raise TypeError("_model_replace expects a Pydantic BaseModel instance")
-    return instance.model_copy(update=dict(updates or {}), deep=True)
-
-
-def _coerce_optional_str_value(
-    value: ConfigValue,
-    current: str | None,
-    context: str,
-) -> str | None:
-    """Return cleaned string values allowing ``None`` defaults.
-
-    Args:
-        value: Raw configuration value.
-        current: Existing value preserved when ``value`` is ``None``.
-        context: Dot-delimited configuration key for error reporting.
-
-    Returns:
-        Normalised string value or ``None``.
-
-    Raises:
-        ConfigError: If ``value`` cannot be converted into a string.
-    """
-
-    if value is None:
-        return current
-    if isinstance(value, str):
-        stripped = value.strip()
-        return stripped or None
-    raise ConfigError(f"{context} must be a string")
-
-
-def _coerce_optional_bool(value: ConfigValue, current: bool, context: str) -> bool:
-    """Return cleaned bool values allowing ``None`` defaults.
-
-    Args:
-        value: Raw configuration value.
-        current: Existing value preserved when ``value`` is ``None``.
-        context: Dot-delimited configuration key for error reporting.
-
-    Returns:
-        Boolean value recognised by the configuration model.
-
-    Raises:
-        ConfigError: If ``value`` cannot be interpreted as a boolean.
-    """
-
-    if value is None:
-        return current
-    if isinstance(value, bool):
-        return value
-    raise ConfigError(f"{context} must be a boolean")
-
-
-class _SectionMerger(Generic[ModelT], ABC):
-    """Base utilities for section-specific merge implementations."""
-
-    section: SectionName
-
-    def describe_section(self) -> SectionName:
-        """Return the section identifier managed by this merger.
-
-        Returns:
-            SectionName: Name of the configuration section managed by the merger.
-        """
-
-        return self.section
-
-    @abstractmethod
-    def merge(self, current: ModelT, raw: ConfigValue) -> tuple[ModelT, SectionDiff]:
-        """Return updated section model merged with raw configuration data.
-
-        Args:
-            current: Existing configuration model instance.
-            raw: Raw section payload sourced from configuration files.
-
-        Returns:
-            Tuple containing the merged model and the diff of applied values.
-        """
-
-    @staticmethod
-    def _ensure_mapping(raw: ConfigValue, section: str) -> ConfigMapping:
-        """Return a mapping view of ``raw`` validated for ``section``.
-
-        Args:
-            raw: Raw configuration payload.
-            section: Name of the section being processed.
-
-        Returns:
-            Mapping suitable for structured processing.
-
-        Raises:
-            ConfigError: If ``raw`` is not a mapping.
-        """
-        if raw is None:
-            return {}
-        if not isinstance(raw, Mapping):
-            raise ConfigError(f"{section} section must be a table")
-        result: dict[str, ConfigValue] = {}
-        for key, value in raw.items():
-            if not isinstance(key, str):
-                raise ConfigError(f"{section} section keys must be strings")
-            result[key] = value
-        return result
-
-    @staticmethod
-    def _diff_model(current: BaseModel, updated: BaseModel) -> SectionDiff:
-        """Return a dictionary describing fields changed between models.
-
-        Args:
-            current: Baseline Pydantic model instance.
-            updated: Updated model instance.
-
-        Returns:
-            Mapping containing only the fields that changed.
-        """
-        current_data = current.model_dump(mode="python")
-        updated_data = updated.model_dump(mode="python")
-        result: SectionDiff = {}
-        for key, value in updated_data.items():
-            if current_data.get(key) != value:
-                result[key] = value
-        return result
+from .constants import (
+    CLEAN_PATTERNS_KEY,
+    CLEAN_TREES_KEY,
+    DEDUPE_PREFER_KEY,
+    EXECUTION_ENABLE_KEY,
+    EXECUTION_LANGUAGES_KEY,
+    EXECUTION_ONLY_KEY,
+    FILE_DISCOVERY_EXCLUDES_KEY,
+    FILE_DISCOVERY_EXPLICIT_KEY,
+    FILE_DISCOVERY_LIMIT_KEY,
+    FILE_DISCOVERY_ROOTS_KEY,
+    GENERIC_VALUE_TYPES_ENABLED_KEY,
+    GENERIC_VALUE_TYPES_IMPLICATIONS_KEY,
+    GENERIC_VALUE_TYPES_RULES_KEY,
+    LICENSE_ALLOW_ALTERNATE_KEY,
+    LICENSE_EXCEPTIONS_KEY,
+    OUTPUT_MIN_SEVERITY_KEY,
+    OUTPUT_PR_SUMMARY_OUT_KEY,
+    OUTPUT_REPORT_OUT_KEY,
+    OUTPUT_SARIF_OUT_KEY,
+    OUTPUT_TOOL_FILTERS_KEY,
+    QUALITY_CHECKS_KEY,
+    QUALITY_PROTECTED_BRANCHES_KEY,
+    QUALITY_SCHEMA_TARGETS_KEY,
+    QUALITY_SKIP_GLOBS_KEY,
+    UPDATE_ENABLED_MANAGERS_KEY,
+    UPDATE_SKIP_PATTERNS_KEY,
+)
+from .merge_utils import (
+    ModelUpdateValue,
+    PathResolver,
+    SectionDiff,
+    _coerce_optional_bool,
+    _coerce_optional_str_value,
+    _ensure_optional_path,
+    _model_replace,
+    _SectionMerger,
+)
 
 
 class _FileDiscoverySection(_SectionMerger[FileDiscoveryConfig]):
+    """Handle merges for file discovery configuration sections."""
+
     section = "file_discovery"
 
     def __init__(self, resolver: PathResolver) -> None:
@@ -316,55 +105,10 @@ class _FileDiscoverySection(_SectionMerger[FileDiscoveryConfig]):
         """
 
         data = self._ensure_mapping(raw, self.section)
-        roots = list(current.roots)
-        if FILE_DISCOVERY_ROOTS_KEY in data:
-            raw_roots = cast(
-                Iterable[Path | str],
-                _coerce_iterable(data[FILE_DISCOVERY_ROOTS_KEY], "file_discovery.roots"),
-            )
-            roots = _unique_paths(self._resolver.resolve_iterable(raw_roots))
-        elif not roots:
-            roots = [self._resolver.project_root]
-
-        excludes = _unique_paths(current.excludes)
-        if FILE_DISCOVERY_EXCLUDES_KEY in data:
-            raw_excludes = cast(
-                Iterable[Path | str],
-                _coerce_iterable(
-                    data[FILE_DISCOVERY_EXCLUDES_KEY],
-                    "file_discovery.excludes",
-                ),
-            )
-            for resolved in self._resolver.resolve_iterable(raw_excludes):
-                candidate = resolved.resolve()
-                if candidate not in excludes:
-                    excludes.append(candidate)
-
-        explicit_files = _existing_unique_paths(current.explicit_files)
-        if FILE_DISCOVERY_EXPLICIT_KEY in data:
-            raw_explicit = cast(
-                Iterable[Path | str],
-                _coerce_iterable(
-                    data[FILE_DISCOVERY_EXPLICIT_KEY],
-                    "file_discovery.explicit_files",
-                ),
-            )
-            for resolved in self._resolver.resolve_iterable(raw_explicit):
-                candidate = resolved.resolve()
-                if candidate.exists() and candidate not in explicit_files:
-                    explicit_files.append(candidate)
-
-        limit_to = _unique_paths(current.limit_to)
-        if FILE_DISCOVERY_LIMIT_KEY in data:
-            raw_limits = cast(
-                Iterable[Path | str],
-                _coerce_iterable(
-                    data[FILE_DISCOVERY_LIMIT_KEY],
-                    "file_discovery.limit_to",
-                ),
-            )
-            limit_to = _unique_paths(self._resolver.resolve_iterable(raw_limits))
-
+        roots = self._merge_roots(data, current)
+        excludes = self._merge_excludes(data, current)
+        explicit_files = self._merge_explicit_files(data, current)
+        limit_to = self._merge_limit_to(data, current)
         updates: dict[str, ModelUpdateValue] = {
             "roots": roots,
             "excludes": excludes,
@@ -381,9 +125,137 @@ class _FileDiscoverySection(_SectionMerger[FileDiscoveryConfig]):
         updated = _model_replace(current, updates=updates)
         return updated, self._diff_model(current, updated)
 
+    def _merge_roots(
+        self,
+        data: Mapping[str, ConfigValue],
+        current: FileDiscoveryConfig,
+    ) -> list[Path]:
+        """Merge root paths for the file discovery section.
+
+        Args:
+            data: Mapping of raw section values.
+            current: Existing file discovery configuration.
+
+        Returns:
+            List of resolved root paths with fallbacks applied.
+
+        """
+
+        if FILE_DISCOVERY_ROOTS_KEY not in data:
+            roots = list(current.roots)
+            return roots or [self._resolver.project_root]
+        entries = cast(
+            Iterable[Path | str],
+            _coerce_iterable(data[FILE_DISCOVERY_ROOTS_KEY], "file_discovery.roots"),
+        )
+        return _unique_paths(self._resolver.resolve_iterable(entries))
+
+    def _merge_excludes(
+        self,
+        data: Mapping[str, ConfigValue],
+        current: FileDiscoveryConfig,
+    ) -> list[Path]:
+        """Merge path exclusions for the file discovery section.
+
+        Args:
+            data: Mapping of raw section values.
+            current: Existing file discovery configuration.
+
+        Returns:
+            List of resolved excluded paths without duplicates.
+
+        """
+
+        excludes = _unique_paths(current.excludes)
+        if FILE_DISCOVERY_EXCLUDES_KEY not in data:
+            return excludes
+        entries = cast(
+            Iterable[Path | str],
+            _coerce_iterable(data[FILE_DISCOVERY_EXCLUDES_KEY], "file_discovery.excludes"),
+        )
+        for resolved in self._resolver.resolve_iterable(entries):
+            if resolved not in excludes:
+                excludes.append(resolved)
+        return excludes
+
+    def _merge_explicit_files(
+        self,
+        data: Mapping[str, ConfigValue],
+        current: FileDiscoveryConfig,
+    ) -> list[Path]:
+        """Merge explicit file targets for the file discovery section.
+
+        Args:
+            data: Mapping of raw section values.
+            current: Existing file discovery configuration.
+
+        Returns:
+            List of resolved explicit file paths that exist on disk.
+
+        """
+
+        explicit_files = _existing_unique_paths(current.explicit_files)
+        if FILE_DISCOVERY_EXPLICIT_KEY not in data:
+            return explicit_files
+        entries = cast(
+            Iterable[Path | str],
+            _coerce_iterable(
+                data[FILE_DISCOVERY_EXPLICIT_KEY],
+                "file_discovery.explicit_files",
+            ),
+        )
+        for resolved in self._resolver.resolve_iterable(entries):
+            if resolved.exists() and resolved not in explicit_files:
+                explicit_files.append(resolved)
+        return explicit_files
+
+    def _merge_limit_to(
+        self,
+        data: Mapping[str, ConfigValue],
+        current: FileDiscoveryConfig,
+    ) -> list[Path]:
+        """Merge ``limit_to`` paths for the file discovery section.
+
+        Args:
+            data: Mapping of raw section values.
+            current: Existing file discovery configuration.
+
+        Returns:
+            List of resolved paths limiting discovery scope.
+
+        """
+
+        if FILE_DISCOVERY_LIMIT_KEY not in data:
+            return _unique_paths(current.limit_to)
+        entries = cast(
+            Iterable[Path | str],
+            _coerce_iterable(data[FILE_DISCOVERY_LIMIT_KEY], "file_discovery.limit_to"),
+        )
+        return _unique_paths(self._resolver.resolve_iterable(entries))
+
 
 class _OutputSection(_SectionMerger[OutputConfig]):
+    """Merge output configuration sections."""
+
     section = "output"
+    _BOOLEAN_FIELDS: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("verbose", "output.verbose"),
+        ("emoji", "output.emoji"),
+        ("color", "output.color"),
+        ("show_passing", "output.show_passing"),
+        ("show_stats", "output.show_stats"),
+        ("group_by_code", "output.group_by_code"),
+        ("report_include_raw", "output.report_include_raw"),
+        ("gha_annotations", "output.gha_annotations"),
+        ("annotations_use_json", "output.annotations_use_json"),
+        ("quiet", "output.quiet"),
+        ("advice", "output.advice"),
+    )
+    _PATH_FIELDS: ClassVar[tuple[tuple[str, str, str], ...]] = (
+        (OUTPUT_PR_SUMMARY_OUT_KEY, "pr_summary_out", "output.pr_summary_out"),
+        (OUTPUT_REPORT_OUT_KEY, "report_out", "output.report_out"),
+        (OUTPUT_SARIF_OUT_KEY, "sarif_out", "output.sarif_out"),
+    )
 
     def __init__(self, resolver: PathResolver) -> None:
         """Initialise the merger with a shared path resolver.
@@ -406,133 +278,166 @@ class _OutputSection(_SectionMerger[OutputConfig]):
 
         data = self._ensure_mapping(raw, self.section)
 
-        tool_filters = current.tool_filters
-        if OUTPUT_TOOL_FILTERS_KEY in data:
-            tool_filters = _normalize_tool_filters(
-                data[OUTPUT_TOOL_FILTERS_KEY],
-                current.tool_filters,
-            )
-
-        pr_summary_min_raw = data.get(OUTPUT_MIN_SEVERITY_KEY, current.pr_summary_min_severity)
-        pr_summary_min_severity = _normalize_min_severity(str(pr_summary_min_raw))
-
-        pr_summary_raw_value = data.get(OUTPUT_PR_SUMMARY_OUT_KEY)
-        pr_summary_out_raw = _ensure_optional_path(
-            pr_summary_raw_value if pr_summary_raw_value is not None else current.pr_summary_out,
-            "output.pr_summary_out",
+        updates: dict[str, ModelUpdateValue] = {}
+        updates.update(self._path_updates(data, current))
+        updates.update(self._boolean_updates(data, current))
+        updates["tool_filters"] = (
+            _normalize_tool_filters(data[OUTPUT_TOOL_FILTERS_KEY], current.tool_filters)
+            if OUTPUT_TOOL_FILTERS_KEY in data
+            else current.tool_filters
         )
-        pr_summary_out = self._resolver.resolve_optional(pr_summary_out_raw)
-
-        report_raw_value = data.get(OUTPUT_REPORT_OUT_KEY)
-        report_out_raw = _ensure_optional_path(
-            report_raw_value if report_raw_value is not None else current.report_out,
-            "output.report_out",
+        updates["pr_summary_min_severity"] = _normalize_min_severity(
+            str(data.get(OUTPUT_MIN_SEVERITY_KEY, current.pr_summary_min_severity)),
         )
-        report_out = self._resolver.resolve_optional(report_out_raw)
-
-        sarif_raw_value = data.get(OUTPUT_SARIF_OUT_KEY)
-        sarif_out_raw = _ensure_optional_path(
-            sarif_raw_value if sarif_raw_value is not None else current.sarif_out,
-            "output.sarif_out",
+        updates["output"] = _normalize_output_mode(str(data.get("output", current.output)))
+        updates["pretty_format"] = self._coerce_string(
+            data.get("pretty_format", current.pretty_format),
+            "output.pretty_format",
         )
-        sarif_out = self._resolver.resolve_optional(sarif_out_raw)
-
-        output_mode_raw = data.get("output", current.output)
-        output_mode = _normalize_output_mode(str(output_mode_raw))
-
-        verbose = _coerce_optional_bool(data.get("verbose"), current.verbose, "output.verbose")
-        emoji = _coerce_optional_bool(data.get("emoji"), current.emoji, "output.emoji")
-        color = _coerce_optional_bool(data.get("color"), current.color, "output.color")
-        show_passing = _coerce_optional_bool(
-            data.get("show_passing"),
-            current.show_passing,
-            "output.show_passing",
+        updates["report"] = self._coerce_optional_string(
+            data.get("report", current.report),
+            "output.report",
         )
-        show_stats = _coerce_optional_bool(
-            data.get("show_stats"),
-            current.show_stats,
-            "output.show_stats",
-        )
-
-        pretty_format_raw = data.get("pretty_format", current.pretty_format)
-        if not isinstance(pretty_format_raw, str):
-            raise ConfigError("output.pretty_format must be a string")
-        pretty_format = pretty_format_raw
-
-        group_by_code = _coerce_optional_bool(
-            data.get("group_by_code"),
-            current.group_by_code,
-            "output.group_by_code",
-        )
-
-        report_raw = data.get("report", current.report)
-        if report_raw is not None and not isinstance(report_raw, str):
-            raise ConfigError("output.report must be null or a string")
-        report = report_raw
-
-        report_include_raw = _coerce_optional_bool(
-            data.get("report_include_raw"),
-            current.report_include_raw,
-            "output.report_include_raw",
-        )
-
-        pr_summary_limit = _coerce_optional_int(
+        updates["pr_summary_limit"] = _coerce_optional_int(
             data.get("pr_summary_limit"),
             current.pr_summary_limit,
             "output.pr_summary_limit",
         )
-
-        pr_summary_template_raw = data.get("pr_summary_template", current.pr_summary_template)
-        if not isinstance(pr_summary_template_raw, str):
-            raise ConfigError("output.pr_summary_template must be a string")
-        pr_summary_template = pr_summary_template_raw
-
-        gha_annotations = _coerce_optional_bool(
-            data.get("gha_annotations"),
-            current.gha_annotations,
-            "output.gha_annotations",
+        updates["pr_summary_template"] = self._coerce_string(
+            data.get("pr_summary_template", current.pr_summary_template),
+            "output.pr_summary_template",
         )
-        annotations_use_json = _coerce_optional_bool(
-            data.get("annotations_use_json"),
-            current.annotations_use_json,
-            "output.annotations_use_json",
-        )
-        quiet = _coerce_optional_bool(data.get("quiet"), current.quiet, "output.quiet")
-        advice = _coerce_optional_bool(data.get("advice"), current.advice, "output.advice")
-
-        updates: dict[str, ModelUpdateValue] = {
-            "verbose": verbose,
-            "emoji": emoji,
-            "color": color,
-            "show_passing": show_passing,
-            "show_stats": show_stats,
-            "output": output_mode,
-            "pretty_format": pretty_format,
-            "group_by_code": group_by_code,
-            "report": report,
-            "report_out": report_out,
-            "report_include_raw": report_include_raw,
-            "sarif_out": sarif_out,
-            "pr_summary_out": pr_summary_out,
-            "pr_summary_limit": pr_summary_limit,
-            "pr_summary_min_severity": pr_summary_min_severity,
-            "pr_summary_template": pr_summary_template,
-            "gha_annotations": gha_annotations,
-            "annotations_use_json": annotations_use_json,
-            "quiet": quiet,
-            "tool_filters": tool_filters,
-            "advice": advice,
-        }
         updated = _model_replace(current, updates=updates)
-
-        if updated.show_passing and updated.quiet:
-            updated = _model_replace(updated, updates={"show_passing": False})
-
         return updated, self._diff_model(current, updated)
+
+    def _path_updates(
+        self,
+        data: Mapping[str, ConfigValue],
+        current: OutputConfig,
+    ) -> dict[str, Path | None]:
+        """Collect optional path updates for the output section.
+
+        Args:
+            data: Mapping of raw section values.
+            current: Existing output configuration model.
+
+        Returns:
+            Mapping of output path attributes to their resolved values.
+
+        """
+
+        return {
+            attr: self._resolve_optional_path_field(data, key, getattr(current, attr), context)
+            for key, attr, context in self._PATH_FIELDS
+        }
+
+    def _boolean_updates(
+        self,
+        data: Mapping[str, ConfigValue],
+        current: OutputConfig,
+    ) -> dict[str, bool]:
+        """Collect optional boolean updates for the output section.
+
+        Args:
+            data: Mapping of raw section values.
+            current: Existing output configuration model.
+
+        Returns:
+            Mapping of boolean output options to their merged values.
+
+        """
+
+        return {
+            attr: _coerce_optional_bool(data.get(attr), getattr(current, attr), context)
+            for attr, context in self._BOOLEAN_FIELDS
+        }
+
+    def _resolve_optional_path_field(
+        self,
+        data: Mapping[str, ConfigValue],
+        key: str,
+        current_value: Path | None,
+        context: str,
+    ) -> Path | None:
+        """Resolve optional path configuration values for a given ``key``.
+
+        Args:
+            data: Mapping of raw configuration values for the section.
+            key: Key within ``data`` to resolve.
+            current_value: Existing path value used when ``key`` is absent.
+            context: Dot-delimited configuration key for error reporting.
+
+        Returns:
+            Optional[Path]: Resolved path value when available.
+
+        """
+
+        raw_value = data.get(key)
+        candidate = _ensure_optional_path(
+            raw_value if raw_value is not None else current_value,
+            context,
+        )
+        return self._resolver.resolve_optional(candidate)
+
+    @staticmethod
+    def _coerce_string(value: ConfigValue, context: str) -> str:
+        """Validate that ``value`` is a string.
+
+        Args:
+            value: Raw configuration value expected to be a string.
+            context: Dot-delimited configuration key for error reporting.
+
+        Returns:
+            str: Validated string value.
+
+        Raises:
+            ConfigError: If ``value`` is not a string.
+
+        """
+
+        if not isinstance(value, str):
+            raise ConfigError(f"{context} must be a string")
+        return value
+
+    @staticmethod
+    def _coerce_optional_string(value: ConfigValue | None, context: str) -> str | None:
+        """Validate that ``value`` is ``None`` or a string.
+
+        Args:
+            value: Raw configuration value expected to be optional string.
+            context: Dot-delimited configuration key for error reporting.
+
+        Returns:
+            Optional[str]: Original value when valid or ``None``.
+
+        Raises:
+            ConfigError: If ``value`` is neither ``None`` nor string.
+
+        """
+
+        if value is None or isinstance(value, str):
+            return value
+        raise ConfigError(f"{context} must be null or a string")
 
 
 class _ExecutionSection(_SectionMerger[ExecutionConfig]):
+    """Merge execution configuration sections."""
+
     section = "execution"
+    _SEQUENCE_FIELDS: ClassVar[tuple[tuple[str, str, str], ...]] = (
+        (EXECUTION_ONLY_KEY, "only", "execution.only"),
+        (EXECUTION_LANGUAGES_KEY, "languages", "execution.languages"),
+        (EXECUTION_ENABLE_KEY, "enable", "execution.enable"),
+    )
+    _BOOLEAN_FIELDS: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("strict", "execution.strict"),
+        ("fix_only", "execution.fix_only"),
+        ("check_only", "execution.check_only"),
+        ("force_all", "execution.force_all"),
+        ("respect_config", "execution.respect_config"),
+        ("cache_enabled", "execution.cache_enabled"),
+        ("use_local_linters", "execution.use_local_linters"),
+    )
 
     def __init__(self, resolver: PathResolver) -> None:
         """Initialise the merger with a shared path resolver.
@@ -555,66 +460,75 @@ class _ExecutionSection(_SectionMerger[ExecutionConfig]):
 
         data = self._ensure_mapping(raw, self.section)
 
-        cache_dir = current.cache_dir
-        cache_dir_value = data.get("cache_dir")
-        if cache_dir_value is not None:
-            if not isinstance(cache_dir_value, (Path, str)):
-                raise ConfigError("execution.cache_dir must be a path or string")
-            cache_dir = self._resolver.resolve(cache_dir_value)
+        updates: dict[str, ModelUpdateValue] = {
+            attr: self._coerce_sequence_field(data, key, getattr(current, attr), context)
+            for key, attr, context in self._SEQUENCE_FIELDS
+        }
 
-        jobs = _coerce_optional_int(data.get("jobs"), current.jobs, "execution.jobs")
+        updates["cache_dir"] = self._resolve_cache_dir(data.get("cache_dir"), current.cache_dir)
+
         bail = _coerce_optional_bool(data.get("bail"), current.bail, "execution.bail")
+        jobs = _coerce_optional_int(data.get("jobs"), current.jobs, "execution.jobs")
         if bail:
             jobs = 1
+        updates["bail"] = bail
+        updates["jobs"] = jobs
 
-        only = (
-            _coerce_string_sequence(data[EXECUTION_ONLY_KEY], "execution.only")
-            if EXECUTION_ONLY_KEY in data
-            else list(current.only)
-        )
-        languages = (
-            _coerce_string_sequence(data[EXECUTION_LANGUAGES_KEY], "execution.languages")
-            if EXECUTION_LANGUAGES_KEY in data
-            else list(current.languages)
-        )
-        enable = (
-            _coerce_string_sequence(data[EXECUTION_ENABLE_KEY], "execution.enable")
-            if EXECUTION_ENABLE_KEY in data
-            else list(current.enable)
-        )
+        for attr, context in self._BOOLEAN_FIELDS:
+            updates[attr] = _coerce_optional_bool(data.get(attr), getattr(current, attr), context)
 
-        updates: dict[str, ModelUpdateValue] = {
-            "only": only,
-            "languages": languages,
-            "enable": enable,
-            "strict": _coerce_optional_bool(data.get("strict"), current.strict, "execution.strict"),
-            "jobs": jobs,
-            "fix_only": _coerce_optional_bool(data.get("fix_only"), current.fix_only, "execution.fix_only"),
-            "check_only": _coerce_optional_bool(data.get("check_only"), current.check_only, "execution.check_only"),
-            "force_all": _coerce_optional_bool(data.get("force_all"), current.force_all, "execution.force_all"),
-            "respect_config": _coerce_optional_bool(
-                data.get("respect_config"),
-                current.respect_config,
-                "execution.respect_config",
-            ),
-            "cache_enabled": _coerce_optional_bool(
-                data.get("cache_enabled"),
-                current.cache_enabled,
-                "execution.cache_enabled",
-            ),
-            "cache_dir": cache_dir,
-            "bail": bail,
-            "use_local_linters": _coerce_optional_bool(
-                data.get("use_local_linters"),
-                current.use_local_linters,
-                "execution.use_local_linters",
-            ),
-        }
         updated = _model_replace(current, updates=updates)
         return updated, self._diff_model(current, updated)
 
+    def _coerce_sequence_field(
+        self,
+        data: Mapping[str, ConfigValue],
+        key: str,
+        current_values: Sequence[str],
+        context: str,
+    ) -> list[str]:
+        """Coerce optional string sequences for execution fields.
+
+        Args:
+            data: Mapping containing raw configuration overrides.
+            key: Section key that may provide sequence overrides.
+            current_values: Existing sequence preserved when ``key`` is absent.
+            context: Dot-delimited configuration key for error reporting.
+
+        Returns:
+            list[str]: Normalised list of string values.
+
+        """
+
+        if key not in data:
+            return list(current_values)
+        return _coerce_string_sequence(data[key], context)
+
+    def _resolve_cache_dir(self, raw: ConfigValue | Path | None, current: Path) -> Path:
+        """Resolve the execution cache directory value.
+
+        Args:
+            raw: Raw configuration value used to override the cache directory.
+            current: Existing cache directory path.
+
+        Returns:
+            Path: Resolved cache directory path.
+
+        Raises:
+            ConfigError: If ``raw`` is neither a path nor a string.
+
+        """
+
+        if raw is None:
+            return current
+        if not isinstance(raw, (Path, str)):
+            raise ConfigError("execution.cache_dir must be a path or string")
+        return self._resolver.resolve(raw)
+
 
 class _LicenseSection(_SectionMerger[LicenseConfig]):
+    """Merge license configuration sections."""
+
     section = "license"
 
     def merge(self, current: LicenseConfig, raw: ConfigValue) -> tuple[LicenseConfig, SectionDiff]:
@@ -679,6 +593,8 @@ class _LicenseSection(_SectionMerger[LicenseConfig]):
 
 
 class _QualitySection(_SectionMerger[QualityConfigSection]):
+    """Merge quality configuration sections."""
+
     section = "quality"
 
     def __init__(self, resolver: PathResolver) -> None:
@@ -766,10 +682,9 @@ class _QualitySection(_SectionMerger[QualityConfigSection]):
         """
         if raw is None:
             return list(current)
-        if not isinstance(raw, Iterable) or isinstance(raw, (str, bytes)):
-            raise ConfigError("quality.schema_targets must be an array of paths")
+        entries = _coerce_iterable(raw, "quality.schema_targets")
         resolved: list[Path] = []
-        for entry in raw:
+        for entry in cast(Iterable[Path | str], entries):
             if not isinstance(entry, (str, Path)):
                 raise ConfigError("quality.schema_targets entries must be paths")
             resolved.append(self._resolver.resolve(entry))
@@ -777,7 +692,7 @@ class _QualitySection(_SectionMerger[QualityConfigSection]):
 
 
 class _GenericValueTypesSection(_SectionMerger[GenericValueTypesConfig]):
-    """Merge overrides for the ``generic_value_types`` configuration section."""
+    """Merge generic value-type configuration sections."""
 
     section = "generic_value_types"
 
@@ -806,20 +721,18 @@ class _GenericValueTypesSection(_SectionMerger[GenericValueTypesConfig]):
             raw_rules = data[GENERIC_VALUE_TYPES_RULES_KEY]
             if raw_rules is None:
                 rules = ()
-            elif isinstance(raw_rules, Sequence):
-                rules = tuple(GenericValueTypesRule.model_validate(rule) for rule in raw_rules)
             else:
-                raise ConfigError("generic_value_types.rules must be an array")
+                entries = _coerce_iterable(raw_rules, "generic_value_types.rules")
+                rules = tuple(GenericValueTypesRule.model_validate(rule) for rule in entries)
 
         implications = current.implications
         if GENERIC_VALUE_TYPES_IMPLICATIONS_KEY in data:
             raw_implications = data[GENERIC_VALUE_TYPES_IMPLICATIONS_KEY]
             if raw_implications is None:
                 implications = ()
-            elif isinstance(raw_implications, Sequence):
-                implications = tuple(GenericValueTypesImplication.model_validate(entry) for entry in raw_implications)
             else:
-                raise ConfigError("generic_value_types.implications must be an array")
+                entries = _coerce_iterable(raw_implications, "generic_value_types.implications")
+                implications = tuple(GenericValueTypesImplication.model_validate(entry) for entry in entries)
 
         updates: dict[str, ModelUpdateValue] = {
             "enabled": enabled_raw,
@@ -831,6 +744,8 @@ class _GenericValueTypesSection(_SectionMerger[GenericValueTypesConfig]):
 
 
 class _CleanSection(_SectionMerger[CleanConfig]):
+    """Merge clean configuration sections."""
+
     section = "clean"
 
     def merge(self, current: CleanConfig, raw: ConfigValue) -> tuple[CleanConfig, SectionDiff]:
@@ -859,6 +774,8 @@ class _CleanSection(_SectionMerger[CleanConfig]):
 
 
 class _UpdateSection(_SectionMerger[UpdateConfig]):
+    """Merge update configuration sections."""
+
     section = "update"
 
     def merge(self, current: UpdateConfig, raw: ConfigValue) -> tuple[UpdateConfig, SectionDiff]:
@@ -897,6 +814,8 @@ class _UpdateSection(_SectionMerger[UpdateConfig]):
 
 
 class _DedupeSection(_SectionMerger[DedupeConfig]):
+    """Merge dedupe configuration sections."""
+
     section = "dedupe"
 
     def merge(self, current: DedupeConfig, raw: ConfigValue) -> tuple[DedupeConfig, SectionDiff]:
@@ -939,7 +858,7 @@ class _DedupeSection(_SectionMerger[DedupeConfig]):
 
 
 def build_section_mergers(resolver: PathResolver) -> tuple[tuple[str, _SectionMerger[BaseModel]], ...]:
-    """Return configured section mergers keyed by configuration attribute.
+    """Construct section mergers keyed by configuration attribute.
 
     Args:
         resolver: Resolver anchored to the project root.
@@ -963,42 +882,3 @@ def build_section_mergers(resolver: PathResolver) -> tuple[tuple[str, _SectionMe
         ),
     )
     return mergers
-
-
-__all__ = [
-    "CLEAN_PATTERNS_KEY",
-    "CLEAN_TREES_KEY",
-    "DEDUPE_PREFER_KEY",
-    "EXECUTION_ENABLE_KEY",
-    "EXECUTION_LANGUAGES_KEY",
-    "EXECUTION_ONLY_KEY",
-    "FieldName",
-    "FILE_DISCOVERY_EXCLUDES_KEY",
-    "FILE_DISCOVERY_EXPLICIT_KEY",
-    "FILE_DISCOVERY_LIMIT_KEY",
-    "FILE_DISCOVERY_ROOTS_KEY",
-    "LICENSE_ALLOW_ALTERNATE_KEY",
-    "LICENSE_EXCEPTIONS_KEY",
-    "ModelT",
-    "OUTPUT_MIN_SEVERITY_KEY",
-    "OUTPUT_PR_SUMMARY_OUT_KEY",
-    "OUTPUT_REPORT_OUT_KEY",
-    "OUTPUT_SARIF_OUT_KEY",
-    "OUTPUT_TOOL_FILTERS_KEY",
-    "PathResolver",
-    "QUALITY_CHECKS_KEY",
-    "QUALITY_PROTECTED_BRANCHES_KEY",
-    "QUALITY_SCHEMA_TARGETS_KEY",
-    "QUALITY_SKIP_GLOBS_KEY",
-    "SectionName",
-    "GENERIC_VALUE_TYPES_ENABLED_KEY",
-    "GENERIC_VALUE_TYPES_RULES_KEY",
-    "GENERIC_VALUE_TYPES_IMPLICATIONS_KEY",
-    "UPDATE_ENABLED_MANAGERS_KEY",
-    "UPDATE_SKIP_PATTERNS_KEY",
-    "_SectionMerger",
-    "_coerce_optional_bool",
-    "_coerce_optional_str_value",
-    "_model_replace",
-    "build_section_mergers",
-]

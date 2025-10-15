@@ -10,7 +10,7 @@ from ...model_defs import BanditConfidence, BanditLevel, SensitivityLevel
 
 
 class SeverityConfig(BaseModel):
-    """Provide severity thresholds applied across multiple tools."""
+    """Manage severity thresholds applied across multiple tools."""
 
     model_config = ConfigDict(validate_assignment=True)
 

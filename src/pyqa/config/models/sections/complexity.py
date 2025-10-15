@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class ComplexityConfig(BaseModel):
-    """Provide complexity thresholds applied to compatible tools."""
+    """Manage complexity thresholds applied to compatible tools."""
 
     model_config = ConfigDict(validate_assignment=True)
 

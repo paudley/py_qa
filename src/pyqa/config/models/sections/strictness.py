@@ -10,7 +10,7 @@ from ...model_defs import StrictnessLevel
 
 
 class StrictnessConfig(BaseModel):
-    """Provide type-checking strictness controls shared by tools."""
+    """Manage type-checking strictness controls shared by tools."""
 
     model_config = ConfigDict(validate_assignment=True)
 

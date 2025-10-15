@@ -28,7 +28,7 @@ DEFAULT_CLEAN_TREES: Final[list[str]] = ["examples", "packages", "build"]
 
 
 class CleanConfig(BaseModel):
-    """Provide configuration describing clean-up operations."""
+    """Manage cleanup operations applied to the repository."""
 
     model_config = ConfigDict(validate_assignment=True)
 
