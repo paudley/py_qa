@@ -11,7 +11,6 @@ import tarfile
 import tempfile
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 from typing import Final, Protocol, cast
 
@@ -91,7 +90,10 @@ class _RequestsGet(Protocol):
         ...
 
 
-@lru_cache(maxsize=1)
+from pyqa.cache.in_memory import memoize
+
+
+@memoize(maxsize=1)
 def _load_requests_get() -> _RequestsGet:
     """Return the cached ``requests.get`` callable.
 

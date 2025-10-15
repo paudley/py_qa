@@ -4,11 +4,11 @@
 from __future__ import annotations
 
 import sys
-from functools import lru_cache
 from typing import Final, Literal
 
 from rich.console import Console
 
+from pyqa.cache.in_memory import memoize
 from pyqa.interfaces.core import ConsoleManager
 
 
@@ -57,7 +57,7 @@ class RichConsoleManager(ConsoleManager):
         return self.get(color=color, emoji=emoji)
 
 
-@lru_cache(maxsize=1)
+@memoize(maxsize=1)
 def get_console_manager() -> RichConsoleManager:
     """Return a cached :class:`RichConsoleManager` instance."""
 

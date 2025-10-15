@@ -14,9 +14,10 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
+
+from pyqa.cache.in_memory import memoize
 
 from ...analysis.providers import NullAnnotationProvider
 from ...analysis.services import resolve_function_scale_estimator
@@ -713,7 +714,7 @@ def _is_test_path(path: str | None) -> bool:
     return any(part.startswith("test") or part in TEST_TOKENS for part in parts)
 
 
-@lru_cache(maxsize=1)
+@memoize(maxsize=1)
 def _duplicate_hint_code_map() -> dict[str, set[str]]:
     """Return catalog-backed duplicate hint codes with fallback defaults.
 

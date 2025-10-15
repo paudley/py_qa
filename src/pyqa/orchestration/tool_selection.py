@@ -6,11 +6,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from functools import lru_cache
 from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
 from typing import Final
 
+from pyqa.cache.in_memory import memoize
 from pyqa.platform.languages import detect_languages
 
 from ..config import Config, SensitivityLevel
@@ -437,7 +437,7 @@ class ToolSelector:
         return ordered
 
 
-@lru_cache(maxsize=1)
+@memoize(maxsize=1)
 def _internal_name_sets() -> tuple[frozenset[str], frozenset[str]]:
     try:
         from ..linting.registry import iter_internal_linters

@@ -5,14 +5,15 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from functools import lru_cache
+
+from pyqa.cache.in_memory import memoize
 
 from ..catalog.metadata import catalog_test_suppressions
 
 TestSuppressionsMap = dict[str, dict[str, tuple[str, ...]]]
 
 
-@lru_cache(maxsize=1)
+@memoize(maxsize=1)
 def _catalog_test_suppressions() -> TestSuppressionsMap:
     catalog_map = catalog_test_suppressions()
     mapping: TestSuppressionsMap = {}

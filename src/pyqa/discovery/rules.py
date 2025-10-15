@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from functools import lru_cache
 from pathlib import Path
+
+from pyqa.cache.in_memory import memoize
 
 _CURRENT_DIRECTORY_MARKER = "."
 _PATH_SEPARATOR = "/"
@@ -51,7 +52,7 @@ def path_matches_requirements(candidate: Path, root: Path, requirements: Sequenc
     return _path_matches_requirements(candidate, root, tuple(requirements))
 
 
-@lru_cache(maxsize=512)
+@memoize(maxsize=512)
 def _normalise_path_requirement(raw: str) -> tuple[str, ...]:
     cleaned = raw.replace("\\", "/").strip()
     if not cleaned:
@@ -75,7 +76,7 @@ def _path_matches_requirements(
     return all(_has_path_sequence(parts, requirement) for requirement in requirements)
 
 
-@lru_cache(maxsize=1024)
+@memoize(maxsize=1024)
 def _candidate_parts(candidate: Path, root: Path) -> tuple[str, ...]:
     relative_path = _resolve_relative_path(candidate, root)
     normalised = _normalise_parts(relative_path)

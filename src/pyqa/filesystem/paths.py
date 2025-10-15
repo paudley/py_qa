@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import os
-from functools import lru_cache
 from os import PathLike
 from pathlib import Path
 from typing import Final
@@ -15,7 +14,10 @@ _Pathish = str | PathLike[str] | Path
 _DEFAULT_CACHE_SIZE: Final[int] = 1024
 
 
-@lru_cache(maxsize=_DEFAULT_CACHE_SIZE)
+from pyqa.cache.in_memory import memoize
+
+
+@memoize(maxsize=_DEFAULT_CACHE_SIZE)
 def _best_effort_resolve(path: Path) -> Path:
     """Return ``path`` resolved where possible without raising.
 

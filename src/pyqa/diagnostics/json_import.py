@@ -8,8 +8,9 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
-from functools import lru_cache
 from typing import Final, TypeAlias
+
+from pyqa.cache.in_memory import memoize
 
 from ..core.models import RawDiagnostic
 from ..tools.base import ToolContext
@@ -427,7 +428,7 @@ def _extract_path(entry: FieldMapping, path: tuple[PathComponent, ...] | None) -
     return None
 
 
-@lru_cache(maxsize=1024)
+@memoize(maxsize=1024)
 def _tokenize_path(path: str, *, allow_wildcards: bool) -> tuple[PathComponent, ...]:
     """Tokenise dotted/array path expressions into components.
 

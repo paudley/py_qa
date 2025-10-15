@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, Protocol, TypeVar, runtime_checkable
 
@@ -13,7 +13,7 @@ ValueT = TypeVar("ValueT")
 
 if TYPE_CHECKING:
     from pyqa.cache.context import CacheContext
-    from pyqa.cache.result_store import CacheRequest, CachedEntry
+    from pyqa.cache.result_store import CachedEntry, CacheRequest
     from pyqa.config.models import Config
     from pyqa.core.metrics import FileMetrics
     from pyqa.core.models import ToolOutcome
@@ -66,15 +66,15 @@ class CacheProvider(Protocol, Generic[ValueT]):
 class ResultCacheProtocol(Protocol):
     """Define the contract satisfied by result cache backends."""
 
-    def load(self, request: "CacheRequest") -> "CachedEntry | None":
+    def load(self, request: CacheRequest) -> CachedEntry | None:
         """Return the cached entry recorded for ``request`` when available."""
 
     def store(
         self,
-        request: "CacheRequest",
+        request: CacheRequest,
         *,
-        outcome: "ToolOutcome",
-        file_metrics: Mapping[str, "FileMetrics"] | None = None,
+        outcome: ToolOutcome,
+        file_metrics: Mapping[str, FileMetrics] | None = None,
     ) -> None:
         """Persist ``outcome`` for ``request`` with optional ``file_metrics``."""
 
@@ -99,14 +99,14 @@ class CacheVersionStore(Protocol):
 class CacheTokenBuilder(Protocol):
     """Generate cache tokens from lint configuration."""
 
-    def build_token(self, config: "Config") -> str:
+    def build_token(self, config: Config) -> str:
         """Return the cache token representing ``config``."""
 
 
 class CacheContextFactory(Protocol):
     """Create cache contexts for lint executions."""
 
-    def build(self, config: "Config", root: Path) -> "CacheContext":
+    def build(self, config: Config, root: Path) -> CacheContext:
         """Return the cache context bound to ``config`` and ``root``."""
 
 

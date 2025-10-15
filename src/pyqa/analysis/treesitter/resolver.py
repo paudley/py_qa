@@ -9,7 +9,6 @@ import importlib
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
-from functools import lru_cache
 from pathlib import Path
 from types import ModuleType
 from typing import Final, cast
@@ -19,6 +18,8 @@ from tree_sitter import Language as TSLanguage
 from tree_sitter import Node as TSNode
 from tree_sitter import Parser as TSParser
 from tree_sitter import Tree as TSTree
+
+from pyqa.cache.in_memory import memoize
 
 from ...core.logging import warn
 from ...core.models import Diagnostic
@@ -471,7 +472,7 @@ class TreeSitterContextResolver:
         self._warnings.clear()
         return warnings
 
-    @lru_cache(maxsize=256)
+    @memoize(maxsize=256)
     def _parse(self, language: Language, path: Path, _mtime_ns: int) -> _ParseResult | None:
         parser = self._get_parser(language)
         if parser is None:

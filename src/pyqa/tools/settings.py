@@ -9,7 +9,6 @@ from __future__ import annotations
 from collections import OrderedDict
 from collections.abc import Mapping
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import TypeAlias
 
 from ..catalog.metadata import CatalogOption, catalog_tool_options
@@ -71,9 +70,17 @@ def _build_field(option: CatalogOption) -> SettingField:
     )
 
 
-@lru_cache(maxsize=1)
-def _build_tool_setting_schema() -> OrderedDict[str, OrderedDict[str, SettingField]]:
-    """Materialise the catalog-driven tool setting schema."""
+from pyqa.cache import CacheProviderSettings, create_cache_provider
+from pyqa.cache.in_memory import memoize
+
+
+@memoize(maxsize=1)
+def _schema_cache() -> ToolSettingSchema:
+    provider = create_cache_provider(CacheProviderSettings(kind="memory"))
+    cached = provider.get("tool-setting-schema")
+    if isinstance(cached, dict):
+        return OrderedDict((tool, OrderedDict(fields.items())) for tool, fields in cached.items())
+
     schema: OrderedDict[str, OrderedDict[str, SettingField]] = OrderedDict()
     options_map = catalog_tool_options()
     for tool_name in sorted(options_map):
@@ -84,10 +91,11 @@ def _build_tool_setting_schema() -> OrderedDict[str, OrderedDict[str, SettingFie
         for option in options:
             field_map[option.name] = _build_field(option)
         schema[tool_name] = field_map
+    provider.set("tool-setting-schema", schema)
     return schema
 
 
-TOOL_SETTING_SCHEMA: ToolSettingSchema = _build_tool_setting_schema()
+TOOL_SETTING_SCHEMA: ToolSettingSchema = _schema_cache()
 
 
 def tool_setting_schema_as_dict() -> RawToolSettingSchema:
