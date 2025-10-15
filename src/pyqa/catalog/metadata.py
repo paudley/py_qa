@@ -8,9 +8,10 @@ import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, TypeAlias, cast
 
-from pyqa.cache.providers import InMemoryCacheProvider
+from pyqa.cache import CacheProviderSettings, create_cache_provider
+from pyqa.interfaces.cache import CacheProvider
 from pyqa.platform.paths import get_pyqa_root
 
 from .errors import CatalogIntegrityError
@@ -32,12 +33,18 @@ class CatalogOption:
 
 _DUPLICATE_HINT_KEY: Final[str] = "duplicateHints"
 
-_TOOL_OPTIONS_CACHE = InMemoryCacheProvider[dict[str, tuple[CatalogOption, ...]]]()
-_SNAPSHOT_CACHE = InMemoryCacheProvider[CatalogSnapshot | None]()
+CatalogToolOptionsCache: TypeAlias = dict[str, tuple[CatalogOption, ...]]
+CatalogCacheValue: TypeAlias = CatalogSnapshot | CatalogToolOptionsCache
+
+_SNAPSHOT_CACHE_KEY: Final[str] = "catalog:snapshot"
+_TOOL_OPTIONS_CACHE_KEY: Final[str] = "catalog:tool-options"
+_CATALOG_CACHE: CacheProvider[CatalogCacheValue] = cast(
+    CacheProvider[CatalogCacheValue],
+    create_cache_provider(CacheProviderSettings(kind="memory")),
+)
 
 
-@_memoize_singleton
-def _cached_tool_options() -> dict[str, tuple[CatalogOption, ...]]:
+def _cached_tool_options() -> CatalogToolOptionsCache:
     """Return cached catalog-defined option metadata keyed by tool name.
 
     Returns:
@@ -45,26 +52,13 @@ def _cached_tool_options() -> dict[str, tuple[CatalogOption, ...]]:
         options captured from the snapshot.
     """
 
-    cached = _TOOL_OPTIONS_CACHE.get("tool-options")
-    if cached is not None:
+    cached = _CATALOG_CACHE.get(_TOOL_OPTIONS_CACHE_KEY)
+    if isinstance(cached, dict):
         return cached
 
     snapshot = _snapshot_or_error()
-    options: dict[str, tuple[CatalogOption, ...]] = {}
-    for definition in snapshot.tools:
-        if not definition.options:
-            continue
-        entries = tuple(
-            CatalogOption(
-                name=option.name,
-                option_type=option.option_type,
-                description=option.description or "",
-                choices=option.choices,
-            )
-            for option in definition.options
-        )
-        options[definition.name] = entries
-    _TOOL_OPTIONS_CACHE.set("tool-options", options)
+    options = _build_tool_options(snapshot)
+    _CATALOG_CACHE.set(_TOOL_OPTIONS_CACHE_KEY, options)
     return options
 
 
@@ -203,9 +197,13 @@ def catalog_tool_options() -> dict[str, tuple[CatalogOption, ...]]:
 
 
 def clear_catalog_metadata_cache() -> None:
-    """Clear cached catalog metadata to force a reload on next access."""
-    _SNAPSHOT_CACHE.clear()
-    _TOOL_OPTIONS_CACHE.clear()
+    """Clear cached catalog metadata to force a reload on next access.
+
+    Returns:
+        None
+    """
+    _CATALOG_CACHE.delete(_SNAPSHOT_CACHE_KEY)
+    _CATALOG_CACHE.delete(_TOOL_OPTIONS_CACHE_KEY)
 
 
 def _load_snapshot() -> CatalogSnapshot | None:
@@ -216,8 +214,8 @@ def _load_snapshot() -> CatalogSnapshot | None:
         present and valid; otherwise ``None``.
 
     """
-    cached = _SNAPSHOT_CACHE.get("snapshot")
-    if cached is not None:
+    cached = _CATALOG_CACHE.get(_SNAPSHOT_CACHE_KEY)
+    if isinstance(cached, CatalogSnapshot):
         return cached
 
     catalog_root, schema_root = _catalog_paths()
@@ -232,7 +230,7 @@ def _load_snapshot() -> CatalogSnapshot | None:
     except (CatalogIntegrityError, ValueError, OSError) as exc:
         LOGGER.warning("catalog snapshot load failed: %s", exc)
         return None
-    _SNAPSHOT_CACHE.set("snapshot", snapshot)
+    _CATALOG_CACHE.set(_SNAPSHOT_CACHE_KEY, snapshot)
     return snapshot
 
 
@@ -263,6 +261,33 @@ def _catalog_paths() -> tuple[Path, Path]:
     catalog_root = project_root / "tooling" / "catalog"
     schema_root = project_root / "tooling" / "schema"
     return catalog_root, schema_root
+
+
+def _build_tool_options(snapshot: CatalogSnapshot) -> CatalogToolOptionsCache:
+    """Return tool option metadata derived from ``snapshot``.
+
+    Args:
+        snapshot: Catalog snapshot containing tool definitions.
+
+    Returns:
+        CatalogToolOptionsCache: Mapping from tool name to cached option entries.
+    """
+
+    options: CatalogToolOptionsCache = {}
+    for definition in snapshot.tools:
+        if not definition.options:
+            continue
+        entries = tuple(
+            CatalogOption(
+                name=option.name,
+                option_type=option.option_type,
+                description=option.description or "",
+                choices=option.choices,
+            )
+            for option in definition.options
+        )
+        options[definition.name] = entries
+    return options
 
 
 def _dedupe_preserving_order(values: Iterable[str]) -> list[str]:

@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from pyqa.catalog.metadata import (
     CatalogOption,
     catalog_duplicate_hint_codes,
@@ -15,6 +17,7 @@ from pyqa.catalog.metadata import (
     catalog_tool_options,
     clear_catalog_metadata_cache,
 )
+from pyqa.catalog.loader import ToolCatalogLoader
 
 
 def test_catalog_duplicate_metadata() -> None:
@@ -62,3 +65,25 @@ def test_catalog_tool_options_with_choices() -> None:
     )
     assert isinstance(target_version, CatalogOption)
     assert "py311" in target_version.choices
+
+
+def test_catalog_metadata_cache_hit_tracking(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Snapshot loads should be cached until the catalog metadata cache clears."""
+    clear_catalog_metadata_cache()
+    load_count = 0
+    original_loader = ToolCatalogLoader.load_snapshot
+
+    def _tracking_loader(self: ToolCatalogLoader):
+        nonlocal load_count
+        load_count += 1
+        return original_loader(self)
+
+    monkeypatch.setattr(ToolCatalogLoader, "load_snapshot", _tracking_loader)
+
+    catalog_tool_options()
+    catalog_tool_options()
+    assert load_count == 1
+
+    clear_catalog_metadata_cache()
+    catalog_tool_options()
+    assert load_count == 2

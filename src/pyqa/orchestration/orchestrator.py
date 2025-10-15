@@ -24,7 +24,7 @@ from ..analysis.services import (
     resolve_function_scale_estimator,
 )
 from ..analysis.suppression import apply_suppression_hints
-from ..cache.context import CacheContext, build_cache_context, load_cached_outcome, save_versions, update_tool_version
+from ..cache.context import CacheContext, build_cache_context, update_tool_version
 from ..config import Config
 from ..core.logging import warn
 from ..core.models import RunResult, ToolOutcome
@@ -349,8 +349,7 @@ class Orchestrator:
             self._analysis.annotation,
             function_scale=self._analysis.function_scale,
         )
-        if environment.cache.cache and environment.cache.versions_dirty:
-            save_versions(environment.cache.cache_dir, environment.cache.versions)
+        environment.cache.persist_versions()
         if self._hooks.after_execution:
             self._hooks.after_execution(result)
         return result
@@ -707,8 +706,7 @@ class Orchestrator:
             return _DECISION_EXECUTE
 
         files: Sequence[Path] = invocation.context.files
-        cached_entry = load_cached_outcome(
-            environment.cache,
+        cached_entry = environment.cache.load_cached_outcome(
             tool_name=invocation.tool_name,
             action_name=invocation.action.name,
             cmd=invocation.command,

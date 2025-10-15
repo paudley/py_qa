@@ -14,7 +14,14 @@ from typing import Protocol, cast
 from pyqa.core.serialization import JsonValue
 from pyqa.runtime.console.manager import get_console_manager
 
-from ...cache import ResultCache, build_cache_context
+from ...cache import create_cache_provider, default_cache_provider
+from ...cache.context import (
+    DefaultCacheTokenBuilder,
+    FileSystemCacheVersionStore,
+    build_cache_context,
+    default_cache_context_factory,
+)
+from ...cache.result_store import ResultCache
 from ...plugins import (
     load_all_plugins,
     load_catalog_plugins,
@@ -110,6 +117,34 @@ def register_default_services(container: ServiceContainer) -> None:
         "cache_context_builder",
         lambda _: build_cache_context,
         singleton=False,
+    )
+
+    container.register(
+        "cache_context_factory",
+        lambda _: default_cache_context_factory(),
+    )
+
+    container.register(
+        "cache_token_builder",
+        lambda _: DefaultCacheTokenBuilder(),
+        singleton=False,
+    )
+
+    container.register(
+        "cache_version_store",
+        lambda _: FileSystemCacheVersionStore(),
+        singleton=False,
+    )
+
+    container.register(
+        "cache_provider_factory",
+        lambda _: create_cache_provider,
+        singleton=False,
+    )
+
+    container.register(
+        "cache_provider",
+        lambda _: default_cache_provider(),
     )
 
     container.register(
