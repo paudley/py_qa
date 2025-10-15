@@ -23,7 +23,7 @@ LOGGER = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class CatalogOption:
-    """Represent option metadata captured from the catalog."""
+    """Describe the option metadata defined in the catalog."""
 
     name: str
     option_type: str
@@ -82,7 +82,7 @@ def catalog_general_suppressions() -> dict[str, tuple[str, ...]]:
 
 
 def catalog_test_suppressions() -> dict[str, dict[str, tuple[str, ...]]]:
-    """Return language→tool mappings of catalog-defined test suppressions.
+    """Construct language-to-tool mappings of catalog-defined test suppressions.
 
     Returns:
         dict[str, dict[str, tuple[str, ...]]]: Nested mapping keyed first by
@@ -124,7 +124,7 @@ def catalog_duplicate_tools() -> dict[str, tuple[str, ...]]:
 
 
 def catalog_duplicate_hint_codes() -> dict[str, tuple[str, ...]]:
-    """Return hint codes that should trigger duplicate-advice messaging.
+    """Collect hint codes that should trigger duplicate-advice messaging.
 
     Returns:
         dict[str, tuple[str, ...]]: Mapping of tool identifiers to the set of
@@ -147,7 +147,7 @@ def catalog_duplicate_hint_codes() -> dict[str, tuple[str, ...]]:
 
 
 def catalog_duplicate_preference() -> tuple[str, ...]:
-    """Return ordered tool names indicating duplicate resolution preference.
+    """Return the ordered tool names indicating duplicate resolution preference.
 
     Returns:
         tuple[str, ...]: Sequence of tool names ranked by preference for
@@ -197,11 +197,7 @@ def catalog_tool_options() -> dict[str, tuple[CatalogOption, ...]]:
 
 
 def clear_catalog_metadata_cache() -> None:
-    """Clear cached catalog metadata to force a reload on next access.
-
-    Returns:
-        None
-    """
+    """Reset the cached catalog metadata to force a reload on next access."""
     _CATALOG_CACHE.delete(_SNAPSHOT_CACHE_KEY)
     _CATALOG_CACHE.delete(_TOOL_OPTIONS_CACHE_KEY)
 
@@ -264,7 +260,7 @@ def _catalog_paths() -> tuple[Path, Path]:
 
 
 def _build_tool_options(snapshot: CatalogSnapshot) -> CatalogToolOptionsCache:
-    """Return tool option metadata derived from ``snapshot``.
+    """Create tool option metadata derived from ``snapshot``.
 
     Args:
         snapshot: Catalog snapshot containing tool definitions.

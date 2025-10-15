@@ -30,7 +30,7 @@ def load_plugin_contributions(
     *,
     plugin_factories: Sequence[Callable[..., CatalogContribution]] | None = None,
 ) -> tuple[CatalogContribution, ...]:
-    """Return catalog contributions sourced from entry-point plugins.
+    """Collect catalog contributions sourced from entry-point plugins.
 
     Args:
         context: Execution context shared with plugin factories.
@@ -43,8 +43,5 @@ def load_plugin_contributions(
         plugin factories.
     """
 
-    if plugin_factories is None:
-        factories = load_catalog_plugins()
-    else:
-        factories = tuple(plugin_factories)
+    factories = tuple(plugin_factories) if plugin_factories is not None else load_catalog_plugins()
     return _spec_plugins.load_plugin_contributions(context, plugin_factories=factories)

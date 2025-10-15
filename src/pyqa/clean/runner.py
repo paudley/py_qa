@@ -58,7 +58,18 @@ def sparkly_clean(
     extra_trees: Sequence[str] | None = None,
     dry_run: bool = False,
 ) -> CleanResult:
-    """Remove temporary artefacts under *root* based on *config* and overrides."""
+    """Remove temporary artefacts under ``root`` based on configuration and overrides.
+
+    Args:
+        root: Repository root inspected for cleanup candidates.
+        config: Cleanup configuration defining baseline patterns and trees.
+        extra_patterns: Optional glob patterns appended to configured values.
+        extra_trees: Optional directory roots appended to configured tree list.
+        dry_run: When ``True`` report the plan without removing files.
+
+    Returns:
+        CleanResult: Summary describing removed, skipped, and ignored paths.
+    """
 
     planner = CleanPlanner(
         extra_patterns=extra_patterns,

@@ -44,7 +44,7 @@ __all__ = [
 
 @dataclass(slots=True)
 class _DownloadInstaller:
-    """Installer callable materialising artifacts defined in the catalog."""
+    """Describe an installer that materialises catalog-defined artifacts."""
 
     download_mapping: Mapping[str, JSONValue]
     version: str | None
@@ -259,7 +259,7 @@ DEFAULT_BINARY_PLACEHOLDER = "${binary}"
 
 @dataclass(slots=True)
 class _DownloadBinaryStrategy(CommandBuilder):
-    """Command builder that executes downloaded binaries with mapped options."""
+    """Describe a command builder that executes downloaded binaries with mapped options."""
 
     version: str | None
     download: Mapping[str, JSONValue]
@@ -269,7 +269,14 @@ class _DownloadBinaryStrategy(CommandBuilder):
     target_selector: _TargetSelector | None
 
     def build(self, ctx: ToolContext) -> Sequence[str]:
-        """Compose the command line for the configured binary."""
+        """Compose the command line for the configured binary.
+
+        Args:
+            ctx: Tool execution context used to resolve downloads and targets.
+
+        Returns:
+            Sequence[str]: Command arguments suitable for execution.
+        """
 
         cache_root = ctx.root / ".lint-cache"
         binary = _download_artifact_for_tool(
@@ -289,7 +296,19 @@ class _DownloadBinaryStrategy(CommandBuilder):
 
 
 def command_download_binary(config: Mapping[str, JSONValue]) -> CommandBuilder:
-    """Return a command builder that downloads a binary and applies option maps."""
+    """Create a command builder that downloads a binary and applies option maps.
+
+    Args:
+        config: Mapping describing download parameters, base command segments,
+            option mappings, and optional target selectors.
+
+    Returns:
+        CommandBuilder: Builder that materialises the binary and produces the
+        final command.
+
+    Raises:
+        CatalogIntegrityError: If the configuration is malformed.
+    """
 
     plain_config = _as_plain_json(config)
     if not isinstance(plain_config, Mapping):
@@ -357,7 +376,7 @@ def command_download_binary(config: Mapping[str, JSONValue]) -> CommandBuilder:
 
 @dataclass(slots=True)
 class _TargetSelector:
-    """Derive command targets from file discovery metadata."""
+    """Describe command target derivation from file discovery metadata."""
 
     mode: TargetSelectorMode
     suffixes: tuple[str, ...]
@@ -367,7 +386,7 @@ class _TargetSelector:
     default_to_root: bool
 
     def select(self, ctx: ToolContext, *, excluded: set[Path]) -> list[str]:
-        """Return target arguments resolved from the tool context.
+        """Return a list of target arguments derived from the tool context.
 
         Args:
             ctx: Tool execution context providing file selections.
@@ -450,7 +469,16 @@ def _coerce_optional_non_empty_string(
     field_name: str,
     context: str,
 ) -> str | None:
-    """Return string when provided ensuring it is non-empty."""
+    """Return an optional non-empty string when the value is valid.
+
+    Args:
+        value: Raw configuration value to validate.
+        field_name: Name of the configuration field being processed.
+        context: Context string used for error reporting.
+
+    Returns:
+        str | None: Normalised string when provided; otherwise ``None``.
+    """
 
     if value is None:
         return None
@@ -462,7 +490,18 @@ def _coerce_optional_non_empty_string(
 
 
 def _parse_target_selector(entry: JSONValue, *, context: str) -> _TargetSelector:
-    """Parse target selector configuration for binary download commands."""
+    """Return the target selector configured for binary download commands.
+
+    Args:
+        entry: Raw JSON value configuring target selection behaviour.
+        context: Context string used for error messaging when validation fails.
+
+    Returns:
+        _TargetSelector: Strategy responsible for deriving command targets.
+
+    Raises:
+        CatalogIntegrityError: If ``entry`` is not a mapping with supported keys.
+    """
 
     if not isinstance(entry, Mapping):
         raise CatalogIntegrityError(f"{context}: target selector must be an object")
@@ -513,7 +552,17 @@ def _parse_target_selector(entry: JSONValue, *, context: str) -> _TargetSelector
 
 
 def command_project_scanner(config: Mapping[str, JSONValue]) -> CommandBuilder:
-    """Return a project-aware scanner command builder driven by catalog data."""
+    """Create a project-aware scanner command builder driven by catalog data.
+
+    Args:
+        config: Mapping describing how project scanning should be configured.
+
+    Returns:
+        CommandBuilder: Builder that produces discovery commands.
+
+    Raises:
+        CatalogIntegrityError: If ``config`` is not mapping-like.
+    """
 
     plain_config = _as_plain_json(config)
     if not isinstance(plain_config, Mapping):
@@ -538,7 +587,7 @@ def _download_artifact_for_tool(
     cache_root: Path,
     context: str,
 ) -> Path:
-    """Download or reuse a tool artifact described by a catalog snippet.
+    """Return a tool artifact path described by a catalog snippet.
 
     Args:
         download_config: Raw download configuration extracted from the tool
@@ -569,6 +618,13 @@ def _download_artifact_for_tool(
 
 
 def _as_plain_json(value: JSONValue) -> JSONValue:
-    """Return plain Python containers for ``value``."""
+    """Return plain Python containers for ``value``.
+
+    Args:
+        value: JSON-like value possibly containing frozen catalog types.
+
+    Returns:
+        JSONValue: Plain Python representation of ``value``.
+    """
 
     return thaw_json_value(value)

@@ -40,7 +40,7 @@ _OUTPUT_FLAG: Final[str] = "--output"
 
 
 class OptionKind(str, Enum):
-    """Define supported command-option mapping behaviours."""
+    """Describe the supported command option mapping behaviours."""
 
     VALUE = "value"
     PATH = "path"
@@ -50,7 +50,7 @@ class OptionKind(str, Enum):
 
 
 class TransformName(str, Enum):
-    """Define transforms available to option mappings."""
+    """Describe the transforms available to option mappings."""
 
     PYTHON_VERSION_TAG = "python_version_tag"
     PYTHON_VERSION_NUMBER = "python_version_number"
@@ -65,7 +65,7 @@ class _OptionBehavior(Protocol):
     """Define behaviour contracts responsible for appending CLI fragments."""
 
     def extend_command(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
-        """Mutate ``command`` to reflect ``value`` within the current context.
+        """Extend ``command`` to reflect ``value`` within the current context.
 
         Args:
             ctx: Tool execution context providing settings and metadata.
@@ -74,7 +74,7 @@ class _OptionBehavior(Protocol):
         """
 
     def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
-        """Invoke the behaviour using callable syntax.
+        """Apply the behaviour using callable syntax.
 
         Args:
             ctx: Tool execution context forwarded to ``extend_command``.
@@ -112,7 +112,7 @@ class _ArgsOptionBehavior:
             append_value(str(entry))
 
     def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
-        """Invoke ``extend_command`` to handle callable usage.
+        """Apply ``extend_command`` to handle callable usage.
 
         Args:
             ctx: Tool execution context forwarded to ``extend_command``.
@@ -155,7 +155,7 @@ class _PathOptionBehavior:
             append_value(resolved)
 
     def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
-        """Invoke ``extend_command`` to handle callable usage.
+        """Apply ``extend_command`` to handle callable usage.
 
         Args:
             ctx: Tool execution context forwarded to ``extend_command``.
@@ -186,7 +186,7 @@ class _ValueOptionBehavior:
         append_value(str(value))
 
     def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
-        """Invoke ``extend_command`` to handle callable usage.
+        """Apply ``extend_command`` to handle callable usage.
 
         Args:
             ctx: Tool execution context forwarded to ``extend_command``.
@@ -199,7 +199,7 @@ class _ValueOptionBehavior:
 
 @dataclass(slots=True, frozen=True)
 class _FlagOptionBehavior:
-    """Toggle boolean flag options based on configuration values."""
+    """Manage boolean flag options based on configuration values."""
 
     flag: str | None
     negate_flag: str | None
@@ -221,7 +221,7 @@ class _FlagOptionBehavior:
             command.append(selected_flag)
 
     def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
-        """Invoke ``extend_command`` to handle callable usage.
+        """Apply ``extend_command`` to handle callable usage.
 
         Args:
             ctx: Tool execution context forwarded to ``extend_command``.
@@ -257,7 +257,7 @@ class _RepeatFlagBehavior:
             command.append(self.negate_flag)
 
     def __call__(self, ctx: ToolContext, command: list[str], value: JSONValue) -> None:
-        """Delegate callable invocation to :meth:`extend_command`.
+        """Apply :meth:`extend_command` via callable syntax.
 
         Args:
             ctx: Tool execution context forwarded to ``extend_command``.
@@ -280,7 +280,7 @@ class _ParsedOptionConfig:
 
 @dataclass(slots=True, frozen=True)
 class _OptionFlags:
-    """Store CLI flag metadata associated with an option."""
+    """Describe CLI flag metadata associated with an option."""
 
     flag: str | None
     join_with: str | None
@@ -290,7 +290,7 @@ class _OptionFlags:
 
 @dataclass(slots=True, frozen=True)
 class _OptionDefaults:
-    """Store default behaviour metadata for an option."""
+    """Describe default behaviour metadata for an option."""
 
     value: JSONValue | None
     reference: str | None
@@ -525,7 +525,7 @@ def require_str(config: Mapping[str, JSONValue], key: str, *, context: str) -> s
 
 
 def _collect_option_config(entry: Mapping[str, JSONValue], context: str) -> _ParsedOptionConfig:
-    """Parse option configuration mapping into a typed structure.
+    """Convert an option configuration mapping into a typed structure.
 
     Args:
         entry: Raw option configuration extracted from the catalog.
@@ -571,7 +571,7 @@ def _collect_option_config(entry: Mapping[str, JSONValue], context: str) -> _Par
 
 
 def _parse_option_names(raw: JSONValue, context: str) -> tuple[str, ...]:
-    """Normalise the ``setting`` field into a tuple of option names.
+    """Normalize the ``setting`` field into a tuple of option names.
 
     Args:
         raw: Raw value supplied for the ``setting`` key.
@@ -599,7 +599,7 @@ def _parse_option_names(raw: JSONValue, context: str) -> tuple[str, ...]:
 
 
 def _parse_option_kind(raw: JSONValue, context: str) -> OptionKind:
-    """Map ``type`` entries onto :class:`OptionKind` members.
+    """Return the :class:`OptionKind` member associated with ``raw``.
 
     Args:
         raw: Raw value describing the option kind.
@@ -679,7 +679,7 @@ def _parse_literal_values(raw: JSONValue, context: str) -> tuple[str, ...]:
 
 
 def _parse_transform(raw: JSONValue, context: str) -> TransformName | None:
-    """Normalise optional transform names.
+    """Return the optional transform name associated with ``raw``.
 
     Args:
         raw: Raw ``transform`` value from configuration.
@@ -705,7 +705,7 @@ def _parse_transform(raw: JSONValue, context: str) -> TransformName | None:
 
 
 def _build_option_behavior(config: _ParsedOptionConfig, *, context: str) -> _OptionBehavior:
-    """Instantiate behaviour strategy for a parsed option.
+    """Build behaviour strategy for a parsed option.
 
     Args:
         config: Parsed option configuration.
@@ -737,7 +737,7 @@ def _build_option_behavior(config: _ParsedOptionConfig, *, context: str) -> _Opt
 
 
 def _transform_python_version_tag(value: JSONValue, ctx: ToolContext) -> JSONValue:
-    """Return Python version tag derived from ``value`` or context.
+    """Compute the Python version tag derived from ``value`` or context.
 
     Args:
         value: Raw version value configured for the option.

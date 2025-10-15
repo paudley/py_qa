@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 
+"""Typing re-exports for catalog model stubs."""
+
 from __future__ import annotations
 
 from typing import Final

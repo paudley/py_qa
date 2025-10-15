@@ -28,14 +28,18 @@ class CleanPlanItem:
 
 @dataclass(slots=True)
 class CleanPlan:
-    """Aggregate cleanup targets and ignored project directories."""
+    """Represent cleanup targets and ignored project directories."""
 
     items: list[CleanPlanItem] = field(default_factory=list)
     ignored_py_qa: list[Path] = field(default_factory=list)
 
     @property
     def paths(self) -> list[Path]:
-        """Return the list of filesystem paths slated for removal."""
+        """Return the filesystem paths slated for removal.
+
+        Returns:
+            list[Path]: Paths that will be removed when the plan executes.
+        """
 
         return [item.path for item in self.items]
 
@@ -49,17 +53,40 @@ class CleanPlanner:
         extra_patterns: Sequence[str] | None = None,
         extra_trees: Sequence[str] | None = None,
     ) -> None:
+        """Initialise the planner with optional pattern and tree overrides.
+
+        Args:
+            extra_patterns: Additional glob patterns appended to configured
+                patterns.
+            extra_trees: Additional directory prefixes appended to configured
+                tree lists.
+        """
+
         self._extra_patterns = tuple(extra_patterns or ())
         self._extra_trees = tuple(extra_trees or ())
 
     @property
     def overrides(self) -> tuple[tuple[str, ...], tuple[str, ...]]:
-        """Return the pattern and tree overrides configured for the planner."""
+        """Return the pattern and tree overrides configured for the planner.
+
+        Returns:
+            tuple[tuple[str, ...], tuple[str, ...]]: Tuples containing pattern
+            and tree overrides provided at construction time.
+        """
 
         return self._extra_patterns, self._extra_trees
 
     def plan(self, root: Path, config: CleanConfig) -> CleanPlan:
-        """Return a cleanup plan for ``root`` based on ``config`` and overrides."""
+        """Build a cleanup plan for ``root`` using ``config`` and overrides.
+
+        Args:
+            root: Repository root scanned for cleanup targets.
+            config: Configuration describing base patterns and tree roots.
+
+        Returns:
+            CleanPlan: Plan describing discovered cleanup items and ignored
+            ``py_qa`` directories.
+        """
 
         root = root.resolve()
         patterns = _merge_unique(config.patterns, self._extra_patterns)
@@ -102,6 +129,19 @@ def _collect_matches_from_directory(
     root: Path,
     skip_py_qa: bool,
 ) -> tuple[dict[Path, CleanPlanItem], list[Path]]:
+    """Collect filesystem matches within ``base`` using ``patterns``.
+
+    Args:
+        base: Directory scanned for pattern matches.
+        patterns: Glob patterns evaluated relative to ``base``.
+        root: Repository root used when evaluating protected directories.
+        skip_py_qa: When ``True`` ignore matches inside py_qa directories.
+
+    Returns:
+        tuple[dict[Path, CleanPlanItem], list[Path]]: Mapping of matched paths
+        to plan items alongside skipped py_qa directories.
+    """
+
     collected: dict[Path, CleanPlanItem] = {}
     ignored: list[Path] = []
     for directory, _subdirs, _files in iter_paths(base):
@@ -114,6 +154,16 @@ def _collect_matches_from_directory(
 
 
 def _merge_unique(primary: Sequence[str], extras: Sequence[str]) -> list[str]:
+    """Return merged patterns with duplicates removed while preserving order.
+
+    Args:
+        primary: Primary collection of patterns.
+        extras: Additional patterns appended after deduplication.
+
+    Returns:
+        list[str]: Ordered list of trimmed patterns without duplicates.
+    """
+
     merged: list[str] = []
     seen: set[str] = set()
     for collection in (primary, extras):
@@ -127,6 +177,17 @@ def _merge_unique(primary: Sequence[str], extras: Sequence[str]) -> list[str]:
 
 
 def _is_protected(path: Path, root: Path) -> bool:
+    """Return ``True`` when ``path`` resides in protected directories.
+
+    Args:
+        path: Candidate filesystem path.
+        root: Repository root used to compute relative segments.
+
+    Returns:
+        bool: ``True`` if the path is inside protected directories; ``False``
+        otherwise.
+    """
+
     try:
         relative = path.relative_to(root)
     except ValueError:
@@ -135,6 +196,16 @@ def _is_protected(path: Path, root: Path) -> bool:
 
 
 def _match_patterns(base: Path, patterns: Iterable[str]) -> set[Path]:
+    """Collect paths under ``base`` that match any of the provided patterns.
+
+    Args:
+        base: Directory searched for pattern matches.
+        patterns: Iterable of glob patterns evaluated against ``base``.
+
+    Returns:
+        set[Path]: Resolved paths matching the provided patterns.
+    """
+
     matches: set[Path] = set()
     for pattern in patterns:
         for match_path in base.glob(pattern):
@@ -148,6 +219,17 @@ def _match_patterns(base: Path, patterns: Iterable[str]) -> set[Path]:
 
 
 def _should_skip_py_qa(path: Path, root: Path, skip_py_qa: bool) -> bool:
+    """Determine whether ``path`` should be skipped due to py_qa rules.
+
+    Args:
+        path: Candidate filesystem path.
+        root: Repository root that anchors py_qa detection.
+        skip_py_qa: When ``True`` skip paths inside py_qa directories.
+
+    Returns:
+        bool: ``True`` if the path should be skipped, ``False`` otherwise.
+    """
+
     if not skip_py_qa:
         return False
     try:
@@ -161,6 +243,15 @@ def _should_skip_py_qa(path: Path, root: Path, skip_py_qa: bool) -> bool:
 
 
 def _dedupe_paths(paths: Iterable[Path]) -> list[Path]:
+    """Remove duplicate paths while preserving input order.
+
+    Args:
+        paths: Iterable of candidate paths that may contain duplicates.
+
+    Returns:
+        list[Path]: Ordered paths with duplicates removed.
+    """
+
     seen: set[Path] = set()
     ordered: list[Path] = []
     for path in paths:
@@ -176,6 +267,16 @@ def _dedupe_paths(paths: Iterable[Path]) -> list[Path]:
 
 
 def _discover_py_qa_directories(root: Path) -> list[Path]:
+    """Identify py_qa directories under ``root`` for reporting purposes.
+
+    Args:
+        root: Repository root scanned for py_qa directories.
+
+    Returns:
+        list[Path]: Directories named ``PY_QA_DIR_NAME`` that reside under
+        ``root``.
+    """
+
     try:
         candidates = list(root.rglob(PY_QA_DIR_NAME))
     except OSError:
@@ -184,6 +285,12 @@ def _discover_py_qa_directories(root: Path) -> list[Path]:
 
 
 def _remove_path(path: Path) -> None:
+    """Remove ``path`` from the filesystem, tolerating permission errors.
+
+    Args:
+        path: Filesystem path scheduled for deletion.
+    """
+
     if path.is_dir() and not path.is_symlink():
         shutil.rmtree(path, ignore_errors=True)
     else:
