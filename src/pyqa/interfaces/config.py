@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from pyqa.config.types import ConfigFragment, MutableConfigFragment
@@ -20,14 +21,16 @@ class ConfigSource(Protocol):
     name: str
     """Identifier describing the configuration source."""
 
+    @abstractmethod
     def load(self) -> ConfigFragment:
-        """Return configuration values as a mapping.
+        """Provide configuration values as a mapping.
 
         Returns:
             Mapping containing configuration keys and values.
         """
         raise NotImplementedError
 
+    @abstractmethod
     def describe(self) -> str:
         """Return a human-readable description of the source.
 
@@ -42,14 +45,16 @@ class ConfigResolver(Protocol):
     """Resolve layered configuration values into a final mapping."""
 
     @property
+    @abstractmethod
     def strategy_name(self) -> str:
         """Return the resolver strategy identifier.
 
         Returns:
             String identifying the resolution strategy.
         """
-        raise NotImplementedError("ConfigResolver.strategy_name must be implemented")
+        raise NotImplementedError
 
+    @abstractmethod
     def resolve(self, *sources: ConfigFragment) -> ConfigFragment:
         """Merge ``sources`` according to resolver semantics.
 
@@ -67,16 +72,18 @@ class ConfigMutator(Protocol):
     """Apply overrides to configuration structures."""
 
     @property
+    @abstractmethod
     def description(self) -> str:
         """Return a human-readable description of the mutator.
 
         Returns:
             String describing the mutation strategy.
         """
-        raise NotImplementedError("ConfigMutator.description must be implemented")
+        raise NotImplementedError
 
+    @abstractmethod
     def apply(self, data: MutableConfigFragment) -> None:
-        """Mutate ``data`` in place.
+        """Apply mutations to ``data`` in place.
 
         Args:
             data: Mutable mapping that should be updated by the mutator.
@@ -86,19 +93,21 @@ class ConfigMutator(Protocol):
 
 @runtime_checkable
 class ConfigLoader(Protocol):
-    """Load configuration values from registered sources."""
+    """Define an interface that loads configuration values from registered sources."""
 
     @property
+    @abstractmethod
     def target_name(self) -> str:
         """Return the name of the configuration target being loaded.
 
         Returns:
             String identifying the configuration payload being produced.
         """
-        raise NotImplementedError("ConfigLoader.target_name must be implemented")
+        raise NotImplementedError
 
+    @abstractmethod
     def load(self, *, strict: bool = False) -> Config:
-        """Return the resolved configuration object.
+        """Load the resolved configuration object.
 
         Args:
             strict: When ``True`` enforce strict validation semantics.

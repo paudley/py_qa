@@ -54,7 +54,7 @@ def collect_target_files(
     paths = [path.resolve() for path in options.paths]
     if not paths and not options.dirs:
         paths.append(root)
-    include_dotfiles = options.include_dotfiles
+    include_dotfiles = getattr(options, "include_dotfiles", False)
 
     context = _DiscoveryContext(
         excluded=options.exclude,

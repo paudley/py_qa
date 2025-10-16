@@ -36,6 +36,7 @@ def _build_options(
     dirs: list[Path] | None = None,
     exclude: list[Path] | None = None,
     paths_from_stdin: bool = False,
+    include_dotfiles: bool = False,
     changed_only: bool = False,
     diff_ref: str = "HEAD",
     include_untracked: bool = True,
@@ -81,6 +82,7 @@ def _build_options(
         dirs=list(dirs or []),
         exclude=list(exclude or []),
         paths_from_stdin=paths_from_stdin,
+        include_dotfiles=include_dotfiles,
     )
     git = LintGitOptions(
         changed_only=changed_only,

@@ -12,7 +12,6 @@ from types import EllipsisType, GenericAlias, UnionType
 from typing import (
     Annotated,
     Final,
-    Protocol,
     TypeAlias,
     TypeVar,
     cast,
@@ -29,27 +28,24 @@ from click.formatting import HelpFormatter
 from typer.core import TyperCommand, TyperGroup
 from typer.models import OptionInfo, ParameterInfo, ParamMeta
 
+from pyqa.interfaces.cli import CliParameterValue
+
 from .shared import (
     CommandCallable,
     CommandResult,
     Depends,
 )
 
-
-class CLIParameterValue(Protocol):
-    """Marker protocol for values exchanged through Typer callbacks."""
-
-
-CLIConvertor: TypeAlias = Callable[[CLIParameterValue], CLIParameterValue]
+CLIConvertor: TypeAlias = Callable[[CliParameterValue], CliParameterValue]
 ConvertorMap: TypeAlias = dict[str, CLIConvertor]
-DefaultsMap: TypeAlias = dict[str, CLIParameterValue]
+DefaultsMap: TypeAlias = dict[str, CliParameterValue]
 AnnotationValue: TypeAlias = type | GenericAlias | UnionType | tuple[type, ...] | str | EllipsisType | None
 AnnotationMap: TypeAlias = Mapping[str, AnnotationValue]
 ParamsMetadata: TypeAlias = tuple[list[Argument | Option], ConvertorMap, str | None]
-TyperParamShim: TypeAlias = Callable[..., ParamsMetadata]
-TyperCallbackShim: TypeAlias = Callable[..., Callable[..., CLIParameterValue] | None]
-DependencyCallable: TypeAlias = Callable[..., CLIParameterValue]
-AnalyzableCallable: TypeAlias = Callable[..., CLIParameterValue]
+TyperParamAdapterCallable: TypeAlias = Callable[..., ParamsMetadata]
+TyperCallbackAdapterCallable: TypeAlias = Callable[..., Callable[..., CliParameterValue] | None]
+DependencyCallable: TypeAlias = Callable[..., CliParameterValue]
+AnalyzableCallable: TypeAlias = Callable[..., CliParameterValue]
 GetClickParamCallable: TypeAlias = Callable[[ParamMeta], tuple[Argument | Option, CLIConvertor | None]]
 
 
@@ -84,8 +80,9 @@ class _DependencyInvocation:
     defaults: DefaultsMap
     convertors: ConvertorMap
 
-    # suppression_valid: lint=internal-signatures Typer callback wrapper must expose the dynamic call signature expected by Typer while routing through our resolver.
-    def __call__(self, *call_args: CLIParameterValue, **kwargs: CLIParameterValue) -> CommandResult:
+    # suppression_valid: lint=internal-signatures Typer callback wrapper must expose
+    # the dynamic call signature expected by Typer while routing through our resolver.
+    def __call__(self, *call_args: CliParameterValue, **kwargs: CliParameterValue) -> CommandResult:
         """Execute ``callback`` using resolver-managed dependency injection.
 
         Args:
@@ -136,7 +133,7 @@ def _sanitize_param_decl(
     param: ParamMeta,
     *,
     original_get_click_param: GetClickParamCallable,
-) -> tuple[Argument | Option, CLIParameterValue]:
+) -> tuple[Argument | Option, CliParameterValue]:
     """Strip non-string parameter declarations before delegating to Typer.
 
     Args:
@@ -163,7 +160,7 @@ class _ParamSanitizer:
 
     original: GetClickParamCallable
 
-    def __call__(self, param: ParamMeta) -> tuple[Argument | Option, CLIParameterValue]:
+    def __call__(self, param: ParamMeta) -> tuple[Argument | Option, CliParameterValue]:
         """Sanitise ``param`` before delegating to the original Click factory."""
 
         return _sanitize_param_decl(param, original_get_click_param=self.original)
@@ -194,7 +191,9 @@ def _dependency_param_adapter(
     )
 
 
-# suppression_valid: lint=internal-signatures adapter must mirror Typer's callback factory signature to intercept dependency resolution without breaking upstream expectations.
+# suppression_valid: lint=internal-signatures adapter must mirror Typer's callback
+# factory signature to intercept dependency resolution without breaking upstream
+# expectations.
 def _dependency_callback_adapter(
     *,
     callback: AnalyzableCallable | None = None,
@@ -272,8 +271,8 @@ def _install_dependency_support(
         return
 
     resolver = _DependencyResolver(original_get_click_param)
-    param_adapter: TyperParamShim = _build_dependency_param_adapter(resolver)
-    callback_adapter: TyperCallbackShim = _build_dependency_callback_adapter(resolver)
+    param_adapter: TyperParamAdapterCallable = _build_dependency_param_adapter(resolver)
+    callback_adapter: TyperCallbackAdapterCallable = _build_dependency_callback_adapter(resolver)
     typer.main.get_params_convertors_ctx_param_name_from_function = param_adapter
     typer.main.get_callback = callback_adapter
     setattr(typer.main, "_pyqa_dependency_support_installed", True)
@@ -281,7 +280,7 @@ def _install_dependency_support(
 
 def _build_dependency_param_adapter(
     resolver: _DependencyResolver,
-) -> TyperParamShim:
+) -> TyperParamAdapterCallable:
     """Return a Typer helper that exposes dependency-aware parameter metadata."""
 
     return partial(_dependency_param_adapter, resolver=resolver)
@@ -289,7 +288,7 @@ def _build_dependency_param_adapter(
 
 def _build_dependency_callback_adapter(
     resolver: _DependencyResolver,
-) -> TyperCallbackShim:
+) -> TyperCallbackAdapterCallable:
     """Return a Typer helper that wires dependency resolution into callbacks."""
 
     return partial(_dependency_callback_adapter, resolver=resolver)
@@ -316,7 +315,7 @@ class _DependencyResolver:
                 None,
                 [],
                 set(),
-                dict[str, CLIParameterValue](),
+                dict[str, CliParameterValue](),
             )
         cached: _AnalyzedCallback | None = getattr(callback, "__pyqa_analysis__", None)
         if cached is not None:
@@ -386,7 +385,7 @@ class _DependencyResolver:
             dependencies=[],
             cli_param_names=set(),
             context_param_name=None,
-            defaults=dict[str, CLIParameterValue](),
+            defaults=dict[str, CliParameterValue](),
         )
 
         for param_name, parameter in signature.parameters.items():
@@ -434,10 +433,10 @@ class _DependencyResolver:
         self,
         annotation: AnnotationValue,
         parameter: inspect.Parameter,
-    ) -> tuple[AnnotationValue, ParameterInfo | None, Depends[CLIParameterValue] | None]:
+    ) -> tuple[AnnotationValue, ParameterInfo | None, Depends[CliParameterValue] | None]:
         """Return resolved annotation metadata for ``parameter``."""
 
-        dependency_info: Depends[CLIParameterValue] | None = None
+        dependency_info: Depends[CliParameterValue] | None = None
         parameter_info: ParameterInfo | None = None
         if annotation is inspect.Signature.empty:
             annotation = str
@@ -485,7 +484,7 @@ class _DependencyResolver:
     ) -> DefaultsMap:
         """Return values mapped to ``meta`` while removing them from ``values``."""
 
-        dep_values: DefaultsMap = dict[str, CLIParameterValue]()
+        dep_values: DefaultsMap = dict[str, CliParameterValue]()
         for name in meta.cli_param_names:
             if name in values:
                 dep_values[name] = values.pop(name)
@@ -501,7 +500,7 @@ class _DependencyResolver:
     def build_default_values(self, callback: AnalyzableCallable) -> DefaultsMap:
         """Return default parameter values derived from ``callback`` signature."""
 
-        defaults: DefaultsMap = dict[str, CLIParameterValue]()
+        defaults: DefaultsMap = dict[str, CliParameterValue]()
         signature = inspect.signature(callback)
         for name, parameter in signature.parameters.items():
             default_candidate = parameter.default
@@ -600,7 +599,7 @@ class _DependencyResolver:
         state.cli_param_names.add(param_name)
         if hasattr(click_param, "default"):
             default_value = getattr(click_param, "default")
-            state.defaults[param_name] = cast(CLIParameterValue, default_value)
+            state.defaults[param_name] = cast(CliParameterValue, default_value)
 
 
 class SortedTyperCommand(TyperCommand):
@@ -677,7 +676,9 @@ class SortedTyper(typer.Typer):
         )
 
 
-# suppression_valid: lint=internal-signatures factory intentionally forwards arbitrary kwargs to maintain Typer compatibility while enforcing sorted command help.
+# suppression_valid: lint=internal-signatures factory intentionally forwards
+# arbitrary kwargs to maintain Typer compatibility while enforcing sorted
+# command help.
 def create_typer(
     *,
     config: TyperAppConfig | None = None,

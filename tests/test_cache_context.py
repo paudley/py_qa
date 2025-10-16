@@ -37,6 +37,10 @@ class _RecordingCache(ResultCacheProtocol):
 
 
 class _RecordingFactory(ResultCacheFactory):
+    @property
+    def factory_name(self) -> str:
+        return "recording"
+
     def __init__(self, cache: ResultCacheProtocol | None = None) -> None:
         self.cache = cache or _RecordingCache()
         self.calls: list[Path] = []

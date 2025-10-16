@@ -539,7 +539,10 @@ class DocstringLinter:
         if not doc:
             issues.append(DocstringIssue(path=path, line=line, message=f"Class '{node.name}' is missing a docstring"))
         else:
-            issues.extend(self._check_summary(path, line, doc))
+            summary_issues = self._check_summary(doc)
+            if summary_issues:
+                message = "; ".join(summary_issues)
+                issues.append(DocstringIssue(path=path, line=line, message=f"Class '{node.name}': {message}"))
         return issues
 
     def _check_function_docstring(
@@ -577,70 +580,49 @@ class DocstringLinter:
             )
             return issues
 
-        issues.extend(self._check_summary(path, doc_line, doc))
+        function_issues: list[str] = []
+        function_issues.extend(self._check_summary(doc))
 
         if params and not _has_args_section(doc):
-            issues.append(
-                DocstringIssue(
-                    path=path,
-                    line=doc_line,
-                    message=f"Function '{node.name}' is missing an Args section",
-                ),
-            )
+            function_issues.append("Missing Args section")
         if returns_value and not _has_returns_section(doc):
-            issues.append(
-                DocstringIssue(
-                    path=path,
-                    line=doc_line,
-                    message=f"Function '{node.name}' is missing a Returns section",
-                ),
-            )
+            function_issues.append("Missing Returns section")
         if yields_value and not _has_yields_section(doc):
+            function_issues.append("Missing Yields section")
+
+        if function_issues:
+            message = "; ".join(function_issues)
             issues.append(
                 DocstringIssue(
                     path=path,
                     line=doc_line,
-                    message=f"Function '{node.name}' is missing a Yields section",
+                    message=f"Function '{node.name}': {message}",
                 ),
             )
         return issues
 
-    def _check_summary(self, path: Path, line: int, docstring: str) -> list[DocstringIssue]:
+    def _check_summary(self, docstring: str) -> list[str]:
         """Validate the summary line for ``docstring``.
 
         Args:
-            path: Module path containing the docstring.
-            line: Line number associated with the docstring.
             docstring: Raw docstring text to analyse.
 
         Returns:
-            List of summary-related issues identified during analysis.
+            List of human readable summary-related issues.
         """
 
-        issues: list[DocstringIssue] = []
+        issues: list[str] = []
         summary = _extract_summary_line(docstring)
         if not summary:
-            issues.append(DocstringIssue(path=path, line=line, message="Docstring summary is empty"))
+            issues.append("Docstring summary is empty")
             return issues
         if len(summary) > _MAX_SUMMARY_LENGTH:
-            issues.append(
-                DocstringIssue(
-                    path=path,
-                    line=line,
-                    message=f"Docstring summary exceeds {_MAX_SUMMARY_LENGTH} characters",
-                ),
-            )
+            issues.append(f"Docstring summary exceeds {_MAX_SUMMARY_LENGTH} characters")
         if self._nlp is not None:
             doc = self._nlp(summary)
             first_token = next(iter(doc), None)
             if first_token is not None and first_token.pos_ not in {"VERB", "AUX"}:
-                issues.append(
-                    DocstringIssue(
-                        path=path,
-                        line=line,
-                        message="Docstring summary should start with an imperative verb",
-                    ),
-                )
+                issues.append("Docstring summary should start with an imperative verb")
         return issues
 
 

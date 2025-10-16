@@ -17,6 +17,7 @@ from pyqa.linting.value_types import run_value_type_linter
 def stub_state() -> SimpleNamespace:
     root = Path(__file__).resolve().parents[3]
     target_options = SimpleNamespace(paths=[root / "src/pyqa/analysis/navigator.py"], dirs=[])
+    target_options.include_dotfiles = False
     options = SimpleNamespace(target_options=target_options)
     meta = SimpleNamespace(normal=False)
     return SimpleNamespace(root=root, options=options, meta=meta)

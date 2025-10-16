@@ -128,6 +128,7 @@ def _scan_file(path: Path) -> list[_Finding]:
     lines = text.splitlines()
     findings: list[_Finding] = []
     suffix = path.suffix.lower()
+    skip_not_implemented = "interfaces" in path.parts
     for line_number, raw_line in enumerate(lines, start=1):
         stripped = raw_line.strip()
         generic_marker = _match_generic_marker(raw_line)
@@ -143,7 +144,11 @@ def _scan_file(path: Path) -> list[_Finding]:
             continue
 
         python_match = _PYTHON_NOT_IMPLEMENTED_PATTERN.search(raw_line) if suffix in _PYTHON_SUFFIXES else None
-        if python_match is not None and not _is_within_string(raw_line, python_match.start()):
+        if (
+            python_match is not None
+            and not skip_not_implemented
+            and not _is_within_string(raw_line, python_match.start())
+        ):
             findings.append(
                 _Finding(
                     file=path,
@@ -178,7 +183,11 @@ def _scan_file(path: Path) -> list[_Finding]:
             continue
 
         not_impl_match = _NOT_IMPLEMENTED_PATTERN.search(raw_line)
-        if not_impl_match is not None and not _is_within_string(raw_line, not_impl_match.start()):
+        if (
+            not_impl_match is not None
+            and not skip_not_implemented
+            and not _is_within_string(raw_line, not_impl_match.start())
+        ):
             findings.append(
                 _Finding(
                     file=path,

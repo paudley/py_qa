@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 
-"""Analysis-oriented interfaces (Tree-sitter, spaCy, etc.)."""
+"""Organise analysis-oriented protocols (Tree-sitter, spaCy, etc.)."""
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,39 +25,105 @@ HighlightKind = Literal[
 
 @runtime_checkable
 class MessageSpan(Protocol):
-    """Lightweight structure describing a span highlighted in a message."""
+    """Provide a read-only view of a highlighted span extracted from a message."""
 
-    start: int
-    end: int
-    style: str
-    kind: str | None
+    @property
+    @abstractmethod
+    def start(self) -> int:
+        """Return the inclusive start offset of the span.
+
+        Returns:
+            int: Inclusive start offset expressed as a character index.
+        """
+        raise NotImplementedError("MessageSpan.start must be implemented")
+
+    @property
+    @abstractmethod
+    def end(self) -> int:
+        """Return the exclusive end offset of the span.
+
+        Returns:
+            int: Exclusive end offset expressed as a character index.
+        """
+        raise NotImplementedError("MessageSpan.end must be implemented")
+
+    @property
+    @abstractmethod
+    def style(self) -> str:
+        """Return the highlighting style applied to the span.
+
+        Returns:
+            str: Highlight style identifier supplied by the annotation provider.
+        """
+        raise NotImplementedError("MessageSpan.style must be implemented")
+
+    @property
+    @abstractmethod
+    def kind(self) -> str | None:
+        """Return the semantic kind associated with the span when available.
+
+        Returns:
+            str | None: Semantic kind string or ``None`` when unspecified.
+        """
+        raise NotImplementedError("MessageSpan.kind must be implemented")
 
 
 @runtime_checkable
 class AnnotationProvider(Protocol):
-    """Protocol implemented by services that annotate diagnostic messages."""
+    """Provide annotation services for diagnostic messages."""
 
+    @abstractmethod
     def annotate_run(self, result: RunResult) -> Mapping[int, DiagnosticAnnotation]:
-        """Annotate diagnostics contained within ``result``."""
+        """Provide annotations for diagnostics contained within ``result``.
+
+        Args:
+            result: Aggregated lint output to enrich.
+
+        Returns:
+            Mapping[int, DiagnosticAnnotation]: Annotation payloads keyed by diagnostic identifier.
+        """
         raise NotImplementedError
 
+    @abstractmethod
     def message_spans(self, message: str) -> Sequence[MessageSpan]:
-        """Return spans detected in ``message``."""
+        """Produce highlight spans detected within ``message``.
+
+        Args:
+            message: Diagnostic message requiring highlight extraction.
+
+        Returns:
+            Sequence[MessageSpan]: Ordered spans referencing highlighted tokens.
+        """
         raise NotImplementedError
 
+    @abstractmethod
     def message_signature(self, message: str) -> Sequence[str]:
-        """Return signature tokens derived from ``message``."""
+        """Generate signature tokens that describe ``message`` semantics.
+
+        Args:
+            message: Diagnostic message that should be tokenised.
+
+        Returns:
+            Sequence[str]: Ordered signature tokens used for classification.
+        """
         raise NotImplementedError
 
 
 @runtime_checkable
 class ContextResolver(Protocol):
-    """Protocol describing Tree-sitter context resolution services."""
+    """Deliver structural context resolution for diagnostics."""
 
+    @abstractmethod
     def annotate(self, diagnostics: Iterable[Diagnostic], *, root: Path) -> None:
-        """Populate contextual information on ``diagnostics``."""
+        """Inject contextual information onto ``diagnostics``.
+
+        Args:
+            diagnostics: Iterable of diagnostics to annotate in place.
+            root: Repository root used for filesystem lookups.
+        """
         raise NotImplementedError
 
+    @abstractmethod
     def resolve_context_for_lines(
         self,
         file_path: str,
@@ -64,19 +131,34 @@ class ContextResolver(Protocol):
         root: Path,
         lines: Iterable[int],
     ) -> dict[int, str]:
-        """Return contextual names keyed by requested line numbers."""
+        """Resolve contextual names keyed by the requested line numbers.
+
+        Args:
+            file_path: File path subject to context resolution.
+            root: Repository root used to resolve relative paths.
+            lines: One-based line numbers for which context is required.
+
+        Returns:
+            dict[int, str]: Mapping of line numbers to resolved context strings.
+        """
         raise NotImplementedError
 
 
 @runtime_checkable
 class FunctionScaleEstimator(Protocol):
-    """Protocol for services that estimate function size and complexity."""
+    """Provide estimates for function size and cyclomatic complexity."""
 
     @property
+    @abstractmethod
     def supported_languages(self) -> Sequence[str]:
-        """Return languages this estimator can analyse."""
-        raise NotImplementedError("FunctionScaleEstimator.supported_languages must be implemented")
+        """Return the languages that the estimator can analyse.
 
+        Returns:
+            Sequence[str]: Language identifiers the estimator supports.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def estimate(self, path: Path, function: str) -> tuple[int | None, int | None]:
         """Return approximate line count and complexity for ``function``.
 
@@ -88,23 +170,73 @@ class FunctionScaleEstimator(Protocol):
             tuple[int | None, int | None]: Estimated line count and complexity
             score, or ``None`` for values that cannot be computed.
         """
-
         raise NotImplementedError
 
 
 @dataclass(frozen=True, slots=True)
 class SimpleMessageSpan(MessageSpan):
-    """Concrete message span dataclass implementing the protocol."""
+    """Represent a message span implementing :class:`MessageSpan`."""
 
-    start: int
-    end: int
-    style: str
-    kind: str | None = None
+    _start: int
+    _end: int
+    _style: str
+    _kind: str | None = None
+
+    def __init__(self, start: int, end: int, style: str, kind: str | None = None) -> None:
+        """Initialise a simple message span instance.
+
+        Args:
+            start: Inclusive start offset of the span.
+            end: Exclusive end offset of the span.
+            style: Highlight style identifier.
+            kind: Optional semantic kind associated with the span.
+        """
+
+        object.__setattr__(self, "_start", start)
+        object.__setattr__(self, "_end", end)
+        object.__setattr__(self, "_style", style)
+        object.__setattr__(self, "_kind", kind)
+
+    @property
+    def start(self) -> int:
+        """Return the inclusive start offset captured by the span.
+
+        Returns:
+            int: Inclusive start offset expressed as a zero-based character index.
+        """
+        return self._start
+
+    @property
+    def end(self) -> int:
+        """Return the exclusive end offset captured by the span.
+
+        Returns:
+            int: Exclusive end offset expressed as a zero-based character index.
+        """
+        return self._end
+
+    @property
+    def style(self) -> str:
+        """Return the styling identifier describing how to render the span.
+
+        Returns:
+            str: Highlighting style associated with the span.
+        """
+        return self._style
+
+    @property
+    def kind(self) -> str | None:
+        """Return the semantic kind linked to the span when provided.
+
+        Returns:
+            str | None: Semantic tag describing the span; ``None`` when unspecified.
+        """
+        return self._kind
 
 
 @dataclass(frozen=True, slots=True)
 class DiagnosticAnnotation:
-    """Annotation metadata attached to a diagnostic message."""
+    """Maintain annotation metadata attached to a diagnostic message."""
 
     function: str | None
     class_name: str | None

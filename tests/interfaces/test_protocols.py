@@ -3,12 +3,20 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, MutableMapping
+from collections.abc import Iterable, Mapping, MutableMapping, Sequence
 from pathlib import Path
 
+from rich.console import Console
+
+from pyqa.core.serialization import JsonValue
 from pyqa.interfaces.analysis import AnnotationProvider, MessageSpan
-from pyqa.interfaces.catalog import CatalogSnapshot, StrategyFactory, ToolDefinition
-from pyqa.interfaces.cli import CliCommand, CliCommandFactory
+from pyqa.interfaces.catalog import (
+    CatalogSnapshot,
+    StrategyFactory,
+    StrategyRequest,
+    ToolDefinition,
+)
+from pyqa.interfaces.cli import CliCommand, CliCommandFactory, CliInvocation
 from pyqa.interfaces.compliance import ComplianceCheck, PolicyEvaluator, RemediationService
 from pyqa.interfaces.config import ConfigMutator, ConfigResolver, ConfigSource
 from pyqa.interfaces.core import ConsoleFactory, LoggerFactory, Serializer
@@ -46,17 +54,18 @@ class _Tool(ToolDefinition):
     phase = "lint"
     languages = ("python",)
 
-    def to_dict(self) -> Mapping[str, object]:
+    def to_dict(self) -> Mapping[str, str]:
         return {"name": self.name}
 
 
 class _Strategy(StrategyFactory):
-    def __call__(self, config=None, **overrides):
-        payload: dict[str, object] = {}
-        if config is not None:
-            payload.update({str(key): value for key, value in config.items()})
-        if overrides:
-            payload.update(overrides)
+    @property
+    def strategy_name(self) -> str:
+        return "demo-strategy"
+
+    def __call__(self, request: StrategyRequest) -> Mapping[str, JsonValue]:
+        payload: dict[str, JsonValue] = dict(request.base_config)
+        payload.update(request.overrides)
         return payload
 
 
@@ -78,12 +87,20 @@ def test_catalog_protocols() -> None:
 
 
 class _Command(CliCommand):
-    def __call__(self, *args, **kwargs):
+    @property
+    def name(self) -> str:
+        return "cli-demo"
+
+    def execute(self, invocation: CliInvocation) -> int | None:
         return 0
 
 
 class _CommandFactory(CliCommandFactory):
-    def create(self, argv=None):
+    @property
+    def command_name(self) -> str:
+        return "cli-demo"
+
+    def create(self, argv: Sequence[str] | None = None) -> CliCommand:
         return _Command()
 
 
@@ -93,16 +110,28 @@ def test_cli_protocols() -> None:
 
 
 class _ComplianceCheck(ComplianceCheck):
-    def run(self):
+    @property
+    def identifier(self) -> str:
+        return "compliance"
+
+    def run(self) -> Sequence[str]:
         return ["issue"]
 
 
 class _PolicyEvaluator(PolicyEvaluator):
-    def evaluate(self, payload: object) -> None:
+    @property
+    def policy_name(self) -> str:
+        return "policy"
+
+    def evaluate(self, payload: Mapping[str, str]) -> None:
         return None
 
 
 class _Remediation(RemediationService):
+    @property
+    def supported_issues(self) -> Sequence[str]:
+        return ("issue",)
+
     def apply(self, issue_identifier: str) -> bool:
         return True
 
@@ -124,29 +153,45 @@ class _Source(ConfigSource):
 
 
 class _Resolver(ConfigResolver):
-    def resolve(self, *sources: Mapping[str, object]):
-        return {}
+    @property
+    def strategy_name(self) -> str:
+        return "resolver"
+
+    def resolve(self, *sources: Mapping[str, str]) -> Mapping[str, str]:
+        return {"result": "ok"}
 
 
 class _Mutator(ConfigMutator):
-    def apply(self, data: MutableMapping[str, object]) -> None:
-        data["mutated"] = True
+    @property
+    def description(self) -> str:
+        return "mutator"
+
+    def apply(self, data: MutableMapping[str, str]) -> None:
+        data["mutated"] = "true"
 
 
 def test_config_protocols() -> None:
     assert isinstance(_Source(), ConfigSource)
     assert isinstance(_Resolver(), ConfigResolver)
-    target: dict[str, object] = {}
+    target: dict[str, str] = {}
     _Mutator().apply(target)
-    assert target == {"mutated": True}
+    assert target == {"mutated": "true"}
 
 
 class _ConsoleFactory(ConsoleFactory):
-    def __call__(self, *, color: bool, emoji: bool):
-        return object()
+    @property
+    def default_color(self) -> bool:
+        return True
+
+    def __call__(self, *, color: bool, emoji: bool) -> Console:
+        return Console(color_system="truecolor")
 
 
 class _LoggerFactory(LoggerFactory):
+    @property
+    def namespace(self) -> str:
+        return "pyqa"
+
     def __call__(self, name: str):
         import logging
 
@@ -154,11 +199,15 @@ class _LoggerFactory(LoggerFactory):
 
 
 class _Serializer(Serializer):
-    def dump(self, value):
+    @property
+    def content_type(self) -> str:
+        return "application/json"
+
+    def dump(self, value: JsonValue) -> str:
         return "{}"
 
-    def load(self, payload: str):
-        return {}
+    def load(self, payload: str) -> JsonValue:
+        return {"payload": payload}
 
 
 def test_core_protocols() -> None:
@@ -168,18 +217,33 @@ def test_core_protocols() -> None:
 
 
 class _ExcludePolicy(ExcludePolicy):
+    @property
+    def policy_name(self) -> str:
+        return "default"
+
     def exclusions(self):
         return ("*.py",)
 
 
 class _TargetPlanner(TargetPlanner):
+    @property
+    def planner_name(self) -> str:
+        return "planner"
+
     def plan(self):
         return ("src",)
 
 
 class _DiscoveryStrategy(DiscoveryStrategy):
-    def build(self):
-        return _TargetPlanner(), _ExcludePolicy()
+    @property
+    def identifier(self) -> str:
+        return "discover"
+
+    def discover(self, config, root: Path):
+        return (root / "src",)
+
+    def __call__(self, config, root: Path):
+        return self.discover(config, root)
 
 
 def test_discovery_protocols() -> None:
@@ -189,16 +253,28 @@ def test_discovery_protocols() -> None:
 
 
 class _Preparer(EnvironmentPreparer):
+    @property
+    def preparer_name(self) -> str:
+        return "preparer"
+
     def prepare(self) -> None:
         return None
 
 
 class _RuntimeResolver(RuntimeResolver):
+    @property
+    def supported_tools(self) -> tuple[str, ...]:
+        return ("tool",)
+
     def resolve(self, tool: str) -> Path:
         return Path("/bin/true")
 
 
 class _WorkspaceLocator(WorkspaceLocator):
+    @property
+    def workspace_hint(self) -> str:
+        return "workspace"
+
     def locate(self) -> Path:
         return Path("/")
 
@@ -210,11 +286,19 @@ def test_environment_protocols() -> None:
 
 
 class _Executor(ActionExecutor):
+    @property
+    def executor_name(self) -> str:
+        return "executor"
+
     def execute(self, action_name: str) -> None:
         return None
 
 
 class _Hooks(RunHooks):
+    @property
+    def supported_phases(self) -> Sequence[str]:
+        return ("plan", "execute")
+
     def before_phase(self, phase: str) -> None:
         return None
 
@@ -223,8 +307,15 @@ class _Hooks(RunHooks):
 
 
 class _Pipeline(ExecutionPipeline):
+    @property
+    def pipeline_name(self) -> str:
+        return "pipeline"
+
     def run(self, config, *, root):
         return {"config": config, "root": root}
+
+    def plan_tools(self, config, *, root):
+        return ()
 
     def fetch_all_tools(self, config, *, root, callback=None):
         if callback is not None:
@@ -239,12 +330,20 @@ def test_orchestration_protocols() -> None:
 
 
 class _Presenter(DiagnosticPresenter):
-    def render(self, diagnostics: Iterable[object]) -> str:
+    @property
+    def format_name(self) -> str:
+        return "text"
+
+    def render(self, diagnostics: Iterable[JsonValue]) -> str:
         return "rendered"
 
 
 class _Advisor(AdviceProvider):
-    def advise(self, diagnostics: Iterable[object]):
+    @property
+    def provider_name(self) -> str:
+        return "advisor"
+
+    def advise(self, diagnostics: Iterable[JsonValue]) -> Sequence[str]:
         return ["advice"]
 
 

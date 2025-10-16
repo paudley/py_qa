@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,7 +18,7 @@ from ..core.models import Diagnostic, RawDiagnostic
 
 @dataclass(frozen=True, slots=True)
 class DiagnosticPipelineRequest:
-    """Request bundle consumed by diagnostic pipelines."""
+    """Represent a request bundle consumed by diagnostic pipelines."""
 
     tool_name: str
     candidates: Sequence[RawDiagnostic | Diagnostic]
@@ -31,13 +32,25 @@ class DiagnosticPipeline(Protocol):
     """Process raw diagnostics into filtered results for consumption."""
 
     @property
+    @abstractmethod
     def pipeline_name(self) -> str:
-        """Return the identifier of the pipeline implementation."""
-        raise NotImplementedError("DiagnosticPipeline.pipeline_name must be implemented")
+        """Return the identifier of the pipeline implementation.
 
+        Returns:
+            str: Identifier describing the diagnostic pipeline implementation.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def run(self, request: DiagnosticPipelineRequest) -> list[Diagnostic]:
-        """Return filtered diagnostics ready for presentation."""
+        """Produce filtered diagnostics ready for presentation.
 
+        Args:
+            request: Pipeline request containing raw diagnostics and metadata.
+
+        Returns:
+            list[Diagnostic]: Diagnostics normalised and filtered by the pipeline.
+        """
         raise NotImplementedError
 
 

@@ -80,6 +80,16 @@ class CacheContext:
 class DefaultCacheTokenBuilder(CacheTokenBuilderProtocol):
     """Generate cache tokens from lint configuration."""
 
+    @property
+    def builder_name(self) -> str:
+        """Return the identifier of the token builder implementation.
+
+        Returns:
+            str: Identifier describing the default token builder.
+        """
+
+        return "default-cache-token"
+
     def build_token(self, config: Config) -> str:
         """Build the cache token representing ``config``.
 
@@ -146,12 +156,36 @@ class FileSystemCacheVersionStore(CacheVersionStoreProtocol):
 
 
 @dataclass(slots=True)
+class ResultCacheClassFactory(ResultCacheFactory):
+    """Wrap a cache class so it satisfies the factory protocol."""
+
+    implementation: type[ResultCache]
+
+    @property
+    def factory_name(self) -> str:
+        """Return the identifier of the wrapped cache class."""
+
+        return self.implementation.__name__
+
+    def __call__(self, directory: Path) -> ResultCacheProtocol:
+        """Instantiate the wrapped cache class for ``directory``."""
+
+        return self.implementation(directory)
+
+
+@dataclass(slots=True)
 class DefaultCacheContextFactory(CacheContextFactoryProtocol):
     """Create cache contexts using injectable collaborators."""
 
     result_cache_factory: ResultCacheFactory
     token_builder: CacheTokenBuilderProtocol
     version_store: CacheVersionStoreProtocol
+
+    @property
+    def factory_name(self) -> str:
+        """Return the identifier of the cache context factory."""
+
+        return "default-cache-context"
 
     def build(self, config: Config, root: Path) -> CacheContext:
         """Construct a cache context bound to ``config`` and ``root``.
@@ -184,7 +218,7 @@ class DefaultCacheContextFactory(CacheContextFactoryProtocol):
 _DEFAULT_TOKEN_BUILDER = DefaultCacheTokenBuilder()
 _DEFAULT_VERSION_STORE = FileSystemCacheVersionStore()
 _DEFAULT_CONTEXT_FACTORY = DefaultCacheContextFactory(
-    result_cache_factory=ResultCache,
+    result_cache_factory=ResultCacheClassFactory(ResultCache),
     token_builder=_DEFAULT_TOKEN_BUILDER,
     version_store=_DEFAULT_VERSION_STORE,
 )

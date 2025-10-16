@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Interface modules aggregating protocols for pyqa subsystems.
 
 This package intentionally avoids importing concrete implementations to

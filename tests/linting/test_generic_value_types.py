@@ -30,6 +30,7 @@ def _build_state(root: Path, targets: list[Path]) -> SimpleNamespace:
         dirs=[],
         exclude=[],
         paths_from_stdin=False,
+        include_dotfiles=False,
     )
     options = SimpleNamespace(target_options=target_options)
     meta = SimpleNamespace(

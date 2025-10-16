@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Interface data structures capturing tool-selection outcomes.
 
 Modules outside ``pyqa.orchestration`` should consume these definitions instead
@@ -10,17 +11,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Final, Literal
 
 from pyqa.config import Config, SensitivityLevel
 from pyqa.tools.base import PhaseLiteral
 
 ToolFamilyLiteral = Literal["external", "internal", "internal-pyqa", "unknown"]
+RUN_ACTION: Final[str] = "run"
 
 
 @dataclass(frozen=True, slots=True)
 class SelectionContext:
-    """Derived inputs used to evaluate tool eligibility."""
+    """Provide derived inputs used to evaluate tool eligibility."""
 
     config: Config
     root: Path
@@ -35,7 +37,11 @@ class SelectionContext:
 
     @property
     def language_scope(self) -> frozenset[str]:
-        """Return languages that should guide tool selection heuristics."""
+        """Provide languages that should guide tool selection heuristics.
+
+        Returns:
+            frozenset[str]: Languages used when evaluating tool eligibility.
+        """
 
         if self.requested_languages:
             return frozenset(self.requested_languages)
@@ -44,7 +50,7 @@ class SelectionContext:
 
 @dataclass(frozen=True, slots=True)
 class ToolEligibility:
-    """Per-tool predicate evaluation used to explain selection decisions."""
+    """Capture per-tool predicate evaluations used to explain selection decisions."""
 
     name: str
     family: ToolFamilyLiteral
@@ -61,7 +67,7 @@ class ToolEligibility:
 
 @dataclass(frozen=True, slots=True)
 class ToolDecision:
-    """Final verdict for an individual tool."""
+    """Summarize the final verdict for an individual tool."""
 
     name: str
     family: ToolFamilyLiteral
@@ -73,7 +79,7 @@ class ToolDecision:
 
 @dataclass(frozen=True, slots=True)
 class SelectionResult:
-    """Outcome of planning a lint run given current configuration."""
+    """Summarize the outcome of planning a lint run for the current configuration."""
 
     ordered: tuple[str, ...]
     decisions: tuple[ToolDecision, ...]
@@ -81,16 +87,26 @@ class SelectionResult:
 
     @property
     def run_names(self) -> tuple[str, ...]:
-        """Return tool names scheduled for execution."""
+        """Provide tool names scheduled for execution.
+
+        Returns:
+            tuple[str, ...]: Ordered tool identifiers scheduled for execution.
+        """
 
         return self.ordered
 
     @property
     def run_decisions(self) -> tuple[ToolDecision, ...]:
-        """Return decisions corresponding to scheduled tools in run order."""
+        """Provide decisions corresponding to scheduled tools in run order.
+
+        Returns:
+            tuple[ToolDecision, ...]: Decisions associated with tools scheduled to run.
+        """
 
         sequence = {name: index for index, name in enumerate(self.ordered)}
-        filtered = [decision for decision in self.decisions if decision.action == "run" and decision.name in sequence]
+        filtered = [
+            decision for decision in self.decisions if decision.action == RUN_ACTION and decision.name in sequence
+        ]
         filtered.sort(key=lambda decision: sequence[decision.name])
         return tuple(filtered)
 

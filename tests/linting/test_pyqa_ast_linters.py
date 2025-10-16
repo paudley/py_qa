@@ -22,6 +22,7 @@ def _stub_state(tmp_path: Path, module: Path) -> SimpleNamespace:
                 dirs=[],
                 exclude=[],
                 paths_from_stdin=False,
+                include_dotfiles=False,
             ),
         ),
         meta=SimpleNamespace(pyqa_rules=True),

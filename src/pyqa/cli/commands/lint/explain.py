@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from typing import Final
+
 from rich.table import Table
 
 from pyqa.interfaces.orchestration_selection import SelectionResult, ToolDecision
@@ -14,10 +16,16 @@ from .runtime import LintRuntimeContext
 
 _CHECKMARK = "✓"
 _CROSS = "✗"
+_SKIP_ACTION: Final[str] = "skip"
 
 
 def render_explain_tools(runtime: LintRuntimeContext, selection: SelectionResult) -> None:
-    """Render a summary table describing tool-selection decisions."""
+    """Render a summary table describing tool-selection decisions.
+
+    Args:
+        runtime: Execution runtime supplying registry and logging services.
+        selection: Planned tool selection emitted by the orchestration layer.
+    """
 
     logger = runtime.state.logger
     table = Table(title="Tool Selection Plan", show_lines=False, box=None)
@@ -52,12 +60,19 @@ def render_explain_tools(runtime: LintRuntimeContext, selection: SelectionResult
 
     logger.console.print(table)
     run_count = len(selection.run_names)
-    skip_count = sum(1 for decision in selection.decisions if decision.action == "skip")
+    skip_count = sum(1 for decision in selection.decisions if decision.action == _SKIP_ACTION)
     logger.ok(f"Planned {run_count} tool(s); skipped {skip_count} tool(s).")
 
 
 def _format_indicators(decision: ToolDecision) -> str:
-    """Return a compact indicator string for ``decision``."""
+    """Return a compact indicator string for ``decision``.
+
+    Args:
+        decision: Tool selection decision whose metadata should be summarised.
+
+    Returns:
+        str: Space-separated indicator tokens describing decision metadata.
+    """
 
     eligibility = decision.eligibility
     parts: list[str] = []
@@ -81,11 +96,29 @@ def _format_indicators(decision: ToolDecision) -> str:
 
 
 def _format_toggle(label: str, value: bool) -> str:
+    """Return an indicator string describing the boolean toggle state.
+
+    Args:
+        label: Indicator label to present.
+        value: Toggle state associated with ``label``.
+
+    Returns:
+        str: Formatted label paired with a checkmark or cross symbol.
+    """
+
     return f"{label}={_CHECKMARK if value else _CROSS}"
 
 
 def _lookup_description(registry: ToolRegistry, tool_name: str) -> str:
-    """Return the registry description for ``tool_name`` when available."""
+    """Return the registry description for ``tool_name`` when available.
+
+    Args:
+        registry: Tool registry queried for descriptions.
+        tool_name: Name of the tool whose description should be retrieved.
+
+    Returns:
+        str: Description string or an empty string when undefined.
+    """
 
     tool: Tool | None = registry.try_get(tool_name)
     if tool is None:
