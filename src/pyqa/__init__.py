@@ -10,6 +10,10 @@ from dataclasses import dataclass
 from importlib import import_module, metadata
 from typing import TYPE_CHECKING, Final, cast
 
+from .core.git_stub import install_git_stub
+
+install_git_stub()
+
 
 @dataclass(frozen=True, slots=True)
 class ExportTarget:
