@@ -145,7 +145,14 @@ def _download(url: str, destination: Path) -> None:
 
 
 def _library_filename(grammar_name: str) -> str:
-    """Return platform-specific shared library filename for ``grammar_name``."""
+    """Return the platform-specific shared library filename for ``grammar_name``.
+
+    Args:
+        grammar_name: Tree-sitter grammar identifier.
+
+    Returns:
+        str: Filename appropriate for the running platform.
+    """
 
     if sys.platform.startswith("win"):
         return f"{grammar_name}.dll"
@@ -155,7 +162,14 @@ def _library_filename(grammar_name: str) -> str:
 
 
 def _import_language_module(module_name: str) -> ModuleType | None:
-    """Import a packaged Tree-sitter language module when available."""
+    """Import a packaged Tree-sitter language module when available.
+
+    Args:
+        module_name: Fully qualified module path to import.
+
+    Returns:
+        ModuleType | None: Imported module when present; otherwise ``None``.
+    """
 
     try:
         return importlib.import_module(module_name)
@@ -164,7 +178,14 @@ def _import_language_module(module_name: str) -> ModuleType | None:
 
 
 def _language_from_module(module: ModuleType) -> TSLanguage | None:
-    """Instantiate a ``Language`` object from a packaged module factory."""
+    """Instantiate a ``Language`` object from a packaged module factory.
+
+    Args:
+        module: Module exposing a ``language`` factory callable.
+
+    Returns:
+        TSLanguage | None: Loaded language instance when the factory is available.
+    """
 
     factory = getattr(module, "language", None)
     if not callable(factory):

@@ -27,6 +27,7 @@ class LintTargetOptions:
     dirs: list[Path]
     exclude: list[Path]
     paths_from_stdin: bool
+    include_dotfiles: bool
 
 
 @dataclass(slots=True)
@@ -174,6 +175,7 @@ _OPTION_ATTRIBUTE_MAP: Final[dict[str, tuple[str, ...]]] = {
     "dirs": ("_targets", "dirs"),
     "exclude": ("_targets", "exclude"),
     "paths_from_stdin": ("_targets", "paths_from_stdin"),
+    "include_dotfiles": ("_targets", "include_dotfiles"),
     "changed_only": ("_git", "changed_only"),
     "diff_ref": ("_git", "diff_ref"),
     "include_untracked": ("_git", "include_untracked"),
@@ -347,6 +349,7 @@ class LintOptions:
         dirs: list[Path]
         exclude: list[Path]
         paths_from_stdin: bool
+        include_dotfiles: bool
         changed_only: bool
         diff_ref: str
         include_untracked: bool

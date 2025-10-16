@@ -28,7 +28,7 @@ MAGIC_SIGNATURES: Final[set[str]] = {"magic"}
 
 
 class IssueTag(str, Enum):
-    """List recognised navigator issue tags."""
+    """Enumerate recognised navigator issue tags."""
 
     COMPLEXITY = "complexity"
     TYPING = "typing"

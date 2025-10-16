@@ -32,6 +32,7 @@ class LintOptionKey(str, Enum):
     DIRS = "dirs"
     PATHS = "paths"
     EXCLUDE = "exclude"
+    INCLUDE_DOTFILES = "include_dotfiles"
     FILTERS = "filters"
     VERBOSE = "verbose"
     QUIET = "quiet"

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
@@ -15,6 +16,17 @@ if TYPE_CHECKING:  # pragma: no cover - type checking import
 
 
 _PYTHON_EXTENSIONS: Final[tuple[str, ...]] = (".py", ".pyi")
+_CACHE_SEGMENT_INDICATOR: Final[str] = "cache"
+
+
+@dataclass(frozen=True, slots=True)
+class _DiscoveryContext:
+    """Describe discovery rules shared across helper functions."""
+
+    excluded: Iterable[Path]
+    root: Path
+    extension_filter: set[str] | None
+    include_dotfiles: bool
 
 
 def collect_target_files(
@@ -31,6 +43,8 @@ def collect_target_files(
 
     Returns:
         Sorted list of resolved file paths matching the requested filters.
+        Dot-prefixed files and directories are excluded unless the caller
+        opts into ``include_dotfiles``.
     """
 
     options = state.options.target_options
@@ -40,25 +54,31 @@ def collect_target_files(
     paths = [path.resolve() for path in options.paths]
     if not paths and not options.dirs:
         paths.append(root)
+    include_dotfiles = options.include_dotfiles
+
+    context = _DiscoveryContext(
+        excluded=options.exclude,
+        root=root,
+        extension_filter=extension_filter,
+        include_dotfiles=include_dotfiles,
+    )
 
     for path in paths:
         _include_candidate(
             candidates,
             path,
-            excluded=options.exclude,
-            root=root,
-            extension_filter=extension_filter,
+            context=context,
         )
         if path.is_dir():
             resolved_dir = _resolve_within_root(path, root)
             if resolved_dir is None:
                 continue
-            candidates.update(_walk_files(resolved_dir, options.exclude, root, extension_filter))
+            candidates.update(_walk_files(resolved_dir, context))
     for directory in options.dirs:
         resolved_dir = _resolve_within_root(directory, root)
         if resolved_dir is None:
             continue
-        candidates.update(_walk_files(resolved_dir, options.exclude, root, extension_filter))
+        candidates.update(_walk_files(resolved_dir, context))
     return sorted(candidates)
 
 
@@ -75,41 +95,34 @@ def collect_python_files(state: PreparedLintState) -> list[Path]:
     return collect_target_files(state, extensions=_PYTHON_EXTENSIONS)
 
 
-def _walk_files(
-    directory: Path,
-    exclude: Iterable[Path],
-    root: Path,
-    extension_filter: set[str] | None,
-) -> set[Path]:
+def _walk_files(directory: Path, context: _DiscoveryContext) -> set[Path]:
     """Collect files beneath ``directory`` while applying exclusions.
 
     Args:
         directory: Directory explored for candidate files.
-        exclude: Iterable of paths explicitly excluded by the caller.
-        root: Workspace root used to constrain traversal.
-        extension_filter: Optional set of extensions used to filter results.
+        context: Discovery context describing exclusion lists and options.
 
     Returns:
         set[Path]: Resolved file paths discovered within ``directory``.
     """
 
-    excluded = [path.resolve() for path in exclude]
+    excluded = [path.resolve() for path in context.excluded]
     results: set[Path] = set()
     for candidate in directory.rglob("*"):
         if not candidate.is_file():
             continue
-        if _is_excluded(candidate, excluded, root):
+        if _is_excluded(candidate, excluded, context.root, context.include_dotfiles):
             continue
-        resolved = _resolve_within_root(candidate, root)
+        resolved = _resolve_within_root(candidate, context.root)
         if resolved is None:
             continue
-        if extension_filter and resolved.suffix.lower() not in extension_filter:
+        if context.extension_filter and resolved.suffix.lower() not in context.extension_filter:
             continue
         results.add(resolved)
     return results
 
 
-def _is_excluded(path: Path, excluded: Iterable[Path], root: Path) -> bool:
+def _is_excluded(path: Path, excluded: Iterable[Path], root: Path, include_dotfiles: bool) -> bool:
     """Return ``True`` when ``path`` should be ignored during scanning.
 
     Args:
@@ -132,9 +145,28 @@ def _is_excluded(path: Path, excluded: Iterable[Path], root: Path) -> bool:
         relative = path.relative_to(root)
     except ValueError:
         return True
-    if any(part in ALWAYS_EXCLUDE_DIRS for part in relative.parts):
+    if any(_should_exclude_segment(part, include_dotfiles) for part in relative.parts):
         return True
     return False
+
+
+def _should_exclude_segment(segment: str, include_dotfiles: bool) -> bool:
+    """Return ``True`` when ``segment`` represents an excluded directory name.
+
+    Args:
+        segment: Individual path component extracted from a candidate path.
+        include_dotfiles: Whether dot-prefixed segments should be retained.
+
+    Returns:
+        bool: ``True`` if the component should cause the path to be skipped.
+    """
+
+    lowered = segment.lower()
+    if segment in ALWAYS_EXCLUDE_DIRS:
+        return True
+    if not include_dotfiles and segment.startswith("."):
+        return True
+    return _CACHE_SEGMENT_INDICATOR in lowered
 
 
 def _resolve_within_root(path: Path, root: Path) -> Path | None:
@@ -161,25 +193,22 @@ def _include_candidate(
     candidates: set[Path],
     path: Path,
     *,
-    excluded: Iterable[Path],
-    root: Path,
-    extension_filter: set[str] | None,
+    context: _DiscoveryContext,
 ) -> None:
     """Include ``path`` in ``candidates`` when it is an eligible file.
 
     Args:
         candidates: Accumulator tracking resolved candidate paths.
         path: Candidate path supplied by the caller.
-        excluded: Iterable of paths explicitly excluded by the caller.
-        root: Workspace root constraining traversal.
-        extension_filter: Optional set of extensions used to filter results.
+        context: Discovery context describing exclusion lists and options.
     """
 
-    if _is_excluded(path, excluded, root):
+    if _is_excluded(path, context.excluded, context.root, context.include_dotfiles):
         return
-    resolved = _resolve_within_root(path, root)
+    resolved = _resolve_within_root(path, context.root)
     if resolved is None or not resolved.is_file():
         return
+    extension_filter = context.extension_filter
     if extension_filter and resolved.suffix.lower() not in extension_filter:
         return
     candidates.add(resolved)

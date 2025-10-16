@@ -49,6 +49,7 @@ def _build_state(
     paths: list[Path] | None = None,
     dirs: list[Path] | None = None,
     exclude: list[Path] | None = None,
+    include_dotfiles: bool = False,
 ) -> PreparedLintState:
     """Build a minimal stand-in resembling :class:`PreparedLintState`.
 
@@ -69,6 +70,7 @@ def _build_state(
         dirs=dirs or [],
         exclude=exclude or [],
         paths_from_stdin=False,
+        include_dotfiles=include_dotfiles,
     )
     options = SimpleNamespace(target_options=target_options)
     state = SimpleNamespace(options=options)
@@ -122,3 +124,29 @@ def test_collect_target_files_ignores_symlinks_escaping_root(tmp_path: Path) -> 
     result = collect_target_files(state)
 
     assert result == [inside_file.resolve()]
+
+
+def test_collect_target_files_skips_dotfiles_by_default(tmp_path: Path) -> None:
+    """Ensure dotfiles are excluded unless explicitly requested."""
+
+    root = tmp_path / "workspace"
+    root.mkdir()
+    hidden = root / ".hidden.py"
+    hidden.write_text("print('hidden')\n", encoding="utf-8")
+
+    state = _build_state(root=root, paths=[hidden])
+
+    assert collect_target_files(state) == []
+
+
+def test_collect_target_files_includes_dotfiles_when_requested(tmp_path: Path) -> None:
+    """Ensure dotfiles are included when the caller opts in."""
+
+    root = tmp_path / "workspace"
+    root.mkdir()
+    hidden = root / ".hidden.py"
+    hidden.write_text("print('hidden')\n", encoding="utf-8")
+
+    state = _build_state(root=root, paths=[hidden], include_dotfiles=True)
+
+    assert collect_target_files(state) == [hidden.resolve()]

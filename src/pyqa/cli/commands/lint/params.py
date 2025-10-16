@@ -33,6 +33,15 @@ class LintPathParams:
     paths_from_stdin: bool
     dirs: list[Path]
     exclude: list[Path]
+    include_dotfiles: bool
+
+
+@dataclass(slots=True)
+class LintPathToggles:
+    """Capture toggle options that influence filesystem discovery."""
+
+    paths_from_stdin: bool
+    include_dotfiles: bool
 
 
 LintGitParams = LintGitOptions
@@ -452,6 +461,7 @@ __all__ = (
     "LintOutputParams",
     "LintOverrideParams",
     "LintPathParams",
+    "LintPathToggles",
     "LintReportingParams",
     "LintSelectionParams",
     "LintSeverityParams",

@@ -172,7 +172,15 @@ def _extract_arguments(diag: Diagnostic, engine: AnnotationProvider) -> list[str
 
 
 def _resolve_suppression_tool(tool_name: str) -> SuppressionTool | None:
-    """Return the suppression-aware tool enum for ``tool_name``."""
+    """Return the suppression-aware tool enum for ``tool_name``.
+
+    Args:
+        tool_name: Tool identifier sourced from a diagnostic payload.
+
+    Returns:
+        SuppressionTool | None: Matching suppression enum member when recognised,
+        otherwise ``None``.
+    """
 
     try:
         candidate = SuppressionTool(tool_name)
@@ -182,7 +190,15 @@ def _resolve_suppression_tool(tool_name: str) -> SuppressionTool | None:
 
 
 def _resolve_annotation_tool(tool_name: str) -> AnnotationTool | None:
-    """Return the annotation-aware tool enum for ``tool_name``."""
+    """Return the annotation-aware tool enum for ``tool_name``.
+
+    Args:
+        tool_name: Tool identifier sourced from a diagnostic payload.
+
+    Returns:
+        AnnotationTool | None: Matching annotation enum member when recognised,
+        otherwise ``None``.
+    """
 
     try:
         candidate = AnnotationTool(tool_name)

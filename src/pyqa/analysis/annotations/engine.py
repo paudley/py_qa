@@ -68,7 +68,7 @@ _UNDERSCORE_CHAR: Final[str] = "_"
 
 @dataclass(frozen=True)
 class MessageAnalysis:
-    """Store cached NLP artefacts for a diagnostic message."""
+    """Represent cached NLP artefacts for a diagnostic message."""
 
     spans: tuple[SimpleMessageSpan, ...]
     signature: tuple[str, ...]
@@ -136,7 +136,7 @@ class AnnotationEngine(AnnotationProvider):
         return annotations
 
     def message_spans(self, message: str) -> Sequence[MessageSpan]:
-        """Return cached highlight spans for ``message``.
+        """Return cached highlight spans detected within ``message``.
 
         Args:
             message: Diagnostic text to analyse.
@@ -150,7 +150,7 @@ class AnnotationEngine(AnnotationProvider):
         return analysis.spans
 
     def message_signature(self, message: str) -> Sequence[str]:
-        """Build a semantic signature extracted from ``message``.
+        """Return the semantic signature extracted from ``message``.
 
         Args:
             message: Diagnostic text to transform into semantic tokens.
@@ -293,14 +293,14 @@ class _SpanCollector:
         self._collect_simple_matches(_FUNCTION_PATTERN, _FUNCTION_SPEC)
 
     def _collect_paths(self) -> None:
-        """Capture filesystem path spans within the message text."""
+        """Collect filesystem path spans within the message text."""
 
         for match in _PATH_PATTERN.finditer(self.message):
             value = self.message[match.start(1) : match.end(1)]
             self._record_span(value, match.start(1), match.end(1), _PATH_SPEC)
 
     def _collect_camel_case_identifiers(self) -> None:
-        """Capture CamelCase identifiers in the message text."""
+        """Collect CamelCase identifiers in the message text."""
 
         for match in _CAMEL_IDENTIFIER_PATTERN.finditer(self.message):
             value = match.group(0)
@@ -308,7 +308,7 @@ class _SpanCollector:
                 self._record_span(value, match.start(0), match.end(0), _CLASS_SPEC)
 
     def _collect_argument_names(self) -> None:
-        """Capture function argument name spans within the message."""
+        """Collect function argument name spans within the message."""
 
         for match in _ARGUMENT_PATTERN.finditer(self.message):
             raw_arguments = match.group(1)

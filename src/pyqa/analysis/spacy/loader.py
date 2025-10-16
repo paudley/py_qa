@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib import import_module
 from shutil import which
 from threading import Lock
@@ -143,14 +143,23 @@ class SpacyLanguage(Protocol):
 
 @dataclass(frozen=True)
 class _UnsetSentinel:
-    """Marker type indicating an uninitialised cache entry."""
+    """Represent an uninitialised cache entry sentinel."""
 
 
 _SENTINEL: Final[_UnsetSentinel] = _UnsetSentinel()
-_LOADER_CACHE: Callable[[str], SpacyLanguage] | None | _UnsetSentinel = _SENTINEL
-_VERSION_CACHE: str | None | _UnsetSentinel = _SENTINEL
-_LANGUAGE_CACHE: dict[str, SpacyLanguage] = {}
-_LANGUAGE_CACHE_LOCK = Lock()
+
+
+@dataclass(slots=True)
+class _LoaderState:
+    """Maintain cached spaCy loader and version metadata."""
+
+    loader: Callable[[str], SpacyLanguage] | None | _UnsetSentinel = _SENTINEL
+    version: str | None | _UnsetSentinel = _SENTINEL
+    language_cache: dict[str, SpacyLanguage] = field(default_factory=dict)
+    language_lock: Lock = field(default_factory=Lock)
+
+
+_STATE = _LoaderState()
 
 
 def load_language(model_name: str) -> SpacyLanguage | None:
@@ -164,9 +173,9 @@ def load_language(model_name: str) -> SpacyLanguage | None:
         not possible.
     """
 
-    with _LANGUAGE_CACHE_LOCK:
-        if model_name in _LANGUAGE_CACHE:
-            return _LANGUAGE_CACHE[model_name]
+    with _STATE.language_lock:
+        if model_name in _STATE.language_cache:
+            return _STATE.language_cache[model_name]
     loader = _resolve_loader()
     if loader is None:
         return None
@@ -183,16 +192,16 @@ def load_language(model_name: str) -> SpacyLanguage | None:
             language = loader(model_name)
         except OSError:  # pragma: no cover - spaCy optional
             return None
-    with _LANGUAGE_CACHE_LOCK:
-        cached = _LANGUAGE_CACHE.get(model_name)
+    with _STATE.language_lock:
+        cached = _STATE.language_cache.get(model_name)
         if cached is None:
-            _LANGUAGE_CACHE[model_name] = language
+            _STATE.language_cache[model_name] = language
             cached = language
     return cached
 
 
 def _download_spacy_model(model_name: str) -> bool:
-    """Attempt to download the specified spaCy model via ``uv``.
+    """Download the specified spaCy model via ``uv`` when available.
 
     Args:
         model_name: Fully qualified spaCy model identifier.
@@ -238,21 +247,19 @@ def _resolve_loader(force: bool = False) -> Callable[[str], SpacyLanguage] | Non
         when spaCy is not installed.
     """
 
-    global _LOADER_CACHE
-
-    if not force and _LOADER_CACHE is not _SENTINEL:
-        return cast(Callable[[str], SpacyLanguage] | None, _LOADER_CACHE)
+    if not force and _STATE.loader is not _SENTINEL:
+        return cast(Callable[[str], SpacyLanguage] | None, _STATE.loader)
     try:
         module: ModuleType = import_module("spacy")
     except ModuleNotFoundError:  # pragma: no cover - optional dependency
-        _LOADER_CACHE = None
+        _STATE.loader = None
         return None
     load_fn = getattr(module, "load", None)
     if not callable(load_fn):
-        _LOADER_CACHE = None
+        _STATE.loader = None
         return None
     loader = cast(Callable[[str], SpacyLanguage], load_fn)
-    _LOADER_CACHE = loader
+    _STATE.loader = loader
     return loader
 
 
@@ -266,18 +273,16 @@ def _resolve_version(force: bool = False) -> str | None:
         str | None: Resolved spaCy version or ``None`` if unavailable.
     """
 
-    global _VERSION_CACHE
-
-    if not force and _VERSION_CACHE is not _SENTINEL:
-        return cast(str | None, _VERSION_CACHE)
+    if not force and _STATE.version is not _SENTINEL:
+        return cast(str | None, _STATE.version)
     try:
         module: ModuleType = import_module("spacy")
     except ModuleNotFoundError:  # pragma: no cover - optional dependency
-        _VERSION_CACHE = None
+        _STATE.version = None
         return None
     version = getattr(module, "__version__", None)
     resolved = version if isinstance(version, str) else None
-    _VERSION_CACHE = resolved
+    _STATE.version = resolved
     return resolved
 
 

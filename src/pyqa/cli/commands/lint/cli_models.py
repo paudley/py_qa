@@ -37,6 +37,7 @@ from .params import (
     LintOutputParams,
     LintOverrideParams,
     LintPathParams,
+    LintPathToggles,
     LintReportingParams,
     LintSelectionParams,
     LintSeverityParams,
@@ -315,13 +316,40 @@ def _coerce_pr_summary_severity(value: str) -> PRSummarySeverityLiteral:
 # Dependency factories -----------------------------------------------------------------
 
 
-def _path_params_dependency(
-    paths: PathArgument,
-    root: RootOption,
+def _path_toggles_dependency(
     paths_from_stdin: Annotated[
         bool,
         typer.Option(False, help="Read file paths from stdin."),
     ],
+    include_dotfiles: Annotated[
+        bool,
+        typer.Option(
+            False,
+            "--dotfiles",
+            help="Include dotfiles and dot directories during discovery.",
+        ),
+    ],
+) -> LintPathToggles:
+    """Return discovery toggles controlling path ingestion sources.
+
+    Args:
+        paths_from_stdin: Flag indicating whether paths originate from stdin.
+        include_dotfiles: Whether dotfiles and dot directories should be included.
+
+    Returns:
+        LintPathToggles: Structured toggle values for path discovery.
+    """
+
+    return LintPathToggles(
+        paths_from_stdin=paths_from_stdin,
+        include_dotfiles=include_dotfiles,
+    )
+
+
+def _path_params_dependency(
+    paths: PathArgument,
+    root: RootOption,
+    toggles: Annotated[LintPathToggles, Depends(_path_toggles_dependency)],
     dirs: Annotated[
         list[Path],
         typer.Option([], "--dir", help="Add directory to discovery roots (repeatable)."),
@@ -336,7 +364,7 @@ def _path_params_dependency(
     Args:
         paths: Optional positional path arguments.
         root: Repository root option supplied via CLI.
-        paths_from_stdin: Flag indicating whether paths originate from stdin.
+        toggles: Discovery toggles controlling stdin ingestion and dotfiles.
         dirs: Additional directory discovery roots.
         exclude: Explicit paths or globs to exclude from discovery.
 
@@ -347,9 +375,10 @@ def _path_params_dependency(
     return LintPathParams(
         paths=list(paths or []),
         root=root,
-        paths_from_stdin=paths_from_stdin,
+        paths_from_stdin=toggles.paths_from_stdin,
         dirs=list(dirs),
         exclude=list(exclude),
+        include_dotfiles=toggles.include_dotfiles,
     )
 
 

@@ -264,6 +264,7 @@ def _build_target_options(
         dirs=list(normalized_targets.dirs),
         exclude=preset.exclude_paths,
         paths_from_stdin=target_params.paths_from_stdin,
+        include_dotfiles=target_params.include_dotfiles,
     )
 
 
@@ -725,6 +726,7 @@ def _collect_provided_flags(
         "paths_from_stdin",
         "dirs",
         "exclude",
+        "dotfiles",
         "filters",
         "only",
         "language",
