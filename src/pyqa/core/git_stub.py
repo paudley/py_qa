@@ -10,10 +10,15 @@ import json
 import os
 import shutil
 import subprocess
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
 
+GIT_EXECUTABLE: Final[str] = "git"
+STATUS_DELETED_PREFIX: Final[str] = " D "
+STATUS_MODIFIED_PREFIX: Final[str] = " M "
+STATUS_UNTRACKED_PREFIX: Final[str] = "?? "
 _STATE_FILENAME = "pyqa_stub_state.json"
 _ORIGINAL_RUN = subprocess.run
 _ORIGINAL_WHICH = shutil.which
@@ -27,7 +32,7 @@ class _RepositoryState:
     staged: dict[str, str | None]
 
     @classmethod
-    def load(cls, root: Path) -> "_RepositoryState":
+    def load(cls, root: Path) -> _RepositoryState:
         state_file = root / ".git" / _STATE_FILENAME
         if not state_file.exists():
             return cls(tracked={}, staged={})
@@ -63,29 +68,41 @@ def _init_repo(cwd: Path) -> tuple[int, str, str]:
 
 
 def _collect_paths(cwd: Path, arguments: Sequence[str]) -> Iterable[Path]:
+    """Yield file paths referenced by ``arguments`` relative to ``cwd``.
+
+    Args:
+        cwd: Repository root directory.
+        arguments: Paths provided to the stub command.
+
+    Returns:
+        Iterable[Path]: Iterated file paths that match ``arguments``.
+    """
+
     if not arguments:
         return []
     for arg in arguments:
         target = (cwd / arg).resolve()
         if target.is_dir():
-            yield from (
-                path
-                for path in target.rglob("*")
-                if path.is_file() and ".git" not in path.parts
-            )
+            yield from (path for path in target.rglob("*") if path.is_file() and ".git" not in path.parts)
         elif target.is_file():
             yield target
     return []
 
 
 def _git_add(cwd: Path, args: Sequence[str]) -> tuple[int, str, str]:
+    """Stage paths referenced in ``args`` inside ``cwd``.
+
+    Args:
+        cwd: Repository root directory.
+        args: Paths (relative or glob) to stage.
+
+    Returns:
+        tuple[int, str, str]: Return code, stdout, and stderr values.
+    """
+
     state = _RepositoryState.load(cwd)
     if "." in args or not args:
-        paths = [
-            path
-            for path in cwd.rglob("*")
-            if path.is_file() and ".git" not in path.parts
-        ]
+        paths = [path for path in cwd.rglob("*") if path.is_file() and ".git" not in path.parts]
     else:
         paths = list(_collect_paths(cwd, args))
     for path in paths:
@@ -96,6 +113,15 @@ def _git_add(cwd: Path, args: Sequence[str]) -> tuple[int, str, str]:
 
 
 def _git_commit(cwd: Path) -> tuple[int, str, str]:
+    """Commit staged changes for the repository rooted at ``cwd``.
+
+    Args:
+        cwd: Repository root directory.
+
+    Returns:
+        tuple[int, str, str]: Return code, stdout, and stderr values.
+    """
+
     state = _RepositoryState.load(cwd)
     if not state.staged:
         return 0, "", ""
@@ -110,6 +136,16 @@ def _git_commit(cwd: Path) -> tuple[int, str, str]:
 
 
 def _tracked_bytes(state: _RepositoryState, rel: str) -> bytes | None:
+    """Return tracked bytes for ``rel`` or ``None`` when absent.
+
+    Args:
+        state: Repository state containing tracked entries.
+        rel: Relative path to inspect.
+
+    Returns:
+        bytes | None: Tracked bytes when present; otherwise ``None``.
+    """
+
     encoded = state.tracked.get(rel)
     if encoded is None:
         return None
@@ -120,6 +156,16 @@ def _tracked_bytes(state: _RepositoryState, rel: str) -> bytes | None:
 
 
 def _working_bytes(root: Path, rel: str) -> bytes | None:
+    """Return working-tree bytes for ``rel`` located under ``root``.
+
+    Args:
+        root: Repository root directory.
+        rel: Relative path to inspect.
+
+    Returns:
+        bytes | None: Current working-tree bytes; ``None`` when unavailable.
+    """
+
     candidate = root / rel
     if not candidate.exists():
         return None
@@ -130,6 +176,15 @@ def _working_bytes(root: Path, rel: str) -> bytes | None:
 
 
 def _git_status(cwd: Path) -> tuple[int, str, str]:
+    """Return git-status style output for the repository rooted at ``cwd``.
+
+    Args:
+        cwd: Repository root directory.
+
+    Returns:
+        tuple[int, str, str]: Return code, stdout, and stderr values.
+    """
+
     state = _RepositoryState.load(cwd)
     lines: list[str] = []
 
@@ -137,9 +192,9 @@ def _git_status(cwd: Path) -> tuple[int, str, str]:
         tracked_bytes = _tracked_bytes(state, rel)
         working_bytes = _working_bytes(cwd, rel)
         if working_bytes is None:
-            lines.append(f" D {rel}")
+            lines.append(f"{STATUS_DELETED_PREFIX}{rel}")
         elif tracked_bytes != working_bytes:
-            lines.append(f" M {rel}")
+            lines.append(f"{STATUS_MODIFIED_PREFIX}{rel}")
 
     tracked_set = set(state.tracked)
     for path in cwd.rglob("*"):
@@ -149,12 +204,22 @@ def _git_status(cwd: Path) -> tuple[int, str, str]:
             continue
         rel = path.relative_to(cwd).as_posix()
         if rel not in tracked_set:
-            lines.append(f"?? {rel}")
+            lines.append(f"{STATUS_UNTRACKED_PREFIX}{rel}")
 
     return 0, "\n".join(lines), ""
 
 
 def _diff_tracked(cwd: Path, state: _RepositoryState) -> list[str]:
+    """Return tracked files whose content differs from the working tree.
+
+    Args:
+        cwd: Repository root directory.
+        state: Repository state containing tracked entries.
+
+    Returns:
+        list[str]: Relative paths whose content differs from the tracked data.
+    """
+
     results: list[str] = []
     for rel in sorted(state.tracked):
         tracked_bytes = _tracked_bytes(state, rel)
@@ -165,6 +230,16 @@ def _diff_tracked(cwd: Path, state: _RepositoryState) -> list[str]:
 
 
 def _git_diff(cwd: Path, args: Sequence[str]) -> tuple[int, str, str]:
+    """Produce git-diff style output for ``cwd`` respecting ``args``.
+
+    Args:
+        cwd: Repository root directory.
+        args: Diff arguments supplied by the caller.
+
+    Returns:
+        tuple[int, str, str]: Return code, stdout, and stderr values.
+    """
+
     state = _RepositoryState.load(cwd)
     if "--cached" in args:
         paths = sorted(rel for rel, data in state.staged.items() if data is not None)
@@ -173,6 +248,16 @@ def _git_diff(cwd: Path, args: Sequence[str]) -> tuple[int, str, str]:
 
 
 def _untracked_paths(cwd: Path, state: _RepositoryState) -> list[str]:
+    """Return untracked paths for the repository rooted at ``cwd``.
+
+    Args:
+        cwd: Repository root directory.
+        state: Current repository state object.
+
+    Returns:
+        list[str]: Relative paths that are not tracked.
+    """
+
     tracked_set = set(state.tracked)
     results: list[str] = []
     for path in cwd.rglob("*"):
@@ -187,6 +272,16 @@ def _untracked_paths(cwd: Path, state: _RepositoryState) -> list[str]:
 
 
 def _git_ls_files(cwd: Path, args: Sequence[str]) -> tuple[int, str, str]:
+    """Return git-ls-files style output for the repository rooted at ``cwd``.
+
+    Args:
+        cwd: Repository root directory.
+        args: Command arguments supplied by the caller.
+
+    Returns:
+        tuple[int, str, str]: Return code, stdout, and stderr values.
+    """
+
     state = _RepositoryState.load(cwd)
     if "--others" in args:
         return 0, "\n".join(_untracked_paths(cwd, state)), ""
@@ -194,6 +289,16 @@ def _git_ls_files(cwd: Path, args: Sequence[str]) -> tuple[int, str, str]:
 
 
 def _handle_git_command(cmd: Sequence[str], cwd: Path) -> tuple[int, str, str]:
+    """Dispatch git subcommands implemented by the stub.
+
+    Args:
+        cmd: Git command arguments excluding the ``git`` executable.
+        cwd: Repository root directory.
+
+    Returns:
+        tuple[int, str, str]: Return code, stdout, and stderr values.
+    """
+
     if not cmd:
         return 1, "", "missing git subcommand"
 
@@ -224,6 +329,17 @@ def _git_stub_run(
     *pos_args: Any,
     **kwargs: Any,
 ) -> subprocess.CompletedProcess[Any]:
+    """Emulate ``subprocess.run`` for git commands when git is unavailable.
+
+    Args:
+        args: Command sequence or shell string to execute.
+        *pos_args: Positional arguments forwarded to the original runner.
+        **kwargs: Keyword arguments forwarded to the original runner.
+
+    Returns:
+        subprocess.CompletedProcess[Any]: Completed process describing the outcome.
+    """
+
     if isinstance(args, str):
         if not args:
             return _ORIGINAL_RUN(args, *pos_args, **kwargs)
@@ -253,10 +369,12 @@ def _git_stub_run(
 def install_git_stub() -> None:
     """Install a git stub when the git executable is unavailable."""
 
-    if shutil.which("git"):
+    if shutil.which(GIT_EXECUTABLE):
         return
     if getattr(subprocess, "_pyqa_git_stub_installed", False):
         return
     subprocess.run = _git_stub_run  # type: ignore[assignment]
-    shutil.which = lambda cmd, *args, **kwargs: ("git" if cmd == "git" else _ORIGINAL_WHICH(cmd, *args, **kwargs))  # type: ignore[assignment]
+    shutil.which = lambda cmd, *args, **kwargs: (
+        GIT_EXECUTABLE if cmd == GIT_EXECUTABLE else _ORIGINAL_WHICH(cmd, *args, **kwargs)  # type: ignore[assignment]
+    )
     subprocess._pyqa_git_stub_installed = True
