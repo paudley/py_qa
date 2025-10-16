@@ -11,67 +11,9 @@ from datetime import datetime
 from enum import Enum
 from importlib import import_module
 from pathlib import Path
-from typing import Final, Protocol, cast
+from typing import Final, cast
 
-
-class LicensePolicyProtocol(Protocol):
-    """Contract describing the license policy data required by the fixer."""
-
-    spdx_id: str | None
-    allow_alternate_spdx: tuple[str, ...]
-    require_spdx: bool
-    require_notice: bool
-
-    def match_notice(self, content: str) -> str | None:  # pragma: no cover - protocol definition
-        """Return the matched copyright notice or ``None`` when missing."""
-        raise NotImplementedError
-
-    def should_skip(self, path: Path, root: Path) -> bool:  # pragma: no cover - protocol definition
-        """Return whether the given path should be excluded from enforcement."""
-        raise NotImplementedError
-
-
-class ExpectedNoticeFn(Protocol):
-    """Callable returning the canonical notice string for a file."""
-
-    def __call__(
-        self,
-        policy: LicensePolicyProtocol,
-        observed_notice: str | None,
-        *,
-        current_year: int | None = None,
-    ) -> str | None:  # pragma: no cover - protocol definition
-        """Return the expected copyright notice for the file."""
-        raise NotImplementedError
-
-    def __repr__(self) -> str:  # pragma: no cover - protocol definition
-        """Return a developer-friendly representation of the callable."""
-        raise NotImplementedError
-
-
-class ExtractSpdxFn(Protocol):
-    """Callable extracting SPDX identifiers from file content."""
-
-    def __call__(self, content: str) -> list[str]:  # pragma: no cover - protocol definition
-        """Return SPDX identifiers discovered in ``content``."""
-        raise NotImplementedError
-
-    def __repr__(self) -> str:  # pragma: no cover - protocol definition
-        """Return a developer-friendly representation of the callable."""
-        raise NotImplementedError
-
-
-class NormaliseNoticeFn(Protocol):
-    """Callable normalising copyright notice strings."""
-
-    def __call__(self, notice: str) -> str:  # pragma: no cover - protocol definition
-        """Return a canonical representation of ``notice``."""
-        raise NotImplementedError
-
-    def __repr__(self) -> str:  # pragma: no cover - protocol definition
-        """Return a developer-friendly representation of the callable."""
-        raise NotImplementedError
-
+from pyqa.interfaces.licensing import ExpectedNotice, ExtractSpdx, LicensePolicy, NormaliseNotice
 
 try:
     _licenses_module = import_module("pyqa.compliance.checks.licenses")
@@ -83,26 +25,13 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
         sys.path.insert(0, str(project_root))
     _licenses_module = import_module("pyqa.compliance.checks.licenses")
 
-LicensePolicy = cast(
-    type[LicensePolicyProtocol],
-    _licenses_module.LicensePolicy,
-)
-expected_notice = cast(
-    ExpectedNoticeFn,
-    getattr(_licenses_module, "expected_notice"),
-)
-extract_spdx_identifiers = cast(
-    ExtractSpdxFn,
-    getattr(_licenses_module, "extract_spdx_identifiers"),
-)
-normalise_notice = cast(
-    NormaliseNoticeFn,
-    getattr(_licenses_module, "normalise_notice"),
-)
+expected_notice = cast(ExpectedNotice, getattr(_licenses_module, "expected_notice"))
+extract_spdx_identifiers = cast(ExtractSpdx, getattr(_licenses_module, "extract_spdx_identifiers"))
+normalise_notice = cast(NormaliseNotice, getattr(_licenses_module, "normalise_notice"))
 
 
 class CommentStyle(str, Enum):
-    """Enumerate supported comment styles for license headers."""
+    """Define comment styles supported when rendering license headers."""
 
     HASH = "hash"
     SLASH = "slash"
@@ -230,7 +159,14 @@ RENDER_TOKENS: Final[dict[CommentStyle, RenderTemplate]] = {
 
 
 def _extract_hash_comment(line: str) -> str | None:
-    """Return a hash-style comment payload from ``line`` when present."""
+    """Extract a hash-style comment payload from ``line`` when present.
+
+    Args:
+        line: Source line potentially containing a hash-prefixed comment.
+
+    Returns:
+        str | None: Comment payload when detected; otherwise ``None``.
+    """
 
     if line.startswith("#!"):
         return None
@@ -240,7 +176,14 @@ def _extract_hash_comment(line: str) -> str | None:
 
 
 def _extract_slash_comment(line: str) -> str | None:
-    """Return a C/Java style comment payload from ``line`` when present."""
+    """Extract a slash-style comment payload from ``line`` when present.
+
+    Args:
+        line: Source line potentially containing C/Java style comments.
+
+    Returns:
+        str | None: Comment payload when detected; otherwise ``None``.
+    """
 
     if line.startswith("//"):
         return line[2:].lstrip()
@@ -248,7 +191,14 @@ def _extract_slash_comment(line: str) -> str | None:
 
 
 def _extract_html_comment(line: str) -> str | None:
-    """Return an HTML-style comment payload from ``line`` when present."""
+    """Extract an HTML-style comment payload from ``line`` when present.
+
+    Args:
+        line: Source line potentially containing HTML comments.
+
+    Returns:
+        str | None: Comment payload when detected; otherwise ``None``.
+    """
 
     if line.startswith("<!--") and line.endswith("-->"):
         return line[4:-3].strip()
@@ -256,7 +206,14 @@ def _extract_html_comment(line: str) -> str | None:
 
 
 def _extract_rst_comment(line: str) -> str | None:
-    """Return an reStructuredText comment payload from ``line`` when present."""
+    """Extract a reStructuredText comment payload from ``line`` when present.
+
+    Args:
+        line: Source line potentially containing RST comments.
+
+    Returns:
+        str | None: Comment payload when detected; otherwise ``None``.
+    """
 
     if line.startswith(".."):
         return line[2:].lstrip()
@@ -264,7 +221,14 @@ def _extract_rst_comment(line: str) -> str | None:
 
 
 def _extract_dash_comment(line: str) -> str | None:
-    """Return a SQL-style dash comment payload from ``line`` when present."""
+    """Extract a SQL-style dash comment payload from ``line`` when present.
+
+    Args:
+        line: Source line potentially containing dash-prefixed comments.
+
+    Returns:
+        str | None: Comment payload when detected; otherwise ``None``.
+    """
 
     if line.startswith("--"):
         return line[2:].lstrip()
@@ -303,7 +267,7 @@ class ConflictingLicenseError(LicenseFixError):
 
 
 class PruneDecision(str, Enum):
-    """Enumerate pruning decisions for existing header lines."""
+    """Define pruning decisions for handling existing header lines."""
 
     DELETE = "delete"
     ADVANCE = "advance"
@@ -324,7 +288,7 @@ def _default_year() -> int:
 class LicenseHeaderFixer:
     """Add or update SPDX tags and copyright notices in source files."""
 
-    policy: LicensePolicyProtocol
+    policy: LicensePolicy
     current_year: int = field(default_factory=_default_year)
 
     def apply(self, path: Path, content: str) -> str | None:
@@ -430,7 +394,7 @@ def _inject_header(
     spdx_line: str | None,
     notice_line: str | None,
 ) -> str:
-    """Insert or update the license header using the provided comment style.
+    """Insert the license header using the provided comment style.
 
     Args:
         content: Original file content.
@@ -532,7 +496,7 @@ def _first_content_index(style: CommentStyle, lines: Sequence[str]) -> int:
 
 
 def _skip_existing_spdx(style: CommentStyle, lines: Sequence[str], start_index: int) -> int:
-    """Advance past contiguous SPDX comment lines starting at *start_index*.
+    """Skip existing SPDX comment lines starting at *start_index*.
 
     Args:
         style: Comment style used to extract comment payloads.
@@ -634,7 +598,7 @@ def _classify_header_comment(
 
 
 def _format_comment(style: CommentStyle, text: str) -> str:
-    """Format ``text`` according to the provided comment ``style``.
+    """Format comment ``text`` using the provided ``style``.
 
     Args:
         style: Comment style used to render the text.

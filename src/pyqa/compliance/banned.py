@@ -55,7 +55,7 @@ class BannedWordChecker:
     default_terms: Iterable[str] = field(default_factory=lambda: DEFAULT_BANNED_TERMS)
 
     def load_terms(self) -> list[str]:
-        """Return aggregated banned terms from personal, repo, and default lists.
+        """Collect banned terms from personal, repo, and default lists.
 
         Returns:
             list[str]: Sorted set of case-insensitive banned terms.
@@ -72,7 +72,7 @@ class BannedWordChecker:
         return sorted(terms, key=lambda s: s.lower())
 
     def scan(self, lines: Sequence[str]) -> list[str]:
-        """Return banned terms discovered within ``lines``.
+        """Identify banned terms discovered within ``lines``.
 
         Args:
             lines: Text lines to evaluate for banned content.
@@ -93,7 +93,7 @@ class BannedWordChecker:
 
 
 def _read_terms(path: Path) -> set[str]:
-    """Return banned terms read from ``path`` ignoring comments and blanks.
+    """Load banned terms from ``path`` while ignoring comments and blanks.
 
     Args:
         path: File containing newline-separated banned terms.

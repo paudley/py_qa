@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 import sys
 import tomllib
+from abc import abstractmethod
 from collections.abc import Iterable, Mapping, MutableMapping
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -46,18 +47,30 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
 
 @runtime_checkable
 class _LicenseConfigProtocol(Protocol):
-    """Contract implemented by ``pyqa.config.LicenseConfig`` for runtime checks."""
+    """Define the operations expected from ``pyqa.config.LicenseConfig``."""
 
+    @abstractmethod
     def model_dump(self, *, mode: str = "python") -> dict[str, LicenseOverrideValue]:
-        """Return a serialisable representation of the configuration."""
+        """Serialise the configuration.
+
+        Args:
+            mode: Serialization mode requested by the caller.
+        """
+
         raise NotImplementedError
 
+    @abstractmethod
     def model_copy(
         self,
         *,
         update: LicenseOverrideMapping | None = None,
     ) -> LicenseConfigProtocol:
-        """Return a shallow copy of the configuration instance."""
+        """Create a shallow copy of the configuration.
+
+        Args:
+            update: Optional overrides applied to the new configuration instance.
+        """
+
         raise NotImplementedError
 
 
@@ -178,7 +191,7 @@ class LicensePolicy:
 
 
 def load_project_license(root: Path) -> LicenseMetadata:
-    """Return license metadata derived from project configuration files.
+    """Load license metadata derived from project configuration files.
 
     Args:
         root: Repository root directory.
@@ -221,7 +234,14 @@ def load_project_license(root: Path) -> LicenseMetadata:
 
 
 def _normalize_pyproject_table(value: Mapping[str, JSONValue]) -> PyProjectTable:
-    """Return ``value`` coerced into a mapping of string keys to JSON values."""
+    """Normalise a ``pyproject`` table into a mapping of string keys.
+
+    Args:
+        value: Raw table extracted from ``pyproject.toml``.
+
+    Returns:
+        PyProjectTable: Mapping with consistently lower-cased keys.
+    """
 
     table: dict[str, JSONValue] = {}
     for key, item in value.items():
@@ -408,7 +428,7 @@ def verify_file_license(
 
 
 def _collect_spdx_issues(content: str, lower_content: str, policy: LicensePolicy) -> list[str]:
-    """Return SPDX-related issues for *content* under *policy*.
+    """Collect SPDX-related issues for ``content`` under ``policy``.
 
     Args:
         content: Original file content.
@@ -528,7 +548,7 @@ def normalise_notice(value: str) -> str:
 
 
 def extract_spdx_identifiers(content: str) -> set[str]:
-    """Return SPDX identifiers found in comment lines within *content*.
+    """Extract SPDX identifiers found in comment lines within ``content``.
 
     Args:
         content: File content searched for SPDX headers.
@@ -580,7 +600,7 @@ def _comment_payload(line: str) -> str | None:
 
 @dataclass(frozen=True)
 class _NoticeParts:
-    """Structured representation of the components of a notice string."""
+    """Represent the components of a notice string."""
 
     start: int | None
     end: int | None
