@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
 TOOLS_SUBDIR: Final[str] = "tools"
 UV_SUBDIR: Final[str] = "uv"
@@ -29,10 +29,19 @@ PERL_BIN_SUBDIR: Final[str] = "bin"
 PERL_META_SUBDIR: Final[str] = "meta"
 PROJECT_MARKER_FILENAME: Final[str] = "project-installed.json"
 
+RuntimeName = Literal["go", "lua", "rust", "perl"]
+
 
 @dataclass(frozen=True, slots=True)
 class RuntimeCachePaths:
-    """Filesystem locations associated with a cached runtime."""
+    """Model cached runtime filesystem locations.
+
+    Attributes:
+        cache_dir: Root directory containing runtime-managed cache data.
+        bin_dir: Directory holding runnable binaries for the runtime.
+        meta_dir: Directory containing metadata artefacts required at runtime.
+        work_dir: Optional directory used for workspace state during execution.
+    """
 
     cache_dir: Path
     bin_dir: Path
@@ -40,7 +49,7 @@ class RuntimeCachePaths:
     work_dir: Path | None = None
 
     def directories(self) -> tuple[Path, ...]:
-        """Return directories that should exist for the runtime cache.
+        """Compute directories that must exist for the runtime cache.
 
         Returns:
             tuple[Path, ...]: Ordered cache directories for the runtime.
@@ -54,17 +63,17 @@ class RuntimeCachePaths:
 
 @dataclass(frozen=True, slots=True)
 class ToolCacheLayout:
-    """Filesystem layout describing per-run tool cache directories."""
+    """Model per-run tool cache directories.
+
+    Attributes:
+        cache_dir: Base directory that contains persistent tool cache data.
+    """
 
     cache_dir: Path
-    _runtime_paths: dict[str, RuntimeCachePaths] = field(init=False)
+    _runtime_paths: dict[RuntimeName, RuntimeCachePaths] = field(init=False)
 
     def __post_init__(self) -> None:
-        """Populate derived cache directory paths for the layout.
-
-        Returns:
-            None: Initialisation mutates derived attributes for runtime lookup.
-        """
+        """Initialise derived cache directory paths for the layout."""
 
         runtimes = {
             "go": RuntimeCachePaths(
@@ -95,67 +104,107 @@ class ToolCacheLayout:
 
     @property
     def tools_root(self) -> Path:
-        """Return the root directory containing cached tool environments."""
+        """Determine the root directory containing cached tool environments.
+
+        Returns:
+            Path: Root directory under which tool cache data is stored.
+        """
 
         return self.cache_dir / TOOLS_SUBDIR
 
     @property
     def uv_dir(self) -> Path:
-        """Return the directory reserved for the ``uv`` installer."""
+        """Resolve the directory reserved for the ``uv`` installer.
+
+        Returns:
+            Path: Filesystem path for the uv installer cache.
+        """
 
         return self.tools_root / UV_SUBDIR
 
     @property
     def node_cache_dir(self) -> Path:
-        """Return the cache directory used for npm/node tooling."""
+        """Resolve the cache directory used for npm/node tooling.
+
+        Returns:
+            Path: Filesystem path for Node.js runtime cache data.
+        """
 
         return self.tools_root / NODE_SUBDIR
 
     @property
     def npm_cache_dir(self) -> Path:
-        """Return the cache directory used for npm artefacts."""
+        """Resolve the cache directory used for npm artefacts.
+
+        Returns:
+            Path: Filesystem path for npm package cache data.
+        """
 
         return self.tools_root / NPM_SUBDIR
 
     @property
     def project_marker(self) -> Path:
-        """Return the modern project marker file path."""
+        """Locate the modern project marker file path.
+
+        Returns:
+            Path: File path indicating successful project tool installation.
+        """
 
         return self.tools_root / PROJECT_MARKER_FILENAME
 
     @property
     def legacy_project_marker(self) -> Path:
-        """Return the legacy project marker file path."""
+        """Locate the legacy project marker file path.
+
+        Returns:
+            Path: File path for the legacy tool installation marker.
+        """
 
         return self.cache_dir / PROJECT_MARKER_FILENAME
 
     @property
     def go(self) -> RuntimeCachePaths:
-        """Return cache paths for Go tooling."""
+        """Expose cache paths for Go tooling.
+
+        Returns:
+            RuntimeCachePaths: Cache directories associated with Go.
+        """
 
         return self._runtime_paths["go"]
 
     @property
     def lua(self) -> RuntimeCachePaths:
-        """Return cache paths for Lua tooling."""
+        """Expose cache paths for Lua tooling.
+
+        Returns:
+            RuntimeCachePaths: Cache directories associated with Lua.
+        """
 
         return self._runtime_paths["lua"]
 
     @property
     def rust(self) -> RuntimeCachePaths:
-        """Return cache paths for Rust tooling."""
+        """Expose cache paths for Rust tooling.
+
+        Returns:
+            RuntimeCachePaths: Cache directories associated with Rust.
+        """
 
         return self._runtime_paths["rust"]
 
     @property
     def perl(self) -> RuntimeCachePaths:
-        """Return cache paths for Perl tooling."""
+        """Expose cache paths for Perl tooling.
+
+        Returns:
+            RuntimeCachePaths: Cache directories associated with Perl.
+        """
 
         return self._runtime_paths["perl"]
 
     @property
     def directories(self) -> tuple[Path, ...]:
-        """Return cache directories that must exist for the layout.
+        """Compile cache directories that must exist for the layout.
 
         Returns:
             tuple[Path, ...]: Ordered, unique directories that runtimes rely on
@@ -187,7 +236,7 @@ class ToolCacheLayout:
 
 
 def cache_layout(cache_dir: Path) -> ToolCacheLayout:
-    """Return the cache layout for ``cache_dir``.
+    """Create the cache layout for ``cache_dir``.
 
     Args:
         cache_dir: Base cache directory selected for the run.

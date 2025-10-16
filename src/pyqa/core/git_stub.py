@@ -1,25 +1,30 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 
-"""Provide a lightweight git stub for environments lacking git."""
+"""Provide a lightweight git shim for environments lacking git."""
 
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 import os
 import shutil
 import subprocess
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Final
 
 GIT_EXECUTABLE: Final[str] = "git"
+GIT_METADATA_DIR: Final[str] = ".git"
+CURRENT_DIRECTORY_SENTINEL: Final[str] = "."
 STATUS_DELETED_PREFIX: Final[str] = " D "
 STATUS_MODIFIED_PREFIX: Final[str] = " M "
 STATUS_UNTRACKED_PREFIX: Final[str] = "?? "
-_STATE_FILENAME = "pyqa_stub_state.json"
+DIFF_CACHED_FLAG: Final[str] = "--cached"
+LSFILES_OTHERS_FLAG: Final[str] = "--others"
+STATE_FILENAME: Final[str] = "pyqa_stub_state.json"
 _ORIGINAL_RUN = subprocess.run
 _ORIGINAL_WHICH = shutil.which
 
@@ -33,33 +38,84 @@ class _RepositoryState:
 
     @classmethod
     def load(cls, root: Path) -> _RepositoryState:
-        state_file = root / ".git" / _STATE_FILENAME
+        """Load repository state from disk or return an empty default.
+
+        Args:
+            root: Repository root directory containing stub metadata.
+
+        Returns:
+            _RepositoryState: Loaded repository state instance.
+        """
+
+        state_file = root / GIT_METADATA_DIR / STATE_FILENAME
         if not state_file.exists():
             return cls(tracked={}, staged={})
         raw = json.loads(state_file.read_text(encoding="utf-8"))
         return cls(tracked=dict(raw.get("tracked", {})), staged=dict(raw.get("staged", {})))
 
     def save(self, root: Path) -> None:
-        state_file = root / ".git" / _STATE_FILENAME
+        """Persist the current repository state to disk.
+
+        Args:
+            root: Repository root directory containing stub metadata.
+        """
+
+        state_file = root / ".git" / STATE_FILENAME
         state_file.parent.mkdir(parents=True, exist_ok=True)
         payload = {"tracked": self.tracked, "staged": self.staged}
         state_file.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _encode_bytes(data: bytes) -> str:
+    """Encode ``data`` to a Base64 string.
+
+    Args:
+        data: Raw bytes to encode.
+
+    Returns:
+        str: Base64 encoded representation of ``data``.
+    """
+
     return base64.b64encode(data).decode("ascii")
 
 
 def _decode_bytes(data: str) -> bytes:
+    """Decode a Base64 string into bytes.
+
+    Args:
+        data: Base64 encoded string.
+
+    Returns:
+        bytes: Decoded byte sequence.
+    """
+
     return base64.b64decode(data.encode("ascii"))
 
 
 def _repo_root(cwd: Path) -> Path:
+    """Return the repository root for the stub (identical to ``cwd``).
+
+    Args:
+        cwd: Working directory requested by the caller.
+
+    Returns:
+        Path: Repository root directory.
+    """
+
     return cwd
 
 
 def _init_repo(cwd: Path) -> tuple[int, str, str]:
-    git_dir = cwd / ".git"
+    """Initialise the stub repository metadata under ``cwd``.
+
+    Args:
+        cwd: Repository root directory.
+
+    Returns:
+        tuple[int, str, str]: Return code, stdout, and stderr values.
+    """
+
+    git_dir = cwd / GIT_METADATA_DIR
     git_dir.mkdir(parents=True, exist_ok=True)
     (git_dir / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
     (git_dir / "refs" / "heads").mkdir(parents=True, exist_ok=True)
@@ -67,26 +123,27 @@ def _init_repo(cwd: Path) -> tuple[int, str, str]:
     return 0, "", ""
 
 
-def _collect_paths(cwd: Path, arguments: Sequence[str]) -> Iterable[Path]:
-    """Yield file paths referenced by ``arguments`` relative to ``cwd``.
+def _collect_paths(cwd: Path, arguments: Sequence[str]) -> list[Path]:
+    """Collect file paths referenced by ``arguments`` relative to ``cwd``.
 
     Args:
         cwd: Repository root directory.
         arguments: Paths provided to the stub command.
 
     Returns:
-        Iterable[Path]: Iterated file paths that match ``arguments``.
+        list[Path]: File paths that match the requested arguments.
     """
 
+    paths: list[Path] = []
     if not arguments:
-        return []
+        return paths
     for arg in arguments:
         target = (cwd / arg).resolve()
         if target.is_dir():
-            yield from (path for path in target.rglob("*") if path.is_file() and ".git" not in path.parts)
+            paths.extend(path for path in target.rglob("*") if path.is_file() and GIT_METADATA_DIR not in path.parts)
         elif target.is_file():
-            yield target
-    return []
+            paths.append(target)
+    return paths
 
 
 def _git_add(cwd: Path, args: Sequence[str]) -> tuple[int, str, str]:
@@ -101,10 +158,10 @@ def _git_add(cwd: Path, args: Sequence[str]) -> tuple[int, str, str]:
     """
 
     state = _RepositoryState.load(cwd)
-    if "." in args or not args:
-        paths = [path for path in cwd.rglob("*") if path.is_file() and ".git" not in path.parts]
+    if CURRENT_DIRECTORY_SENTINEL in args or not args:
+        paths = [path for path in cwd.rglob("*") if path.is_file() and GIT_METADATA_DIR not in path.parts]
     else:
-        paths = list(_collect_paths(cwd, args))
+        paths = _collect_paths(cwd, args)
     for path in paths:
         rel = path.relative_to(cwd).as_posix()
         state.staged[rel] = _encode_bytes(path.read_bytes())
@@ -136,7 +193,7 @@ def _git_commit(cwd: Path) -> tuple[int, str, str]:
 
 
 def _tracked_bytes(state: _RepositoryState, rel: str) -> bytes | None:
-    """Return tracked bytes for ``rel`` or ``None`` when absent.
+    """Retrieve tracked bytes for ``rel`` or ``None`` when absent.
 
     Args:
         state: Repository state containing tracked entries.
@@ -151,12 +208,12 @@ def _tracked_bytes(state: _RepositoryState, rel: str) -> bytes | None:
         return None
     try:
         return _decode_bytes(encoded)
-    except base64.binascii.Error:
+    except binascii.Error:
         return None
 
 
 def _working_bytes(root: Path, rel: str) -> bytes | None:
-    """Return working-tree bytes for ``rel`` located under ``root``.
+    """Retrieve working-tree bytes for ``rel`` located under ``root``.
 
     Args:
         root: Repository root directory.
@@ -176,7 +233,7 @@ def _working_bytes(root: Path, rel: str) -> bytes | None:
 
 
 def _git_status(cwd: Path) -> tuple[int, str, str]:
-    """Return git-status style output for the repository rooted at ``cwd``.
+    """Generate git-status style output for the repository rooted at ``cwd``.
 
     Args:
         cwd: Repository root directory.
@@ -200,7 +257,7 @@ def _git_status(cwd: Path) -> tuple[int, str, str]:
     for path in cwd.rglob("*"):
         if not path.is_file():
             continue
-        if ".git" in path.parts:
+        if GIT_METADATA_DIR in path.parts:
             continue
         rel = path.relative_to(cwd).as_posix()
         if rel not in tracked_set:
@@ -210,7 +267,7 @@ def _git_status(cwd: Path) -> tuple[int, str, str]:
 
 
 def _diff_tracked(cwd: Path, state: _RepositoryState) -> list[str]:
-    """Return tracked files whose content differs from the working tree.
+    """Collect tracked files whose content differs from the working tree.
 
     Args:
         cwd: Repository root directory.
@@ -230,7 +287,7 @@ def _diff_tracked(cwd: Path, state: _RepositoryState) -> list[str]:
 
 
 def _git_diff(cwd: Path, args: Sequence[str]) -> tuple[int, str, str]:
-    """Produce git-diff style output for ``cwd`` respecting ``args``.
+    """Generate git-diff style output for ``cwd`` respecting ``args``.
 
     Args:
         cwd: Repository root directory.
@@ -248,7 +305,7 @@ def _git_diff(cwd: Path, args: Sequence[str]) -> tuple[int, str, str]:
 
 
 def _untracked_paths(cwd: Path, state: _RepositoryState) -> list[str]:
-    """Return untracked paths for the repository rooted at ``cwd``.
+    """Collect untracked paths for the repository rooted at ``cwd``.
 
     Args:
         cwd: Repository root directory.
@@ -263,7 +320,7 @@ def _untracked_paths(cwd: Path, state: _RepositoryState) -> list[str]:
     for path in cwd.rglob("*"):
         if not path.is_file():
             continue
-        if ".git" in path.parts:
+        if GIT_METADATA_DIR in path.parts:
             continue
         rel = path.relative_to(cwd).as_posix()
         if rel not in tracked_set:
@@ -272,7 +329,7 @@ def _untracked_paths(cwd: Path, state: _RepositoryState) -> list[str]:
 
 
 def _git_ls_files(cwd: Path, args: Sequence[str]) -> tuple[int, str, str]:
-    """Return git-ls-files style output for the repository rooted at ``cwd``.
+    """Generate git-ls-files style output for the repository rooted at ``cwd``.
 
     Args:
         cwd: Repository root directory.
@@ -303,25 +360,21 @@ def _handle_git_command(cmd: Sequence[str], cwd: Path) -> tuple[int, str, str]:
         return 1, "", "missing git subcommand"
 
     command, *args = cmd
-    if command == "init":
-        return _init_repo(cwd)
-    if command == "config":
+    handlers: dict[str, Callable[[Sequence[str], Path], tuple[int, str, str]]] = {
+        "init": lambda _args, repo: _init_repo(repo),
+        "config": lambda _args, _repo: (0, "", ""),
+        "add": lambda cmd_args, repo: _git_add(repo, cmd_args),
+        "commit": lambda _args, repo: _git_commit(repo),
+        "status": lambda _args, repo: _git_status(repo),
+        "diff": lambda cmd_args, repo: _git_diff(repo, cmd_args),
+        "ls-files": lambda cmd_args, repo: _git_ls_files(repo, cmd_args),
+        "merge-base": lambda _args, _repo: (0, "", ""),
+        "rev-parse": lambda _args, _repo: (0, "HEAD\n", ""),
+    }
+    handler = handlers.get(command)
+    if handler is None:
         return 0, "", ""
-    if command == "add":
-        return _git_add(cwd, args)
-    if command == "commit":
-        return _git_commit(cwd)
-    if command == "status":
-        return _git_status(cwd)
-    if command == "diff":
-        return _git_diff(cwd, args)
-    if command == "ls-files":
-        return _git_ls_files(cwd, args)
-    if command == "merge-base":
-        return 0, "", ""
-    if command == "rev-parse":
-        return 0, "HEAD\n", ""
-    return 0, "", ""
+    return handler(args, cwd)
 
 
 def _git_stub_run(
