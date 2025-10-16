@@ -15,21 +15,21 @@ _TEST_PREFIXES: Final[tuple[str, ...]] = ("tests/", "test/")
 
 
 class SuppressionTool(StrEnum):
-    """Tools that support inline suppressions handled by pyqa."""
+    """Provide tools that support inline suppressions handled by pyqa."""
 
     RUFF = "ruff"
     PYLINT = "pylint"
 
 
 class AnnotationTool(StrEnum):
-    """Static analysis tools that emit annotation-related diagnostics."""
+    """Provide static analysis tools that emit annotation diagnostics."""
 
     MYPY = "mypy"
     PYRIGHT = "pyright"
 
 
 class DiagnosticSpanKind(StrEnum):
-    """Span kinds returned by annotation providers."""
+    """Provide span kinds returned by annotation providers."""
 
     ARGUMENT = "argument"
 
@@ -56,7 +56,7 @@ _TYPING_SUPPRESSION_TEMPLATE: Final[str] = (
 
 
 def apply_suppression_hints(result: RunResult, engine: AnnotationProvider) -> None:
-    """Populate ``diagnostic.hints`` with suppression guidance.
+    """Populate diagnostic hints with suppression guidance.
 
     Args:
         result: Aggregated run result whose diagnostics should receive hints.
@@ -72,7 +72,7 @@ def apply_suppression_hints(result: RunResult, engine: AnnotationProvider) -> No
 
 
 def _hints_for_diagnostic(diag: Diagnostic, engine: AnnotationProvider) -> Iterable[str]:
-    """Return suppression hints tailored to ``diag``.
+    """Return suppression hints tailored to a diagnostic.
 
     Args:
         diag: Diagnostic requiring optional suppression guidance.
@@ -137,7 +137,7 @@ def _hints_for_diagnostic(diag: Diagnostic, engine: AnnotationProvider) -> Itera
 
 
 def _format_hint(diag: Diagnostic, suppression_key: str, guidance: str) -> str:
-    """Return a formatted hint string for ``diag``.
+    """Return a formatted hint string for a diagnostic.
 
     Args:
         diag: Diagnostic the hint refers to.
@@ -153,7 +153,7 @@ def _format_hint(diag: Diagnostic, suppression_key: str, guidance: str) -> str:
 
 
 def _extract_arguments(diag: Diagnostic, engine: AnnotationProvider) -> list[str]:
-    """Return argument identifiers highlighted in ``diag.message``.
+    """Identify argument identifiers highlighted in the diagnostic message.
 
     Args:
         diag: Diagnostic whose message spans should be inspected.
@@ -172,7 +172,7 @@ def _extract_arguments(diag: Diagnostic, engine: AnnotationProvider) -> list[str
 
 
 def _resolve_suppression_tool(tool_name: str) -> SuppressionTool | None:
-    """Return the suppression-aware tool enum for ``tool_name``.
+    """Return the suppression-aware tool enum for the supplied tool name.
 
     Args:
         tool_name: Tool identifier sourced from a diagnostic payload.
@@ -190,7 +190,7 @@ def _resolve_suppression_tool(tool_name: str) -> SuppressionTool | None:
 
 
 def _resolve_annotation_tool(tool_name: str) -> AnnotationTool | None:
-    """Return the annotation-aware tool enum for ``tool_name``.
+    """Return the annotation-aware tool enum for the supplied tool name.
 
     Args:
         tool_name: Tool identifier sourced from a diagnostic payload.

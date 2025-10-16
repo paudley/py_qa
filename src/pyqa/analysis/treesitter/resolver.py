@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import ast
 import importlib
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -24,6 +24,15 @@ from pyqa.cache.in_memory import memoize
 from ...core.logging import warn
 from ...core.models import Diagnostic
 from ..treesitter.grammars import ensure_language
+from .helpers import (
+    iter_tree_nodes,
+    iter_tree_nodes_with_depth,
+    nearest_python_generic_node,
+    nearest_python_named_scope,
+    node_contains_line,
+    node_row_span,
+    tree_node_name,
+)
 
 EnsureLanguageCallable = Callable[[str], TSLanguage | None]
 
@@ -34,6 +43,8 @@ JSON_PAIR_NODE_TYPE: Final[str] = "pair"
 
 
 class _ParseResult(BaseModel):
+    """Represent the parse tree and source bytes produced by Tree-sitter."""
+
     tree: TSTree
     source: bytes
 
@@ -41,7 +52,7 @@ class _ParseResult(BaseModel):
 
 
 class Language(str, Enum):
-    """Enumerate languages supported by the context resolver."""
+    """Identify languages supported by the context resolver."""
 
     PYTHON = "python"
     MARKDOWN = "markdown"
@@ -62,7 +73,7 @@ class Language(str, Enum):
 
 @dataclass(frozen=True)
 class ParserFactory:
-    """Factory capable of constructing tree-sitter parsers on demand."""
+    """Provide factories capable of constructing Tree-sitter parsers on demand."""
 
     parser_cls: Callable[[], TSParser] | None
     get_parser: Callable[[str], TSParser] | None
@@ -125,7 +136,7 @@ class ParserFactory:
         *,
         register_warning: Callable[[str], None] | None,
     ) -> TSLanguage | None:
-        """Compile grammar sources when bundled modules are unavailable.
+        """Assemble grammar sources when bundled modules are unavailable.
 
         Args:
             grammar_name: Canonical Tree-sitter grammar name to compile.
@@ -214,7 +225,7 @@ class ParserFactory:
 
     @staticmethod
     def _emit_warning(register_warning: Callable[[str], None] | None, message: str) -> None:
-        """Forward ``message`` to ``register_warning`` or log directly.
+        """Send warning messages to the registered callback or logger.
 
         Args:
             register_warning: Optional callback that records warning messages.
@@ -228,7 +239,12 @@ class ParserFactory:
 
 
 def _build_parser_loader() -> ParserFactory | None:
-    """Return a parser factory when tree-sitter bindings are available."""
+    """Return a parser factory when tree-sitter bindings are available.
+
+    Returns:
+        ParserFactory | None: Factory that can construct parsers, or ``None`` when
+        the bindings are not present.
+    """
 
     tree_sitter_module = importlib.import_module("tree_sitter")
     parser_cls = getattr(tree_sitter_module, "Parser", None)
@@ -261,14 +277,18 @@ def _build_parser_loader() -> ParserFactory | None:
 
 @dataclass(slots=True)
 class _ParserLoader:
-    """Callable wrapper that constructs parsers and reports failures."""
+    """Provide a callable wrapper that constructs parsers and reports failures."""
 
     parser_factory: ParserFactory
     grammar_name: str
     register_warning: Callable[[str], None]
 
     def __call__(self) -> TSParser | None:
-        """Return a parser for ``grammar_name`` or emit a warning on failure."""
+        """Return a parser for the configured grammar or emit a warning on failure.
+
+        Returns:
+            TSParser | None: Parser instance when creation succeeds; otherwise ``None``.
+        """
 
         parser = self.parser_factory.create(
             self.grammar_name,
@@ -285,7 +305,7 @@ _PARSER_FACTORY = _build_parser_loader()
 
 
 class TreeSitterContextResolver:
-    """Enrich diagnostics with structural context using Tree-sitter."""
+    """Resolve diagnostic context using Tree-sitter grammars."""
 
     _LANGUAGE_ALIASES: Final[dict[Language, tuple[str, ...]]] = {
         Language.PYTHON: (".py", ".pyi"),
@@ -335,16 +355,28 @@ class TreeSitterContextResolver:
     }
 
     def __init__(self) -> None:
+        """Initialize parser caches and diagnostic warning tracking."""
+
         self._parsers: dict[Language, TSParser] = {}
         self._disabled: set[Language] = set()
         self._warnings: set[str] = set()
 
     def grammar_modules(self) -> dict[str, str]:
-        """Expose supported grammar modules for diagnostic tooling."""
+        """Return the supported grammar modules for diagnostic tooling.
+
+        Returns:
+            dict[str, str]: Mapping of language identifiers to grammar module names.
+        """
+
         return {language.value: name for language, name in self._GRAMMAR_NAMES.items()}
 
     def annotate(self, diagnostics: Iterable[Diagnostic], *, root: Path) -> None:
-        """Populate ``diagnostic.function`` using structural context when available."""
+        """Populate diagnostic function names using structural context when available.
+
+        Args:
+            diagnostics: Iterable of diagnostics to enrich with context.
+            root: Project root used to resolve relative file paths.
+        """
 
         root_path = root.resolve()
         for diag in diagnostics:
@@ -367,7 +399,16 @@ class TreeSitterContextResolver:
         root: Path,
         lines: Iterable[int],
     ) -> dict[int, str]:
-        """Return context strings for the requested ``lines``."""
+        """Return context strings for the requested line numbers.
+
+        Args:
+            file_path: File path whose context should be resolved.
+            root: Project root used to resolve ``file_path`` when relative.
+            lines: One-based line numbers requiring context strings.
+
+        Returns:
+            dict[int, str]: Mapping of line numbers to resolved context strings.
+        """
 
         language = self._detect_language(file_path)
         if language is None:
@@ -386,7 +427,14 @@ class TreeSitterContextResolver:
         return contexts
 
     def _detect_language(self, file_str: str) -> Language | None:
-        """Return the language associated with ``file_str`` when known."""
+        """Return the language associated with the supplied file path.
+
+        Args:
+            file_str: File path string sourced from a diagnostic.
+
+        Returns:
+            Language | None: Detected language enum or ``None`` when unknown.
+        """
 
         path = Path(file_str)
         suffix = path.suffix.lower()
@@ -398,12 +446,31 @@ class TreeSitterContextResolver:
 
     @staticmethod
     def _resolve_path(file_str: str, root: Path) -> Path | None:
+        """Resolve a diagnostic file path against the project root.
+
+        Args:
+            file_str: File path sourced from the diagnostic payload.
+            root: Project root used to resolve relative paths.
+
+        Returns:
+            Path | None: Absolute path to the file when resolution succeeds.
+        """
+
         candidate = Path(file_str)
         if not candidate.is_absolute():
             candidate = (root / candidate).resolve()
         return candidate
 
     def _get_parser(self, language: Language) -> TSParser | None:
+        """Return or create a parser for the supplied language.
+
+        Args:
+            language: Language enum describing the requested parser.
+
+        Returns:
+            TSParser | None: Parser instance when available; otherwise ``None``.
+        """
+
         if language in self._disabled:
             return None
         cached = self._parsers.get(language)
@@ -451,11 +518,23 @@ class TreeSitterContextResolver:
         )
 
     def _disable_language(self, language: Language) -> None:
+        """Disable a language and clear cached parser state.
+
+        Args:
+            language: Language enum that should be disabled.
+        """
+
         if language not in self._FALLBACK_LANGUAGES:
             self._disabled.add(language)
         self._parsers.pop(language, None)
 
     def _register_warning(self, message: str) -> None:
+        """Record a warning message, ensuring duplicates are suppressed.
+
+        Args:
+            message: Warning text to record and emit.
+        """
+
         if message in self._warnings:
             return
         self._warnings.add(message)
@@ -474,6 +553,17 @@ class TreeSitterContextResolver:
 
     @memoize(maxsize=256)
     def _parse(self, language: Language, path: Path, _mtime_ns: int) -> _ParseResult | None:
+        """Parse a file into a Tree-sitter parse result with memoisation.
+
+        Args:
+            language: Language enum identifying the parser to use.
+            path: Absolute path to the source file.
+            _mtime_ns: File modification timestamp used for cache invalidation.
+
+        Returns:
+            _ParseResult | None: Parsed tree and source bytes, or ``None`` on failure.
+        """
+
         parser = self._get_parser(language)
         if parser is None:
             return None
@@ -488,6 +578,17 @@ class TreeSitterContextResolver:
         return _ParseResult(tree=tree, source=source)
 
     def _find_context(self, language: Language, path: Path, line: int) -> str | None:
+        """Derive the contextual scope for a specific source line.
+
+        Args:
+            language: Language enum describing the source file.
+            path: Absolute path to the source file.
+            line: One-based line number requiring context.
+
+        Returns:
+            str | None: Resolved context string or ``None`` when unavailable.
+        """
+
         try:
             mtime_ns = path.stat().st_mtime_ns
         except OSError:
@@ -502,6 +603,16 @@ class TreeSitterContextResolver:
 
     @staticmethod
     def _normalise_context(language: Language, context: str) -> str:
+        """Normalizes context strings for presentation to callers.
+
+        Args:
+            language: Language enum associated with the context.
+            context: Raw context string derived from parsing or heuristics.
+
+        Returns:
+            str: Cleaned context string suitable for display.
+        """
+
         if language is Language.MARKDOWN:
             stripped = context.lstrip("# ")
             return stripped or context
@@ -513,6 +624,17 @@ class TreeSitterContextResolver:
         parsed: _ParseResult,
         line: int,
     ) -> str | None:
+        """Extract structural context from a parsed syntax tree.
+
+        Args:
+            language: Language enum describing the parse tree.
+            parsed: Cached parse result containing the tree and source bytes.
+            line: One-based line number requiring context.
+
+        Returns:
+            str | None: Context string derived from the parse tree, or ``None``.
+        """
+
         tree = getattr(parsed.tree, "root_node", None)
         if tree is None:
             return None
@@ -527,6 +649,17 @@ class TreeSitterContextResolver:
         return None
 
     def _fallback_context(self, language: Language, path: Path, line: int) -> str | None:
+        """Computes heuristic context when parser-based extraction fails.
+
+        Args:
+            language: Language enum describing the source file.
+            path: Absolute path to the source file.
+            line: One-based line number requesting context.
+
+        Returns:
+            str | None: Context string derived from heuristics, or ``None``.
+        """
+
         if language is Language.PYTHON:
             context = self._python_ast_context(path, line)
             return context or self._python_fallback(path, line)
@@ -538,22 +671,30 @@ class TreeSitterContextResolver:
         return None
 
     def _python_context(self, node: TSNode, line: int) -> str | None:
-        """Return the most specific Python scope covering ``line``."""
+        """Return the most specific Python scope covering the line.
 
-        named_scope = _nearest_python_named_scope(node, line)
+        Args:
+            node: Tree-sitter node representing the root of the parsed module.
+            line: One-based line number requiring contextual information.
+
+        Returns:
+            str | None: Function or class name covering the line, or ``None``.
+        """
+
+        named_scope = nearest_python_named_scope(node, line)
         if named_scope:
             return named_scope
-        generic_node = _nearest_python_generic_node(node, line)
+        generic_node = nearest_python_generic_node(node, line)
         if generic_node is None:
             return None
-        fallback_name = _tree_node_name(generic_node)
+        fallback_name = tree_node_name(generic_node)
         if fallback_name:
             return fallback_name
         node_type = getattr(generic_node, "type", None)
         return str(node_type) if isinstance(node_type, str) else None
 
     def _markdown_context(self, node: TSNode, line: int, source: bytes) -> str | None:
-        """Return the Markdown heading that precedes ``line`` when available.
+        """Return the Markdown heading that precedes the requested line when available.
 
         Args:
             node: Tree-sitter node representing the parsed Markdown document.
@@ -565,10 +706,10 @@ class TreeSitterContextResolver:
         """
 
         headings: list[tuple[int, str]] = []
-        for current, depth in _iter_tree_nodes_with_depth(node):
+        for current, depth in iter_tree_nodes_with_depth(node):
             if getattr(current, "type", "") != MARKDOWN_HEADING_NODE_TYPE:
                 continue
-            current_start, current_end = _node_row_span(current)
+            current_start, current_end = node_row_span(current)
             if current_start is None or current_end is None:
                 continue
             if current_start > line:
@@ -582,7 +723,7 @@ class TreeSitterContextResolver:
         return None
 
     def _markdown_heading_text(self, node: TSNode, depth: int, source: bytes) -> str | None:
-        """Return sanitised heading text for ``node`` with depth fallbacks.
+        """Provides sanitised heading text for a node with depth fallbacks.
 
         Args:
             node: Tree-sitter node representing a Markdown heading.
@@ -596,7 +737,7 @@ class TreeSitterContextResolver:
         level_hint = max(depth, 1)
         prefix = "#" * level_hint
 
-        raw = _tree_node_name(node)
+        raw = tree_node_name(node)
         if raw:
             stripped = raw.strip()
             cleaned = stripped.lstrip("# ").strip()
@@ -645,6 +786,16 @@ class TreeSitterContextResolver:
         return None
 
     def _markdown_heading_context(self, path: Path, line: int) -> str | None:
+        """Extract the closest Markdown heading via textual scanning.
+
+        Args:
+            path: Filesystem path to the Markdown document.
+            line: One-based line number requesting context.
+
+        Returns:
+            str | None: Heading text preceding the requested line, or ``None``.
+        """
+
         try:
             content = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -660,8 +811,17 @@ class TreeSitterContextResolver:
         return None
 
     def _json_context(self, node: TSNode) -> str | None:
+        """Identify dotted key context for a JSON node.
+
+        Args:
+            node: Tree-sitter node representing the JSON structure.
+
+        Returns:
+            str | None: Dotted key path or ``None`` when a path cannot be formed.
+        """
+
         parts: list[str] = []
-        for current in _iter_tree_nodes(node):
+        for current in iter_tree_nodes(node):
             node_type = getattr(current, "type", "")
             if node_type == JSON_PAIR_NODE_TYPE:
                 key_node = getattr(current, "child_by_field_name", None)
@@ -669,7 +829,7 @@ class TreeSitterContextResolver:
                     key_token = cast(TSNode | None, key_node("key"))
                 else:
                     key_token = None
-                key_name = _tree_node_name(key_token)
+                key_name = tree_node_name(key_token)
                 if key_name:
                     parts.append(key_name)
         if not parts:
@@ -677,6 +837,16 @@ class TreeSitterContextResolver:
         return ".".join(parts)
 
     def _json_fallback(self, path: Path, line: int) -> str | None:
+        """Inspect JSON via literal evaluation to provide a fallback context.
+
+        Args:
+            path: Filesystem path to the JSON document.
+            line: One-based line number requesting context.
+
+        Returns:
+            str | None: Key string approximating the requested line, or ``None``.
+        """
+
         try:
             content = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -694,12 +864,32 @@ class TreeSitterContextResolver:
         return str(keys[index])
 
     def _node_at(self, root: TSNode, line: int) -> TSNode | None:
-        for node in _iter_tree_nodes(root):
-            if _node_contains_line(node, line):
+        """Locate the syntax node that covers a specific line number.
+
+        Args:
+            root: Root node of the parsed syntax tree.
+            line: One-based line number for which to locate a node.
+
+        Returns:
+            TSNode | None: Matching node or ``None`` when no node covers the line.
+        """
+
+        for node in iter_tree_nodes(root):
+            if node_contains_line(node, line):
                 return node
         return None
 
     def _python_ast_context(self, path: Path, line: int) -> str | None:
+        """Resolve Python context using the standard library AST parser.
+
+        Args:
+            path: Filesystem path to the Python source file.
+            line: One-based line number requesting context.
+
+        Returns:
+            str | None: Function or class name enclosing the line, or ``None``.
+        """
+
         try:
             content = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -726,6 +916,16 @@ class TreeSitterContextResolver:
 
     @staticmethod
     def _python_fallback(path: Path, line: int) -> str | None:
+        """Return the raw source line when Python context cannot be determined.
+
+        Args:
+            path: Filesystem path to the Python source file.
+            line: One-based line number requesting context.
+
+        Returns:
+            str | None: Stripped source line or ``None`` if the line is invalid.
+        """
+
         try:
             content = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -735,106 +935,6 @@ class TreeSitterContextResolver:
             return None
         raw = lines[line - 1].strip()
         return raw or None
-
-
-def _tree_node_name(node: TSNode | None) -> str | None:
-    """Return a normalised display name for ``node`` when available."""
-
-    if node is None:
-        return None
-
-    extractor = getattr(node, "child_by_field_name", None)
-    if callable(extractor):
-        name_node = extractor("name")
-        raw = getattr(name_node, "text", None)
-        if isinstance(raw, bytes):
-            return raw.decode("utf-8")
-        if isinstance(raw, str):
-            return raw
-    text = getattr(node, "text", None)
-    if isinstance(text, bytes):
-        text = text.decode("utf-8")
-    if isinstance(text, str) and text.strip():
-        return text.strip()
-    return None
-
-
-def _iter_tree_nodes(node: TSNode) -> Iterator[TSNode]:
-    """Yield nodes in depth-first order starting from ``node``."""
-
-    yield node
-    children = getattr(node, "children", None)
-    if not children:
-        return
-    for child in children:
-        if child is not None:
-            yield from _iter_tree_nodes(child)
-
-
-def _iter_tree_nodes_with_depth(node: TSNode, depth: int = 0) -> Iterator[tuple[TSNode, int]]:
-    """Yield nodes and their depth in depth-first order."""
-
-    yield node, depth
-    children = getattr(node, "children", None)
-    if not children:
-        return
-    for child in children:
-        if child is not None:
-            yield from _iter_tree_nodes_with_depth(child, depth + 1)
-
-
-def _node_row_span(node: TSNode) -> tuple[int | None, int | None]:
-    """Return 1-based (start, end) line numbers for ``node`` when available."""
-
-    start_point = getattr(node, "start_point", None)
-    end_point = getattr(node, "end_point", None)
-    start_row = start_point[0] + 1 if start_point else None
-    end_row = end_point[0] + 1 if end_point else None
-    return start_row, end_row
-
-
-def _node_contains_line(node: TSNode, line: int) -> bool:
-    """Return ``True`` when ``node`` spans ``line``."""
-
-    start_row, end_row = _node_row_span(node)
-    return bool(start_row is not None and end_row is not None and start_row <= line <= end_row)
-
-
-def _nearest_python_named_scope(node: TSNode, line: int) -> str | None:
-    """Return the innermost named Python scope covering ``line``."""
-
-    best_line = -1
-    best_name: str | None = None
-    for current in _iter_tree_nodes(node):
-        node_type = getattr(current, "type", "")
-        if node_type not in {"function_definition", "class_definition"}:
-            continue
-        if not _node_contains_line(current, line):
-            continue
-        start_row, _ = _node_row_span(current)
-        if start_row is None or start_row < best_line:
-            continue
-        name = _tree_node_name(current)
-        if name:
-            best_line = start_row
-            best_name = name
-    return best_name
-
-
-def _nearest_python_generic_node(node: TSNode, line: int) -> TSNode | None:
-    """Return the deepest node covering ``line`` when no named scope exists."""
-
-    best_node: TSNode | None = None
-    best_line = -1
-    for current in _iter_tree_nodes(node):
-        if not _node_contains_line(current, line):
-            continue
-        start_row, _ = _node_row_span(current)
-        if start_row is None or start_row < best_line:
-            continue
-        best_line = start_row
-        best_node = current
-    return best_node
 
 
 __all__ = ["TreeSitterContextResolver"]

@@ -28,7 +28,7 @@ MAGIC_SIGNATURES: Final[set[str]] = {"magic"}
 
 
 class IssueTag(str, Enum):
-    """Enumerate recognised navigator issue tags."""
+    """Summarize recognised navigator issue tags."""
 
     COMPLEXITY = "complexity"
     TYPING = "typing"
@@ -59,7 +59,7 @@ class NavigatorPayload(TypedDict):
 
 @dataclass(slots=True)
 class NavigatorDiagnosticEntry:
-    """Capture a diagnostic included in the refactor navigator payload."""
+    """Record a diagnostic included in the refactor navigator payload."""
 
     tool: str
     code: str
@@ -113,7 +113,7 @@ class NavigatorBucket:
         return iter(self.diagnostics)
 
     def add_diagnostic(self, diag: Diagnostic, tag: IssueTag | None) -> None:
-        """Add ``diag`` to the bucket and increment the associated tag.
+        """Add a diagnostic to the bucket and increment the associated tag.
 
         Args:
             diag: Diagnostic to store in the bucket.
@@ -167,7 +167,7 @@ def build_refactor_navigator(
     *,
     function_scale: FunctionScaleEstimator | None = None,
 ) -> None:
-    """Populate ``result.analysis['refactor_navigator']`` with hotspot data.
+    """Populate the refactor navigator entry within the run analysis.
 
     Args:
         result: Run outcome containing diagnostics and analysis metadata.
@@ -188,7 +188,7 @@ def _build_navigator_summary(
     engine: AnnotationProvider,
     estimator: FunctionScaleEstimator,
 ) -> list[NavigatorBucket]:
-    """Build navigator buckets summarising diagnostics by function.
+    """Summarise diagnostics by function into navigator buckets.
 
     Args:
         result: Run outcome containing diagnostic data.
@@ -229,7 +229,7 @@ def _build_navigator_summary(
 
 
 def _issue_tag(diag: Diagnostic, engine: AnnotationProvider) -> IssueTag | None:
-    """Return the navigator issue tag for ``diag`` when recognised.
+    """Return the navigator issue tag for a diagnostic when recognised.
 
     Args:
         diag: Diagnostic whose message should be classified.

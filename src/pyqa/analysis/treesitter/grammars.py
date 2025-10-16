@@ -54,7 +54,7 @@ _GRAMMAR_SOURCES: dict[str, GrammarSource] = {
 
 
 def ensure_language(grammar_name: str) -> TSLanguage | None:
-    """Resolve a :class:`Language` for ``grammar_name`` when possible.
+    """Resolve a Tree-sitter language for the requested grammar when possible.
 
     Args:
         grammar_name: Canonical Tree-sitter grammar name (e.g., ``"python"``).
@@ -97,7 +97,7 @@ def ensure_language(grammar_name: str) -> TSLanguage | None:
 
 
 def _build_language_library(source: GrammarSource, lib_path: Path, cache_dir: Path) -> None:
-    """Compile a Tree-sitter grammar archive into ``lib_path``.
+    """Compile a Tree-sitter grammar archive into the target library path.
 
     Args:
         source: Remote grammar archive metadata.
@@ -127,7 +127,7 @@ def _build_language_library(source: GrammarSource, lib_path: Path, cache_dir: Pa
 
 
 def _download(url: str, destination: Path) -> None:
-    """Download ``url`` into ``destination`` enforcing safe schemes.
+    """Downloads the provided URL into the destination while enforcing safe schemes.
 
     Args:
         url: HTTPS URL pointing to the grammar archive.
@@ -145,7 +145,7 @@ def _download(url: str, destination: Path) -> None:
 
 
 def _library_filename(grammar_name: str) -> str:
-    """Return the platform-specific shared library filename for ``grammar_name``.
+    """Return the platform-specific shared library filename for the grammar.
 
     Args:
         grammar_name: Tree-sitter grammar identifier.
@@ -178,7 +178,7 @@ def _import_language_module(module_name: str) -> ModuleType | None:
 
 
 def _language_from_module(module: ModuleType) -> TSLanguage | None:
-    """Instantiate a ``Language`` object from a packaged module factory.
+    """Instantiate a language object from a packaged module factory.
 
     Args:
         module: Module exposing a ``language`` factory callable.
@@ -195,7 +195,12 @@ def _language_from_module(module: ModuleType) -> TSLanguage | None:
 
 
 def _resolve_build_library() -> Callable[[str, list[str]], None] | None:
-    """Return the Tree-sitter build helper when exposed by the bindings."""
+    """Retrieve the Tree-sitter build helper when exposed by the bindings.
+
+    Returns:
+        Callable[[str, list[str]], None] | None: Build helper callable when
+        available from the Tree-sitter bindings; otherwise ``None``.
+    """
 
     candidate = getattr(TSLanguage, "build_library", None)
     if candidate is None or not callable(candidate):
@@ -204,7 +209,12 @@ def _resolve_build_library() -> Callable[[str, list[str]], None] | None:
 
 
 def _safe_extract_tar(archive: tarfile.TarFile, destination: Path) -> None:
-    """Safely extract ``archive`` into ``destination`` preventing path escapes."""
+    """Extract an archive into the destination while preventing path escapes.
+
+    Args:
+        archive: Tar archive to extract.
+        destination: Destination directory receiving the extracted files.
+    """
 
     destination = destination.resolve()
     for member in archive.getmembers():
@@ -216,7 +226,7 @@ def _safe_extract_tar(archive: tarfile.TarFile, destination: Path) -> None:
 
 
 def _load_compiled_language(lib_path: Path, grammar_name: str) -> TSLanguage | None:
-    """Load the compiled Tree-sitter ``Language`` from ``lib_path``.
+    """Load the compiled Tree-sitter language from the shared library.
 
     Args:
         lib_path: Path to the compiled shared library.

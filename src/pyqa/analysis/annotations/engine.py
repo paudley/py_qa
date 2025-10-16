@@ -68,7 +68,7 @@ _UNDERSCORE_CHAR: Final[str] = "_"
 
 @dataclass(frozen=True)
 class MessageAnalysis:
-    """Represent cached NLP artefacts for a diagnostic message."""
+    """Collect cached NLP artefacts for a diagnostic message."""
 
     spans: tuple[SimpleMessageSpan, ...]
     signature: tuple[str, ...]
@@ -103,7 +103,7 @@ class AnnotationEngine(AnnotationProvider):
         self._nlp_missing = False
 
     def annotate_run(self, result: RunResult) -> dict[int, DiagnosticAnnotation]:
-        """Annotate the diagnostics contained in ``result``.
+        """Annotate the diagnostics contained in the run result.
 
         Args:
             result: Aggregated lint outcome produced by the orchestrator.
@@ -136,28 +136,28 @@ class AnnotationEngine(AnnotationProvider):
         return annotations
 
     def message_spans(self, message: str) -> Sequence[MessageSpan]:
-        """Return cached highlight spans detected within ``message``.
+        """Analyze highlight spans detected within the message.
 
         Args:
             message: Diagnostic text to analyse.
 
         Returns:
             Sequence[MessageSpan]: Span metadata describing highlighted
-            regions detected within ``message``.
+            regions detected within the message.
         """
 
         analysis = self._analyse_message(message)
         return analysis.spans
 
     def message_signature(self, message: str) -> Sequence[str]:
-        """Return the semantic signature extracted from ``message``.
+        """Return the semantic signature extracted from the message.
 
         Args:
             message: Diagnostic text to transform into semantic tokens.
 
         Returns:
             Sequence[str]: Ordered collection of tokens representing the
-            diagnostic semantics.
+            diagnostic semantics for the message.
         """
 
         return self._analyse_message(message).signature
@@ -242,7 +242,7 @@ _FUNCTION_SPEC: Final[_SpanSpec] = _SpanSpec(style=_FUNCTION_STYLE, kind="functi
 
 
 def _build_span(start: int, end: int, style: str, kind: str | None) -> SimpleMessageSpan:
-    """Create a ``SimpleMessageSpan`` instance for spaCy-driven highlights.
+    """Create a simple message span for spaCy-driven highlights.
 
     Args:
         start: Inclusive span starting offset within the analysed message.
@@ -259,7 +259,7 @@ def _build_span(start: int, end: int, style: str, kind: str | None) -> SimpleMes
 
 
 def _heuristic_spans(message: str) -> tuple[list[SimpleMessageSpan], list[str]]:
-    """Return heuristic spans and signature tokens from ``message``.
+    """Return heuristic spans and signature tokens from the diagnostic message.
 
     Args:
         message: Diagnostic message text awaiting annotation.
@@ -283,7 +283,7 @@ class _SpanCollector:
     tokens: list[str]
 
     def collect(self) -> None:
-        """Populate span and token collections via heuristic rules."""
+        """Collect span and token candidates using heuristic rules."""
 
         self._collect_paths()
         self._collect_camel_case_identifiers()
@@ -339,13 +339,13 @@ class _SpanCollector:
 
     @staticmethod
     def _split_arguments(raw_arguments: str) -> list[str]:
-        """Return cleaned argument names from the raw capture group.
+        """Collect argument names from the raw capture group.
 
         Args:
             raw_arguments: Raw string containing argument names and punctuation.
 
         Returns:
-            list[str]: Sanitised argument names extracted from ``raw_arguments``.
+            list[str]: Sanitised argument names extracted from the capture group.
         """
 
         cleaned: list[str] = []
@@ -392,7 +392,7 @@ def _fallback_signature_tokens(message: str) -> list[str]:
 
 
 def _looks_camel_case(token: str) -> bool:
-    """Return ``True`` when ``token`` resembles a CamelCase identifier.
+    """Return True when the token resembles a CamelCase identifier.
 
     Args:
         token: Candidate token to evaluate.
@@ -412,13 +412,13 @@ def _looks_camel_case(token: str) -> bool:
 
 
 def _dedupe_spans(spans: Sequence[SimpleMessageSpan]) -> list[SimpleMessageSpan]:
-    """Return span collection stripped of overlapping spans.
+    """Remove overlapping spans to keep unique highlights.
 
     Args:
         spans: Candidate spans generated via heuristic and NLP passes.
 
     Returns:
-        list[MessageSpan]: De-duplicated spans sorted by position and size.
+        list[SimpleMessageSpan]: De-duplicated spans sorted by position and size.
     """
 
     seen: list[SimpleMessageSpan] = []
@@ -430,7 +430,7 @@ def _dedupe_spans(spans: Sequence[SimpleMessageSpan]) -> list[SimpleMessageSpan]
 
 
 def _overlap(left: SimpleMessageSpan, right: SimpleMessageSpan) -> bool:
-    """Return ``True`` when span ranges intersect.
+    """Return True when span ranges intersect.
 
     Args:
         left: First span under consideration.

@@ -21,7 +21,7 @@ def build_spacy_spans(
     doc: DocLike,
     span_factory: Callable[[int, int, str, str | None], SpanT],
 ) -> list[SpanT]:
-    """Return highlight spans derived from ``doc`` tokens.
+    """Identify highlight spans derived from spaCy document tokens.
 
     Args:
         doc: Tokenised spaCy document representing the diagnostic message.
@@ -57,7 +57,7 @@ def build_spacy_spans(
 
 
 def iter_signature_tokens(doc: DocLike) -> list[str]:
-    """Return semantic signature tokens for the supplied ``doc``.
+    """Identify semantic signature tokens for the supplied document.
 
     Args:
         doc: Tokenised spaCy document representing the diagnostic message.

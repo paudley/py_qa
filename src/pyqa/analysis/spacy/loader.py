@@ -129,7 +129,7 @@ class SpacyLanguage(Protocol):
         return cast(DocLike, object())
 
     def pipe(self, texts: Iterable[str]) -> Iterable[DocLike]:
-        """Return documents generated for ``texts`` in sequence.
+        """Generate documents for ``texts`` in sequence.
 
         Args:
             texts: Iterable of text fragments to process.
@@ -201,7 +201,7 @@ def load_language(model_name: str) -> SpacyLanguage | None:
 
 
 def _download_spacy_model(model_name: str) -> bool:
-    """Download the specified spaCy model via ``uv`` when available.
+    """Retrieve the specified spaCy model via uv when available.
 
     Args:
         model_name: Fully qualified spaCy model identifier.

@@ -13,7 +13,7 @@ FAILURE_KEY = "aux_tool_failures"
 
 
 def record_tool_warning(result: RunResult, message: str) -> None:
-    """Attach a warning message to ``result`` and adjust failure metrics.
+    """Attach a warning message to the result and adjust failure metrics.
 
     Args:
         result: Run outcome whose ``analysis`` metadata should be updated.
@@ -21,10 +21,7 @@ def record_tool_warning(result: RunResult, message: str) -> None:
     """
 
     warnings_value: JsonValue = result.analysis.get(WARNING_KEY, [])
-    if isinstance(warnings_value, list):
-        warnings = [str(item) for item in warnings_value]
-    else:
-        warnings = []
+    warnings = [str(item) for item in warnings_value] if isinstance(warnings_value, list) else []
 
     if message in warnings:
         result.analysis[WARNING_KEY] = cast(JsonValue, list(warnings))
