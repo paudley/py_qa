@@ -8,9 +8,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome
+from pyqa.interfaces.linting import PreparedLintState
 
 
 @dataclass(slots=True)
@@ -20,11 +20,6 @@ class InternalLintReport:
     outcome: ToolOutcome
     files: tuple[Path, ...]
 
-
-if TYPE_CHECKING:  # pragma: no cover - import guard for type checking
-    from pyqa.cli.commands.lint.preparation import PreparedLintState
-else:  # pragma: no cover - runtime hinting only
-    PreparedLintState = object
 
 RunnerCallable = Callable[[PreparedLintState, bool], InternalLintReport]
 

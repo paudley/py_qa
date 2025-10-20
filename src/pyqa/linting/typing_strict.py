@@ -8,7 +8,7 @@ import ast
 from pathlib import Path
 from typing import Final, cast
 
-from pyqa.cli.commands.lint.preparation import PreparedLintState
+from pyqa.interfaces.linting import PreparedLintState
 
 from ._ast_visitors import BaseAstLintVisitor, VisitorMetadata, run_ast_linter
 from .base import InternalLintReport

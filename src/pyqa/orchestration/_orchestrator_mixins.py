@@ -4,10 +4,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from types import MappingProxyType
-from collections.abc import Callable
 
 from pyqa.core.environment.tool_env import CommandPreparationRequest, PreparedCommand
 
@@ -110,8 +109,8 @@ class _OrchestratorActionMixin:
 
         if self._requires_immediate_execution(loop_context.cfg, action):
             self._debug(
-                    f"executing {loop_context.tool.name}:{action.name} immediately "
-                    f"(is_fix={action.is_fix}, bail={loop_context.cfg.execution.bail})"
+                f"executing {loop_context.tool.name}:{action.name} immediately "
+                f"(is_fix={action.is_fix}, bail={loop_context.cfg.execution.bail})"
             )
             should_bail = self._execute_immediate_action(
                 invocation=invocation,

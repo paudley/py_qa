@@ -10,12 +10,11 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 import pytest
 
-if TYPE_CHECKING:
-    from pyqa.cli.commands.lint.preparation import PreparedLintState
+from pyqa.interfaces.linting import PreparedLintState
 
 
 def _collect_target_files() -> Callable[[PreparedLintState], list[Path]]:

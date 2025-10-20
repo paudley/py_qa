@@ -26,6 +26,7 @@ class ExcludePolicy(Protocol):
         Returns:
             str: Identifier describing the exclusion policy.
         """
+
         raise NotImplementedError
 
     @abstractmethod
@@ -35,6 +36,7 @@ class ExcludePolicy(Protocol):
         Returns:
             Sequence[str]: Exclusion patterns or filesystem paths.
         """
+
         raise NotImplementedError
 
 
@@ -50,6 +52,7 @@ class TargetPlanner(Protocol):
         Returns:
             str: Identifier describing the planner implementation.
         """
+
         raise NotImplementedError
 
     @abstractmethod
@@ -59,6 +62,7 @@ class TargetPlanner(Protocol):
         Returns:
             Iterable[str]: Ordered collection of planned target identifiers.
         """
+
         raise NotImplementedError
 
 
@@ -74,6 +78,7 @@ class DiscoveryStrategy(Protocol):
         Returns:
             str: Identifier describing the discovery strategy implementation.
         """
+
         raise NotImplementedError
 
     @abstractmethod
@@ -87,6 +92,7 @@ class DiscoveryStrategy(Protocol):
         Returns:
             Iterable[Path]: Resolved filesystem paths respecting discovery rules.
         """
+
         raise NotImplementedError
 
     def __call__(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
@@ -99,4 +105,78 @@ class DiscoveryStrategy(Protocol):
         Returns:
             Iterable[Path]: Resolved filesystem paths respecting discovery rules.
         """
+
         raise NotImplementedError
+
+
+@runtime_checkable
+class DiscoveryOptions(Protocol):
+    """Target discovery options propagated to tooling layers."""
+
+    @property
+    def root(self) -> Path:
+        """Return the filesystem root used when resolving targets.
+
+        Returns:
+            Path: Filesystem root for lint discovery.
+        """
+
+        raise NotImplementedError
+
+    @property
+    def paths(self) -> Sequence[Path]:
+        """Return explicit file paths selected for discovery.
+
+        Returns:
+            Sequence[Path]: Files explicitly requested for discovery.
+        """
+
+        raise NotImplementedError
+
+    @property
+    def dirs(self) -> Sequence[Path]:
+        """Return directory paths that should be recursively explored.
+
+        Returns:
+            Sequence[Path]: Directories to scan recursively.
+        """
+
+        raise NotImplementedError
+
+    @property
+    def exclude(self) -> Sequence[Path]:
+        """Return paths that must be excluded from discovery.
+
+        Returns:
+            Sequence[Path]: Paths excluded from discovery.
+        """
+
+        raise NotImplementedError
+
+    @property
+    def include_dotfiles(self) -> bool:
+        """Indicate whether dot-prefixed files should be included.
+
+        Returns:
+            bool: ``True`` when dotfiles should be considered.
+        """
+
+        raise NotImplementedError
+
+    @property
+    def paths_from_stdin(self) -> bool:
+        """Return whether target paths were supplied via standard input.
+
+        Returns:
+            bool: ``True`` when target paths originated from standard input.
+        """
+
+        raise NotImplementedError
+
+
+__all__ = [
+    "DiscoveryStrategy",
+    "ExcludePolicy",
+    "TargetPlanner",
+    "DiscoveryOptions",
+]

@@ -9,17 +9,15 @@ import tokenize
 from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import Final
 
 from pyqa.core.models import Diagnostic
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path_key
+from pyqa.interfaces.linting import PreparedLintState
 
 from .base import InternalLintReport, build_internal_report
 from .utils import collect_python_files
-
-if TYPE_CHECKING:  # pragma: no cover
-    from pyqa.cli.commands.lint.preparation import PreparedLintState
 
 
 @dataclass(slots=True)

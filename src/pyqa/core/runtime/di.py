@@ -425,6 +425,7 @@ def register_default_services(container: ServiceRegistryProtocol) -> None:
     Args:
         container: Service registry that receives default registrations.
     """
+
     def _register_if_missing(
         key: str,
         factory: ServiceFactory,

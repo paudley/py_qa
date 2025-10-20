@@ -7,10 +7,11 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 from pyqa.config import Config
 from pyqa.core.models import ToolOutcome
+from pyqa.interfaces.linting import PreparedLintState
 from pyqa.platform.workspace import is_py_qa_workspace
 from pyqa.tools.base import (
     DeferredCommand,
@@ -43,9 +44,6 @@ from .signatures import run_signature_linter
 from .suppressions import run_suppression_linter
 from .typing_strict import run_typing_linter
 from .value_types import run_value_type_linter
-
-if TYPE_CHECKING:
-    from pyqa.cli.commands.lint.preparation import PreparedLintState
 
 
 @dataclass(slots=True)

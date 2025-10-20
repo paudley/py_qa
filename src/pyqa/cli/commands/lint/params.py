@@ -5,9 +5,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TypeAlias
+from typing import ClassVar, Final, TypeAlias
 
 from ...core.lint_literals import (
     BanditLevelLiteral,
@@ -22,6 +22,31 @@ from ...core.options import (
     LintGitOptions,
     LintSelectionOptions,
     LintSeverityOptions,
+)
+
+RUNTIME_CORE_FLAGS: Final[tuple[str, ...]] = (
+    "check_closures",
+    "check_signatures",
+    "check_cache_usage",
+    "check_value_types",
+    "check_value_types_general",
+)
+RUNTIME_INTERFACE_FLAGS: Final[tuple[str, ...]] = (
+    "check_interfaces",
+    "check_di",
+    "check_module_docs",
+    "check_pyqa_python_hygiene",
+)
+RUNTIME_POLICY_FLAGS: Final[tuple[str, ...]] = (
+    "show_valid_suppressions",
+    "check_license_header",
+    "check_copyright",
+    "check_python_hygiene",
+)
+RUNTIME_ADDITIONAL_FLAGS: Final[tuple[str, ...]] = (
+    "check_file_size",
+    "check_schema_sync",
+    "pyqa_rules",
 )
 
 
@@ -210,6 +235,69 @@ class RuntimeAdditionalChecks:
 
 
 @dataclass(slots=True)
+class RuntimeGroupOverrides:
+    """Optional runtime check overrides grouped by enforcement tier."""
+
+    core: RuntimeCoreChecks | None = None
+    interface: RuntimeInterfaceChecks | None = None
+    policy: RuntimePolicyChecks | None = None
+    additional: RuntimeAdditionalChecks | None = None
+
+
+RuntimeGroup = RuntimeCoreChecks | RuntimeInterfaceChecks | RuntimePolicyChecks | RuntimeAdditionalChecks
+
+
+@dataclass(slots=True)
+class RuntimeCoreFlagOverrides:
+    """Boolean overrides for core runtime meta checks."""
+
+    check_closures: bool = False
+    check_signatures: bool = False
+    check_cache_usage: bool = False
+    check_value_types: bool = False
+    check_value_types_general: bool = False
+
+
+@dataclass(slots=True)
+class RuntimeInterfaceFlagOverrides:
+    """Boolean overrides for interface runtime meta checks."""
+
+    check_interfaces: bool = False
+    check_di: bool = False
+    check_module_docs: bool = False
+    check_pyqa_python_hygiene: bool = False
+
+
+@dataclass(slots=True)
+class RuntimePolicyFlagOverrides:
+    """Boolean overrides for policy runtime meta checks."""
+
+    show_valid_suppressions: bool = False
+    check_license_header: bool = False
+    check_copyright: bool = False
+    check_python_hygiene: bool = False
+
+
+@dataclass(slots=True)
+class RuntimeAdditionalFlagOverrides:
+    """Boolean overrides for additional runtime meta checks."""
+
+    check_file_size: bool = False
+    check_schema_sync: bool = False
+    pyqa_rules: bool = False
+
+
+@dataclass(slots=True)
+class RuntimeFlagOverrides:
+    """Boolean overrides for runtime meta flags across all enforcement tiers."""
+
+    core: RuntimeCoreFlagOverrides = field(default_factory=RuntimeCoreFlagOverrides)
+    interface: RuntimeInterfaceFlagOverrides = field(default_factory=RuntimeInterfaceFlagOverrides)
+    policy: RuntimePolicyFlagOverrides = field(default_factory=RuntimePolicyFlagOverrides)
+    additional: RuntimeAdditionalFlagOverrides = field(default_factory=RuntimeAdditionalFlagOverrides)
+
+
+@dataclass(slots=True, init=False)
 class MetaRuntimeChecks:
     """Aggregate runtime check toggles across core, interface, policy, and extras."""
 
@@ -217,6 +305,113 @@ class MetaRuntimeChecks:
     interface: RuntimeInterfaceChecks
     policy: RuntimePolicyChecks
     additional: RuntimeAdditionalChecks
+
+    _CORE_FLAGS: ClassVar[tuple[str, ...]] = RUNTIME_CORE_FLAGS
+    _INTERFACE_FLAGS: ClassVar[tuple[str, ...]] = RUNTIME_INTERFACE_FLAGS
+    _POLICY_FLAGS: ClassVar[tuple[str, ...]] = RUNTIME_POLICY_FLAGS
+    _ADDITIONAL_FLAGS: ClassVar[tuple[str, ...]] = RUNTIME_ADDITIONAL_FLAGS
+    _ALL_FLAGS: ClassVar[tuple[str, ...]] = _CORE_FLAGS + _INTERFACE_FLAGS + _POLICY_FLAGS + _ADDITIONAL_FLAGS
+
+    def __init__(
+        self,
+        *,
+        overrides: RuntimeGroupOverrides | None = None,
+        flags: RuntimeFlagOverrides | None = None,
+    ) -> None:
+        """Initialise runtime checks using grouped dataclasses or flat flags.
+
+        Args:
+            overrides: Optional runtime check overrides grouped by enforcement tiers.
+            flags: Boolean overrides for the known runtime toggle set.
+        """
+
+        overrides = overrides or RuntimeGroupOverrides()
+        flag_overrides = flags or RuntimeFlagOverrides()
+        flag_values: dict[str, bool] = {name: bool(getattr(flag_overrides.core, name)) for name in self._CORE_FLAGS}
+        flag_values.update({name: bool(getattr(flag_overrides.interface, name)) for name in self._INTERFACE_FLAGS})
+        flag_values.update({name: bool(getattr(flag_overrides.policy, name)) for name in self._POLICY_FLAGS})
+        flag_values.update({name: bool(getattr(flag_overrides.additional, name)) for name in self._ADDITIONAL_FLAGS})
+        core_group = self._resolve_group(
+            overrides.core,
+            flag_values,
+            self._CORE_FLAGS,
+            RuntimeCoreChecks,
+            group_name="core",
+        )
+        interface_group = self._resolve_group(
+            overrides.interface,
+            flag_values,
+            self._INTERFACE_FLAGS,
+            RuntimeInterfaceChecks,
+            group_name="interface",
+        )
+        policy_group = self._resolve_group(
+            overrides.policy,
+            flag_values,
+            self._POLICY_FLAGS,
+            RuntimePolicyChecks,
+            group_name="policy",
+        )
+        additional_group = self._resolve_group(
+            overrides.additional,
+            flag_values,
+            self._ADDITIONAL_FLAGS,
+            RuntimeAdditionalChecks,
+            group_name="additional",
+        )
+
+        if flag_values:
+            unexpected = ", ".join(sorted(flag_values))
+            raise TypeError(f"Unexpected runtime meta flag(s): {unexpected}")
+
+        object.__setattr__(self, "core", core_group)
+        object.__setattr__(self, "interface", interface_group)
+        object.__setattr__(self, "policy", policy_group)
+        object.__setattr__(self, "additional", additional_group)
+
+    @staticmethod
+    def _resolve_group(
+        group: RuntimeGroup | None,
+        flags: dict[str, bool],
+        flag_names: tuple[str, ...],
+        factory: (
+            type[RuntimeCoreChecks]
+            | type[RuntimeInterfaceChecks]
+            | type[RuntimePolicyChecks]
+            | type[RuntimeAdditionalChecks]
+        ),
+        *,
+        group_name: str,
+    ) -> RuntimeGroup:
+        """Resolve runtime overrides using explicit groups or boolean flags.
+
+        Args:
+            group: Optional pre-constructed runtime group override.
+            flags: Mutable mapping of boolean flag values provided by callers.
+            flag_names: Flag names associated with the runtime group.
+            factory: Dataclass factory used to construct the runtime group.
+            group_name: Human-readable name used in error messages.
+
+        Returns:
+            RuntimeCoreChecks | RuntimeInterfaceChecks | RuntimePolicyChecks | RuntimeAdditionalChecks:
+            Instantiated runtime group populated from overrides or flags.
+
+        Raises:
+            TypeError: If explicit overrides and individual flags are supplied together.
+        """
+
+        if group is not None:
+            for name in flag_names:
+                flag_value = bool(flags.pop(name, False))
+                if flag_value:
+                    raise TypeError(
+                        f"Runtime {group_name} group provided alongside '{name}'; "
+                        "supply either grouped dataclasses or individual flags."
+                    )
+            return group
+
+        values = {name: bool(flags.pop(name, False)) for name in flag_names}
+        return factory(**values)
 
 
 @dataclass(slots=True)
@@ -360,9 +555,19 @@ class OverrideStrictnessParams:
 
 __all__ = (
     "BanditLevelLiteral",
+    "RUNTIME_CORE_FLAGS",
+    "RUNTIME_INTERFACE_FLAGS",
+    "RUNTIME_POLICY_FLAGS",
+    "RUNTIME_ADDITIONAL_FLAGS",
     "MetaActionParams",
     "MetaAnalysisChecks",
     "MetaRuntimeChecks",
+    "RuntimeGroupOverrides",
+    "RuntimeCoreFlagOverrides",
+    "RuntimeInterfaceFlagOverrides",
+    "RuntimePolicyFlagOverrides",
+    "RuntimeAdditionalFlagOverrides",
+    "RuntimeFlagOverrides",
     "LintAdvancedGroup",
     "LintCLIInputs",
     "LintExecutionGroup",

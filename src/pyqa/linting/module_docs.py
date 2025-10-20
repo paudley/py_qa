@@ -8,9 +8,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Final
 
-from pyqa.cli.commands.lint.preparation import PreparedLintState
 from pyqa.core.models import Diagnostic
 from pyqa.core.severity import Severity
+from pyqa.interfaces.linting import PreparedLintState
 
 from .base import InternalLintReport, build_internal_report
 

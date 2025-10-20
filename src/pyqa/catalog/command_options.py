@@ -940,25 +940,166 @@ _TRANSFORM_HANDLERS: Mapping[TransformName, _TransformFunc] = {
 }
 
 
+def _enum_to_string(value: str | Enum | None) -> str | None:
+    """Return a string representation for enum-like configuration values.
+
+    Args:
+        value: Enum or string value describing a configuration option.
+
+    Returns:
+        str | None: Normalised string representation of ``value``.
+    """
+
+    if value is None:
+        return None
+    if isinstance(value, Enum):
+        raw_value = getattr(value, "value", value.name)
+        return str(raw_value)
+    return str(value)
+
+
+def _default_execution_line_length(ctx: ToolContext) -> JSONValue | None:
+    """Return the configured execution line length.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: Execution line length value.
+    """
+
+    return ctx.cfg.execution.line_length
+
+
+def _default_complexity_max(ctx: ToolContext) -> JSONValue | None:
+    """Return the maximum cyclomatic complexity threshold.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: Maximum cyclomatic complexity threshold.
+    """
+
+    return ctx.cfg.complexity.max_complexity
+
+
+def _default_complexity_arguments(ctx: ToolContext) -> JSONValue | None:
+    """Return the maximum function argument threshold.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: Maximum function argument threshold.
+    """
+
+    return ctx.cfg.complexity.max_arguments
+
+
+def _default_bandit_level(ctx: ToolContext) -> JSONValue | None:
+    """Return the Bandit severity level as a string.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: Bandit severity level expressed as a string.
+    """
+
+    return _enum_to_string(ctx.cfg.severity.bandit_level)
+
+
+def _default_bandit_confidence(ctx: ToolContext) -> JSONValue | None:
+    """Return the Bandit confidence level as a string.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: Bandit confidence level expressed as a string.
+    """
+
+    return _enum_to_string(ctx.cfg.severity.bandit_confidence)
+
+
+def _default_pylint_threshold(ctx: ToolContext) -> JSONValue | None:
+    """Return the pylint fail-under threshold.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: pylint fail-under threshold.
+    """
+
+    return ctx.cfg.severity.pylint_fail_under
+
+
+def _default_max_warnings(ctx: ToolContext) -> JSONValue | None:
+    """Return the maximum warning allowance.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: Maximum warning allowance.
+    """
+
+    return ctx.cfg.severity.max_warnings
+
+
+def _default_strictness(ctx: ToolContext) -> JSONValue | None:
+    """Return the strictness profile as a string.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: Strictness profile representation.
+    """
+
+    profile = ctx.cfg.strictness.type_checking
+    return None if profile is None else str(profile)
+
+
+def _default_sql_dialect(ctx: ToolContext) -> JSONValue | None:
+    """Return the configured SQL dialect.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: SQL dialect configured for tooling.
+    """
+
+    return ctx.cfg.execution.sql_dialect
+
+
+def _default_tool_root(ctx: ToolContext) -> JSONValue | None:
+    """Return the tool root as a string path.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: String representation of the tool root path.
+    """
+
+    return str(ctx.root)
+
+
 _DEFAULT_REFERENCE_LOOKUP: Mapping[str, Callable[[ToolContext], JSONValue | None]] = {
-    "execution.line_length": lambda ctx: ctx.cfg.execution.line_length,
-    "complexity.max_complexity": lambda ctx: ctx.cfg.complexity.max_complexity,
-    "complexity.max_arguments": lambda ctx: ctx.cfg.complexity.max_arguments,
-    "severity.bandit_level": lambda ctx: getattr(
-        ctx.cfg.severity.bandit_level,
-        "value",
-        ctx.cfg.severity.bandit_level,
-    ),
-    "severity.bandit_confidence": lambda ctx: getattr(
-        ctx.cfg.severity.bandit_confidence,
-        "value",
-        ctx.cfg.severity.bandit_confidence,
-    ),
-    "severity.pylint_fail_under": lambda ctx: ctx.cfg.severity.pylint_fail_under,
-    "severity.max_warnings": lambda ctx: ctx.cfg.severity.max_warnings,
-    "strictness.type_checking": lambda ctx: ctx.cfg.strictness.type_checking,
-    "execution.sql_dialect": lambda ctx: getattr(ctx.cfg.execution, "sql_dialect", None),
-    "tool.root": lambda ctx: str(ctx.root),
+    "execution.line_length": _default_execution_line_length,
+    "complexity.max_complexity": _default_complexity_max,
+    "complexity.max_arguments": _default_complexity_arguments,
+    "severity.bandit_level": _default_bandit_level,
+    "severity.bandit_confidence": _default_bandit_confidence,
+    "severity.pylint_fail_under": _default_pylint_threshold,
+    "severity.max_warnings": _default_max_warnings,
+    "strictness.type_checking": _default_strictness,
+    "execution.sql_dialect": _default_sql_dialect,
+    "tool.root": _default_tool_root,
 }
 
 

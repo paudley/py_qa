@@ -7,13 +7,10 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import Final
 
 from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS
-
-if TYPE_CHECKING:  # pragma: no cover - type checking import
-    from pyqa.cli.commands.lint.preparation import PreparedLintState
-
+from pyqa.interfaces.linting import PreparedLintState
 
 _PYTHON_EXTENSIONS: Final[tuple[str, ...]] = (".py", ".pyi")
 _CACHE_SEGMENT_INDICATOR: Final[str] = "cache"

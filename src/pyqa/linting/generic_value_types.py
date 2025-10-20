@@ -12,7 +12,6 @@ from typing import Final, cast
 
 from tree_sitter import Node, Parser
 
-from pyqa.cli.commands.lint.preparation import PreparedLintState
 from pyqa.config import (
     Config,
     GenericValueTypesConfig,
@@ -24,6 +23,7 @@ from pyqa.config import (
 from pyqa.core.models import Diagnostic
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path_key
+from pyqa.interfaces.linting import PreparedLintState
 
 from .base import InternalLintReport, build_internal_report
 from .suppressions import SuppressionRegistry

@@ -9,16 +9,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING
 
 from pyqa.core.models import Diagnostic
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path_key
+from pyqa.interfaces.linting import PreparedLintState
 
 from .base import InternalLintReport, build_internal_report
-
-if TYPE_CHECKING:  # pragma: no cover - import for typing only
-    from pyqa.cli.commands.lint.preparation import PreparedLintState
 
 
 @dataclass(frozen=True, slots=True)

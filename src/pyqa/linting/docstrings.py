@@ -15,10 +15,10 @@ from tree_sitter import Node, Parser, Tree
 
 from ..analysis.spacy.loader import load_language
 from ..cache.result_store import CacheRequest, ResultCache
-from ..cli.commands.lint.preparation import PreparedLintState
 from ..core.models import Diagnostic, ToolExitCategory, ToolOutcome
 from ..core.severity import Severity
 from ..filesystem.paths import normalize_path_key
+from ..interfaces.linting import PreparedLintState
 from .base import InternalLintReport
 from .tree_sitter_utils import resolve_python_parser
 from .utils import collect_python_files

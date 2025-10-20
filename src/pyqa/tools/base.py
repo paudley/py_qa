@@ -14,8 +14,9 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator,
 from ..config import Config
 from ..config.types import ConfigValue
 from ..core.models import Diagnostic, OutputFilter, RawDiagnostic, ToolOutcome
+from ..interfaces.tools import ToolConfiguration
 
-ConfigField: TypeAlias = Config
+ConfigField: TypeAlias = Config | ToolConfiguration
 ToolSettingsMap: TypeAlias = Mapping[str, ConfigValue]
 ToolContextValue: TypeAlias = ConfigValue | Sequence[Path]
 ToolContextExtras: TypeAlias = Mapping[str, ToolContextValue]
@@ -77,6 +78,43 @@ class Parser(Protocol):
 
 
 @runtime_checkable
+class ParserLike(Protocol):
+    """Protocol describing callable objects capable of parsing diagnostics."""
+
+    def parse(
+        self,
+        stdout: Sequence[str],
+        stderr: Sequence[str],
+        *,
+        context: ToolContext,
+    ) -> Sequence[RawDiagnostic | Diagnostic]:
+        """Parse diagnostics emitted by a tool invocation."""
+
+
+class _ParserAdapter:
+    """Adapter that wraps parser-like objects with the :class:`Parser` protocol."""
+
+    __slots__ = ("_delegate",)
+
+    def __init__(self, delegate: ParserLike) -> None:
+        """Store the parser delegate used to handle diagnostic parsing."""
+
+        self._delegate = delegate
+
+    def parse(
+        self,
+        stdout: Sequence[str],
+        stderr: Sequence[str],
+        *,
+        context: ToolContext,
+    ) -> Sequence[RawDiagnostic | Diagnostic]:
+        """Delegate parsing to the wrapped object and normalise the result."""
+
+        result = self._delegate.parse(stdout, stderr, context=context)
+        return tuple(result)
+
+
+@runtime_checkable
 class CommandBuilder(Protocol):
     """Build a command for execution based on the tool context."""
 
@@ -112,8 +150,16 @@ class CommandBuilder(Protocol):
         return self.build(ctx)
 
 
-CommandField: TypeAlias = CommandBuilder
-ParserField: TypeAlias = Parser | None
+@runtime_checkable
+class CommandBuilderLike(Protocol):
+    """Protocol describing objects that can construct command arguments."""
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        """Return the command arguments for the provided context."""
+
+
+CommandField: TypeAlias = CommandBuilderLike
+ParserField: TypeAlias = ParserLike | None
 
 
 class ToolContext(BaseModel):
@@ -158,6 +204,29 @@ class ToolContext(BaseModel):
             for key, value in extra_obj.items():
                 payload.setdefault(key, value)  # preserve explicit keyword arguments
         return payload
+
+    @field_validator("cfg", mode="before")
+    @classmethod
+    def _coerce_cfg(cls, value: Config | ToolConfiguration) -> ConfigField:
+        """Validate that the supplied configuration satisfies the expected contract.
+
+        Args:
+            value: Candidate configuration object provided by the caller.
+
+        Returns:
+            Config | ToolConfiguration: Configuration instance accepted by the context.
+
+        Raises:
+            TypeError: If the value does not implement the ``ToolConfiguration`` protocol.
+        """
+
+        if isinstance(value, Config):
+            return value
+        if isinstance(value, ToolConfiguration):
+            return value
+        raise TypeError(
+            "cfg must be an instance of pyqa.config.Config or implement the ToolConfiguration protocol",
+        )
 
     @field_validator("files", mode="before")
     @classmethod
@@ -389,6 +458,50 @@ class ToolAction(BaseModel):
     parser: ParserField = None
     exit_codes: ActionExitCodes = Field(default_factory=ActionExitCodes)
     internal_runner: InternalActionRunner | None = None
+
+    @field_validator("command", mode="before")
+    @classmethod
+    def _coerce_command(cls, value: CommandBuilderLike) -> CommandField:
+        """Validate that command builders expose the required interface.
+
+        Args:
+            value: Candidate command builder supplied for the action.
+
+        Returns:
+            CommandBuilderLike: Accepted command builder instance.
+
+        Raises:
+            TypeError: If the value does not provide a ``build`` method.
+        """
+
+        if isinstance(value, CommandBuilderLike):
+            return value
+        if hasattr(value, "build") and callable(getattr(value, "build")):
+            return cast(CommandBuilderLike, value)
+        raise TypeError("command must provide a callable 'build' method")
+
+    @field_validator("parser", mode="before")
+    @classmethod
+    def _coerce_parser(cls, value: ParserLike | None) -> ParserField:
+        """Validate parser instances supplied for tool actions.
+
+        Args:
+            value: Candidate parser supplied for diagnostic extraction.
+
+        Returns:
+            ParserLike | None: Accepted parser instance.
+
+        Raises:
+            TypeError: If the value does not satisfy the ``Parser`` protocol.
+        """
+
+        if value is None or isinstance(value, Parser):
+            return value
+        if isinstance(value, ParserLike):
+            return value
+        if hasattr(value, "parse") and callable(getattr(value, "parse")):
+            return cast(ParserLike, value)
+        raise TypeError("parser must implement the Parser protocol")
 
     @field_validator("filter_patterns", mode="before")
     @classmethod

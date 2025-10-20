@@ -16,6 +16,7 @@ from ..params import (
     MetaRuntimeChecks,
     RuntimeAdditionalChecks,
     RuntimeCoreChecks,
+    RuntimeGroupOverrides,
     RuntimeInterfaceChecks,
     RuntimePolicyChecks,
 )
@@ -278,12 +279,13 @@ def _meta_runtime_checks_dependency(
         MetaRuntimeChecks: Consolidated runtime check configuration.
     """
 
-    return MetaRuntimeChecks(
+    overrides = RuntimeGroupOverrides(
         core=RuntimeCoreChecks(**core),
         interface=RuntimeInterfaceChecks(**interface),
         policy=RuntimePolicyChecks(**policy),
         additional=RuntimeAdditionalChecks(**additional),
     )
+    return MetaRuntimeChecks(overrides=overrides)
 
 
 def _meta_params_dependency(
@@ -309,7 +311,7 @@ def _meta_params_dependency(
             check_types_strict=True,
             check_missing=True,
         )
-        runtime = MetaRuntimeChecks(
+        runtime_overrides = RuntimeGroupOverrides(
             core=RuntimeCoreChecks(
                 check_closures=True,
                 check_signatures=True,
@@ -335,6 +337,7 @@ def _meta_params_dependency(
                 pyqa_rules=True,
             ),
         )
+        runtime = MetaRuntimeChecks(overrides=runtime_overrides)
     else:
         analysis = analysis_checks
         runtime = runtime_checks

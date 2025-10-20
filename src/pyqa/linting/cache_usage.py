@@ -6,13 +6,11 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-from typing import TYPE_CHECKING
+
+from pyqa.interfaces.linting import PreparedLintState
 
 from ._ast_visitors import BaseAstLintVisitor, VisitorMetadata, run_ast_linter
 from .base import InternalLintReport
-
-if TYPE_CHECKING:
-    from pyqa.cli.commands.lint.preparation import PreparedLintState
 
 _FUNCTOOLS_MODULE = "functools"
 _LRU_CACHE_NAME = "lru_cache"

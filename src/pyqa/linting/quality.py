@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from pyqa.cli.commands.lint.preparation import PreparedLintState
 from pyqa.compliance.quality import (
     COPYRIGHT_CATEGORY,
     LICENSE_HEADER_CATEGORY,
@@ -33,6 +32,7 @@ from pyqa.config import Config
 from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path_key
+from pyqa.interfaces.linting import PreparedLintState
 
 from .base import InternalLintReport
 from .utils import collect_python_files, collect_target_files

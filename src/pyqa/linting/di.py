@@ -7,18 +7,14 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import Final
 
 from pyqa.core.models import JsonValue
+from pyqa.interfaces.linting import PreparedLintState
 
 from ._ast_visitors import BaseAstLintVisitor, VisitorMetadata, run_ast_linter
 from ._module_utils import module_name_from_path
 from .base import InternalLintReport
-
-if TYPE_CHECKING:  # pragma: no cover - import for typing only
-    from pyqa.cli.commands.lint.preparation import PreparedLintState
-else:  # pragma: no cover - runtime hinting only
-    PreparedLintState = object
 
 _ALLOWED_SERVICE_REGISTERERS: Final[frozenset[str]] = frozenset(
     {

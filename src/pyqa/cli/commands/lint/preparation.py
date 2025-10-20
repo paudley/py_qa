@@ -43,6 +43,10 @@ from ...core.utils import filter_py_qa_paths
 from .cli_models import LintDisplayOptions as CLIDisplayOptions
 from .literals import OUTPUT_MODE_CONCISE
 from .params import (
+    RUNTIME_ADDITIONAL_FLAGS,
+    RUNTIME_CORE_FLAGS,
+    RUNTIME_INTERFACE_FLAGS,
+    RUNTIME_POLICY_FLAGS,
     LintAdvancedGroup,
     LintCLIInputs,
     LintExecutionGroup,
@@ -755,19 +759,6 @@ def _collect_provided_flags(
         "check_suppressions",
         "check_types_strict",
         "check_missing",
-        "check_closures",
-        "check_signatures",
-        "check_cache_usage",
-        "check_value_types",
-        "check_value_types_general",
-        "check_pyqa_python_hygiene",
-        "show_valid_suppressions",
-        "check_license_header",
-        "check_copyright",
-        "check_python_hygiene",
-        "check_file_size",
-        "check_schema_sync",
-        "pyqa_rules",
         "fix_only",
         "check_only",
         "verbose",
@@ -798,6 +789,10 @@ def _collect_provided_flags(
         PROVIDED_FLAG_ADVICE,
         PROVIDED_FLAG_INTERNAL_LINTERS,
     }
+    tracked.update(RUNTIME_CORE_FLAGS)
+    tracked.update(RUNTIME_INTERFACE_FLAGS)
+    tracked.update(RUNTIME_POLICY_FLAGS)
+    tracked.update(RUNTIME_ADDITIONAL_FLAGS)
     provided: set[str] = set()
     for name in tracked:
         source = _parameter_source_name(ctx, name)

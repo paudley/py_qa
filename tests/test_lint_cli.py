@@ -28,6 +28,11 @@ from pyqa.cli.commands.lint.params import (
     MetaActionParams,
     MetaAnalysisChecks,
     MetaRuntimeChecks,
+    RuntimeAdditionalFlagOverrides,
+    RuntimeCoreFlagOverrides,
+    RuntimeFlagOverrides,
+    RuntimeInterfaceFlagOverrides,
+    RuntimePolicyFlagOverrides,
 )
 from pyqa.cli.commands.lint.preparation import PROVIDED_FLAG_INTERNAL_LINTERS
 from pyqa.config import Config
@@ -91,22 +96,32 @@ def _meta_flags(
             check_missing=check_missing,
         ),
         runtime=MetaRuntimeChecks(
-            check_closures=check_closures,
-            check_signatures=check_signatures,
-            check_cache_usage=check_cache_usage,
-            check_value_types=check_value_types,
-            check_value_types_general=check_value_types_general,
-            check_interfaces=check_interfaces,
-            check_di=check_di,
-            check_module_docs=check_module_docs,
-            check_pyqa_python_hygiene=check_pyqa_python_hygiene,
-            show_valid_suppressions=show_valid_suppressions,
-            check_license_header=check_license_header,
-            check_copyright=check_copyright,
-            check_python_hygiene=check_python_hygiene,
-            check_file_size=check_file_size,
-            check_schema_sync=check_schema_sync,
-            pyqa_rules=pyqa_rules,
+            flags=RuntimeFlagOverrides(
+                core=RuntimeCoreFlagOverrides(
+                    check_closures=check_closures,
+                    check_signatures=check_signatures,
+                    check_cache_usage=check_cache_usage,
+                    check_value_types=check_value_types,
+                    check_value_types_general=check_value_types_general,
+                ),
+                interface=RuntimeInterfaceFlagOverrides(
+                    check_interfaces=check_interfaces,
+                    check_di=check_di,
+                    check_module_docs=check_module_docs,
+                    check_pyqa_python_hygiene=check_pyqa_python_hygiene,
+                ),
+                policy=RuntimePolicyFlagOverrides(
+                    show_valid_suppressions=show_valid_suppressions,
+                    check_license_header=check_license_header,
+                    check_copyright=check_copyright,
+                    check_python_hygiene=check_python_hygiene,
+                ),
+                additional=RuntimeAdditionalFlagOverrides(
+                    check_file_size=check_file_size,
+                    check_schema_sync=check_schema_sync,
+                    pyqa_rules=pyqa_rules,
+                ),
+            ),
         ),
     )
 
