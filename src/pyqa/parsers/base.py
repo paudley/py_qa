@@ -23,13 +23,30 @@ TextTransform = Callable[[Sequence[str], ToolContext], Sequence[RawDiagnostic]]
 
 
 def _ensure_lines(value: Sequence[str]) -> list[str]:
-    """Normalise string-based output into a list of lines."""
+    """Return a normalised list of lines from ``value``.
+
+    Args:
+        value: Sequence containing strings or other line-like values.
+
+    Returns:
+        list[str]: Normalised list of line strings.
+    """
+
     if isinstance(value, str):
         return value.splitlines()
     return [str(item) for item in value]
 
 
 def _load_json_stream(stdout: str) -> JsonValue:
+    """Return a JSON payload parsed from ``stdout``.
+
+    Args:
+        stdout: Raw standard-output string potentially containing JSON objects.
+
+    Returns:
+        JsonValue: Parsed JSON payload or a sequence of partial objects.
+    """
+
     stdout = stdout.strip()
     if not stdout:
         return []
@@ -49,12 +66,30 @@ def _load_json_stream(stdout: str) -> JsonValue:
 
 
 def _coerce_object_mapping(value: JsonValue) -> dict[str, JsonValue]:
+    """Return a shallow copy of ``value`` when it behaves like a mapping.
+
+    Args:
+        value: JSON value potentially containing key/value pairs.
+
+    Returns:
+        dict[str, JsonValue]: Mapping with stringified keys when applicable.
+    """
+
     if isinstance(value, MappingABC):
         return {str(key): entry for key, entry in value.items()}
     return {}
 
 
 def _coerce_dict_sequence(value: JsonValue) -> list[dict[str, JsonValue]]:
+    """Return dictionaries extracted from ``value`` when it is a sequence.
+
+    Args:
+        value: JSON value potentially containing dictionary entries.
+
+    Returns:
+        list[dict[str, JsonValue]]: Sequence of normalised mapping entries.
+    """
+
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
         return []
     collected: list[dict[str, JsonValue]] = []
@@ -65,6 +100,15 @@ def _coerce_dict_sequence(value: JsonValue) -> list[dict[str, JsonValue]]:
 
 
 def _coerce_optional_str(value: JsonValue | None) -> str | None:
+    """Return ``value`` as a string when possible.
+
+    Args:
+        value: JSON scalar or ``None``.
+
+    Returns:
+        str | None: String representation or ``None`` when unavailable.
+    """
+
     if isinstance(value, str):
         return value
     if value is None:
@@ -73,7 +117,14 @@ def _coerce_optional_str(value: JsonValue | None) -> str | None:
 
 
 def iter_dicts(value: JsonValue) -> Iterator[MappingABC[str, JsonValue]]:
-    """Yield mapping items from ``value`` when it is a sequence of dict-like objects."""
+    """Yield mapping items from ``value`` when it is a sequence of dict-like objects.
+
+    Args:
+        value: JSON value that may contain dictionary entries.
+
+    Yields:
+        MappingABC[str, JsonValue]: Mapping entries extracted from ``value``.
+    """
 
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         for item in value:
@@ -82,7 +133,16 @@ def iter_dicts(value: JsonValue) -> Iterator[MappingABC[str, JsonValue]]:
 
 
 def map_severity(label: JsonValue, mapping: MappingABC[str, Severity], default: Severity) -> Severity:
-    """Return a :class:`Severity` derived from ``label`` using ``mapping``."""
+    """Return a :class:`Severity` derived from ``label`` using ``mapping``.
+
+    Args:
+        label: Raw severity label produced by the tool.
+        mapping: Case-insensitive mapping of labels to severities.
+        default: Fallback severity when ``label`` cannot be resolved.
+
+    Returns:
+        Severity: Mapped severity value or ``default`` when not found.
+    """
 
     if isinstance(label, str):
         return mapping.get(label.lower(), default)
@@ -117,7 +177,11 @@ class RawDiagnosticSpec:
     details: DiagnosticDetails
 
     def build(self) -> RawDiagnostic:
-        """Materialise the spec as a :class:`RawDiagnostic` instance."""
+        """Materialise the spec as a :class:`RawDiagnostic` instance.
+
+        Returns:
+            RawDiagnostic: Diagnostic instantiated from the specification.
+        """
 
         return RawDiagnostic(
             file=self.location.file,
@@ -210,6 +274,9 @@ def iter_pattern_matches(
 
     Yields:
         re.Match[str]: Match objects produced by ``pattern``.
+
+    Returns:
+        Iterator[re.Match[str]]: Iterator yielding regex matches.
     """
 
     forbidden = tuple(skip_prefixes)
@@ -237,6 +304,17 @@ class JsonParser(Parser):
         *,
         context: ToolContext,
     ) -> Sequence[RawDiagnostic]:
+        """Return diagnostics parsed from JSON ``stdout`` payloads.
+
+        Args:
+            stdout: Iterable of standard-output lines produced by the tool.
+            stderr: Iterable of standard-error lines (unused but part of the protocol).
+            context: Tool context describing configuration and execution root.
+
+        Returns:
+            Sequence[RawDiagnostic]: Normalised diagnostics emitted by ``transform``.
+        """
+
         del stderr  # retain signature compatibility without using the value
         stdout_text = "\n".join(_ensure_lines(stdout))
         payload = _load_json_stream(stdout_text)
@@ -256,6 +334,17 @@ class TextParser(Parser):
         *,
         context: ToolContext,
     ) -> Sequence[RawDiagnostic]:
+        """Return diagnostics derived from ``stdout`` text lines.
+
+        Args:
+            stdout: Iterable of standard-output lines produced by the tool.
+            stderr: Iterable of standard-error lines (ignored but retained for parity).
+            context: Tool context describing configuration and execution root.
+
+        Returns:
+            Sequence[RawDiagnostic]: Diagnostics computed by the transformation callable.
+        """
+
         del stderr
         lines = _ensure_lines(stdout)
         return self.transform(lines, context)

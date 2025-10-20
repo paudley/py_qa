@@ -50,6 +50,7 @@ _ESCAPE_CHAR: Final[str] = "\\"
 _SINGLE_QUOTE: Final[str] = "'"
 _DOUBLE_QUOTE: Final[str] = '"'
 _BACKTICK: Final[str] = "`"
+_INTERFACES_SEGMENT: Final[str] = "interfaces"
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,7 +129,7 @@ def _scan_file(path: Path) -> list[_Finding]:
     lines = text.splitlines()
     findings: list[_Finding] = []
     suffix = path.suffix.lower()
-    skip_not_implemented = "interfaces" in path.parts
+    skip_not_implemented = _INTERFACES_SEGMENT in path.parts
     for line_number, raw_line in enumerate(lines, start=1):
         stripped = raw_line.strip()
         generic_marker = _match_generic_marker(raw_line)

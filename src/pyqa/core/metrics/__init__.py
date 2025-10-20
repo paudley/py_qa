@@ -17,13 +17,17 @@ JSONValue = JSONPrimitive | list["JSONValue"] | dict[str, "JSONValue"]
 
 @dataclass(slots=True)
 class FileMetrics:
-    """Lightweight container for line counts and suppression totals."""
+    """Maintain line counts and suppression totals for a source file."""
 
     line_count: int = 0
     suppressions: dict[str, int] = field(default_factory=dict)
 
     def to_payload(self) -> dict[str, JSONValue]:
-        """Serialise the metrics into a JSON-compatible mapping."""
+        """Serialise the metrics into a JSON-compatible mapping.
+
+        Returns:
+            dict[str, JSONValue]: Mapping containing line counts and suppression tallies.
+        """
 
         return {
             "line_count": self.line_count,
@@ -84,7 +88,15 @@ SUPPRESSION_LABELS: tuple[str, ...] = tuple(label for label, _ in SUPPRESSION_PA
 
 
 def compute_file_metrics(path: Path) -> FileMetrics:
-    """Return :class:`FileMetrics` for ``path``, handling unreadable files."""
+    """Calculate metrics for the file located at ``path``.
+
+    Args:
+        path: File system path to the source file to inspect.
+
+    Returns:
+        FileMetrics: Metrics populated with line counts and suppression totals. Unreadable files
+            produce a zeroed metrics instance.
+    """
     metrics = FileMetrics(line_count=0, suppressions=dict.fromkeys(SUPPRESSION_LABELS, 0))
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")

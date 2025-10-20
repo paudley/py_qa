@@ -34,7 +34,7 @@ RuntimeName = Literal["go", "lua", "rust", "perl"]
 
 @dataclass(frozen=True, slots=True)
 class RuntimeCachePaths:
-    """Model cached runtime filesystem locations.
+    """Maintain cached runtime filesystem location metadata.
 
     Attributes:
         cache_dir: Root directory containing runtime-managed cache data.
@@ -49,7 +49,7 @@ class RuntimeCachePaths:
     work_dir: Path | None = None
 
     def directories(self) -> tuple[Path, ...]:
-        """Compute directories that must exist for the runtime cache.
+        """Collect directories that must exist for the runtime cache.
 
         Returns:
             tuple[Path, ...]: Ordered cache directories for the runtime.
@@ -73,7 +73,7 @@ class ToolCacheLayout:
     _runtime_paths: dict[RuntimeName, RuntimeCachePaths] = field(init=False)
 
     def __post_init__(self) -> None:
-        """Initialise derived cache directory paths for the layout."""
+        """Prepare derived cache directory paths for the layout."""
 
         runtimes = {
             "go": RuntimeCachePaths(
@@ -204,7 +204,7 @@ class ToolCacheLayout:
 
     @property
     def directories(self) -> tuple[Path, ...]:
-        """Compile cache directories that must exist for the layout.
+        """Collect cache directories that must exist for the layout.
 
         Returns:
             tuple[Path, ...]: Ordered, unique directories that runtimes rely on

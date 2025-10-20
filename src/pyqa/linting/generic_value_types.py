@@ -8,9 +8,11 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
+from typing import Final, cast
 
-from pyqa.analysis.treesitter.grammars import ensure_language
+from tree_sitter import Node, Parser
+
+from pyqa.cli.commands.lint.preparation import PreparedLintState
 from pyqa.config import (
     Config,
     GenericValueTypesConfig,
@@ -23,12 +25,9 @@ from pyqa.core.models import Diagnostic
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path_key
 
-if TYPE_CHECKING:  # pragma: no cover - import for typing only
-    from pyqa.cli.commands.lint.preparation import PreparedLintState
-else:  # pragma: no cover - runtime placeholder to avoid circular import
-    PreparedLintState = object
-
 from .base import InternalLintReport, build_internal_report
+from .suppressions import SuppressionRegistry
+from .tree_sitter_utils import resolve_python_parser
 from .utils import collect_python_files
 
 TOOL_NAME: Final[str] = "generic-value-types"
@@ -57,43 +56,6 @@ class Finding:
     methods: tuple[str, ...]
 
 
-@runtime_checkable
-class _TreeSitterNode(Protocol):
-    """Protocol describing the tree-sitter node interface used by the linter."""
-
-    type: str
-    start_byte: int
-    end_byte: int
-    start_point: tuple[int, int]
-    children: tuple[_TreeSitterNode, ...]
-
-    def child_by_field_name(self, name: str) -> _TreeSitterNode | None:
-        """Return the child node referenced by ``name`` when available."""
-        ...
-
-
-@runtime_checkable
-class _TreeSitterTree(Protocol):
-    """Protocol describing the tree-sitter parse tree interface."""
-
-    @property
-    def root_node(self) -> _TreeSitterNode:
-        """Return the root node for the parsed source."""
-        ...
-
-
-class _TreeSitterParser(Protocol):
-    """Protocol describing the tree-sitter parser surface used in the linter."""
-
-    def parse(self, source: bytes) -> _TreeSitterTree:
-        """Return the parsed tree for ``source``."""
-        ...
-
-
-_PARSER: _TreeSitterParser | None = None
-_PARSER_ERROR: str | None = None
-
-
 _TRAIT_DATACLASS: Final[str] = "dataclass"
 _TRAIT_DATACLASS_FROZEN: Final[str] = "dataclass-frozen"
 _TRAIT_SLOTS: Final[str] = "slots"
@@ -110,8 +72,41 @@ _TRAIT_LEN: Final[str] = "len"
 _TRAIT_BOOL: Final[str] = "bool"
 _TRAIT_CONTAINS: Final[str] = "contains"
 _TRAIT_ITER: Final[str] = "iter"
+_FROZEN_ARGUMENT: Final[str] = "frozen=True"
+_ENUM_SUFFIX: Final[str] = "Enum"
+_NAMEDTUPLE_SUFFIXES: Final[tuple[str, ...]] = ("NamedTuple", "tuple")
+_ITERABLE_BASES: Final[tuple[str, ...]] = ("Iterable", "Collection")
+_SEQUENCE_BASES: Final[tuple[str, ...]] = ("Sequence", "MutableSequence")
+_MAPPING_BASES: Final[tuple[str, ...]] = ("Mapping", "MutableMapping")
+_ASSIGNMENT_MIN_CHILDREN: Final[int] = 3
+_DATACLASS_SUFFIX: Final[str] = "dataclass"
+_DECORATED_DEFINITION_NODE: Final[str] = "decorated_definition"
+_DECORATOR_NODE: Final[str] = "decorator"
+_CLASS_DEFINITION_NODE: Final[str] = "class_definition"
+_FUNCTION_DEFINITION_NODE: Final[str] = "function_definition"
+_ASYNC_FUNCTION_DEFINITION_NODE: Final[str] = "async_function_definition"
+_EXPRESSION_STATEMENT_NODE: Final[str] = "expression_statement"
+_ASSIGNMENT_NODE: Final[str] = "assignment"
+_IDENTIFIER_NODE: Final[str] = "identifier"
+_ATTRIBUTE_NODE: Final[str] = "attribute"
+_NAME_FIELD: Final[str] = "name"
+_BODY_FIELD: Final[str] = "body"
+_SUPERCLASSES_FIELD: Final[str] = "superclasses"
+_SLOTS_IDENTIFIER: Final[str] = "__slots__"
+_INIT_MODULE_BASENAME: Final[str] = "__init__"
+_METHOD_LEN: Final[str] = "__len__"
+_METHOD_BOOL: Final[str] = "__bool__"
+_METHOD_ITER: Final[str] = "__iter__"
+_METHOD_CONTAINS: Final[str] = "__contains__"
+_METHOD_EQ: Final[str] = "__eq__"
+_METHOD_HASH: Final[str] = "__hash__"
+_METHOD_REPR: Final[str] = "__repr__"
+_METHOD_STR: Final[str] = "__str__"
 
-_METHOD_NODE_TYPES: Final[tuple[str, ...]] = ("function_definition", "async_function_definition")
+_METHOD_NODE_TYPES: Final[tuple[str, ...]] = (
+    _FUNCTION_DEFINITION_NODE,
+    _ASYNC_FUNCTION_DEFINITION_NODE,
+)
 
 
 def run_generic_value_type_linter(
@@ -138,36 +133,26 @@ def run_generic_value_type_linter(
     if not gv_config.enabled or (not gv_config.rules and not gv_config.implications):
         return build_internal_report(tool=TOOL_NAME, stdout=[], diagnostics=[], files=())
 
-    parser = _resolve_parser()
-    if parser is None:
-        message = _PARSER_ERROR or "Tree-sitter parser unavailable; skipping generic value-type checks."
-        return build_internal_report(tool=TOOL_NAME, stdout=[message], diagnostics=[], files=())
+    try:
+        parser = resolve_python_parser()
+    except RuntimeError as exc:
+        return build_internal_report(tool=TOOL_NAME, stdout=[str(exc)], diagnostics=[], files=())
 
     files = tuple(collect_python_files(state))
+    suppressions = cast(SuppressionRegistry | None, getattr(state, "suppressions", None))
     diagnostics: list[Diagnostic] = []
     stdout_lines: list[str] = []
-    suppressions = getattr(state, "suppressions", None)
 
     for file_path in files:
-        for facts in _collect_class_facts(parser, file_path, state.root):
-            findings = _evaluate_class_facts(facts, gv_config)
-            if not findings:
-                continue
-            for finding in findings:
-                diagnostic = _build_diagnostic(facts, finding, state.root)
-                if suppressions is not None:
-                    absolute_path = (
-                        facts.file_path if facts.file_path.is_absolute() else (state.root / facts.file_path).resolve()
-                    )
-                    if suppressions.should_suppress(
-                        absolute_path,
-                        diagnostic.line or facts.line,
-                        tool=diagnostic.tool,
-                        code=diagnostic.code or diagnostic.tool,
-                    ):
-                        continue
-                diagnostics.append(diagnostic)
-                stdout_lines.append(f"{diagnostic.file}:{diagnostic.line}: {diagnostic.message}")
+        file_diagnostics, file_stdout = _evaluate_file_for_value_types(
+            parser=parser,
+            file_path=file_path,
+            root=state.root,
+            config=gv_config,
+            suppressions=suppressions,
+        )
+        diagnostics.extend(file_diagnostics)
+        stdout_lines.extend(file_stdout)
 
     return build_internal_report(
         tool=TOOL_NAME,
@@ -177,31 +162,21 @@ def run_generic_value_type_linter(
     )
 
 
-def _resolve_parser() -> _TreeSitterParser | None:
-    """Return a cached Tree-sitter parser for Python source."""
-
-    global _PARSER, _PARSER_ERROR
-    if _PARSER is not None or _PARSER_ERROR is not None:
-        return _PARSER
-    try:
-        from tree_sitter import Parser as TreeSitterParser
-    except ModuleNotFoundError:  # pragma: no cover - optional dependency
-        _PARSER_ERROR = "tree_sitter module is not installed"
-        return None
-    language = ensure_language("python")
-    if language is None:  # pragma: no cover - depends on runtime environment
-        _PARSER_ERROR = "Unable to load Tree-sitter Python grammar"
-        return None
-    _PARSER = cast(_TreeSitterParser, TreeSitterParser(language))
-    return _PARSER
-
-
 def _collect_class_facts(
-    parser: _TreeSitterParser,
+    parser: Parser,
     file_path: Path,
     root: Path,
 ) -> tuple[ClassFacts, ...]:
-    """Return class metadata discovered in ``file_path`` using Tree-sitter."""
+    """Return class metadata discovered in ``file_path`` using Tree-sitter.
+
+    Args:
+        parser: Tree-sitter parser configured for Python grammar.
+        file_path: Python source file to inspect.
+        root: Repository root used to normalise module names.
+
+    Returns:
+        tuple[ClassFacts, ...]: Facts describing each class definition in the file.
+    """
 
     try:
         source = file_path.read_bytes()
@@ -214,11 +189,61 @@ def _collect_class_facts(
     return tuple(collector.facts)
 
 
+def _evaluate_file_for_value_types(
+    parser: Parser,
+    file_path: Path,
+    root: Path,
+    config: GenericValueTypesConfig,
+    suppressions: SuppressionRegistry | None,
+) -> tuple[list[Diagnostic], list[str]]:
+    """Return diagnostics and stdout lines for ``file_path``.
+
+    Args:
+        parser: Tree-sitter parser configured for Python grammar.
+        file_path: File currently being analysed.
+        root: Repository root used for path normalisation.
+        config: Generic value-type configuration defining rules.
+        suppressions: Registry used to honour ``suppression_valid`` directives.
+
+    Returns:
+        tuple[list[Diagnostic], list[str]]: Diagnostics and corresponding stdout lines.
+    """
+
+    diagnostics: list[Diagnostic] = []
+    stdout_lines: list[str] = []
+    for facts in _collect_class_facts(parser, file_path, root):
+        findings = _evaluate_class_facts(facts, config)
+        if not findings:
+            continue
+        for finding in findings:
+            diagnostic = _build_diagnostic(facts, finding, root)
+            if suppressions is not None:
+                absolute_path = facts.file_path if facts.file_path.is_absolute() else (root / facts.file_path).resolve()
+                if suppressions.should_suppress(
+                    absolute_path,
+                    diagnostic.line or facts.line,
+                    tool=diagnostic.tool,
+                    code=diagnostic.code or diagnostic.tool,
+                ):
+                    continue
+            diagnostics.append(diagnostic)
+            stdout_lines.append(f"{diagnostic.file}:{diagnostic.line}: {diagnostic.message}")
+    return diagnostics, stdout_lines
+
+
 def _evaluate_class_facts(
     facts: ClassFacts,
     config: GenericValueTypesConfig,
 ) -> tuple[Finding, ...]:
-    """Return findings for ``facts`` based on ``config`` rules and implications."""
+    """Return findings for ``facts`` based on ``config`` rules and implications.
+
+    Args:
+        facts: Class metadata extracted from the source file.
+        config: Configuration describing rules and implications.
+
+    Returns:
+        tuple[Finding, ...]: Findings describing missing dunder methods.
+    """
 
     allow_missing: set[str] = set()
     required: dict[str, set[str]] = {}
@@ -270,7 +295,15 @@ def _accumulate_missing(
     target: dict[str, set[str]],
     reason: str,
 ) -> None:
-    """Accumulate missing ``candidates`` into ``target`` keyed by ``reason``."""
+    """Accumulate missing ``candidates`` into ``target`` keyed by ``reason``.
+
+    Args:
+        candidates: Candidate method names to evaluate.
+        methods: Methods currently implemented on the class.
+        allow_missing: Methods explicitly allowed to be omitted.
+        target: Mapping of reason to missing method names.
+        reason: Explanation associated with missing methods.
+    """
 
     if not candidates:
         return
@@ -282,7 +315,15 @@ def _accumulate_missing(
 
 
 def _rule_matches(rule: GenericValueTypesRule, facts: ClassFacts) -> bool:
-    """Return ``True`` when ``rule`` applies to ``facts``."""
+    """Return ``True`` when ``rule`` applies to ``facts``.
+
+    Args:
+        rule: Rule under evaluation.
+        facts: Class metadata describing the candidate class.
+
+    Returns:
+        bool: ``True`` when the rule pattern matches the class facts.
+    """
 
     if not fnmatchcase(facts.qualname, rule.pattern):
         return False
@@ -292,7 +333,15 @@ def _rule_matches(rule: GenericValueTypesRule, facts: ClassFacts) -> bool:
 
 
 def _implication_matches(implication: GenericValueTypesImplication, facts: ClassFacts) -> bool:
-    """Return ``True`` when ``implication`` should fire for ``facts``."""
+    """Return ``True`` when ``implication`` should fire for ``facts``.
+
+    Args:
+        implication: Implication specification from the configuration.
+        facts: Class metadata describing the candidate class.
+
+    Returns:
+        bool: ``True`` when the implication trigger is satisfied.
+    """
 
     kind, trigger = implication.parsed_trigger()
     if implication.traits and not set(implication.traits).issubset(facts.traits):
@@ -305,7 +354,14 @@ def _implication_matches(implication: GenericValueTypesImplication, facts: Class
 
 
 def _rule_reason(rule: GenericValueTypesRule) -> str:
-    """Return a human-readable reason string for ``rule`` findings."""
+    """Return a human-readable reason string for ``rule`` findings.
+
+    Args:
+        rule: Rule that produced the finding.
+
+    Returns:
+        str: Reason string describing the rule match.
+    """
 
     if rule.description:
         return rule.description
@@ -313,7 +369,14 @@ def _rule_reason(rule: GenericValueTypesRule) -> str:
 
 
 def _implication_reason(implication: GenericValueTypesImplication) -> str:
-    """Return a human-readable reason string for ``implication`` findings."""
+    """Return a human-readable reason string for ``implication`` findings.
+
+    Args:
+        implication: Implication that produced the finding.
+
+    Returns:
+        str: Reason string describing the implication trigger.
+    """
 
     kind, trigger = implication.parsed_trigger()
     prefix = "method" if kind is ValueTypeTriggerKind.METHOD else "trait"
@@ -321,7 +384,16 @@ def _implication_reason(implication: GenericValueTypesImplication) -> str:
 
 
 def _build_diagnostic(facts: ClassFacts, finding: Finding, root: Path) -> Diagnostic:
-    """Convert ``finding`` into a ``Diagnostic`` for reporting."""
+    """Convert ``finding`` into a ``Diagnostic`` for reporting.
+
+    Args:
+        facts: Class metadata associated with the finding.
+        finding: Finding message describing the missing methods.
+        root: Repository root used to normalise file paths.
+
+    Returns:
+        Diagnostic: Diagnostic representing the finding.
+    """
 
     code = _RECOMMENDED_CODE if finding.severity is Severity.WARNING else _REQUIRED_CODE
     message = (
@@ -341,7 +413,15 @@ def _build_diagnostic(facts: ClassFacts, finding: Finding, root: Path) -> Diagno
 
 
 def _module_name(file_path: Path, root: Path) -> str:
-    """Return the dotted module path for ``file_path`` relative to ``root``."""
+    """Return the dotted module path for ``file_path`` relative to ``root``.
+
+    Args:
+        file_path: Source file being analysed.
+        root: Repository root used to compute module names.
+
+    Returns:
+        str: Normalised module path.
+    """
 
     try:
         relative = file_path.resolve().relative_to(root.resolve())
@@ -352,7 +432,7 @@ def _module_name(file_path: Path, root: Path) -> str:
         return file_path.stem
     if parts[-1].endswith(".py"):
         parts[-1] = parts[-1][:-3]
-    if parts[-1] == "__init__" and len(parts) > 1:
+    if parts[-1] == _INIT_MODULE_BASENAME and len(parts) > 1:
         parts = parts[:-1]
     dotted = ".".join(part for part in parts if part)
     return dotted or file_path.stem
@@ -375,42 +455,62 @@ class _ClassCollector:
     root_file: Path
     facts: list[ClassFacts] = field(default_factory=list)
 
-    def visit(self, node: _TreeSitterNode, parents: tuple[str, ...] = ()) -> None:
-        """Traverse ``node`` collecting class metadata."""
+    def visit(self, node: Node, parents: tuple[str, ...] = ()) -> None:
+        """Traverse ``node`` collecting class metadata.
 
-        if node.type == "decorated_definition":
-            decorators = tuple(self._decorator_info(child) for child in node.children if child.type == "decorator")
+        Args:
+            node: Current syntax node being visited.
+            parents: Qualified name components for parent classes.
+        """
+
+        if node.type == _DECORATED_DEFINITION_NODE:
+            decorators = tuple(self._decorator_info(child) for child in node.children if child.type == _DECORATOR_NODE)
             for child in node.children:
-                if child.type == "class_definition":
+                if child.type == _CLASS_DEFINITION_NODE:
                     self._handle_class(child, parents, decorators)
-                elif child.type in {"decorated_definition", "class_definition"}:
+                elif child.type in {_DECORATED_DEFINITION_NODE, _CLASS_DEFINITION_NODE}:
                     self.visit(child, parents)
                 else:
                     self._visit_child(child, parents)
             return
-        if node.type == "class_definition":
+        if node.type == _CLASS_DEFINITION_NODE:
             self._handle_class(node, parents, ())
             return
         self._visit_child(node, parents)
 
-    def _visit_child(self, node: _TreeSitterNode, parents: tuple[str, ...]) -> None:
+    def _visit_child(self, node: Node, parents: tuple[str, ...]) -> None:
+        """Visit ``node`` while preserving ``parents`` context.
+
+        Args:
+            node: Child node to traverse.
+            parents: Qualified name components for parent classes.
+        """
+
         for child in node.children:
             self.visit(child, parents)
 
     def _handle_class(
         self,
-        node: _TreeSitterNode,
+        node: Node,
         parents: tuple[str, ...],
         decorators: tuple[_DecoratorInfo, ...],
     ) -> None:
-        name_node = node.child_by_field_name("name")
+        """Record class metadata for ``node`` and nested definitions.
+
+        Args:
+            node: Class definition node encountered in the syntax tree.
+            parents: Qualified name components for parent classes.
+            decorators: Decorators applied to the class definition.
+        """
+
+        name_node = node.child_by_field_name(_NAME_FIELD)
         if name_node is None:
             return
         class_name = self._slice(name_node)
         if not class_name:
             return
         qualname = ".".join(part for part in (self.module, *parents, class_name) if part)
-        body = node.child_by_field_name("body")
+        body = node.child_by_field_name(_BODY_FIELD)
         methods = self._collect_methods(body)
         traits = self._collect_traits(node, body, decorators, methods)
         line = (node.start_point[0] if node.start_point else 0) + 1
@@ -429,14 +529,22 @@ class _ClassCollector:
         for child in body.children:
             self.visit(child, nested_parents)
 
-    def _collect_methods(self, body: _TreeSitterNode | None) -> set[str]:
+    def _collect_methods(self, body: Node | None) -> set[str]:
+        """Return method names defined within ``body``.
+
+        Args:
+            body: Class body node or ``None`` when absent.
+
+        Returns:
+            set[str]: Names of methods declared in the class body.
+        """
         methods: set[str] = set()
         if body is None:
             return methods
         for child in body.children:
             if child.type not in _METHOD_NODE_TYPES:
                 continue
-            name_node = child.child_by_field_name("name")
+            name_node = child.child_by_field_name(_NAME_FIELD)
             if name_node is None:
                 continue
             method_name = self._slice(name_node)
@@ -446,103 +554,192 @@ class _ClassCollector:
 
     def _collect_traits(
         self,
-        node: _TreeSitterNode,
-        body: _TreeSitterNode | None,
+        node: Node,
+        body: Node | None,
         decorators: tuple[_DecoratorInfo, ...],
         methods: set[str],
     ) -> set[str]:
-        traits: set[str] = set()
-        decorator_tokens = {token for decorator in decorators for token in decorator.tokens if token}
-        if any(token.endswith("dataclass") for token in decorator_tokens):
-            traits.add(_TRAIT_DATACLASS)
-            decorator_text = {decorator.text for decorator in decorators if decorator.text}
-            if any("frozen=True" in text for text in decorator_text):
-                traits.add(_TRAIT_DATACLASS_FROZEN)
-        argument_list = node.child_by_field_name("superclasses")
-        bases = self._collect_bases(argument_list)
-        if any(base.endswith("Enum") for base in bases):
-            traits.add(_TRAIT_ENUM)
-        if any(base.endswith(tuple_name) for base in bases for tuple_name in ("NamedTuple", "tuple")):
-            traits.add(_TRAIT_VALUE_SEMANTICS)
-        if any(base.endswith(option) for base in bases for option in ("Iterable", "Collection")):
-            traits.add(_TRAIT_ITERABLE)
-        if any(base.endswith(option) for base in bases for option in ("Sequence", "MutableSequence")):
-            traits.add(_TRAIT_SEQUENCE)
-        if any(base.endswith(option) for base in bases for option in ("Mapping", "MutableMapping")):
-            traits.add(_TRAIT_MAPPING)
+        """Derive semantic traits for ``node``.
+
+        Args:
+            node: Class definition node.
+            body: Body node containing class statements.
+            decorators: Decorator metadata applied to the class.
+            methods: Methods declared on the class.
+
+        Returns:
+            set[str]: Derived trait identifiers for the class.
+        """
+        decorator_traits = self._traits_from_decorators(decorators)
+        base_traits = self._traits_from_bases(self._collect_bases(node.child_by_field_name(_SUPERCLASSES_FIELD)))
+        method_traits = self._traits_from_methods(methods)
+        traits = decorator_traits | base_traits | method_traits
         if self._has_slots(body):
             traits.add(_TRAIT_SLOTS)
         if traits & {_TRAIT_DATACLASS, _TRAIT_SLOTS, _TRAIT_SEQUENCE, _TRAIT_MAPPING}:
             traits.add(_TRAIT_VALUE_SEMANTICS)
-        if "__len__" in methods:
+        return traits
+
+    def _traits_from_decorators(self, decorators: tuple[_DecoratorInfo, ...]) -> set[str]:
+        """Return traits implied by ``decorators``.
+
+        Args:
+            decorators: Decorator metadata applied to a class definition.
+
+        Returns:
+            set[str]: Trait identifiers derived from decorators.
+        """
+
+        traits: set[str] = set()
+        decorator_tokens = {token for decorator in decorators for token in decorator.tokens if token}
+        if any(token.endswith(_DATACLASS_SUFFIX) for token in decorator_tokens):
+            traits.add(_TRAIT_DATACLASS)
+            decorator_text = {decorator.text for decorator in decorators if decorator.text}
+            if any(_FROZEN_ARGUMENT in text for text in decorator_text):
+                traits.add(_TRAIT_DATACLASS_FROZEN)
+        return traits
+
+    def _traits_from_bases(self, bases: tuple[str, ...]) -> set[str]:
+        """Return traits implied by base classes listed in ``bases``.
+
+        Args:
+            bases: Base class names extracted from the class definition.
+
+        Returns:
+            set[str]: Trait identifiers derived from base classes.
+        """
+
+        traits: set[str] = set()
+        if any(base.endswith(_ENUM_SUFFIX) for base in bases):
+            traits.add(_TRAIT_ENUM)
+        if any(base.endswith(suffix) for base in bases for suffix in _NAMEDTUPLE_SUFFIXES):
+            traits.add(_TRAIT_VALUE_SEMANTICS)
+        if any(base.endswith(option) for base in bases for option in _ITERABLE_BASES):
+            traits.add(_TRAIT_ITERABLE)
+        if any(base.endswith(option) for base in bases for option in _SEQUENCE_BASES):
+            traits.add(_TRAIT_SEQUENCE)
+        if any(base.endswith(option) for base in bases for option in _MAPPING_BASES):
+            traits.add(_TRAIT_MAPPING)
+        return traits
+
+    def _traits_from_methods(self, methods: set[str]) -> set[str]:
+        """Return traits implied by dunder ``methods``.
+
+        Args:
+            methods: Methods defined on the class.
+
+        Returns:
+            set[str]: Trait identifiers derived from method definitions.
+        """
+
+        traits: set[str] = set()
+        if _METHOD_LEN in methods:
             traits.add(_TRAIT_LEN)
-        if "__bool__" in methods:
+        if _METHOD_BOOL in methods:
             traits.add(_TRAIT_BOOL)
-        if "__iter__" in methods:
+        if _METHOD_ITER in methods:
             traits.add(_TRAIT_ITER)
             traits.add(_TRAIT_ITERABLE)
-        if "__contains__" in methods:
+        if _METHOD_CONTAINS in methods:
             traits.add(_TRAIT_CONTAINS)
-        if "__eq__" in methods:
+        if _METHOD_EQ in methods:
             traits.add(_TRAIT_EQ)
-        if "__hash__" in methods:
+        if _METHOD_HASH in methods:
             traits.add(_TRAIT_HASH)
-        if "__repr__" in methods:
+        if _METHOD_REPR in methods:
             traits.add(_TRAIT_REPR)
-        if "__str__" in methods:
+        if _METHOD_STR in methods:
             traits.add(_TRAIT_STR)
         return traits
 
-    def _collect_bases(self, argument_list: _TreeSitterNode | None) -> tuple[str, ...]:
+    def _collect_bases(self, argument_list: Node | None) -> tuple[str, ...]:
+        """Return fully qualified base class names for ``argument_list``.
+
+        Args:
+            argument_list: AST node describing superclass arguments.
+
+        Returns:
+            tuple[str, ...]: Tuple of base class names.
+        """
         if argument_list is None:
             return ()
         bases: list[str] = []
         for token in self._iterate_named_nodes(argument_list):
-            if token.type in {"identifier", "attribute"}:
+            if token.type in {_IDENTIFIER_NODE, _ATTRIBUTE_NODE}:
                 text = self._slice(token)
                 if text:
                     bases.append(text)
         return tuple(bases)
 
-    def _has_slots(self, body: _TreeSitterNode | None) -> bool:
+    def _has_slots(self, body: Node | None) -> bool:
+        """Return ``True`` when ``body`` declares ``__slots__``.
+
+        Args:
+            body: Class body node inspected for ``__slots__``.
+
+        Returns:
+            bool: ``True`` when ``__slots__`` is declared.
+        """
         if body is None:
             return False
         for child in body.children:
-            if child.type != "expression_statement" or not child.children:
+            if child.type != _EXPRESSION_STATEMENT_NODE or not child.children:
                 continue
             assignment = child.children[0]
-            if assignment.type != "assignment" or len(assignment.children) < 3:
+            if assignment.type != _ASSIGNMENT_NODE or len(assignment.children) < _ASSIGNMENT_MIN_CHILDREN:
                 continue
             target = assignment.children[0]
-            if target.type == "identifier" and self._slice(target) == "__slots__":
+            if target.type == _IDENTIFIER_NODE and self._slice(target) == _SLOTS_IDENTIFIER:
                 return True
         return False
 
-    def _decorator_info(self, decorator: _TreeSitterNode) -> _DecoratorInfo:
+    def _decorator_info(self, decorator: Node) -> _DecoratorInfo:
+        """Return decorator metadata extracted from ``decorator``.
+
+        Args:
+            decorator: Decorator node applied to the class definition.
+
+        Returns:
+            _DecoratorInfo: Extracted decorator token and text metadata.
+        """
         tokens: list[str] = []
         for node in self._iterate_named_nodes(decorator):
-            if node.type in {"identifier", "attribute"}:
+            if node.type in {_IDENTIFIER_NODE, _ATTRIBUTE_NODE}:
                 text = self._slice(node)
                 if text:
                     tokens.append(text)
         text = self._slice(decorator)
         return _DecoratorInfo(tokens=tuple(tokens), text=text)
 
-    def _iterate_named_nodes(self, node: _TreeSitterNode) -> Iterator[_TreeSitterNode]:
-        stack: list[_TreeSitterNode] = [node]
-        while stack:
-            current = stack.pop()
-            for child in current.children:
-                is_named_attr = getattr(child, "is_named", True)
-                if callable(is_named_attr):
-                    is_named = bool(is_named_attr())
-                else:
-                    is_named = bool(is_named_attr)
-                if is_named:
-                    yield child
-                stack.append(child)
+    def _iterate_named_nodes(self, node: Node) -> Iterator[Node]:
+        """Yield named child nodes starting from ``node``.
 
-    def _slice(self, node: _TreeSitterNode) -> str:
+        Args:
+            node: Root node whose named descendants should be traversed.
+
+        Yields:
+            Node: Named child nodes in depth-first order.
+
+        Returns:
+            Iterator[Node]: Iterator yielding named nodes.
+        """
+
+        for child in node.children:
+            is_named_attr = getattr(child, "is_named", True)
+            is_named = bool(is_named_attr()) if callable(is_named_attr) else bool(is_named_attr)
+            if is_named:
+                yield child
+            yield from self._iterate_named_nodes(child)
+
+    def _slice(self, node: Node) -> str:
+        """Return the UTF-8 decoded source slice for ``node``.
+
+        Args:
+            node: Node whose span should be extracted from ``self.source``.
+
+        Returns:
+            str: Source text corresponding to ``node``.
+        """
         return self.source[node.start_byte : node.end_byte].decode("utf-8", errors="ignore").strip()
 
 

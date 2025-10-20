@@ -41,7 +41,15 @@ def apply_file_discovery_overrides(
     current: FileDiscoveryConfig,
     overrides: FileDiscoveryOverrides,
 ) -> FileDiscoveryConfig:
-    """Return ``current`` updated with the supplied override mapping."""
+    """Return ``current`` updated with the supplied override mapping.
+
+    Args:
+        current: Baseline file discovery configuration prior to mutation.
+        overrides: Override values derived from CLI selections.
+
+    Returns:
+        FileDiscoveryConfig: New file discovery configuration reflecting ``overrides``.
+    """
 
     updates = {
         "roots": list(overrides["roots"]),
@@ -220,12 +228,22 @@ def resolve_explicit_files(
 
 
 def derive_boundaries(user_dirs: Sequence[Path], user_files: Sequence[Path]) -> Iterable[Path]:
-    """Yield discovery boundaries derived from explicit user selections."""
+    """Return discovery boundaries derived from explicit user selections.
+
+    Args:
+        user_dirs: Directories explicitly requested by the user.
+        user_files: Files explicitly requested by the user.
+
+    Returns:
+        Iterable[Path]: Candidate boundary paths constraining discovery to selected locations.
+    """
 
     parents = [file_path.parent for file_path in user_files]
+    collected: list[Path] = []
     for candidate in (*user_dirs, *parents):
         if candidate:
-            yield candidate
+            collected.append(candidate)
+    return collected
 
 
 def resolve_excludes(
@@ -269,7 +287,15 @@ def _filter_roots_within_boundaries(
     roots: Sequence[Path],
     boundaries: Sequence[Path],
 ) -> list[Path]:
-    """Filter root directories so they reside within supplied boundaries."""
+    """Filter root directories so they reside within supplied boundaries.
+
+    Args:
+        roots: Root directories selected for discovery.
+        boundaries: Boundary paths restricting discovery scope.
+
+    Returns:
+        list[Path]: Root paths constrained to ``boundaries`` while preserving order.
+    """
 
     matching = [path for path in roots if is_within_any(path, boundaries)]
     if matching:

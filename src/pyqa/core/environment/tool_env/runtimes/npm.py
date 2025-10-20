@@ -24,12 +24,19 @@ shutil = _shutil
 
 
 class NpmRuntime(RuntimeHandler):
-    """Provision Node-based tooling with cached installations."""
+    """Provide the runtime for Node-based tooling with cached installations."""
 
     META_FILE = ".pyqa-meta.json"
 
     def _try_project(self, context: RuntimeContext) -> PreparedCommand | None:
-        """Use a project-local Node binary located under ``node_modules/.bin``."""
+        """Return the project command when ``node_modules/.bin`` contains the binary.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            PreparedCommand | None: Prepared project command, or ``None`` when absent.
+        """
 
         bin_dir = context.root / "node_modules" / ".bin"
         executable = bin_dir / context.executable
@@ -54,7 +61,14 @@ class NpmRuntime(RuntimeHandler):
         )
 
     def _prepare_local(self, context: RuntimeContext) -> PreparedCommand:
-        """Install npm packages into the cache and return the local command."""
+        """Return the command after installing npm packages into the cache.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            PreparedCommand: Prepared command referencing the cached npm binary.
+        """
 
         prefix, cached_version = self._ensure_local_package(context)
         bin_dir = prefix / "node_modules" / ".bin"
@@ -68,6 +82,17 @@ class NpmRuntime(RuntimeHandler):
         return PreparedCommand.from_parts(cmd=cmd, env=env, version=version, source="local")
 
     def _ensure_local_package(self, context: RuntimeContext) -> tuple[Path, str | None]:
+        """Ensure the npm package requirement is installed into the cache.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            tuple[Path, str | None]: Prefix directory containing node modules and optional version string.
+
+        Raises:
+            RuntimeError: If no package requirement is specified for the tool.
+        """
         tool = context.tool
         layout = context.cache_layout
         requirement = self._npm_requirement(tool)
@@ -109,6 +134,16 @@ class NpmRuntime(RuntimeHandler):
         tool: Tool,
         env: Mapping[str, str],
     ) -> str | None:
+        """Return the installed npm package version when available.
+
+        Args:
+            prefix: Path to the installation prefix containing ``node_modules``.
+            tool: Tool metadata describing the npm requirement.
+            env: Environment variables passed to npm commands.
+
+        Returns:
+            str | None: Normalised version string when resolvable, otherwise ``None``.
+        """
         requirement = self._npm_requirement(tool)
         packages = shlex.split(requirement)
         if not packages:
@@ -145,7 +180,14 @@ class NpmRuntime(RuntimeHandler):
 
     @staticmethod
     def _coerce_version_value(value: JsonValue | None) -> str | None:
-        """Return a version string extracted from ``value`` when possible."""
+        """Return the version string extracted from ``value`` when possible.
+
+        Args:
+            value: Raw JSON value produced by npm metadata.
+
+        Returns:
+            str | None: Normalised version string when present, otherwise ``None``.
+        """
 
         if isinstance(value, str):
             stripped = value.strip()
@@ -154,6 +196,15 @@ class NpmRuntime(RuntimeHandler):
 
     @staticmethod
     def _project_env(context: RuntimeContext, bin_dir: Path) -> dict[str, str]:
+        """Return the environment variables for project-level npm execution.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+            bin_dir: Directory containing project-level npm binaries.
+
+        Returns:
+            dict[str, str]: Environment variables suitable for project execution.
+        """
         path_value = os.environ.get("PATH", "")
         combined = f"{bin_dir}{os.pathsep}{path_value}" if path_value else str(bin_dir)
         return {
@@ -165,6 +216,16 @@ class NpmRuntime(RuntimeHandler):
 
     @staticmethod
     def _local_env(context: RuntimeContext, bin_dir: Path, prefix: Path) -> dict[str, str]:
+        """Return the environment variables for cached npm execution.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+            bin_dir: Directory containing cached npm binaries.
+            prefix: Prefix directory hosting node modules and metadata.
+
+        Returns:
+            dict[str, str]: Environment variables suitable for cached execution.
+        """
         path_value = os.environ.get("PATH", "")
         combined = f"{bin_dir}{os.pathsep}{path_value}" if path_value else str(bin_dir)
         return {
@@ -177,6 +238,14 @@ class NpmRuntime(RuntimeHandler):
         }
 
     def _npm_requirement(self, tool: Tool) -> str:
+        """Return the npm requirement string derived from ``tool`` metadata.
+
+        Args:
+            tool: Tool metadata describing npm package requirements.
+
+        Returns:
+            str: npm specification used during installation.
+        """
         if tool.package:
             return tool.package
         target = desired_version(tool)

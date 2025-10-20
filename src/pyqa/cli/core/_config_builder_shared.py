@@ -77,25 +77,58 @@ def select_value(
 
 
 def resolve_path(root: Path, path: Path) -> Path:
-    """Resolve a potentially relative path against the project root."""
+    """Resolve a potentially relative path against the project root.
+
+    Args:
+        root: Project root directory used as the absolute base.
+        path: Source path that may be absolute or relative.
+
+    Returns:
+        Path: Absolute path anchored to ``root``.
+    """
 
     return ensure_absolute_path(path, base_dir=root)
 
 
 def resolve_optional_path(root: Path, path: Path | None) -> Path | None:
-    """Resolve an optional path, preserving ``None`` when unspecified."""
+    """Resolve an optional path, preserving ``None`` when unspecified.
+
+    Args:
+        root: Project root directory used as the absolute base.
+        path: Optional path that should be resolved when provided.
+
+    Returns:
+        Path | None: Absolute path anchored to ``root`` or ``None`` when the input
+        path is unspecified.
+    """
 
     return try_ensure_absolute_path(path, base_dir=root)
 
 
 def ensure_abs(root: Path, path: Path) -> Path:
-    """Ensure ``path`` is absolute relative to ``root`` when required."""
+    """Ensure ``path`` is absolute relative to ``root`` when required.
+
+    Args:
+        root: Project root directory used as the absolute base.
+        path: Source path that may require conversion to an absolute path.
+
+    Returns:
+        Path: Absolute representation of ``path``.
+    """
 
     return ensure_absolute_path(path, base_dir=root)
 
 
 def is_within(candidate: Path, bound: Path) -> bool:
-    """Return whether ``candidate`` resides within ``bound``."""
+    """Return whether ``candidate`` resides within ``bound``.
+
+    Args:
+        candidate: Filesystem path under evaluation.
+        bound: Directory that may contain ``candidate``.
+
+    Returns:
+        bool: ``True`` when ``candidate`` is located inside ``bound``.
+    """
 
     try:
         candidate.relative_to(bound)
@@ -105,7 +138,15 @@ def is_within(candidate: Path, bound: Path) -> bool:
 
 
 def is_within_any(candidate: Path, bounds: Iterable[Path]) -> bool:
-    """Return whether ``candidate`` resides within any provided ``bounds``."""
+    """Return whether ``candidate`` resides within any provided ``bounds``.
+
+    Args:
+        candidate: Filesystem path under evaluation.
+        bounds: Iterable of boundary directories.
+
+    Returns:
+        bool: ``True`` when ``candidate`` resides within at least one boundary.
+    """
 
     return any(is_within(candidate, bound) for bound in bounds)
 

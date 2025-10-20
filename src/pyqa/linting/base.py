@@ -4,10 +4,11 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome
 
@@ -20,25 +21,70 @@ class InternalLintReport:
     files: tuple[Path, ...]
 
 
-class InternalLintRunner(Protocol):
-    """Protocol describing reusable internal linter callables."""
+if TYPE_CHECKING:  # pragma: no cover - import guard for type checking
+    from pyqa.cli.commands.lint.preparation import PreparedLintState
+else:  # pragma: no cover - runtime hinting only
+    PreparedLintState = object
+
+RunnerCallable = Callable[[PreparedLintState, bool], InternalLintReport]
+
+
+class InternalLintRunner(ABC):
+    """Abstract base class describing reusable internal linter callables."""
+
+    def __init__(self, runner_name: str) -> None:
+        """Store the human-readable name for the runner.
+
+        Args:
+            runner_name: Identifier exposed for diagnostics and logging.
+        """
+
+        self._runner_name = runner_name
 
     @property
     def runner_name(self) -> str:
-        """Return a human-readable name for the linter."""
+        """Return a human-readable name for the linter.
 
-        raise NotImplementedError
+        Returns:
+            str: Configured runner name.
+        """
+
+        return self._runner_name
+
+    @abstractmethod
+    def run(
+        self,
+        state: PreparedLintState,
+        *,
+        emit_to_logger: bool,
+    ) -> InternalLintReport:
+        """Execute the linter using CLI-prepared state.
+
+        Args:
+            state: Prepared lint state describing the workspace context.
+            emit_to_logger: Flag indicating whether logging output should be produced.
+
+        Returns:
+            InternalLintReport: Result produced by the internal runner.
+        """
 
     def __call__(
-        self, state: PreparedLintState, *, emit_to_logger: bool
-    ) -> InternalLintReport:  # pragma: no cover - structural contract
-        """Execute the linter using CLI-prepared state."""
+        self,
+        state: PreparedLintState,
+        *,
+        emit_to_logger: bool,
+    ) -> InternalLintReport:
+        """Execute the linter using CLI-prepared state.
 
-        raise NotImplementedError
+        Args:
+            state: Prepared lint state describing the workspace context.
+            emit_to_logger: Flag indicating whether logging output should be produced.
 
+        Returns:
+            InternalLintReport: Result produced by the internal runner.
+        """
 
-if TYPE_CHECKING:  # pragma: no cover - import guard for type checking
-    from pyqa.cli.commands.lint.preparation import PreparedLintState
+        return self.run(state, emit_to_logger=emit_to_logger)
 
 
 __all__ = ["InternalLintReport", "InternalLintRunner"]
@@ -47,20 +93,35 @@ __all__ = ["InternalLintReport", "InternalLintRunner"]
 class _CallableInternalRunner(InternalLintRunner):
     """Concrete internal runner with an explicit name binding."""
 
+    __slots__ = ("_runner_name", "_func")
+
     def __init__(
         self,
         *,
-        runner_name: str,
+        name: str,
         func: Callable[[PreparedLintState, bool], InternalLintReport],
     ) -> None:
-        self._runner_name = runner_name
+        """Create a callable runner delegating to ``func``.
+
+        Args:
+            name: Human-readable runner identifier.
+            func: Callable implementing the lint logic.
+        """
+
+        super().__init__(name)
         self._func = func
 
-    @property
-    def runner_name(self) -> str:
-        return self._runner_name
+    def run(self, state: PreparedLintState, *, emit_to_logger: bool) -> InternalLintReport:
+        """Execute the wrapped callable and return its report.
 
-    def __call__(self, state: PreparedLintState, *, emit_to_logger: bool) -> InternalLintReport:
+        Args:
+            state: Prepared lint state provided by the CLI pipeline.
+            emit_to_logger: Flag indicating whether logging output should be produced.
+
+        Returns:
+            InternalLintReport: Report returned by the wrapped callable.
+        """
+
         return self._func(state, emit_to_logger)
 
 
@@ -79,7 +140,7 @@ def as_internal_runner(
         delegating execution to ``func``.
     """
 
-    return _CallableInternalRunner(runner_name=name, func=func)
+    return _CallableInternalRunner(name=name, func=func)
 
 
 __all__.append("as_internal_runner")
@@ -92,7 +153,17 @@ def build_internal_report(
     diagnostics: Sequence[Diagnostic],
     files: Sequence[Path],
 ) -> InternalLintReport:
-    """Return an internal lint report with a normalised outcome."""
+    """Return an internal lint report with a normalised outcome.
+
+    Args:
+        tool: Identifier of the linter that produced the diagnostics.
+        stdout: Lines emitted during execution.
+        diagnostics: Diagnostics raised by the linter.
+        files: Files inspected during the lint run.
+
+    Returns:
+        InternalLintReport: Aggregated outcome and file footprint.
+    """
 
     exit_category = ToolExitCategory.DIAGNOSTIC if diagnostics else ToolExitCategory.SUCCESS
     outcome = ToolOutcome(

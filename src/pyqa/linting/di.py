@@ -9,16 +9,16 @@ import ast
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
-if TYPE_CHECKING:  # pragma: no cover - import for typing only
-    from pyqa.cli.commands.lint.preparation import PreparedLintState
-else:  # pragma: no cover - runtime hinting only
-    PreparedLintState = object
-
 from pyqa.core.models import JsonValue
 
 from ._ast_visitors import BaseAstLintVisitor, VisitorMetadata, run_ast_linter
 from ._module_utils import module_name_from_path
 from .base import InternalLintReport
+
+if TYPE_CHECKING:  # pragma: no cover - import for typing only
+    from pyqa.cli.commands.lint.preparation import PreparedLintState
+else:  # pragma: no cover - runtime hinting only
+    PreparedLintState = object
 
 _ALLOWED_SERVICE_REGISTERERS: Final[frozenset[str]] = frozenset(
     {
@@ -31,6 +31,7 @@ _ALLOWED_SERVICE_REGISTERERS_DISPLAY: Final[str] = ", ".join(
     (*sorted(_ALLOWED_SERVICE_REGISTERERS), "*bootstrap modules"),
 )
 _SERVICE_CONTAINER_NAMES: Final[frozenset[str]] = frozenset({"ServiceContainer", "container"})
+_REGISTER_METHOD_NAME: Final[str] = "register"
 
 
 def run_pyqa_di_linter(
@@ -62,7 +63,16 @@ def _build_di_visitor(
     state: PreparedLintState,
     metadata: VisitorMetadata,
 ) -> _DiVisitor:
-    """Return a DI visitor instance bound to ``path``."""
+    """Return a DI visitor instance bound to ``path``.
+
+    Args:
+        path: File path currently being linted.
+        state: Prepared lint state describing workspace context.
+        metadata: Tool metadata associated with the visitor.
+
+    Returns:
+        _DiVisitor: Visitor instance prepared to analyse ``path``.
+    """
 
     return _DiVisitor(path, state, metadata)
 
@@ -71,13 +81,23 @@ class _DiVisitor(BaseAstLintVisitor):
     """Visitor detecting DI rule violations."""
 
     def __init__(self, path: Path, state: PreparedLintState, metadata: VisitorMetadata) -> None:
-        """Initialise module context for dependency injection checks."""
+        """Initialise module context for dependency injection checks.
+
+        Args:
+            path: File under analysis.
+            state: Prepared lint state describing the workspace context.
+            metadata: Tool metadata describing diagnostic ownership.
+        """
 
         super().__init__(path, state, metadata)
         self._module = module_name_from_path(path, state.options.target_options.root)
 
     def visit_call(self, node: ast.Call) -> None:
-        """Record violations for forbidden service registration calls."""
+        """Record violations for forbidden service registration calls.
+
+        Args:
+            node: AST call node encountered during module traversal.
+        """
         if self._is_service_registration(node):
             if not self._is_allowed_module():
                 service_label = self._describe_service(node)
@@ -101,23 +121,41 @@ class _DiVisitor(BaseAstLintVisitor):
         self.generic_visit(node)
 
     def _is_service_registration(self, node: ast.Call) -> bool:
-        """Return ``True`` for ServiceContainer.register style invocations."""
+        """Return ``True`` for ``ServiceContainer.register`` style invocations.
 
-        if isinstance(node.func, ast.Attribute) and node.func.attr == "register":
+        Args:
+            node: AST call node encountered during traversal.
+
+        Returns:
+            bool: ``True`` when the call targets a service container registration API.
+        """
+
+        if isinstance(node.func, ast.Attribute) and node.func.attr == _REGISTER_METHOD_NAME:
             owner = node.func.value
             if isinstance(owner, ast.Name) and owner.id in _SERVICE_CONTAINER_NAMES:
                 return True
         return False
 
     def _is_allowed_module(self) -> bool:
-        """Return ``True`` when the current module is an approved root."""
+        """Return ``True`` when the current module is an approved root.
+
+        Returns:
+            bool: ``True`` when registrations are permitted in the current module.
+        """
 
         if self._module in _ALLOWED_SERVICE_REGISTERERS:
             return True
         return any(self._module.endswith(suffix) for suffix in _ALLOWED_SERVICE_SUFFIXES)
 
     def _describe_service(self, node: ast.Call) -> str:
-        """Return a human-friendly representation of the registered service."""
+        """Return a human-friendly representation of the registered service.
+
+        Args:
+            node: AST call node referencing the registration invocation.
+
+        Returns:
+            str: Human-readable label for the service being registered.
+        """
 
         if node.args:
             label = self._render_argument(node.args[0])
@@ -131,7 +169,14 @@ class _DiVisitor(BaseAstLintVisitor):
         return "unknown service"
 
     def _render_argument(self, arg: ast.AST) -> str:
-        """Render ``arg`` as a readable literal or expression string."""
+        """Render ``arg`` as a readable literal or expression string.
+
+        Args:
+            arg: AST expression representing a service label candidate.
+
+        Returns:
+            str: Best-effort string representation of the provided argument.
+        """
 
         if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
             return arg.value
@@ -139,11 +184,18 @@ class _DiVisitor(BaseAstLintVisitor):
             return arg.id
         try:
             return ast.unparse(arg)
-        except Exception:  # pragma: no cover - ast.unparse best-effort fall back.
+        except (AttributeError, ValueError, TypeError):  # pragma: no cover - ast.unparse best-effort fallback.
             return ast.dump(arg, annotate_fields=False)
 
     def _service_hints(self, service_label: str) -> tuple[str, ...]:
-        """Return actionable hints encouraging proper DI configuration."""
+        """Return actionable hints encouraging proper DI configuration.
+
+        Args:
+            service_label: Name of the service being registered.
+
+        Returns:
+            tuple[str, ...]: Advisory messages guiding correct registration practices.
+        """
 
         suffix_text = " or a module ending with '.bootstrap'" if _ALLOWED_SERVICE_SUFFIXES else ""
         return (

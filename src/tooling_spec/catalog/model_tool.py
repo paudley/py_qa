@@ -450,7 +450,20 @@ class ToolDocumentationParser(Protocol):
         context: str,
         catalog_root: Path,
         source: Path,
-    ) -> DocumentationBundle | None: ...
+    ) -> DocumentationBundle | None:
+        """Return an optional documentation bundle parsed from ``data``.
+
+        Args:
+            data: Mapping containing the documentation payload.
+            context: Human-readable context used for error reporting.
+            catalog_root: Root directory containing catalog documentation assets.
+            source: Path to the JSON document currently being processed.
+
+        Returns:
+            DocumentationBundle | None: Structured documentation bundle when available.
+        """
+
+        ...
 
 
 class ToolRuntimeParser(Protocol):
@@ -461,7 +474,18 @@ class ToolRuntimeParser(Protocol):
         data: Mapping[str, JSONValue],
         *,
         context: str,
-    ) -> RuntimeDefinition | None: ...
+    ) -> RuntimeDefinition | None:
+        """Return an optional runtime definition parsed from ``data``.
+
+        Args:
+            data: Mapping containing runtime configuration metadata.
+            context: Human-readable context used for diagnostics.
+
+        Returns:
+            RuntimeDefinition | None: Runtime definition or ``None`` when the mapping is absent.
+        """
+
+        ...
 
 
 class ToolMetadataParser(Protocol):
@@ -473,7 +497,19 @@ class ToolMetadataParser(Protocol):
         *,
         context: str,
         schema_version: str,
-    ) -> ToolMetadata: ...
+    ) -> ToolMetadata:
+        """Return tool metadata parsed from ``data``.
+
+        Args:
+            data: Mapping describing tool metadata fields.
+            context: Human-readable context used in error messages.
+            schema_version: Active catalog schema version supplied by the caller.
+
+        Returns:
+            ToolMetadata: Parsed tool metadata matching ``schema_version``.
+        """
+
+        ...
 
 
 ToolModelObject: TypeAlias = (

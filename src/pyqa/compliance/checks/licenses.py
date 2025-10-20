@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Final, Protocol, TypeAlias, cast, runtime_checkable
+from typing import Final, Protocol, Self, TypeAlias, cast, runtime_checkable
 
 from tooling_spec.catalog.types import JSONValue
 
@@ -45,8 +45,12 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
     from pyqa.core.config import constants as _core_constants
 
 
+class LicenseConfigProtocolError(RuntimeError):
+    """Raised when the LicenseConfig protocol is invoked without an implementation."""
+
+
 @runtime_checkable
-class _LicenseConfigProtocol(Protocol):
+class LicenseConfigProtocol(Protocol):
     """Define the operations expected from ``pyqa.config.LicenseConfig``."""
 
     @abstractmethod
@@ -55,27 +59,40 @@ class _LicenseConfigProtocol(Protocol):
 
         Args:
             mode: Serialization mode requested by the caller.
+
+        Returns:
+            dict[str, LicenseOverrideValue]: Mapping of override entries.
+
+        Raises:
+            LicenseConfigProtocolError: Raised when the implementation does not override ``model_dump``.
         """
 
-        raise NotImplementedError
+        msg = "LicenseConfigProtocol implementations must override model_dump()."
+        raise LicenseConfigProtocolError(msg)
 
     @abstractmethod
     def model_copy(
         self,
         *,
         update: LicenseOverrideMapping | None = None,
-    ) -> LicenseConfigProtocol:
+    ) -> Self:
         """Create a shallow copy of the configuration.
 
         Args:
             update: Optional overrides applied to the new configuration instance.
+
+        Returns:
+            Self: New configuration instance incorporating overrides.
+
+        Raises:
+            LicenseConfigProtocolError: Raised when the implementation does not override ``model_copy``.
         """
 
-        raise NotImplementedError
+        msg = "LicenseConfigProtocol implementations must override model_copy()."
+        raise LicenseConfigProtocolError(msg)
 
 
-LicenseConfigProtocol = _LicenseConfigProtocol
-LicenseConfigRuntime = cast("type[LicenseConfigProtocol]", _LicenseConfig)
+LicenseConfigRuntime = cast(type[LicenseConfigProtocol], _LicenseConfig)
 DEFAULT_EXCLUDE_DIRS: Final[frozenset[str]] = frozenset(cast(Iterable[str], _core_constants.ALWAYS_EXCLUDE_DIRS))
 
 

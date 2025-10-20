@@ -11,15 +11,16 @@ from typing import Final, cast
 
 from ..core.runtime import ServiceContainer, register_default_services
 from ..interfaces.analysis import AnnotationProvider, ContextResolver, FunctionScaleEstimator
+from ..interfaces.runtime import ServiceRegistryProtocol
 from .bootstrap import register_analysis_services
 
 
 @cache
-def _default_services() -> ServiceContainer:
+def _default_services() -> ServiceRegistryProtocol:
     """Build the default analysis service container.
 
     Returns:
-        ServiceContainer: Container with baseline runtime and analysis bindings
+        ServiceRegistryProtocol: Container with baseline runtime and analysis bindings
         registered.
     """
 
@@ -38,24 +39,26 @@ class _ContainerSelector(Enum):
 DEFAULT_ANALYSIS_CONTAINER: Final = _ContainerSelector.DEFAULT_ANALYSIS
 
 
-def _select_container(container: ServiceContainer | _ContainerSelector) -> ServiceContainer:
+def _select_container(
+    container: ServiceRegistryProtocol | _ContainerSelector,
+) -> ServiceRegistryProtocol:
     """Choose the service container to use for analysis lookups.
 
     Args:
-        container: Existing runtime container or the `DEFAULT_ANALYSIS_CONTAINER`
+        container: Existing runtime container or the ``DEFAULT_ANALYSIS_CONTAINER``
             sentinel requesting the lazily constructed default container.
 
     Returns:
-        ServiceContainer: Container that should supply service instances.
+        ServiceRegistryProtocol: Container that should supply service instances.
     """
 
-    if isinstance(container, ServiceContainer):
+    if isinstance(container, ServiceRegistryProtocol):
         return container
     return _default_services()
 
 
 def resolve_annotation_provider(
-    container: ServiceContainer | _ContainerSelector = DEFAULT_ANALYSIS_CONTAINER,
+    container: ServiceRegistryProtocol | _ContainerSelector = DEFAULT_ANALYSIS_CONTAINER,
 ) -> AnnotationProvider:
     """Fetch the registered annotation provider implementation.
 
@@ -75,7 +78,7 @@ def resolve_annotation_provider(
 
 
 def resolve_function_scale_estimator(
-    container: ServiceContainer | _ContainerSelector = DEFAULT_ANALYSIS_CONTAINER,
+    container: ServiceRegistryProtocol | _ContainerSelector = DEFAULT_ANALYSIS_CONTAINER,
 ) -> FunctionScaleEstimator:
     """Fetch the registered function scale estimator implementation.
 
@@ -95,7 +98,7 @@ def resolve_function_scale_estimator(
 
 
 def resolve_context_resolver(
-    container: ServiceContainer | _ContainerSelector = DEFAULT_ANALYSIS_CONTAINER,
+    container: ServiceRegistryProtocol | _ContainerSelector = DEFAULT_ANALYSIS_CONTAINER,
 ) -> ContextResolver:
     """Fetch the registered Tree-sitter context resolver implementation.
 

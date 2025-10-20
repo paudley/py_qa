@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Runtime helpers for constructing orchestration selection contexts."""
 
 from __future__ import annotations
@@ -23,6 +24,12 @@ class UnknownToolRequestedError(RuntimeError):
     """Raised when ``--only`` specifies tools that are not registered."""
 
     def __init__(self, tool_names: Sequence[str]) -> None:
+        """Create the error with the unresolved tool names.
+
+        Args:
+            tool_names: Sequence of tool identifiers requested via ``--only``.
+        """
+
         deduplicated = tuple(dict.fromkeys(tool_names))
         message = f"Unknown tool(s) requested via --only: {', '.join(deduplicated)}"
         super().__init__(message)
@@ -36,7 +43,17 @@ def build_selection_context(
     detected_languages: Sequence[str],
     root: Path,
 ) -> SelectionContext:
-    """Return a :class:`SelectionContext` derived from configuration inputs."""
+    """Return a :class:`SelectionContext` derived from configuration inputs.
+
+    Args:
+        cfg: Effective configuration for the current invocation.
+        files: Files discovered for the current run.
+        detected_languages: Languages inferred from file contents and paths.
+        root: Repository root path used for resolving discovery heuristics.
+
+    Returns:
+        SelectionContext: Immutable context describing the orchestration inputs.
+    """
 
     file_tuple = tuple(files)
     extensions = frozenset(path.suffix.lower() for path in file_tuple if path.suffix)

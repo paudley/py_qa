@@ -178,7 +178,16 @@ def filter_py_qa_paths(paths: Iterable[Path], root: Path) -> tuple[list[Path], l
 
 
 def _maybe_resolve(path: Path, root: Path | None = None) -> Path | None:
-    """Safely resolve ``path`` relative to ``root`` while handling errors."""
+    """Safely resolve ``path`` relative to ``root`` while handling errors.
+
+    Args:
+        path: Candidate filesystem path supplied by the caller.
+        root: Optional base directory used when resolving relative paths.
+
+    Returns:
+        Path | None: Absolute path when resolution succeeds, otherwise ``None`` when
+        errors occur.
+    """
 
     try:
         return ensure_absolute_path(path, base_dir=root)

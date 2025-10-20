@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal, TypeAlias
+from typing import Final, Literal, TypeAlias, cast
 
 from pyqa.platform.paths import get_pyqa_root
 from tooling_spec.catalog.model_actions import ActionDefinition
@@ -93,7 +93,16 @@ def register_catalog_tools(
     catalog_root: Path | None = None,
     schema_root: Path | None = None,
 ) -> CatalogSnapshot:
-    """Register catalog-backed tools with the provided *registry*."""
+    """Register catalog-backed tools with the provided registry instance.
+
+    Args:
+        registry: Registry that receives catalog tools. Defaults to the global registry.
+        catalog_root: Optional path overriding the catalog root directory.
+        schema_root: Optional path overriding the schema root directory.
+
+    Returns:
+        CatalogSnapshot: Snapshot describing the registered catalog.
+    """
     target = registry if registry is not None else DEFAULT_REGISTRY
     loader = ToolCatalogLoader(
         catalog_root=_resolve_catalog_root(catalog_root),
@@ -114,7 +123,16 @@ def initialize_registry(
     catalog_root: Path | None = None,
     schema_root: Path | None = None,
 ) -> CatalogSnapshot:
-    """Initialise *registry* from the catalog and return the resulting snapshot."""
+    """Initialise ``registry`` from the catalog and return the resulting snapshot.
+
+    Args:
+        registry: Registry that receives catalog tools. Defaults to the global registry.
+        catalog_root: Optional path overriding the catalog root directory.
+        schema_root: Optional path overriding the schema root directory.
+
+    Returns:
+        CatalogSnapshot: Snapshot describing the registered catalog.
+    """
     target = registry if registry is not None else DEFAULT_REGISTRY
     return register_catalog_tools(
         target,
@@ -124,6 +142,18 @@ def initialize_registry(
 
 
 def _resolve_catalog_root(candidate: Path | None) -> Path:
+    """Return the catalog root directory derived from ``candidate``.
+
+    Args:
+        candidate: User-supplied catalog root or ``None`` to use the default path.
+
+    Returns:
+        Path: Resolved catalog root directory.
+
+    Raises:
+        FileNotFoundError: If the default catalog directory cannot be located.
+    """
+
     if candidate is not None:
         return candidate
     project_root = get_pyqa_root()
@@ -137,6 +167,16 @@ def _materialize_tool(
     definition: ToolDefinition,
     strategies: Mapping[str, StrategyDefinition],
 ) -> Tool:
+    """Return a :class:`Tool` instance derived from ``definition``.
+
+    Args:
+        definition: Catalog tool definition describing the runtime and actions.
+        strategies: Strategy definitions keyed by identifier.
+
+    Returns:
+        Tool: Materialised tool ready for registration.
+    """
+
     runtime_config = _extract_runtime(definition, strategies)
     documentation_value = _convert_documentation(definition.components.documentation)
     suppressions_tuple = _extract_suppressions(definition.components.diagnostics_bundle.suppressions)
@@ -174,6 +214,12 @@ def _materialize_tool(
 
 
 def _apply_environment_tags(tool: Tool) -> None:
+    """Update tool enablement based on environment-sensitive tags.
+
+    Args:
+        tool: Tool definition whose default enablement may change based on environment.
+    """
+
     if not tool.tags:
         return
     available_map = {
@@ -217,7 +263,7 @@ def _materialize_action(
     if action.parser is not None:
         parser_instance = _instantiate_parser(action.parser.reference, strategies, context=context)
 
-    env_mapping = {key: value for key, value in action.execution.env.items()}
+    env_mapping = dict(action.execution.env.items())
     description = action.description or ""
     filters = action.execution.filters
 
@@ -334,14 +380,23 @@ def _instantiate_installer(
     raw_config = getattr(reference, "config", {})
     config = _materialize_strategy_config(raw_config)
     installer = _call_strategy_factory(factory, config)
-    if not isinstance(installer, InstallerCallable):
+    if not callable(installer):
         raise CatalogIntegrityError(
             f"{context}: installer strategy '{reference.strategy}' did not return a callable",
         )
-    return installer
+    return cast(InstallerCallable, installer)
 
 
 def _convert_documentation(bundle: DocumentationBundle | None) -> ToolDocumentation | None:
+    """Convert catalog documentation bundle to :class:`ToolDocumentation`.
+
+    Args:
+        bundle: Documentation bundle provided by the catalog.
+
+    Returns:
+        ToolDocumentation | None: Structured documentation or ``None`` when absent.
+    """
+
     if bundle is None:
         return None
     help_entry = _to_tool_doc_entry(bundle.help)
@@ -353,6 +408,15 @@ def _convert_documentation(bundle: DocumentationBundle | None) -> ToolDocumentat
 
 
 def _to_tool_doc_entry(entry: DocumentationEntry | None) -> ToolDocumentationEntry | None:
+    """Convert a documentation entry into a :class:`ToolDocumentationEntry`.
+
+    Args:
+        entry: Catalog documentation entry or ``None``.
+
+    Returns:
+        ToolDocumentationEntry | None: Converted documentation entry, when present.
+    """
+
     if entry is None:
         return None
     content = entry.content.strip()
@@ -520,6 +584,8 @@ def _catalog_cache_key(catalog_root: Path, schema_root: Path | None) -> tuple[Pa
 
 @dataclass(frozen=True, slots=True)
 class _SuppressionBundle:
+    """Container holding suppression identifiers grouped by scope."""
+
     tests: tuple[str, ...]
     general: tuple[str, ...]
     duplicates: tuple[str, ...]
@@ -529,6 +595,16 @@ def _extract_runtime(
     definition: ToolDefinition,
     strategies: Mapping[str, StrategyDefinition],
 ) -> _RuntimeConfig:
+    """Return runtime configuration resolved from ``definition``.
+
+    Args:
+        definition: Catalog tool definition containing runtime metadata.
+        strategies: Strategy definitions keyed by identifier.
+
+    Returns:
+        _RuntimeConfig: Normalised runtime configuration for the tool.
+    """
+
     runtime = definition.runtime
     kind = _normalize_runtime_kind(runtime.kind if runtime is not None else None, context=definition.name)
     package = runtime.package if runtime is not None else None
@@ -576,6 +652,19 @@ def _normalize_phase_literal(raw: str, *, context: str) -> PhaseLiteral:
 
 
 def _normalize_runtime_kind(raw: RuntimeType | str | None, *, context: str) -> ToolRuntimeKind:
+    """Return the normalised runtime kind derived from ``raw``.
+
+    Args:
+        raw: Runtime kind specified by the catalog.
+        context: Human-readable context used for error reporting.
+
+    Returns:
+        ToolRuntimeKind: Validated runtime kind literal.
+
+    Raises:
+        CatalogIntegrityError: If ``raw`` cannot be mapped to a supported runtime kind.
+    """
+
     if raw is None:
         return DEFAULT_RUNTIME_KIND
     candidate = str(raw)
@@ -586,6 +675,16 @@ def _normalize_runtime_kind(raw: RuntimeType | str | None, *, context: str) -> T
 
 
 def _normalize_version_command(value: Sequence[str] | str | None, *, context: str) -> tuple[str, ...] | None:
+    """Return a normalised version command tuple.
+
+    Args:
+        value: Command specification sourced from the catalog definition.
+        context: Human-readable context used for error reporting.
+
+    Returns:
+        tuple[str, ...] | None: Command arguments or ``None`` when not configured.
+    """
+
     if value is None:
         return None
     if isinstance(value, (list, tuple, set)):
@@ -598,6 +697,15 @@ def _normalize_version_command(value: Sequence[str] | str | None, *, context: st
 
 
 def _extract_suppressions(bundle: SuppressionsDefinition | None) -> _SuppressionBundle:
+    """Return suppression bundle extracted from the catalog diagnostics configuration.
+
+    Args:
+        bundle: Suppressions definition provided by the catalog, when present.
+
+    Returns:
+        _SuppressionBundle: Structured suppression identifiers grouped by scope.
+    """
+
     if bundle is None:
         return _SuppressionBundle(tests=(), general=(), duplicates=())
     return _SuppressionBundle(

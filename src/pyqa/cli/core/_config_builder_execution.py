@@ -37,7 +37,15 @@ def apply_execution_overrides(
     current: ExecutionConfig,
     overrides: ExecutionOverrides,
 ) -> ExecutionConfig:
-    """Return ``current`` updated with the supplied override mapping."""
+    """Return ``current`` updated with the supplied override mapping.
+
+    Args:
+        current: Baseline execution configuration prior to mutation.
+        overrides: Override values derived from CLI selections.
+
+    Returns:
+        ExecutionConfig: New execution configuration reflecting ``overrides``.
+    """
 
     return current.model_copy(
         update={

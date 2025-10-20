@@ -23,7 +23,15 @@ class VersionResolver:
         *,
         env: Mapping[str, str] | None = None,
     ) -> str | None:
-        """Return the normalized version string from ``command`` if available."""
+        """Return the normalised version string produced by ``command`` when available.
+
+        Args:
+            command: Command sequence executed to report version information.
+            env: Optional environment overrides supplied to the command invocation.
+
+        Returns:
+            str | None: Normalised version string when parsing succeeds, otherwise ``None``.
+        """
         try:
             completed = run_command(
                 list(command),
@@ -38,7 +46,14 @@ class VersionResolver:
         return self.normalize(first_line)
 
     def normalize(self, raw: str | None) -> str | None:
-        """Return a normalized semantic version extracted from ``raw``."""
+        """Return the normalised semantic version extracted from ``raw``.
+
+        Args:
+            raw: Raw version text captured from tooling output.
+
+        Returns:
+            str | None: Semantic version string, or ``None`` if parsing fails.
+        """
         if not raw:
             return None
         match = self.VERSION_PATTERN.search(raw)
@@ -50,7 +65,15 @@ class VersionResolver:
         return candidate
 
     def is_compatible(self, actual: str | None, expected: str | None) -> bool:
-        """Return ``True`` when ``actual`` satisfies the ``expected`` minimum."""
+        """Return whether ``actual`` satisfies the ``expected`` minimum version.
+
+        Args:
+            actual: Actual version string captured from tooling output.
+            expected: Minimum version string required for compatibility.
+
+        Returns:
+            bool: ``True`` when the actual version meets or exceeds the expectation.
+        """
         if expected is None:
             return True
         if actual is None:

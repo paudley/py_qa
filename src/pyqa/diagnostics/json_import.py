@@ -164,7 +164,10 @@ class JsonDiagnosticExtractor:
             payload: JSON document to walk when extracting diagnostics.
 
         Returns:
-            Iterator[JSONValue]: Items referenced by the configured path.
+            Iterator[JSONValue]: Iterator over nodes referenced by the configured path.
+
+        Yields:
+            JSONValue: Items referenced by the configured path.
         """
 
         if self.item_path is None or not self.item_path.strip():
@@ -323,7 +326,10 @@ def _descend(nodes: Iterable[JSONValue], token: PathComponent) -> Iterator[JSONV
         token: Path component describing the next traversal step.
 
     Returns:
-        Iterator[JSONValue]: Nodes reached after applying the token.
+        Iterator[JSONValue]: Iterator yielding nodes after applying the token.
+
+    Yields:
+        JSONValue: Nodes reached after applying the token.
     """
 
     if token.kind is PathTokenKind.KEY:
@@ -344,7 +350,10 @@ def _descend_by_key(nodes: Iterable[JSONValue], token: PathComponent) -> Iterato
         token: Path component containing the mapping key.
 
     Returns:
-        Iterator[JSONValue]: Child nodes extracted via the key lookup.
+        Iterator[JSONValue]: Iterator yielding children extracted via the key lookup.
+
+    Yields:
+        JSONValue: Child nodes extracted via the key lookup.
     """
 
     key = token.value
@@ -363,7 +372,10 @@ def _descend_by_index(nodes: Iterable[JSONValue], token: PathComponent) -> Itera
         token: Path component containing the positional index.
 
     Returns:
-        Iterator[JSONValue]: Child nodes located at the requested index.
+        Iterator[JSONValue]: Iterator yielding children located at the requested index.
+
+    Yields:
+        JSONValue: Child nodes located at the requested index.
     """
 
     index = int(token.value) if token.value is not None else _DEFAULT_INDEX
@@ -380,7 +392,10 @@ def _descend_by_wildcard(nodes: Iterable[JSONValue]) -> Iterator[JSONValue]:
         nodes: Candidate JSON nodes to traverse.
 
     Returns:
-        Iterator[JSONValue]: Items yielded from sequence nodes encountered.
+        Iterator[JSONValue]: Iterator yielding values discovered during wildcard traversal.
+
+    Yields:
+        JSONValue: Items yielded from sequence nodes encountered.
     """
 
     for node in nodes:
@@ -480,7 +495,12 @@ def _tokenize_path(path: str, *, allow_wildcards: bool) -> tuple[PathComponent, 
 
 
 def _flush_buffer_as_key(buffer: list[str], tokens: list[PathComponent]) -> None:
-    """Append buffered characters as a key token when non-empty."""
+    """Append buffered characters as a key token when non-empty.
+
+    Args:
+        buffer: Characters collected since the previous delimiter.
+        tokens: Accumulated path components to extend.
+    """
 
     if not buffer:
         return
@@ -496,7 +516,14 @@ def _append_bracket_segment(
     allow_wildcards: bool,
     path: str,
 ) -> None:
-    """Append bracket segment tokens, enforcing wildcard policy."""
+    """Append bracket segment tokens, enforcing wildcard policy.
+
+    Args:
+        tokens: Accumulated path components to extend.
+        segment: Bracket-delimited path segment.
+        allow_wildcards: Flag controlling wildcard support.
+        path: Original path used for error reporting.
+    """
 
     if segment in {"", _WILDCARD_SYMBOL}:
         if not allow_wildcards:

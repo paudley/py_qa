@@ -111,25 +111,44 @@ class SecurityScanResult:
     warnings: list[str] = field(default_factory=list)
 
     def register_secret(self, path: Path, message: str) -> None:
-        """Record a potential secret finding for ``path``."""
+        """Record a potential secret finding for ``path``.
+
+        Args:
+            path: File in which the secret was detected.
+            message: Description of the secret pattern.
+        """
 
         self.secret_files.setdefault(path, []).append(message)
         self.findings += 1
 
     def register_pii(self, path: Path, message: str) -> None:
-        """Record potential personally identifiable information for ``path``."""
+        """Record potential personally identifiable information for ``path``.
+
+        Args:
+            path: File containing potential PII.
+            message: Description of the PII finding.
+        """
 
         self.pii_files.setdefault(path, []).append(message)
         self.findings += 1
 
     def register_temp(self, path: Path) -> None:
-        """Record a temporary or backup file that should not be committed."""
+        """Record a temporary or backup file that should not be committed.
+
+        Args:
+            path: File path flagged as temporary.
+        """
 
         self.temp_files.append(path)
         self.findings += 1
 
     def register_bandit(self, metrics: dict[str, int], samples: list[str]) -> None:
-        """Record results from a Bandit security scan."""
+        """Record results from a Bandit security scan.
+
+        Args:
+            metrics: Mapping of issue codes to occurrence counts.
+            samples: Sample outputs highlighting the detected issues.
+        """
 
         self.bandit_issues = metrics
         self.bandit_samples = samples
@@ -146,7 +165,14 @@ class SecurityScanner:
     excludes_file: Path | None = None
 
     def run(self, files: Sequence[Path]) -> SecurityScanResult:
-        """Run configured security checks against ``files``."""
+        """Run configured security checks against ``files``.
+
+        Args:
+            files: Candidate files to inspect for security issues.
+
+        Returns:
+            SecurityScanResult: Aggregated findings from the scan.
+        """
 
         result = SecurityScanResult()
         resolved_files = self._resolve_files(files)
@@ -162,7 +188,14 @@ class SecurityScanner:
 
     # ------------------------------------------------------------------
     def _resolve_files(self, files: Sequence[Path]) -> list[Path]:
-        """Resolve ``files`` relative to :attr:`root` and drop missing entries."""
+        """Resolve ``files`` relative to :attr:`root` and drop missing entries.
+
+        Args:
+            files: Candidate files supplied by the caller.
+
+        Returns:
+            list[Path]: Existing files resolved against :attr:`root`.
+        """
 
         resolved: list[Path] = []
         for file in files:
@@ -172,7 +205,14 @@ class SecurityScanner:
         return resolved
 
     def _should_exclude(self, path: Path) -> bool:
-        """Return whether ``path`` matches the exclude configuration."""
+        """Return whether ``path`` matches the exclude configuration.
+
+        Args:
+            path: Candidate file path to evaluate.
+
+        Returns:
+            bool: ``True`` when the path should be skipped.
+        """
 
         excludes_path = self.excludes_file or (self.root / ".security-check-excludes")
         if not excludes_path.exists():
@@ -187,7 +227,14 @@ class SecurityScanner:
         return False
 
     def _is_binary(self, path: Path) -> bool:
-        """Return ``True`` when ``path`` appears to contain binary data."""
+        """Return ``True`` when ``path`` appears to contain binary data.
+
+        Args:
+            path: File path to test for binary content.
+
+        Returns:
+            bool: ``True`` when the file contains binary data.
+        """
 
         try:
             handle = path.open("rb")
@@ -198,7 +245,14 @@ class SecurityScanner:
         return _NULL_BYTE in chunk
 
     def _read_text(self, path: Path) -> str:
-        """Return the textual contents of ``path`` or an empty string on failure."""
+        """Return the textual contents of ``path`` or an empty string on failure.
+
+        Args:
+            path: File path to read.
+
+        Returns:
+            str: File contents when accessible; otherwise an empty string.
+        """
 
         try:
             return path.read_text(encoding="utf-8", errors="ignore")
@@ -206,7 +260,12 @@ class SecurityScanner:
             return ""
 
     def _scan_file(self, path: Path, result: SecurityScanResult) -> None:
-        """Scan ``path`` for secrets, PII, temp files, and aggregate findings."""
+        """Scan ``path`` for secrets, PII, temp files, and aggregate findings.
+
+        Args:
+            path: File being scanned.
+            result: Result aggregator used to record findings.
+        """
 
         if not self._is_scan_candidate(path):
             return
@@ -234,7 +293,14 @@ class SecurityScanner:
             warn(f"Potential PII found in {relative_path}", use_emoji=self.use_emoji)
 
     def _is_scan_candidate(self, path: Path) -> bool:
-        """Return ``True`` when ``path`` is eligible for scanning."""
+        """Return ``True`` when ``path`` is eligible for scanning.
+
+        Args:
+            path: Candidate file path to evaluate.
+
+        Returns:
+            bool: ``True`` when the file should be inspected.
+        """
 
         if not path.is_file() or self._should_exclude(path):
             return False
@@ -251,7 +317,17 @@ class SecurityScanner:
         lines: Sequence[str],
         result: SecurityScanResult,
     ) -> bool:
-        """Scan ``lines`` for secret patterns and record findings."""
+        """Scan ``lines`` for secret patterns and record findings.
+
+        Args:
+            path: Filesystem path under analysis.
+            relative_path: Path relative to the repository root.
+            lines: File contents split into lines.
+            result: Aggregated scan results.
+
+        Returns:
+            bool: ``True`` when at least one secret was detected.
+        """
 
         found = False
         for pattern in _SECRET_PATTERNS:
@@ -269,7 +345,16 @@ class SecurityScanner:
         lines: Sequence[str],
         result: SecurityScanResult,
     ) -> bool:
-        """Scan ``lines`` for high-entropy strings indicative of secrets."""
+        """Scan ``lines`` for high-entropy strings indicative of secrets.
+
+        Args:
+            relative_path: Path relative to the repository root.
+            lines: File contents split into lines.
+            result: Aggregated scan results.
+
+        Returns:
+            bool: ``True`` when entropy-based findings were recorded.
+        """
 
         matches = _match_pattern(_ENTROPY_PATTERN, lines)
         filtered = _filter_entropy(matches)
@@ -283,7 +368,15 @@ class SecurityScanner:
         return True
 
     def _scan_temp_files(self, relative_path: Path, result: SecurityScanResult) -> bool:
-        """Identify temporary or backup files that should not be committed."""
+        """Identify temporary or backup files that should not be committed.
+
+        Args:
+            relative_path: Path relative to the repository root.
+            result: Aggregated scan results.
+
+        Returns:
+            bool: ``True`` when the file is considered temporary.
+        """
 
         if relative_path.suffix in _TMP_FILE_SUFFIXES or relative_path.name.endswith("~"):
             result.register_temp(relative_path)
@@ -297,7 +390,17 @@ class SecurityScanner:
         lines: Sequence[str],
         result: SecurityScanResult,
     ) -> bool:
-        """Scan ``lines`` for PII matches and record potential findings."""
+        """Scan ``lines`` for PII matches and record potential findings.
+
+        Args:
+            path: Absolute file path under analysis.
+            relative_path: Path relative to the repository root.
+            lines: File contents split into lines.
+            result: Aggregated scan results.
+
+        Returns:
+            bool: ``True`` when PII-like content is detected.
+        """
 
         if _should_skip_pii(path):
             return False
@@ -314,6 +417,12 @@ class SecurityScanner:
 
     # ------------------------------------------------------------------
     def _run_bandit(self, result: SecurityScanResult) -> None:
+        """Execute Bandit against the project when enabled.
+
+        Args:
+            result: Aggregated scan results receiving Bandit findings.
+        """
+
         src_dir = self.root / "src"
         if not src_dir.is_dir():
             info(
@@ -346,7 +455,15 @@ class SecurityScanner:
             self._report_bandit_findings(metrics, samples, result)
 
     def _invoke_bandit(self, src_dir: Path, report_path: Path) -> CompletedProcess[str]:
-        """Run Bandit against ``src_dir`` capturing the JSON report at ``report_path``."""
+        """Run Bandit against ``src_dir`` capturing the JSON report at ``report_path``.
+
+        Args:
+            src_dir: Directory containing source code to scan.
+            report_path: Destination for the generated JSON report.
+
+        Returns:
+            CompletedProcess[str]: Completed subprocess invocation metadata.
+        """
 
         options = CommandOptions(capture_output=True, check=False)
         return run_command(
@@ -364,7 +481,11 @@ class SecurityScanner:
         )
 
     def _log_bandit_failure(self, completed: CompletedProcess[str]) -> None:
-        """Emit log messages when Bandit exits with an unexpected error."""
+        """Emit log messages when Bandit exits with an unexpected error.
+
+        Args:
+            completed: Completed subprocess information emitted by Bandit.
+        """
 
         warn(
             f"Bandit scan encountered an error (exit code {completed.returncode}).",
@@ -375,7 +496,14 @@ class SecurityScanner:
             warn(stderr, use_emoji=self.use_emoji)
 
     def _summarise_bandit_report(self, report_path: Path) -> tuple[dict[str, int], list[str]]:
-        """Return metrics and representative samples from the Bandit report."""
+        """Return metrics and representative samples from the Bandit report.
+
+        Args:
+            report_path: Filesystem path pointing to the Bandit JSON report.
+
+        Returns:
+            tuple[dict[str, int], list[str]]: Tuple of metrics and representative samples.
+        """
 
         data = json.loads(report_path.read_text(encoding="utf-8"))
         totals = data.get("metrics", {}).get("_totals", {})
@@ -396,7 +524,13 @@ class SecurityScanner:
         samples: list[str],
         result: SecurityScanResult,
     ) -> None:
-        """Record Bandit findings and emit a textual summary."""
+        """Record Bandit findings and emit a textual summary.
+
+        Args:
+            metrics: Mapping describing the number of findings per severity.
+            samples: Sampled issue snippets used for display.
+            result: Aggregated scan results receiving Bandit findings.
+        """
 
         result.register_bandit(metrics, samples)
         fail("Bandit found security vulnerabilities", use_emoji=self.use_emoji)
@@ -417,6 +551,17 @@ def _match_pattern(
     *,
     case_sensitive: bool = False,
 ) -> list[tuple[int, str]]:
+    """Return matches for ``pattern`` within ``lines``.
+
+    Args:
+        pattern: Compiled regular expression to match.
+        lines: Source lines scanned for matches.
+        case_sensitive: When ``True``, avoid lowercasing the content.
+
+    Returns:
+        list[tuple[int, str]]: Matched line numbers with the original line text.
+    """
+
     matches: list[tuple[int, str]] = []
     compiled = pattern if case_sensitive else re.compile(pattern.pattern, re.IGNORECASE)
     for idx, line in enumerate(lines, start=1):
@@ -426,7 +571,14 @@ def _match_pattern(
 
 
 def _should_skip_pii(path: Path) -> bool:
-    """Return ``True`` when PII scanning should skip ``path``."""
+    """Return ``True`` when PII scanning should skip ``path``.
+
+    Args:
+        path: Candidate file path under consideration.
+
+    Returns:
+        bool: ``True`` when the file should be excluded from PII scanning.
+    """
 
     if path.name in _SKIP_PII_FILES:
         return True
@@ -438,7 +590,16 @@ def _should_skip_markdown(
     path: Path,
     matches: list[tuple[int, str]],
 ) -> bool:
-    """Return ``True`` when Markdown matches likely reference docs rather than secrets."""
+    """Return ``True`` when Markdown matches likely reference docs rather than secrets.
+
+    Args:
+        _pattern: Regular expression evaluated against the file.
+        path: File path under analysis.
+        matches: Candidate matches produced by the pattern.
+
+    Returns:
+        bool: ``True`` when matches likely reference documentation instead of secrets.
+    """
 
     if path.suffix.lower() != _MARKDOWN_SUFFIX:
         return False
@@ -446,7 +607,14 @@ def _should_skip_markdown(
 
 
 def _filter_entropy(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
-    """Filter entropy matches to remove obvious non-secret content."""
+    """Filter entropy matches to remove obvious non-secret content.
+
+    Args:
+        matches: Candidate entropy matches as line number and text pairs.
+
+    Returns:
+        list[tuple[int, str]]: Filtered matches more likely to be secrets.
+    """
 
     filtered: list[tuple[int, str]] = []
     for idx, line in matches:
@@ -459,7 +627,14 @@ def _filter_entropy(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
 
 
 def _filter_comments(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
-    """Return matches excluding comments to reduce false positives."""
+    """Return matches excluding comments to reduce false positives.
+
+    Args:
+        matches: Candidate pattern matches.
+
+    Returns:
+        list[tuple[int, str]]: Matches that do not originate from comments.
+    """
 
     return [
         (idx, line) for idx, line in matches if not line.lstrip().startswith("#") and not line.lstrip().startswith("//")
@@ -468,7 +643,17 @@ def _filter_comments(matches: list[tuple[int, str]]) -> list[tuple[int, str]]:
 
 @contextmanager
 def _temporary_report_path(suffix: str) -> Iterator[Path]:
-    """Yield a temporary file path that is cleaned up afterwards."""
+    """Yield a temporary file path that is cleaned up afterwards.
+
+    Args:
+        suffix: File suffix used when creating the temporary report.
+
+    Yields:
+        Path: Temporary file path available for use within the context manager.
+
+    Returns:
+        Iterator[Path]: Context manager yielding the temporary path.
+    """
 
     handle = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
     handle.close()
@@ -480,9 +665,16 @@ def _temporary_report_path(suffix: str) -> Iterator[Path]:
 
 
 def get_staged_files(root: Path) -> list[Path]:
-    """Return files with staged changes in git."""
+    """Return files with staged changes in git.
+
+    Args:
+        root: Repository root used to execute git commands.
+
+    Returns:
+        list[Path]: Paths with staged modifications.
+    """
+    options = CommandOptions(capture_output=True, check=False, cwd=root)
     try:
-        options = CommandOptions(capture_output=True, check=False, cwd=root)
         completed = run_command(
             ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
             options=options,

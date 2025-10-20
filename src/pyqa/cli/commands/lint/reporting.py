@@ -33,7 +33,17 @@ def handle_reporting(
     logger: CLILogger | None = None,
     annotation_provider: AnnotationProvider | None = None,
 ) -> None:
-    """Render console output and emit optional artifacts for ``pyqa lint``."""
+    """Render console output and emit optional artifacts for ``pyqa lint``.
+
+    Args:
+        result: Aggregated lint run result containing diagnostics to render.
+        config: Runtime configuration describing output preferences.
+        artifacts: Filesystem destinations for optional report artifacts.
+        logger: Optional CLI logger used to report emitted artifact paths.
+        annotation_provider: Optional annotation provider used to augment reporting.
+
+    This function renders console output and may write reporting artifacts.
+    """
 
     provider = annotation_provider or NullAnnotationProvider()
     set_highlighting_annotation_provider(provider)

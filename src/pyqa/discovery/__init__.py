@@ -58,12 +58,24 @@ class DefaultDiscovery(DiscoveryService):
         return list(self._filesystem.discover(config, root))
 
     def strategies(self) -> tuple[DiscoveryStrategy, ...]:
-        """Return the configured discovery strategies in evaluation order."""
+        """Return the configured discovery strategies in evaluation order.
+
+        Returns:
+            tuple[DiscoveryStrategy, ...]: Ordered strategies used by the pipeline.
+        """
 
         return (self._git, self._filesystem)
 
     def __call__(self, config: FileDiscoveryConfig, root: Path) -> list[Path]:
-        """Delegate to :meth:`run` enabling callable semantics."""
+        """Delegate to :meth:`run` enabling callable semantics.
+
+        Args:
+            config: Discovery configuration supplied by the caller.
+            root: Repository root used for resolving relative paths.
+
+        Returns:
+            list[Path]: Discovered paths returned by :meth:`run`.
+        """
 
         return self.run(config, root)
 

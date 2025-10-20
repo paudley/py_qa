@@ -19,15 +19,29 @@ from .base import RuntimeContext, RuntimeHandler
 
 
 class GoRuntime(RuntimeHandler):
-    """Provision Go tooling by installing modules into a dedicated cache."""
+    """Provide the runtime for Go-based tooling using a dedicated cache."""
 
     def _try_project(self, context: RuntimeContext) -> PreparedCommand | None:
-        """Reuse project ``bin`` directory when a tool-specific binary exists."""
+        """Return the project command when a cached binary exists in ``bin``.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            PreparedCommand | None: Prepared project command, or ``None`` when absent.
+        """
 
         return self._project_binary(context)
 
     def _prepare_local(self, context: RuntimeContext) -> PreparedCommand:
-        """Install Go tooling into the shared cache and return the command."""
+        """Return the command after installing Go tooling into the shared cache.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            PreparedCommand: Prepared command referencing the cached Go binary.
+        """
 
         if not shutil.which("go"):
             raise RuntimeError("Go toolchain is required to install go-based linters")
@@ -38,7 +52,18 @@ class GoRuntime(RuntimeHandler):
         )
 
     def _ensure_local_tool(self, context: RuntimeContext, binary_name: str) -> Path:
-        """Install or reuse a cached Go binary for ``tool``."""
+        """Ensure the cached Go binary for ``binary_name`` is installed.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+            binary_name: Executable name expected in the Go cache.
+
+        Returns:
+            Path: Filesystem path to the installed Go binary.
+
+        Raises:
+            RuntimeError: If installation fails to produce the expected binary.
+        """
         tool = context.tool
         module, version_spec = self._module_spec(tool)
         if not version_spec:
@@ -84,7 +109,14 @@ class GoRuntime(RuntimeHandler):
 
     @staticmethod
     def _module_spec(tool: Tool) -> tuple[str, str | None]:
-        """Return module and version specifiers derived from ``tool`` metadata."""
+        """Return the module and version specifiers derived from tool metadata.
+
+        Args:
+            tool: Tool metadata describing the Go package requirement.
+
+        Returns:
+            tuple[str, str | None]: Module name and optional version specification.
+        """
         if tool.package:
             module, version = _split_package_spec(tool.package)
             return module, version
@@ -92,7 +124,14 @@ class GoRuntime(RuntimeHandler):
 
     @staticmethod
     def _go_env(context: RuntimeContext) -> dict[str, str]:
-        """Return environment variables required for executing Go tools."""
+        """Return the environment variables required for executing Go tools.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            dict[str, str]: Environment variables enabling the cached Go runtime.
+        """
         return RuntimeHandler._prepend_path_environment(
             bin_dir=context.cache_layout.go.bin_dir,
             root=context.root,

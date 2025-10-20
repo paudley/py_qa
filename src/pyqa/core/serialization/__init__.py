@@ -5,35 +5,20 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
-from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, TypeAlias, runtime_checkable
+from typing import Protocol, TypeAlias, runtime_checkable
 
 from pydantic import BaseModel
 
+from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome, coerce_output_sequence
 from pyqa.core.severity import Severity
-
-if TYPE_CHECKING:  # pragma: no cover - typing only
-    from pyqa.core.models import Diagnostic, JsonValue, ToolExitCategory, ToolOutcome
-
 
 type _JsonScalar = str | int | float | bool | None
 type JsonValue = _JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 
 SerializableMapping: TypeAlias = dict[str, JsonValue]
-
-type _CoerceOutput = Callable[[Sequence[str] | str | JsonValue | None], list[str]]
-
-
-@cache
-def _model_exports() -> tuple[type[Diagnostic], type[ToolExitCategory], type[ToolOutcome], _CoerceOutput]:
-    """Return core model classes without introducing import cycles."""
-
-    from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome, coerce_output_sequence
-
-    return Diagnostic, ToolExitCategory, ToolOutcome, coerce_output_sequence
 
 
 @runtime_checkable
@@ -122,8 +107,6 @@ def deserialize_outcome(data: Mapping[str, JsonValue]) -> ToolOutcome:
         ToolOutcome: Tool outcome reconstructed from ``data``.
     """
 
-    Diagnostic, ToolExitCategory, ToolOutcome, coerce_output_sequence = _model_exports()
-
     diagnostics: list[Diagnostic] = []
     for entry in _coerce_diagnostic_payload(data.get("diagnostics")):
         severity_enum = _coerce_severity(entry.get("severity", "warning"))
@@ -172,7 +155,6 @@ def _parse_exit_category(value: str) -> ToolExitCategory:
         ToolExitCategory: Parsed exit category or :class:`ToolExitCategory.UNKNOWN`.
     """
 
-    _, ToolExitCategory, _, _ = _model_exports()
     try:
         return ToolExitCategory(value)
     except ValueError:
@@ -224,7 +206,7 @@ def coerce_optional_int(value: JsonValue) -> int | None:
         value: Raw value to coerce.
 
     Returns:
-        Optional[int]: Parsed integer when successful, otherwise ``None``.
+        int | None: Parsed integer when successful, otherwise ``None``.
     """
     if isinstance(value, bool):
         return int(value)
@@ -245,7 +227,7 @@ def coerce_optional_str(value: JsonValue) -> str | None:
         value: Raw value to coerce.
 
     Returns:
-        Optional[str]: String representation or ``None`` when unavailable.
+        str | None: String representation or ``None`` when unavailable.
     """
     if value is None:
         return None

@@ -67,7 +67,14 @@ def run_pyqa_module_doc_linter(
 
 
 def _iter_packages(package_root: Path) -> list[Path]:
-    """Return package directories beneath ``package_root``."""
+    """Return package directories beneath ``package_root``.
+
+    Args:
+        package_root: Root directory containing the ``pyqa`` package tree.
+
+    Returns:
+        list[Path]: Collection of package directories excluding the root package.
+    """
 
     packages: list[Path] = []
     for init_file in package_root.rglob("__init__.py"):
@@ -79,7 +86,15 @@ def _iter_packages(package_root: Path) -> list[Path]:
 
 
 def _doc_filename(package_root: Path, package: Path) -> str:
-    """Return the expected documentation filename for ``package``."""
+    """Return the expected documentation filename for ``package``.
+
+    Args:
+        package_root: Root directory of the ``pyqa`` package tree.
+        package: Package directory requiring documentation.
+
+    Returns:
+        str: Canonical documentation filename derived from the package path.
+    """
 
     relative = package.relative_to(package_root)
     parts = [part.upper() for part in relative.parts if part]
@@ -87,7 +102,16 @@ def _doc_filename(package_root: Path, package: Path) -> str:
 
 
 def _build_diagnostic(root: Path, doc_path: Path, message: str) -> Diagnostic:
-    """Return a diagnostic anchored to ``doc_path`` with ``message``."""
+    """Return a diagnostic anchored to ``doc_path`` with ``message``.
+
+    Args:
+        root: Repository root used to compute relative paths.
+        doc_path: Documentation path associated with the diagnostic.
+        message: Human-readable description of the issue.
+
+    Returns:
+        Diagnostic: Diagnostic entry referencing the documentation path.
+    """
 
     try:
         relative = doc_path.relative_to(root)

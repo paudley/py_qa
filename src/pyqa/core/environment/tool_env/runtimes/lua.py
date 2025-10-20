@@ -21,7 +21,7 @@ from .base import RuntimeContext, RuntimeHandler
 
 @dataclass(frozen=True, slots=True)
 class LuaInstallPaths:
-    """Resolved filesystem paths used during Lua tool installation."""
+    """Describe the filesystem paths used during Lua tool installation."""
 
     prefix: Path
     meta_file: Path
@@ -30,7 +30,7 @@ class LuaInstallPaths:
 
 
 def _lua_install_paths(paths: RuntimeCachePaths, slug: str, binary_name: str) -> LuaInstallPaths:
-    """Return installation paths for the given slug and binary name.
+    """Return the installation paths for the given slug and binary name.
 
     Args:
         paths: Runtime cache paths associated with Lua tooling.
@@ -56,15 +56,29 @@ def _lua_install_paths(paths: RuntimeCachePaths, slug: str, binary_name: str) ->
 
 
 class LuaRuntime(RuntimeHandler):
-    """Provision Lua tooling using luarocks."""
+    """Provide the runtime for Lua tooling using LuaRocks."""
 
     def _try_project(self, context: RuntimeContext) -> PreparedCommand | None:
-        """Select project-local Lua binary when present."""
+        """Return the project command when a Lua binary exists in the project.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            PreparedCommand | None: Prepared project command, or ``None`` when absent.
+        """
 
         return self._project_binary(context)
 
     def _prepare_local(self, context: RuntimeContext) -> PreparedCommand:
-        """Install Lua tooling via luarocks into the shared cache."""
+        """Return the command after installing Lua tooling via LuaRocks.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            PreparedCommand: Prepared command referencing the cached Lua binary.
+        """
         return self._prepare_cached_command(
             context,
             self._ensure_local_tool,
@@ -72,7 +86,18 @@ class LuaRuntime(RuntimeHandler):
         )
 
     def _ensure_local_tool(self, context: RuntimeContext, binary_name: str) -> Path:
-        """Ensure ``binary_name`` is installed for ``tool`` using luarocks."""
+        """Ensure the binary ``binary_name`` is installed for the requested tool using LuaRocks.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+            binary_name: Executable name expected in the Lua cache.
+
+        Returns:
+            Path: Filesystem path to the installed Lua binary.
+
+        Raises:
+            RuntimeError: If the binary cannot be installed or located.
+        """
 
         tool = context.tool
         package, version = self._package_spec(tool)
@@ -121,7 +146,14 @@ class LuaRuntime(RuntimeHandler):
 
     @staticmethod
     def _package_spec(tool: Tool) -> tuple[str, str | None]:
-        """Return LuaRocks package and version tuple derived from ``tool``."""
+        """Return the LuaRocks package and version tuple derived from the tool.
+
+        Args:
+            tool: Tool metadata describing the Lua package requirement.
+
+        Returns:
+            tuple[str, str | None]: Package name and optional version string.
+        """
         if tool.package:
             package, version = _split_package_spec(tool.package)
             return package, version
@@ -129,7 +161,14 @@ class LuaRuntime(RuntimeHandler):
 
     @staticmethod
     def _lua_env(context: RuntimeContext) -> dict[str, str]:
-        """Return environment variables required to execute Lua tools."""
+        """Return the environment variables required to execute Lua tools.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            dict[str, str]: Environment variables enabling the cached Lua runtime.
+        """
         return RuntimeHandler._prepend_path_environment(
             bin_dir=context.cache_layout.lua.bin_dir,
             root=context.root,

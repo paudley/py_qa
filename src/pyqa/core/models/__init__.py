@@ -21,7 +21,7 @@ type JsonValue = JsonScalar | list[JsonValue] | dict[str, JsonValue]
 
 
 class OutputFilter(BaseModel):
-    """A reusable regex filter applied to tool stdout/stderr."""
+    """Apply reusable regex-based filters to tool stdout and stderr."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -30,12 +30,25 @@ class OutputFilter(BaseModel):
 
     @model_validator(mode="after")
     def _compile_patterns(self) -> OutputFilter:
-        """Compile the configured regex patterns for fast reuse."""
+        """Compile the configured regex patterns for fast reuse.
+
+        Returns:
+            OutputFilter: Filter instance with compiled regex patterns cached.
+        """
+
         self._compiled = tuple(re.compile(pattern) for pattern in self.patterns)
         return self
 
     def apply(self, text: str) -> str:
-        """Return *text* with lines matching any configured pattern removed."""
+        """Remove lines in ``text`` that match configured patterns.
+
+        Args:
+            text: Raw output stream text to filter.
+
+        Returns:
+            str: Filtered output with matching lines removed.
+        """
+
         if not text or not self._compiled:
             return text
         return "\n".join(
@@ -44,7 +57,7 @@ class OutputFilter(BaseModel):
 
 
 class Diagnostic(BaseModel):
-    """Normalized lint diagnostic returned by tools."""
+    """Standardize lint diagnostics returned by tools into a common schema."""
 
     model_config = ConfigDict(validate_assignment=True)
 
@@ -63,7 +76,7 @@ class Diagnostic(BaseModel):
 
 
 class RawDiagnostic(BaseModel):
-    """Intermediate diagnostic that resembles tool-native structure."""
+    """Capture tool-native diagnostic structures prior to normalisation."""
 
     model_config = ConfigDict(validate_assignment=True)
 
@@ -80,7 +93,15 @@ class RawDiagnostic(BaseModel):
     @field_validator("file", mode="before")
     @classmethod
     def _normalize_file(cls, value: str | Path | None) -> str | None:
-        """Ensure diagnostic file paths are stored relative to the invocation root."""
+        """Normalise diagnostic file paths relative to the invocation root.
+
+        Args:
+            value: Original file path emitted by the tool or ``None``.
+
+        Returns:
+            str | None: Normalised path string, or ``None`` when the tool omitted the value.
+        """
+
         if value is None:
             return None
         if isinstance(value, str) and not value.strip():
@@ -124,7 +145,7 @@ class ToolExitCategory(str, Enum):
 
 
 class ToolOutcome(BaseModel):
-    """Result bundle produced by each executed tool action.
+    """Capture the result bundle produced by each executed tool action.
 
     The :attr:`exit_category` field records the orchestrator's interpretation of
     the tool's exit status (success, diagnostic/code failure, or tool failure).
@@ -146,19 +167,36 @@ class ToolOutcome(BaseModel):
     @field_validator("stdout", "stderr", mode="before")
     @classmethod
     def _coerce_output(cls, value: JsonValue | Sequence[str] | None) -> list[str]:
+        """Normalise stdout/stderr payloads prior to model validation.
+
+        Args:
+            value: Raw output payload provided by the orchestrator.
+
+        Returns:
+            list[str]: Sequence of output lines represented as strings.
+        """
+
         return coerce_output_sequence(value)
 
     def is_ok(self) -> bool:
-        """Return ``True`` when the tool exited successfully."""
+        """Return whether the tool exited successfully.
+
+        Returns:
+            bool: ``True`` when the :attr:`returncode` equals ``0``.
+        """
         return self.returncode == 0
 
     @property
     def ok(self) -> bool:
-        """Expose :meth:`is_ok` as an attribute-style accessor."""
+        """Expose :meth:`is_ok` as an attribute-style accessor.
+
+        Returns:
+            bool: ``True`` when the tool exited successfully.
+        """
         return self.is_ok()
 
     def indicates_failure(self) -> bool:
-        """Return ``True`` when the tool failed to execute successfully.
+        """Return whether the tool failed to execute successfully.
 
         Tools often emit diagnostics and exit with ``1`` to signal that issues
         were detected. Those runs are still considered *successful* from an
@@ -167,6 +205,9 @@ class ToolOutcome(BaseModel):
         :class:`ToolExitCategory.TOOL_FAILURE` or when no diagnostics were
         produced and no explicit classification was provided, which typically
         indicates a crash, misconfiguration, or other runtime failure.
+
+        Returns:
+            bool: ``True`` when the outcome represents a runtime failure.
         """
 
         if self.exit_category == ToolExitCategory.TOOL_FAILURE:
@@ -177,7 +218,7 @@ class ToolOutcome(BaseModel):
 
 
 class RunResult(BaseModel):
-    """Aggregate result for a full orchestrator run."""
+    """Aggregate results for a full orchestrator run."""
 
     model_config = ConfigDict(validate_assignment=True)
 
@@ -189,15 +230,27 @@ class RunResult(BaseModel):
     analysis: dict[str, JsonValue] = Field(default_factory=dict)
 
     def has_failures(self) -> bool:
-        """Return ``True`` when any outcome failed."""
+        """Return whether any registered outcome failed.
+
+        Returns:
+            bool: ``True`` when at least one outcome signals failure.
+        """
         return any(outcome.indicates_failure() for outcome in self.outcomes)
 
     def has_diagnostics(self) -> bool:
-        """Return ``True`` when any tool emitted diagnostics."""
+        """Return whether any tool emitted diagnostics.
+
+        Returns:
+            bool: ``True`` when at least one outcome captured diagnostics.
+        """
 
         return any(outcome.diagnostics for outcome in self.outcomes)
 
     @property
     def failed(self) -> bool:
-        """Expose :meth:`has_failures` as an attribute-style accessor."""
+        """Expose :meth:`has_failures` as an attribute-style accessor.
+
+        Returns:
+            bool: ``True`` when any outcome signals failure.
+        """
         return self.has_failures()

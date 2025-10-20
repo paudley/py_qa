@@ -10,11 +10,10 @@ from os import PathLike
 from pathlib import Path
 from typing import Final
 
+from pyqa.cache.in_memory import memoize
+
 _Pathish = str | PathLike[str] | Path
 _DEFAULT_CACHE_SIZE: Final[int] = 1024
-
-
-from pyqa.cache.in_memory import memoize
 
 
 @memoize(maxsize=_DEFAULT_CACHE_SIZE)
@@ -37,7 +36,18 @@ def _best_effort_resolve(path: Path) -> Path:
 
 
 def ensure_absolute_path(path: _Pathish, *, base_dir: _Pathish | None = None) -> Path:
-    """Return an absolute variant of ``path`` relative to ``base_dir`` when provided."""
+    """Return an absolute variant of ``path`` relative to ``base_dir`` when provided.
+
+    Args:
+        path: Filesystem path supplied by the caller.
+        base_dir: Optional base directory used when ``path`` is relative.
+
+    Returns:
+        Path: Resolved absolute path derived from ``path`` and ``base_dir``.
+
+    Raises:
+        ValueError: If ``path`` is ``None``.
+    """
 
     if path is None:
         raise ValueError("path must not be None")
@@ -92,7 +102,15 @@ def try_ensure_absolute_path(
     *,
     base_dir: _Pathish | None = None,
 ) -> Path | None:
-    """Return :func:`ensure_absolute_path` result or ``None`` when coercion fails."""
+    """Return :func:`ensure_absolute_path` result or ``None`` when coercion fails.
+
+    Args:
+        path: Filesystem path to coerce into an absolute path.
+        base_dir: Optional base directory used when ``path`` is relative.
+
+    Returns:
+        Path | None: Absolute path when coercion succeeds; otherwise ``None``.
+    """
 
     if path is None:
         return None

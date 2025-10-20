@@ -30,7 +30,11 @@ class GitDiscovery(DiscoveryStrategy):
 
     @property
     def identifier(self) -> str:
-        """Return the identifier for the git discovery strategy."""
+        """Return the identifier for the git discovery strategy.
+
+        Returns:
+            str: Human-readable identifier associated with git discovery.
+        """
 
         return "git"
 
@@ -63,7 +67,15 @@ class GitDiscovery(DiscoveryStrategy):
         return sorted(bounded)
 
     def __call__(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
-        """Delegate to :meth:`discover` to support callable semantics."""
+        """Delegate to :meth:`discover` to support callable semantics.
+
+        Args:
+            config: Discovery configuration supplied by the caller.
+            root: Repository root used to resolve relative paths.
+
+        Returns:
+            Iterable[Path]: Candidate paths returned by :meth:`discover`.
+        """
 
         return self.discover(config, root)
 
@@ -73,6 +85,9 @@ class GitDiscovery(DiscoveryStrategy):
         Args:
             config: Discovery configuration controlling diff behaviour.
             root: Repository root directory.
+
+        Returns:
+            Iterator[Path]: Iterator yielding resolved diff candidates.
 
         Yields:
             Path: Resolved candidate files reported by git.
@@ -102,6 +117,9 @@ class GitDiscovery(DiscoveryStrategy):
 
         Args:
             root: Repository root directory.
+
+        Returns:
+            Iterator[Path]: Iterator yielding resolved untracked file paths.
 
         Yields:
             Path: Resolved untracked file paths.

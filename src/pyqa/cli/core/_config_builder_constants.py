@@ -122,7 +122,11 @@ _BASE_TOOL_FILTERS: Final[dict[str, list[str]]] = {
 
 
 def build_default_tool_filters() -> dict[str, list[str]]:
-    """Return merged default tool filters with catalog and test suppressions."""
+    """Return merged default tool filters with catalog and test suppressions.
+
+    Returns:
+        dict[str, list[str]]: Mapping of tool identifiers to filtered console noise patterns.
+    """
 
     merged: dict[str, list[str]] = {tool: list(patterns) for tool, patterns in _BASE_TOOL_FILTERS.items()}
     for tool, test_patterns in flatten_test_suppressions().items():

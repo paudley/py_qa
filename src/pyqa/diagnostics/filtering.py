@@ -131,14 +131,29 @@ def filter_diagnostics(
 
 
 def _is_init_path(path: str) -> bool:
-    """Return ``True`` when ``path`` references a package ``__init__`` file."""
+    """Return ``True`` when ``path`` references a package ``__init__`` file.
+
+    Args:
+        path: Filesystem path associated with a diagnostic.
+
+    Returns:
+        bool: ``True`` when the path targets an ``__init__`` module.
+    """
 
     candidate = Path(path).name.lower()
     return candidate in _INIT_BASENAMES
 
 
 def _suppress_tombi_out_of_order(diagnostic: Diagnostic, tool: str) -> bool:
-    """Return ``True`` when tombi should skip the out-of-order warning."""
+    """Return ``True`` when tombi should skip the out-of-order warning.
+
+    Args:
+        diagnostic: Diagnostic emitted by a tool.
+        tool: Name of the originating diagnostic tool.
+
+    Returns:
+        bool: ``True`` when the diagnostic corresponds to a tombi ordering notice.
+    """
 
     if tool != TOMBI_TOOL or not diagnostic.file:
         return False

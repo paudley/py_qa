@@ -19,7 +19,15 @@ def render_quality_result(
     root: Path,
     logger: CLILogger,
 ) -> None:
-    """Render quality check results to the terminal."""
+    """Render quality check results to the terminal.
+
+    Args:
+        result: Structured quality check outcome containing issues to report.
+        root: Workspace root used for normalising issue paths.
+        logger: CLI logger responsible for user-facing messaging.
+
+    The function produces console output describing quality issues.
+    """
 
     if not result.issues:
         logger.ok("Quality checks passed")
@@ -49,7 +57,14 @@ def render_py_qa_skip_warning(
     *,
     logger: CLILogger,
 ) -> None:
-    """Render a warning describing py-qa directories skipped during execution."""
+    """Render a warning describing py_qa directories skipped during execution.
+
+    Args:
+        ignored: Tuple of directory names filtered during processing.
+        logger: CLI logger used to surface the warning to the user.
+
+    Emits a warning to the provided logger when directories are ignored.
+    """
 
     if not ignored:
         return
@@ -61,7 +76,15 @@ def render_py_qa_skip_warning(
 
 
 def _format_issue_location(path: str | Path | None, root: Path) -> str:
-    """Return a human-readable issue location string."""
+    """Return a human-readable issue location string.
+
+    Args:
+        path: Raw location provided by the quality issue.
+        root: Workspace root used to normalise relative paths.
+
+    Returns:
+        str: Human-readable location suffix suitable for console output.
+    """
 
     path_obj = _to_path(path)
     if path_obj is None:
@@ -71,7 +94,14 @@ def _format_issue_location(path: str | Path | None, root: Path) -> str:
 
 
 def _to_path(value: str | Path | None) -> Path | None:
-    """Return ``value`` as a path when possible."""
+    """Return ``value`` as a path when possible.
+
+    Args:
+        value: Raw representation to convert into a path.
+
+    Returns:
+        Path | None: Normalised path when conversion succeeds, otherwise ``None``.
+    """
 
     if isinstance(value, Path):
         return value

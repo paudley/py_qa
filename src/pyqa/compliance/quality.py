@@ -6,15 +6,11 @@ from __future__ import annotations
 
 import json
 import re
-from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from enum import Enum
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Final, Protocol
-
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Final
 
 from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS
 
@@ -27,183 +23,19 @@ from ..filesystem.paths import normalize_path
 from ..tools.settings import tool_setting_schema_as_dict
 from .banned import BannedWordChecker
 from .checks.license_fixer import LicenseFixError, LicenseHeaderFixer
-from .checks.licenses import (
-    LicensePolicy,
-    load_license_policy,
-    normalise_notice,
-    verify_file_license,
+from .checks.licenses import LicensePolicy, load_license_policy, normalise_notice, verify_file_license
+from .quality_components import QualityCheck, QualityCheckResult, QualityContext, QualityIssue, QualityIssueLevel
+from .quality_components.hygiene import (
+    PythonHygieneCheck,
 )
 
-# Thresholds for commit message validation.
+COPYRIGHT_KEYWORDS: Final[tuple[str, ...]] = ("copyright", "notice")
 MAX_COMMIT_SUBJECT_LENGTH: Final[int] = 72
 MAX_COMMIT_LINE_LENGTH: Final[int] = 72
 COMMIT_DESCRIPTION_SEPARATOR: Final[str] = ": "
-
-
-class QualityIssueLevel(str, Enum):
-    """Define severity classifications for discovered quality issues."""
-
-    ERROR = "error"
-    WARNING = "warning"
-
-
 LICENSE_HEADER_CATEGORY: Final[str] = "license-header"
 COPYRIGHT_CATEGORY: Final[str] = "copyright"
-PYTHON_HYGIENE_CATEGORY: Final[str] = "python-hygiene"
 SCHEMA_SYNC_CATEGORY: Final[str] = "schema"
-PYTHON_HYGIENE_BREAKPOINT: Final[str] = f"{PYTHON_HYGIENE_CATEGORY}:debug-breakpoint"
-PYTHON_HYGIENE_BARE_EXCEPT: Final[str] = f"{PYTHON_HYGIENE_CATEGORY}:bare-except"
-PYTHON_HYGIENE_MAIN_GUARD: Final[str] = f"{PYTHON_HYGIENE_CATEGORY}:module-main"
-PYTHON_HYGIENE_BROAD_EXCEPTION: Final[str] = f"{PYTHON_HYGIENE_CATEGORY}:broad-exception"
-PYTHON_HYGIENE_DEBUG_IMPORT: Final[str] = f"{PYTHON_HYGIENE_CATEGORY}:debug-import"
-PYTHON_HYGIENE_SYSTEM_EXIT: Final[str] = f"{PYTHON_HYGIENE_CATEGORY}:system-exit"
-PYTHON_HYGIENE_PRINT: Final[str] = f"{PYTHON_HYGIENE_CATEGORY}:print"
-PYTHON_FILE_SUFFIXES: Final[tuple[str, ...]] = (".py", ".pyi")
-TESTS_DIRECTORY_TOKEN: Final[str] = "tests"
-CLI_COMPONENT_TOKENS: Final[tuple[str, ...]] = ("cli", "commands")
-LOGGER_REFERENCE_TOKENS: Final[tuple[str, ...]] = ("logger", "logging.")
-DEBUG_IMPORT_PREFIXES: Final[tuple[str, ...]] = ("import pdb", "import ipdb", "from pdb import")
-SYSTEM_EXIT_TOKENS: Final[tuple[str, ...]] = ("raise systemexit", "systemexit(", "os._exit")
-CONSOLE_RECEIVER_TOKENS: Final[tuple[str, ...]] = ("console", "self.console", "get_console_manager", "rich")
-COPYRIGHT_KEYWORDS: Final[tuple[str, ...]] = ("copyright", "notice")
-MAIN_GUARD_PATTERN: Final[re.Pattern[str]] = re.compile(r"if __name__ == ['\"]__main__['\"]\s*:")
-BREAKPOINT_PATTERN: Final[re.Pattern[str]] = re.compile(r"(?<!['\"])breakpoint\(")
-TRACE_PATTERN: Final[re.Pattern[str]] = re.compile(r"(?<!['\"])(?:pdb|ipdb)\.set_trace\(")
-BARE_EXCEPT_PATTERN: Final[re.Pattern[str]] = re.compile(r"except\s*:\s*(?:#.*)?$")
-BROAD_EXCEPTION_PATTERN: Final[re.Pattern[str]] = re.compile(r"except\s+Exception\b")
-PRINT_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
-    re.compile(r"print\s*\("),
-    re.compile(r"pprint\s*\("),
-)
-MIN_JUSTIFICATION_WORDS: Final[int] = 3
-
-
-class QualityIssue(BaseModel):
-    """Capture a single issue discovered by a quality check."""
-
-    model_config = ConfigDict(frozen=True)
-
-    level: QualityIssueLevel
-    message: str
-    path: Path | None = None
-    check: str | None = None
-
-
-class QualityCheckResult(BaseModel):
-    """Manage the quality issues collected during a run."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    issues: list[QualityIssue] = Field(default_factory=list)
-
-    def add_error(self, message: str, path: Path | None = None, *, check: str | None = None) -> None:
-        """Record an error-level issue identified by a quality check.
-
-        Args:
-            message: Description of the issue.
-            path: Optional file location associated with the issue.
-            check: Optional identifier describing the originating check or
-                sub-check.
-        """
-
-        issues = list(self.issues)
-        issues.append(
-            QualityIssue(
-                level=QualityIssueLevel.ERROR,
-                message=message,
-                path=path,
-                check=check,
-            ),
-        )
-        self.issues = issues
-
-    def add_warning(self, message: str, path: Path | None = None, *, check: str | None = None) -> None:
-        """Record a warning-level issue identified by a quality check.
-
-        Args:
-            message: Description of the warning.
-            path: Optional file location associated with the warning.
-            check: Optional identifier describing the originating check or
-                sub-check.
-        """
-
-        issues = list(self.issues)
-        issues.append(
-            QualityIssue(
-                level=QualityIssueLevel.WARNING,
-                message=message,
-                path=path,
-                check=check,
-            ),
-        )
-        self.issues = issues
-
-    @property
-    def errors(self) -> list[QualityIssue]:
-        """Return recorded issues that are classified as errors.
-
-        Returns:
-            list[QualityIssue]: Issues with severity ``ERROR``.
-        """
-
-        return [issue for issue in self.issues if issue.level is QualityIssueLevel.ERROR]
-
-    @property
-    def warnings(self) -> list[QualityIssue]:
-        """Return recorded issues that are classified as warnings.
-
-        Returns:
-            list[QualityIssue]: Issues with severity ``WARNING``.
-        """
-
-        return [issue for issue in self.issues if issue.level is QualityIssueLevel.WARNING]
-
-    def exit_code(self) -> int:
-        """Calculate the process exit code implied by the collected issues.
-
-        Returns:
-            int: ``1`` when errors are present; otherwise ``0``.
-        """
-
-        return 1 if self.errors else 0
-
-
-@dataclass(slots=True)
-class QualityContext:
-    """Shared context passed to individual quality checks."""
-
-    root: Path
-    files: Sequence[Path]
-    quality: QualityConfigSection
-    license_policy: LicensePolicy | None
-    fix: bool = False
-
-
-class QualityCheck(Protocol):
-    """Define the contract for individual quality checks."""
-
-    name: str
-
-    @abstractmethod
-    def run(self, ctx: QualityContext, result: QualityCheckResult) -> None:
-        """Execute the check and append findings to ``result``.
-
-        Args:
-            ctx: Shared context describing the files and configuration.
-            result: Accumulator capturing findings emitted by the check.
-        """
-
-        pass
-
-    @abstractmethod
-    def supports_fix(self) -> bool:
-        """Indicate whether the check can perform in-place fixes.
-
-        Returns:
-            bool: ``True`` when automatic fixes are supported.
-        """
-
-        pass
 
 
 @dataclass(slots=True)
@@ -389,7 +221,17 @@ class LicenseCheck:
         fixer: LicenseHeaderFixer,
         result: QualityCheckResult,
     ) -> str | None:
-        """Apply an automatic license fix returning the updated content."""
+        """Apply an automatic license fix returning the updated content.
+
+        Args:
+            path: File path to update.
+            content: Original file content prior to fixes.
+            fixer: License header fixer responsible for applying updates.
+            result: Result collector used to record warnings or errors.
+
+        Returns:
+            str | None: Updated content when the fix succeeds; otherwise ``None``.
+        """
 
         try:
             updated = fixer.apply(path, content)
@@ -414,7 +256,14 @@ class LicenseCheck:
         return updated
 
     def _classify_issue(self, issue: str) -> str:
-        """Return the derived category for a license-related issue."""
+        """Return the derived category for a license-related issue.
+
+        Args:
+            issue: Diagnostic message produced during license evaluation.
+
+        Returns:
+            str: Category identifier used when recording the issue.
+        """
 
         lowered = issue.lower()
         if any(keyword in lowered for keyword in COPYRIGHT_KEYWORDS):
@@ -422,248 +271,18 @@ class LicenseCheck:
         return LICENSE_HEADER_CATEGORY
 
 
-@dataclass(slots=True)
-class _HygieneScanState:
-    """Track per-file state while scanning for hygiene violations."""
-
-    found_main_guard: bool = False
-
-
-@dataclass(slots=True)
-class PythonHygieneCheck:
-    """Enforce Python hygiene rules by scanning source files."""
-
-    name: str = "python"
-
-    def run(self, ctx: QualityContext, result: QualityCheckResult) -> None:
-        """Scan Python files for common hygiene violations."""
-
-        for path in self._target_files(ctx.files):
-            content = self._load_content(path, result)
-            if content is None:
-                continue
-            relative_parts = self._relative_parts(path, ctx.root)
-            if self._should_skip_file(relative_parts):
-                continue
-            is_cli_module = self._is_cli_module(relative_parts)
-            self._scan_lines(path, content, is_cli_module, result)
-
-    def supports_fix(self) -> bool:
-        """Report that hygiene issues require manual review.
-
-        Returns:
-            bool: Always ``False`` because fixes are not automated.
-        """
-
-        return False
-
-    def _target_files(self, files: Sequence[Path]) -> list[Path]:
-        """Return files eligible for hygiene scanning."""
-
-        return [path for path in files if path.suffix in PYTHON_FILE_SUFFIXES]
-
-    def _load_content(self, path: Path, result: QualityCheckResult) -> str | None:
-        """Return decoded file content or ``None`` when reading fails."""
-
-        try:
-            return path.read_text(encoding="utf-8", errors="replace")
-        except OSError as exc:
-            result.add_warning(
-                f"Unable to read Python file: {exc}",
-                path,
-                check=PYTHON_HYGIENE_CATEGORY,
-            )
-            return None
-
-    def _relative_parts(self, path: Path, root: Path) -> tuple[str, ...]:
-        """Return path components relative to ``root`` when possible."""
-
-        try:
-            return path.relative_to(root).parts
-        except ValueError:
-            return path.parts
-
-    def _should_skip_file(self, parts: tuple[str, ...]) -> bool:
-        """Return ``True`` when the file should be excluded from checks."""
-
-        return TESTS_DIRECTORY_TOKEN in parts
-
-    def _is_cli_module(self, parts: tuple[str, ...]) -> bool:
-        """Return ``True`` when ``parts`` describe a CLI command module."""
-
-        return all(component in parts for component in CLI_COMPONENT_TOKENS)
-
-    def _scan_lines(
-        self,
-        path: Path,
-        content: str,
-        is_cli_module: bool,
-        result: QualityCheckResult,
-    ) -> None:
-        """Iterate file lines and record hygiene issues."""
-
-        state = _HygieneScanState()
-        for line_number, line in enumerate(content.splitlines(), start=1):
-            stripped = line.strip()
-            self._analyse_line(
-                path=path,
-                stripped=stripped,
-                line_number=line_number,
-                is_cli_module=is_cli_module,
-                state=state,
-                result=result,
-            )
-
-    def _analyse_line(
-        self,
-        *,
-        path: Path,
-        stripped: str,
-        line_number: int,
-        is_cli_module: bool,
-        state: _HygieneScanState,
-        result: QualityCheckResult,
-    ) -> None:
-        """Analyse a single line of Python source for hygiene issues."""
-
-        lowered = stripped.lower()
-        if not state.found_main_guard and MAIN_GUARD_PATTERN.match(stripped):
-            state.found_main_guard = True
-            result.add_warning(
-                f"Line {line_number}: Module defines a __main__ execution block; move the entry point to a dedicated script.",
-                path,
-                check=PYTHON_HYGIENE_MAIN_GUARD,
-            )
-
-        if BREAKPOINT_PATTERN.search(stripped) or TRACE_PATTERN.search(stripped):
-            result.add_error(
-                f"Line {line_number}: Debug breakpoint detected",
-                path,
-                check=PYTHON_HYGIENE_BREAKPOINT,
-            )
-
-        if BARE_EXCEPT_PATTERN.search(stripped):
-            result.add_warning(
-                f"Line {line_number}: Bare except detected",
-                path,
-                check=PYTHON_HYGIENE_BARE_EXCEPT,
-            )
-
-        if BROAD_EXCEPTION_PATTERN.search(stripped):
-            self._handle_broad_exception(path, stripped, line_number, result)
-
-        if any(stripped.startswith(prefix) for prefix in DEBUG_IMPORT_PREFIXES):
-            result.add_warning(
-                f"Line {line_number}: Debug import '{stripped.split()[1]}' should be removed before committing.",
-                path,
-                check=PYTHON_HYGIENE_DEBUG_IMPORT,
-            )
-
-        if not is_cli_module and _contains_system_exit(stripped):
-            result.add_warning(
-                f"Line {line_number}: Direct process termination bypasses orchestrator safeguards; use structured exit helpers.",
-                path,
-                check=PYTHON_HYGIENE_SYSTEM_EXIT,
-            )
-
-        if not is_cli_module and _contains_print_call(stripped):
-            if any(token in lowered for token in LOGGER_REFERENCE_TOKENS):
-                return
-            if _is_console_print(stripped):
-                return
-            result.add_warning(
-                f"Line {line_number}: Replace print-style output with structured logging.",
-                path,
-                check=PYTHON_HYGIENE_PRINT,
-            )
-
-    def _handle_broad_exception(
-        self,
-        path: Path,
-        stripped: str,
-        line_number: int,
-        result: QualityCheckResult,
-    ) -> None:
-        """Record a warning when a broad exception lacks justification."""
-
-        justification = ""
-        if "#" in stripped:
-            justification = stripped.split("#", 1)[1].strip()
-        if len(justification.split()) >= MIN_JUSTIFICATION_WORDS:
-            return
-        result.add_warning(
-            f"Line {line_number}: Broad Exception catch requires an inline justification explaining why it is safe.",
-            path,
-            check=PYTHON_HYGIENE_BROAD_EXCEPTION,
-        )
-
-
-def _contains_system_exit(line: str) -> bool:
-    """Return ``True`` when ``line`` contains a system-exit invocation."""
-
-    lowered = line.lower()
-    for token in SYSTEM_EXIT_TOKENS:
-        start = lowered.find(token)
-        while start != -1:
-            if not _is_within_quotes(line, start, start + len(token)):
-                return True
-            start = lowered.find(token, start + len(token))
-    return False
-
-
-def _is_within_quotes(line: str, start: int, end: int) -> bool:
-    """Return ``True`` when the segment lies within quoted text."""
-
-    in_single = False
-    in_double = False
-    escape = False
-    for idx, char in enumerate(line):
-        if idx >= start:
-            break
-        if escape:
-            escape = False
-            continue
-        if char == "\\":
-            escape = True
-            continue
-        if char == "'" and not in_double:
-            in_single = not in_single
-        elif char == '"' and not in_single:
-            in_double = not in_double
-    return in_single or in_double
-
-
-def _is_console_print(line: str) -> bool:
-    """Return ``True`` when ``line`` represents an approved console print."""
-
-    if ".print(" not in line:
-        return False
-    prefix = line.split(".print(", 1)[0]
-    lowered = prefix.lower()
-    return any(receiver in lowered for receiver in CONSOLE_RECEIVER_TOKENS)
-
-
-def _contains_print_call(line: str) -> bool:
-    """Return ``True`` when ``line`` performs a print-style call."""
-
-    for pattern in PRINT_PATTERNS:
-        for match in re.finditer(pattern, line):
-            start, end = match.span()
-            if start > 0 and (line[start - 1].isalnum() or line[start - 1] in {"_", "."}):
-                continue
-            if not _is_within_quotes(line, start, end):
-                return True
-    return False
-
-
-@dataclass(slots=True)
 class SchemaCheck:
     """Validate that exported schema documentation matches tool metadata."""
 
     name: str = "schema"
 
     def run(self, ctx: QualityContext, result: QualityCheckResult) -> None:
-        """Compare generated schema artefacts with the current tool schema."""
+        """Compare generated schema artefacts with the current tool schema.
+
+        Args:
+            ctx: Quality context describing the filesystem and configuration.
+            result: Aggregated result used to record schema mismatches.
+        """
 
         if not ctx.quality.schema_targets:
             return
@@ -745,7 +364,14 @@ class QualityFileCollector:
         return [path.resolve() for path in filesystem_discovery.discover(config, self.root) if path.exists()]
 
     def _resolve(self, path: Path) -> Path:
-        """Resolve ``path`` relative to :attr:`root` when necessary."""
+        """Resolve ``path`` relative to :attr:`root` when necessary.
+
+        Args:
+            path: Path supplied by the caller.
+
+        Returns:
+            Path: Absolute path anchored to :attr:`root` when ``path`` is relative.
+        """
 
         return path if path.is_absolute() else (self.root / path).resolve()
 
@@ -772,6 +398,14 @@ class QualityChecker:
         quality: QualityConfigSection,
         options: QualityCheckerOptions | None = None,
     ) -> None:
+        """Initialise the quality checker with configuration and options.
+
+        Args:
+            root: Repository root where quality checks operate.
+            quality: Quality configuration section defining thresholds and toggles.
+            options: Optional advanced options controlling check selection and inputs.
+        """
+
         self.root = root.resolve()
         self.quality = quality
         self._options = options or QualityCheckerOptions()
@@ -788,7 +422,14 @@ class QualityChecker:
         }
 
     def run(self, *, fix: bool = False) -> QualityCheckResult:
-        """Execute configured quality checks and return their aggregated result."""
+        """Execute configured quality checks and return their aggregated result.
+
+        Args:
+            fix: When ``True``, enable fix-capable checks to update files in-place.
+
+        Returns:
+            QualityCheckResult: Aggregated outcome of all executed checks.
+        """
 
         result = QualityCheckResult()
         explicit_files = self._normalized_explicit_files()
@@ -808,13 +449,24 @@ class QualityChecker:
         return result
 
     def available_checks(self) -> Mapping[str, QualityCheck]:
-        """Return a mapping of available check names to their implementations."""
+        """Return a mapping of available check names to their implementations.
+
+        Returns:
+            Mapping[str, QualityCheck]: Copy of registered check implementations keyed by name.
+        """
 
         return dict(self._available_checks)
 
     # ------------------------------------------------------------------
     def _filter_files(self, files: Sequence[Path]) -> list[Path]:
-        """Return ``files`` with duplicates and excluded paths removed."""
+        """Return ``files`` with duplicates and excluded paths removed.
+
+        Args:
+            files: Candidate file sequence discovered from the workspace.
+
+        Returns:
+            list[Path]: Deduplicated and filtered file list ready for analysis.
+        """
 
         filtered: list[Path] = []
         seen: set[Path] = set()
@@ -829,7 +481,14 @@ class QualityChecker:
         return filtered
 
     def _is_excluded(self, path: Path) -> bool:
-        """Return whether ``path`` should be excluded from quality checks."""
+        """Return whether ``path`` should be excluded from quality checks.
+
+        Args:
+            path: Candidate file resolved to an absolute path.
+
+        Returns:
+            bool: ``True`` when the path should be skipped.
+        """
 
         try:
             relative = path.relative_to(self.root)
@@ -841,7 +500,14 @@ class QualityChecker:
         return any(fnmatch(relative_str, pattern) for pattern in self.quality.skip_globs)
 
     def _resolve_path(self, path: Path) -> Path:
-        """Resolve user-provided ``path`` relative to the project root."""
+        """Resolve user-provided ``path`` relative to the project root.
+
+        Args:
+            path: Path supplied via CLI or configuration.
+
+        Returns:
+            Path: Absolute, normalised path anchored to :attr:`root`.
+        """
 
         try:
             normalised = normalize_path(path, base_dir=self.root)
@@ -855,7 +521,11 @@ class QualityChecker:
             return (self.root / normalised).absolute()
 
     def _normalized_explicit_files(self) -> list[Path] | None:
-        """Return resolved explicit files specified via options."""
+        """Return resolved explicit files specified via options.
+
+        Returns:
+            list[Path] | None: Resolved file list when explicitly provided.
+        """
 
         if not self._options.files:
             return None
@@ -868,7 +538,15 @@ CONVENTIONAL_SUBJECT = re.compile(
 
 
 def check_commit_message(root: Path, message_file: Path) -> QualityCheckResult:
-    """Validate commit message formatting and banned word usage."""
+    """Validate commit message formatting and banned word usage.
+
+    Args:
+        root: Repository root used to resolve auxiliary resources.
+        message_file: Path to the commit message file to inspect.
+
+    Returns:
+        QualityCheckResult: Aggregated findings describing message violations.
+    """
     root = root.resolve()
     message_path = message_file.resolve()
     result = QualityCheckResult()
@@ -919,7 +597,15 @@ def check_commit_message(root: Path, message_file: Path) -> QualityCheckResult:
 
 
 def ensure_branch_protection(root: Path, quality: QualityConfigSection) -> QualityCheckResult:
-    """Fail when attempting to operate on a protected branch."""
+    """Fail when attempting to operate on a protected branch.
+
+    Args:
+        root: Repository root whose git metadata should be inspected.
+        quality: Quality configuration containing protected branch names.
+
+    Returns:
+        QualityCheckResult: Result capturing protection violations.
+    """
 
     result = QualityCheckResult()
     branch = _current_branch(root)
@@ -929,7 +615,14 @@ def ensure_branch_protection(root: Path, quality: QualityConfigSection) -> Quali
 
 
 def _current_branch(root: Path) -> str | None:
-    """Return the current git branch for *root* or ``None`` on failure."""
+    """Return the current git branch for *root* or ``None`` on failure.
+
+    Args:
+        root: Repository root whose branch should be detected.
+
+    Returns:
+        str | None: Current branch name when available.
+    """
 
     options = CommandOptions(check=False, capture_output=True)
     completed = run_command(
@@ -943,7 +636,15 @@ def _current_branch(root: Path) -> str | None:
 
 
 def _relative_to_root(path: Path, root: Path) -> Path:
-    """Return ``path`` relative to ``root`` when possible."""
+    """Return ``path`` relative to ``root`` when possible.
+
+    Args:
+        path: Candidate path under consideration.
+        root: Repository root used as the base for relative paths.
+
+    Returns:
+        Path: Relative path when possible, otherwise the original ``path``.
+    """
 
     try:
         return path.relative_to(root)
@@ -952,7 +653,14 @@ def _relative_to_root(path: Path, root: Path) -> Path:
 
 
 def _is_textual_candidate(path: Path) -> bool:
-    """Return ``True`` when ``path`` likely contains textual contents."""
+    """Return ``True`` when ``path`` likely contains textual contents.
+
+    Args:
+        path: Candidate file path.
+
+    Returns:
+        bool: ``True`` when the file is treated as textual for license scanning.
+    """
 
     return path.suffix.lower() in {
         ".py",
@@ -980,3 +688,20 @@ def _is_textual_candidate(path: Path) -> bool:
         ".java",
         ".cs",
     }
+
+
+__all__ = [
+    "FileSizeCheck",
+    "LicenseCheck",
+    "QualityCheck",
+    "QualityCheckResult",
+    "QualityChecker",
+    "QualityCheckerOptions",
+    "QualityContext",
+    "QualityFileCollector",
+    "QualityIssue",
+    "QualityIssueLevel",
+    "SchemaCheck",
+    "check_commit_message",
+    "ensure_branch_protection",
+]

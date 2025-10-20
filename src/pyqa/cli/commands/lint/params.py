@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeAlias
 
 from ...core.lint_literals import (
     BanditLevelLiteral,
@@ -54,7 +55,11 @@ class LintOutputParams(LintDisplayToggles):
     """Rendering preferences for user-facing output."""
 
     def as_dict(self) -> dict[str, bool | OutputModeLiteral]:
-        """Return the toggles as a serialisable dictionary."""
+        """Return the toggles as a serialisable dictionary.
+
+        Returns:
+            dict[str, bool | OutputModeLiteral]: Mapping capturing current rendering settings.
+        """
 
         return {
             "verbose": self.verbose,
@@ -165,25 +170,53 @@ class MetaAnalysisChecks:
 
 
 @dataclass(slots=True)
-class MetaRuntimeChecks:
-    """Capture runtime/tooling oriented meta check toggles."""
+class RuntimeCoreChecks:
+    """Toggle set for core runtime lint checks."""
 
     check_closures: bool
     check_signatures: bool
     check_cache_usage: bool
     check_value_types: bool
     check_value_types_general: bool
+
+
+@dataclass(slots=True)
+class RuntimeInterfaceChecks:
+    """Toggle set for interface-driven runtime checks."""
+
     check_interfaces: bool
     check_di: bool
     check_module_docs: bool
     check_pyqa_python_hygiene: bool
+
+
+@dataclass(slots=True)
+class RuntimePolicyChecks:
+    """Toggle set for compliance and hygiene-related runtime checks."""
+
     show_valid_suppressions: bool
     check_license_header: bool
     check_copyright: bool
     check_python_hygiene: bool
+
+
+@dataclass(slots=True)
+class RuntimeAdditionalChecks:
+    """Toggle set for advanced runtime verifications."""
+
     check_file_size: bool
     check_schema_sync: bool
     pyqa_rules: bool
+
+
+@dataclass(slots=True)
+class MetaRuntimeChecks:
+    """Aggregate runtime check toggles across core, interface, policy, and extras."""
+
+    core: RuntimeCoreChecks
+    interface: RuntimeInterfaceChecks
+    policy: RuntimePolicyChecks
+    additional: RuntimeAdditionalChecks
 
 
 @dataclass(slots=True)
@@ -194,161 +227,38 @@ class LintMetaParams:
     analysis: MetaAnalysisChecks
     runtime: MetaRuntimeChecks
 
-    @property
-    def doctor(self) -> bool:
-        """Return whether the doctor meta action was requested."""
+    def __getattr__(self, attribute: str) -> MetaAttributeValue:
+        """Proxy attribute access to underlying action and runtime groups.
 
-        return self.actions.doctor
+        Args:
+            attribute: Attribute name requested by callers expecting legacy fields.
 
-    @property
-    def tool_info(self) -> str | None:
-        """Return the tool requested for ``--tool-info`` if provided."""
+        Returns:
+            MetaAttributeValue: Value resolved from the aggregate structures.
 
-        return self.actions.tool_info
+        Raises:
+            AttributeError: If ``attribute`` is not provided by any group.
+            TypeError: If the resolved attribute is not a supported meta value type.
+        """
 
-    @property
-    def fetch_all_tools(self) -> bool:
-        """Return whether tool prefetching was requested."""
-
-        return self.actions.fetch_all_tools
-
-    @property
-    def validate_schema(self) -> bool:
-        """Return whether catalog schema validation was requested."""
-
-        return self.actions.validate_schema
-
-    @property
-    def normal(self) -> bool:
-        """Return whether the normal preset flag was supplied."""
-
-        return self.actions.normal
-
-    @property
-    def explain_tools(self) -> bool:
-        """Return whether the explain-tools meta action was supplied."""
-
-        return self.actions.explain_tools
-
-    @property
-    def check_docstrings(self) -> bool:
-        """Return whether the internal docstring checker should run."""
-
-        return self.analysis.check_docstrings
-
-    @property
-    def check_suppressions(self) -> bool:
-        """Return whether lint suppression analysis should run."""
-
-        return self.analysis.check_suppressions
-
-    @property
-    def check_types_strict(self) -> bool:
-        """Return whether the strict typing checker should execute."""
-
-        return self.analysis.check_types_strict
-
-    @property
-    def check_missing(self) -> bool:
-        """Return whether the missing functionality checker should execute."""
-
-        return self.analysis.check_missing
-
-    @property
-    def check_closures(self) -> bool:
-        """Return whether closure usage analysis should run."""
-
-        return self.runtime.check_closures
-
-    @property
-    def check_signatures(self) -> bool:
-        """Return whether function signature analysis should execute."""
-
-        return self.runtime.check_signatures
-
-    @property
-    def check_cache_usage(self) -> bool:
-        """Return whether cache usage analysis should execute."""
-
-        return self.runtime.check_cache_usage
-
-    @property
-    def check_value_types(self) -> bool:
-        """Return whether value-type ergonomics should be validated."""
-
-        return self.runtime.check_value_types
-
-    @property
-    def check_value_types_general(self) -> bool:
-        """Return whether generic value-type guidance should execute."""
-
-        return self.runtime.check_value_types_general
-
-    @property
-    def check_interfaces(self) -> bool:
-        """Return whether interface enforcement should execute."""
-
-        return self.runtime.check_interfaces
-
-    @property
-    def check_di(self) -> bool:
-        """Return whether DI guardrails should execute."""
-
-        return self.runtime.check_di
-
-    @property
-    def check_module_docs(self) -> bool:
-        """Return whether module documentation verification should execute."""
-
-        return self.runtime.check_module_docs
-
-    @property
-    def check_pyqa_python_hygiene(self) -> bool:
-        """Return whether the pyqa-specific hygiene linter should run."""
-
-        return self.runtime.check_pyqa_python_hygiene
-
-    @property
-    def show_valid_suppressions(self) -> bool:
-        """Return whether validated suppressions should be surfaced."""
-
-        return self.runtime.show_valid_suppressions
-
-    @property
-    def check_license_header(self) -> bool:
-        """Return whether license header enforcement should run."""
-
-        return self.runtime.check_license_header
-
-    @property
-    def check_copyright(self) -> bool:
-        """Return whether copyright notice enforcement should run."""
-
-        return self.runtime.check_copyright
-
-    @property
-    def check_python_hygiene(self) -> bool:
-        """Return whether Python hygiene enforcement should run."""
-
-        return self.runtime.check_python_hygiene
-
-    @property
-    def check_file_size(self) -> bool:
-        """Return whether file size enforcement should run."""
-
-        return self.runtime.check_file_size
-
-    @property
-    def check_schema_sync(self) -> bool:
-        """Return whether schema documentation synchronisation should run."""
-
-        return self.runtime.check_schema_sync
-
-    @property
-    def pyqa_rules(self) -> bool:
-        """Return whether pyqa-scoped lint rules are enabled."""
-
-        return self.runtime.pyqa_rules
+        groups = (
+            self.actions,
+            self.analysis,
+            self.runtime.core,
+            self.runtime.interface,
+            self.runtime.policy,
+            self.runtime.additional,
+        )
+        for group in groups:
+            if hasattr(group, attribute):
+                value = getattr(group, attribute)
+                if isinstance(value, (str, bool)) or value is None:
+                    return value
+                raise TypeError(
+                    f"Meta attribute '{attribute}' has unsupported type {type(value)!r}; "
+                    "expected bool, str, or None.",
+                )
+        raise AttributeError(attribute)
 
 
 @dataclass(slots=True)
@@ -393,6 +303,9 @@ class LintCLIInputs:
     execution: LintExecutionGroup
     output: LintOutputGroup
     advanced: LintAdvancedGroup
+
+
+MetaAttributeValue: TypeAlias = bool | str | None
 
 
 @dataclass(slots=True)

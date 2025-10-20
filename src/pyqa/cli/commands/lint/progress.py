@@ -297,13 +297,21 @@ class _ProgressCallbacks:
                 current_status=status,
             )
 
-    def after_execution(self, _result: RunResult) -> None:
-        """Advance the bar after orchestrator execution completes."""
+    def after_execution(self, result: RunResult) -> None:
+        """Advance the bar after orchestrator execution completes.
 
+        Args:
+            result: Run result produced by the orchestrator, used to surface the number
+                of diagnostics processed during post-run reporting.
+        """
+
+        diagnostic_total = sum(len(outcome.diagnostics) for outcome in result.outcomes)
         with self.lock:
             self._ensure_started()
             self.controller.advance(1)
             status = self._status_markup(STATUS_POST_PROCESSING, color="cyan")
+            if diagnostic_total:
+                status = f"{status} ({diagnostic_total} diagnostics)"
             self.progress.update(self.task_id, current_status=status)
 
     def after_plan(self, total_actions: int) -> None:

@@ -9,10 +9,17 @@ from .base import RuntimeContext, RuntimeHandler
 
 
 class PythonRuntime(RuntimeHandler):
-    """Provision Python tools via uv with system/project fallbacks."""
+    """Provide the runtime for Python tools via uv with fallback strategies."""
 
     def _try_project(self, context: RuntimeContext) -> PreparedCommand | None:
-        """Return project Python tooling when version constraints are satisfied."""
+        """Return the project command when version constraints are satisfied.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            PreparedCommand | None: Prepared project command, or ``None`` when incompatible.
+        """
 
         version = None
         if context.tool.version_command:
@@ -24,7 +31,14 @@ class PythonRuntime(RuntimeHandler):
         return PreparedCommand.from_parts(cmd=context.command, env=None, version=version, source="project")
 
     def _prepare_local(self, context: RuntimeContext) -> PreparedCommand:
-        """Provision Python tooling using uv and return the updated command."""
+        """Return the command after provisioning Python tooling using uv.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            PreparedCommand: Prepared command referencing the uv-managed environment.
+        """
 
         requirement = context.tool.package or context.tool.name
         if context.tool.min_version:

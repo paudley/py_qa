@@ -91,46 +91,49 @@ def _validate_cli_combinations(inputs: LintCLIInputs) -> None:
     meta = inputs.advanced.meta
     selection = inputs.execution.selection
     rendering = inputs.output.rendering
+    actions = meta.actions
+    analysis_checks = meta.analysis
+    runtime_checks = meta.runtime
 
     conflicts = (
         (
-            meta.doctor and meta.tool_info is not None,
+            actions.doctor and actions.tool_info is not None,
             "--doctor and --tool-info cannot be combined",
         ),
         (
-            meta.doctor and meta.fetch_all_tools,
+            actions.doctor and actions.fetch_all_tools,
             "--doctor and --fetch-all-tools cannot be combined",
         ),
         (
-            meta.tool_info is not None and meta.fetch_all_tools,
+            actions.tool_info is not None and actions.fetch_all_tools,
             "--tool-info and --fetch-all-tools cannot be combined",
         ),
         (
-            meta.validate_schema and meta.doctor,
+            actions.validate_schema and actions.doctor,
             "--validate-schema and --doctor cannot be combined",
         ),
         (
-            meta.validate_schema and meta.tool_info is not None,
+            actions.validate_schema and actions.tool_info is not None,
             "--validate-schema and --tool-info cannot be combined",
         ),
         (
-            meta.validate_schema and meta.fetch_all_tools,
+            actions.validate_schema and actions.fetch_all_tools,
             "--validate-schema and --fetch-all-tools cannot be combined",
         ),
         (
-            meta.explain_tools and meta.doctor,
+            actions.explain_tools and actions.doctor,
             "--explain-tools and --doctor cannot be combined",
         ),
         (
-            meta.explain_tools and meta.tool_info is not None,
+            actions.explain_tools and actions.tool_info is not None,
             "--explain-tools and --tool-info cannot be combined",
         ),
         (
-            meta.explain_tools and meta.fetch_all_tools,
+            actions.explain_tools and actions.fetch_all_tools,
             "--explain-tools and --fetch-all-tools cannot be combined",
         ),
         (
-            meta.explain_tools and meta.validate_schema,
+            actions.explain_tools and actions.validate_schema,
             "--explain-tools and --validate-schema cannot be combined",
         ),
         (
@@ -147,26 +150,26 @@ def _validate_cli_combinations(inputs: LintCLIInputs) -> None:
             raise typer.BadParameter(message)
 
     check_flags = (
-        meta.check_docstrings,
-        meta.check_suppressions,
-        meta.check_types_strict,
-        meta.check_closures,
-        meta.check_signatures,
-        meta.check_cache_usage,
-        meta.check_value_types,
-        meta.check_value_types_general,
-        meta.check_license_header,
-        meta.check_copyright,
-        meta.check_python_hygiene,
-        meta.check_file_size,
-        meta.check_schema_sync,
+        analysis_checks.check_docstrings,
+        analysis_checks.check_suppressions,
+        analysis_checks.check_types_strict,
+        runtime_checks.core.check_closures,
+        runtime_checks.core.check_signatures,
+        runtime_checks.core.check_cache_usage,
+        runtime_checks.core.check_value_types,
+        runtime_checks.core.check_value_types_general,
+        runtime_checks.policy.check_license_header,
+        runtime_checks.policy.check_copyright,
+        runtime_checks.policy.check_python_hygiene,
+        runtime_checks.additional.check_file_size,
+        runtime_checks.additional.check_schema_sync,
     )
     if any(check_flags) and any(
         (
-            meta.doctor,
-            meta.tool_info is not None,
-            meta.fetch_all_tools,
-            meta.validate_schema,
+            actions.doctor,
+            actions.tool_info is not None,
+            actions.fetch_all_tools,
+            actions.validate_schema,
         ),
     ):
         raise typer.BadParameter("Internal lint check flags cannot be combined with other meta actions")
@@ -189,10 +192,11 @@ def _build_runtime_context(state: PreparedLintState) -> LintRuntimeContext:
     except (ValueError, ConfigError) as exc:
         raise typer.BadParameter(str(exc)) from exc
 
-    if state.meta.normal:
+    meta_flags = state.meta
+    if meta_flags.actions.normal:
         config.quality.enforce_in_lint = True
 
-    pyqa_explicit = state.meta.pyqa_rules or state.meta.normal
+    pyqa_explicit = meta_flags.runtime.additional.pyqa_rules or meta_flags.actions.normal
     if pyqa_explicit and not config.execution.pyqa_rules:
         config.execution = config.execution.model_copy(update={"pyqa_rules": True})
 
@@ -283,17 +287,22 @@ _handle_reporting = handle_reporting
 
 
 def _activate_internal_linters(state: PreparedLintState) -> None:
-    """Ensure meta flags translate into internal tool selection."""
+    """Ensure meta flags translate into internal tool selection.
+
+    Args:
+        state: Prepared lint state containing meta flags and selection options.
+    """
 
     selection = state.options.selection_options
     meta = state.meta
-    if meta.normal:
+    meta_actions = meta.actions
+    if meta_actions.normal:
         state.options.with_added_provided(PROVIDED_FLAG_INTERNAL_LINTERS)
         return
 
     existing = {name.lower() for name in selection.only}
     added = False
-    pyqa_enabled = meta.pyqa_rules or is_py_qa_workspace(state.root)
+    pyqa_enabled = meta.runtime.additional.pyqa_rules or is_py_qa_workspace(state.root)
     for definition in iter_internal_linters():
         if definition.pyqa_scoped and not pyqa_enabled:
             continue

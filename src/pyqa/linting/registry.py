@@ -289,7 +289,11 @@ INTERNAL_LINTERS: tuple[InternalLinterDefinition, ...] = (
 
 
 def iter_internal_linters() -> Sequence[InternalLinterDefinition]:
-    """Return the registered internal lint definitions."""
+    """Return the registered internal lint definitions.
+
+    Returns:
+        Sequence[InternalLinterDefinition]: Immutable collection of definitions.
+    """
 
     return INTERNAL_LINTERS
 
@@ -300,7 +304,13 @@ def ensure_internal_tools_registered(
     state: PreparedLintState,
     config: Config,
 ) -> None:
-    """Register internal linter tools with ``registry`` when absent."""
+    """Register internal linter tools with ``registry`` when absent.
+
+    Args:
+        registry: Tool registry populated by the CLI.
+        state: Prepared lint state supplying CLI metadata.
+        config: Effective configuration passed to config-aware linters.
+    """
 
     for definition in INTERNAL_LINTERS:
         if registry.try_get(definition.name) is not None:
@@ -323,7 +333,16 @@ def _build_internal_tool(
     state: PreparedLintState,
     runner: InternalLintRunner,
 ) -> Tool:
-    """Return a :class:`Tool` that executes the provided internal runner."""
+    """Return a :class:`Tool` that executes the provided internal runner.
+
+    Args:
+        definition: Internal linter definition describing metadata.
+        state: Prepared lint state used for report normalisation.
+        runner: Callable responsible for executing the internal linter.
+
+    Returns:
+        Tool: Registered tool wrapper around the internal linter runner.
+    """
 
     action_runner = _wrap_internal_runner(definition, state, runner)
     action = ToolAction(
@@ -352,7 +371,12 @@ def _build_internal_tool(
 
 
 def configure_internal_tool_defaults(*, registry: ToolRegistry, state: PreparedLintState) -> None:
-    """Toggle default-enabled flags for internal tools based on CLI meta."""
+    """Toggle default-enabled flags for internal tools based on CLI meta.
+
+    Args:
+        registry: Tool registry hosting internal linter definitions.
+        state: Prepared lint state containing CLI runtime metadata.
+    """
 
     pyqa_scope_active = is_py_qa_workspace(state.root)
     meta_runtime = getattr(state.meta, "runtime", None)
@@ -375,7 +399,16 @@ def _wrap_internal_runner(
     state: PreparedLintState,
     runner: InternalLintRunner,
 ) -> InternalActionRunner:
-    """Return an action runner compatible with :class:`ToolAction`."""
+    """Return an action runner compatible with :class:`ToolAction`.
+
+    Args:
+        definition: Internal linter definition describing the tool.
+        state: Prepared lint state providing filesystem context.
+        runner: Callable that executes the internal linter logic.
+
+    Returns:
+        InternalActionRunner: Adapter bridging the tool action and runner.
+    """
 
     return cast(InternalActionRunner, _InternalRunnerAction(definition=definition, state=state, runner=runner))
 
@@ -383,7 +416,14 @@ def _wrap_internal_runner(
 def _bind_runner_callable(
     func: Callable[..., InternalLintReport],
 ) -> Callable[[PreparedLintState, bool], InternalLintReport]:
-    """Return a callable enforcing the standard internal runner signature."""
+    """Return a callable enforcing the standard internal runner signature.
+
+    Args:
+        func: Internal linter runner requiring prepared state injection.
+
+    Returns:
+        Callable[[PreparedLintState, bool], InternalLintReport]: Runner bound to the standard signature.
+    """
 
     return _RunnerBinding(func=func)
 

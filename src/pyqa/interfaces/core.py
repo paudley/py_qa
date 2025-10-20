@@ -11,7 +11,8 @@ from typing import Protocol, runtime_checkable
 
 from rich.console import Console
 
-from pyqa.core.serialization import JsonValue
+type _JsonScalar = str | int | float | bool | None
+type JsonValue = _JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 
 
 @runtime_checkable

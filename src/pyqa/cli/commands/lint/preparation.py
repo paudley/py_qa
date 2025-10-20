@@ -225,7 +225,7 @@ def prepare_lint_state(
     )
 
     if is_py_qa_workspace(normalized_targets.root):
-        inputs.advanced.meta.runtime.pyqa_rules = True
+        inputs.advanced.meta.runtime.additional.pyqa_rules = True
 
     return PreparedLintState(
         options=options,
@@ -503,6 +503,16 @@ def _resolve_artifacts(
     """
 
     def _normalize(value: Path | None) -> Path | None:
+        """Return the normalised path for ``value`` when provided.
+
+        Args:
+            value: Optional filesystem path supplied via CLI parameters.
+
+        Returns:
+            Path | None: Normalised path anchored to ``invocation_cwd`` or ``None`` when
+            ``value`` is not provided.
+        """
+
         if value is None:
             return None
         return _normalize_path(value, invocation_cwd)
@@ -551,7 +561,17 @@ def _apply_py_qa_filter(
     root: Path,
     logger: CLILogger,
 ) -> tuple[list[Path], list[str]]:
-    """Return filtered paths and ignored py_qa entries when required."""
+    """Return filtered paths and ignored py_qa entries when required.
+
+    Args:
+        paths: Candidate filesystem paths supplied by the user.
+        root: Effective lint root resolved for the invocation.
+        logger: CLI logger responsible for emitting workspace warnings.
+
+    Returns:
+        tuple[list[Path], list[str]]: Tuple containing filtered paths and the ignored
+        entries referencing ``PY_QA_DIR_NAME`` directories.
+    """
 
     if is_py_qa_workspace(root) or not paths:
         return paths, []

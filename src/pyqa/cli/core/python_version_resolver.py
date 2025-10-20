@@ -192,8 +192,11 @@ def _iter_pyproject_python_versions(data: Mapping[str, TomlValue]) -> Iterable[s
     Args:
         data: Parsed ``pyproject`` mapping.
 
+    Returns:
+        Iterable[str]: Generator yielding discovered version strings.
+
     Yields:
-        Iterable of raw version strings discovered in recognised sections.
+        str: Raw version strings discovered in recognised sections.
     """
 
     project_section = data.get("project")
@@ -216,8 +219,11 @@ def _iter_poetry_python_versions(tool_section: Mapping[str, TomlValue]) -> Itera
     Args:
         tool_section: ``[tool]`` section extracted from ``pyproject``.
 
+    Returns:
+        Iterable[str]: Generator yielding poetry-defined version constraints.
+
     Yields:
-        Iterable of poetry-defined Python version requirements.
+        str: Poetry-defined Python version constraints.
     """
 
     poetry_section = tool_section.get("poetry")
@@ -237,8 +243,11 @@ def _iter_hatch_python_versions(tool_section: Mapping[str, TomlValue]) -> Iterab
     Args:
         tool_section: ``[tool]`` section extracted from ``pyproject``.
 
+    Returns:
+        Iterable[str]: Generator yielding hatch-defined version constraints.
+
     Yields:
-        Iterable of hatch-defined Python version requirements.
+        str: Hatch-defined Python version constraints.
     """
 
     hatch_section = tool_section.get("hatch")

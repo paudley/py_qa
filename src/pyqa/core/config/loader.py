@@ -74,7 +74,7 @@ class _SectionProcessor(Generic[ModelT]):
 
 
 class FieldUpdate(BaseModel):
-    """Description of a single configuration field mutation."""
+    """Describe a single configuration field mutation."""
 
     model_config = ConfigDict(validate_assignment=True)
 
@@ -85,7 +85,7 @@ class FieldUpdate(BaseModel):
 
 
 class ConfigLoadResult(BaseModel):
-    """Container bundling a resolved config with provenance metadata."""
+    """Capture a resolved configuration alongside provenance metadata."""
 
     model_config = ConfigDict(validate_assignment=True)
 
@@ -105,7 +105,7 @@ class ConfigLoader:
         sources: Sequence[ConfigSource],
         resolver: PathResolver | None = None,
     ) -> None:
-        """Initialise a loader that merges the supplied configuration sources.
+        """Construct the loader that merges the supplied configuration sources.
 
         Args:
             project_root: Directory that anchors relative paths.
@@ -204,7 +204,15 @@ class ConfigLoader:
 
 
 def load_config(project_root: Path) -> Config:
-    """Load configuration for ``project_root`` using the default tiered sources."""
+    """Load the configuration for ``project_root`` using the default tiered sources.
+
+    Args:
+        project_root: Project workspace root used to construct the loader.
+
+    Returns:
+        Config: Resolved configuration model without provenance metadata.
+    """
+
     return ConfigLoader.for_root(project_root).load()
 
 
@@ -212,6 +220,12 @@ class _ConfigMerger:
     """Apply mapping data onto strongly typed configuration objects."""
 
     def __init__(self, resolver: PathResolver) -> None:
+        """Construct the merger from the supplied ``resolver``.
+
+        Args:
+            resolver: Resolver used to interpret configuration paths.
+        """
+
         section_specs = build_section_mergers(resolver)
         self._sections = tuple(self._build_section(merger, attr_name) for attr_name, merger in section_specs)
 
@@ -280,7 +294,7 @@ class _ConfigMerger:
         return merged_config, updates, warnings
 
     def sections(self) -> tuple[SectionName, ...]:
-        """Return section identifiers managed by this merger instance.
+        """Collect section identifiers managed by this merger instance.
 
         Returns:
             tuple[SectionName, ...]: Ordered section identifiers processed
@@ -295,11 +309,30 @@ class _ConfigMerger:
         merger: _SectionMerger[ModelT],
         attr_name: str,
     ) -> _SectionProcessor[ModelT]:
-        """Return a section processor binding ``merger`` to a config attribute."""
+        """Construct a section processor binding ``merger`` to a config attribute.
+
+        Args:
+            merger: Section merger responsible for combining configuration fragments.
+            attr_name: Attribute name on the ``Config`` model associated with the merger.
+
+        Returns:
+            _SectionProcessor[ModelT]: Processor capable of applying section overrides.
+        """
 
         getter = cast(Callable[[Config], ModelT], attrgetter(attr_name))
 
         def setter(config: Config, value: ModelT, *, name: str = attr_name) -> Config:
+            """Apply ``value`` to the section ``name`` on ``config``.
+
+            Args:
+                config: Configuration model receiving the update.
+                value: Section value produced by the merger.
+                name: Attribute name targeted for replacement.
+
+            Returns:
+                Config: Configuration instance with the updated section value applied.
+            """
+
             return _model_replace(config, updates={name: value})
 
         return _SectionProcessor[ModelT](
@@ -340,7 +373,7 @@ def _merge_tool_settings(
     raw: ConfigValue,
     source: str,
 ) -> tuple[dict[str, dict[str, ConfigValue]], dict[str, dict[str, ConfigValue]], list[str]]:
-    """Merge tool-specific configuration dictionaries.
+    """Merge the tool-specific configuration dictionaries.
 
     Args:
         current: Existing tool configuration mapping.
@@ -382,7 +415,18 @@ def _merge_tool_entry(
     existing: Mapping[str, ConfigValue],
     source: str,
 ) -> tuple[dict[str, ConfigValue], dict[str, ConfigValue] | None, list[str]]:
-    """Merge a single tool configuration mapping while collecting warnings."""
+    """Merge the configuration mapping for a single tool while collecting warnings.
+
+    Args:
+        tool: Tool identifier receiving configuration overrides.
+        raw_value: Raw configuration mapping for the tool.
+        existing: Existing configuration entries for the tool.
+        source: Name of the configuration source supplying overrides.
+
+    Returns:
+        tuple[dict[str, ConfigValue], dict[str, ConfigValue] | None, list[str]]:
+            Updated configuration mapping, per-tool diffs, and warnings.
+    """
 
     if tool in _RESERVED_TOOL_KEYS:
         return dict(existing), None, []

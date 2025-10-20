@@ -8,20 +8,31 @@ import shutil
 
 # Bandit: subprocess usage is intentional—we provide a controlled wrapper around
 # external tool execution, normalising arguments and disabling ``shell=True``.
-import subprocess  # nosec B404 suppression_valid: The subprocess module is standard library code and the wrapper enforces safe, shell-free invocation semantics.
+import subprocess  # nosec B404 suppression_valid: Shell-free subprocess wrapper enforces safe execution.
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final, Literal
 
 CommandOverrideValue = Path | Mapping[str, str] | bool | float | int | None
-CommandOverrideMapping = Mapping[str, CommandOverrideValue]
+CommandOptionKey = Literal["cwd", "env", "check", "capture_output", "text", "timeout", "discard_stdin"]
+CommandOverrideMapping = Mapping[CommandOptionKey, CommandOverrideValue]
 
 if TYPE_CHECKING:
     # Bandit: type-only import of subprocess metadata is part of the safe wrapper.
-    from subprocess import (
-        CompletedProcess as _CompletedProcess,  # nosec B404 suppression_valid: Type-checking requires the CompletedProcess alias even though it is never executed at runtime.
-    )
+    # nosec B404 suppression_valid: Type-only import retains annotations for safety.
+    from subprocess import CompletedProcess as _CompletedProcess
+
+_COMMAND_KEYS: Final[frozenset[CommandOptionKey]] = frozenset(
+    {"cwd", "env", "check", "capture_output", "text", "timeout", "discard_stdin"}
+)
+_CWD_KEY: Final[CommandOptionKey] = "cwd"
+_ENV_KEY: Final[CommandOptionKey] = "env"
+_CHECK_KEY: Final[CommandOptionKey] = "check"
+_CAPTURE_OUTPUT_KEY: Final[CommandOptionKey] = "capture_output"
+_TEXT_KEY: Final[CommandOptionKey] = "text"
+_TIMEOUT_KEY: Final[CommandOptionKey] = "timeout"
+_DISCARD_STDIN_KEY: Final[CommandOptionKey] = "discard_stdin"
 
 
 @dataclass(slots=True)
@@ -40,7 +51,8 @@ class CommandOptions:
         """Return a new options instance with ``overrides`` applied.
 
         Args:
-            overrides: Mapping of option names to replacement values.
+            overrides: Mapping of option names to replacement values. Keys must align with
+                the command option literals defined in :data:`_COMMAND_KEYS`.
 
         Returns:
             CommandOptions: Updated options instance with overrides applied.
@@ -51,33 +63,34 @@ class CommandOptions:
             ValueError: When a timeout override is negative.
         """
 
-        valid_keys = {
-            "cwd",
-            "env",
-            "check",
-            "capture_output",
-            "text",
-            "timeout",
-            "discard_stdin",
-        }
-        unknown = [key for key in overrides if key not in valid_keys]
+        unknown = [key for key in overrides if key not in _COMMAND_KEYS]
         if unknown:
             message = ", ".join(sorted(unknown))
             raise TypeError(f"Unknown command option(s): {message}")
-        cwd = self.cwd if "cwd" not in overrides else self._coerce_cwd_override(overrides["cwd"])
-        env = self.env if "env" not in overrides else self._coerce_env_override(overrides["env"])
-        check = self.check if "check" not in overrides else self._coerce_bool_override(overrides["check"], "check")
+        cwd = self.cwd if _CWD_KEY not in overrides else self._coerce_cwd_override(overrides[_CWD_KEY])
+        env = self.env if _ENV_KEY not in overrides else self._coerce_env_override(overrides[_ENV_KEY])
+        check = (
+            self.check if _CHECK_KEY not in overrides else self._coerce_bool_override(overrides[_CHECK_KEY], "check")
+        )
         capture_output = (
             self.capture_output
-            if "capture_output" not in overrides
-            else self._coerce_bool_override(overrides["capture_output"], "capture_output")
+            if _CAPTURE_OUTPUT_KEY not in overrides
+            else self._coerce_bool_override(
+                overrides[_CAPTURE_OUTPUT_KEY],
+                "capture_output",
+            )
         )
-        text = self.text if "text" not in overrides else self._coerce_bool_override(overrides["text"], "text")
-        timeout = self.timeout if "timeout" not in overrides else self._coerce_timeout_override(overrides["timeout"])
+        text = self.text if _TEXT_KEY not in overrides else self._coerce_bool_override(overrides[_TEXT_KEY], "text")
+        timeout = (
+            self.timeout if _TIMEOUT_KEY not in overrides else self._coerce_timeout_override(overrides[_TIMEOUT_KEY])
+        )
         discard_stdin = (
             self.discard_stdin
-            if "discard_stdin" not in overrides
-            else self._coerce_bool_override(overrides["discard_stdin"], "discard_stdin")
+            if _DISCARD_STDIN_KEY not in overrides
+            else self._coerce_bool_override(
+                overrides[_DISCARD_STDIN_KEY],
+                "discard_stdin",
+            )
         )
         return CommandOptions(
             cwd=cwd,
@@ -186,6 +199,14 @@ class SubprocessExecutionError(RuntimeError):
         stdout: str | None,
         stderr: str | None,
     ) -> None:
+        """Initialise the error with captured subprocess metadata.
+
+        Args:
+            command: Normalised command sequence that was executed.
+            returncode: Exit status reported by the subprocess.
+            stdout: Captured standard output stream.
+            stderr: Captured standard error stream.
+        """
         super().__init__(
             f"Command '{command[0]}' exited with status {returncode}. stderr: {stderr or '<none>'}",
         )
@@ -195,7 +216,34 @@ class SubprocessExecutionError(RuntimeError):
         self.stderr = stderr
 
 
+def _ensure_text(value: str | bytes | None) -> str | None:
+    """Return ``value`` decoded to text when supplied as ``bytes``.
+
+    Args:
+        value: Stream output captured from subprocess execution.
+
+    Returns:
+        str | None: Text output or ``None`` when no data was captured.
+    """
+
+    if value is None or isinstance(value, str):
+        return value
+    return value.decode(errors="ignore")
+
+
 def _normalize_args(args: Sequence[str]) -> list[str]:
+    """Normalise the subprocess argument sequence.
+
+    Args:
+        args: Raw command arguments supplied by the caller.
+
+    Returns:
+        list[str]: Validated argument list suitable for subprocess execution.
+
+    Raises:
+        ValueError: If no arguments are provided.
+    """
+
     if not args:
         msg = "subprocess command requires at least one argument"
         raise ValueError(msg)
@@ -236,13 +284,8 @@ def run_command(
     """
 
     normalized = _normalize_args(args)
-    overrides_mapping: CommandOverrideMapping = overrides or {}
+    overrides_mapping: dict[CommandOptionKey, CommandOverrideValue] = dict(overrides or {})
     resolved_options = (options or CommandOptions()).with_overrides(overrides_mapping)
-
-    def _ensure_text(value: str | bytes | None) -> str | None:
-        if value is None or isinstance(value, str):
-            return value
-        return value.decode(errors="ignore")
 
     try:
         # Bandit: commands originate from vetted tool configurations; we pass
@@ -283,4 +326,11 @@ def run_command(
     return completed
 
 
-__all__ = ["SubprocessExecutionError", "run_command"]
+__all__ = [
+    "CommandOptionKey",
+    "CommandOptions",
+    "CommandOverrideMapping",
+    "CommandOverrideValue",
+    "SubprocessExecutionError",
+    "run_command",
+]

@@ -22,10 +22,13 @@ NODE_ENV_DEFAULTS: Final[dict[str, str]] = {
 
 
 def find_venv_bin(root: Path | None = None) -> Path | None:
-    """Find the virtualenv bin/Scripts directory relative to *root*.
+    """Locate the virtualenv ``bin`` or ``Scripts`` directory relative to ``root``.
 
-    The search walks up from ``root`` until the filesystem root, looking for
-    either ``.venv`` or ``venv`` directories.
+    Args:
+        root: Directory from which to begin the upwards search. Defaults to ``Path.cwd()``.
+
+    Returns:
+        Path | None: Resolved virtualenv bin directory, or ``None`` when not found.
     """
     root = (root or Path.cwd()).resolve()
     search_paths = [root, *root.parents]
@@ -44,9 +47,14 @@ def prepend_venv_to_path(
     root: Path | None = None,
     env: MutableMapping[str, str] | None = None,
 ) -> Path | None:
-    """Ensure the virtualenv ``bin`` directory is first on PATH.
+    """Ensure the virtualenv ``bin`` directory is first on ``PATH``.
 
-    Returns the resolved bin path if one was added, otherwise ``None``.
+    Args:
+        root: Directory from which to locate the virtualenv.
+        env: Environment mapping to mutate; defaults to ``os.environ``.
+
+    Returns:
+        Path | None: Resolved virtualenv bin directory when prepended, otherwise ``None``.
     """
     env = env if env is not None else os.environ
     venv_bin = find_venv_bin(root)
@@ -58,7 +66,11 @@ def prepend_venv_to_path(
 
 
 def inject_node_defaults(env: MutableMapping[str, str] | None = None) -> None:
-    """Apply default environment variables for Node-based tooling."""
+    """Apply the default environment variables for Node-based tooling.
+
+    Args:
+        env: Environment mapping to mutate; defaults to ``os.environ``.
+    """
     env = env if env is not None else os.environ
     for key, value in NODE_ENV_DEFAULTS.items():
         env.setdefault(key, value)

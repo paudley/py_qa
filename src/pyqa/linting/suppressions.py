@@ -11,16 +11,15 @@ from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
-if TYPE_CHECKING:  # pragma: no cover
-    from pyqa.cli.commands.lint.preparation import PreparedLintState
-else:  # pragma: no cover
-    PreparedLintState = object
 from pyqa.core.models import Diagnostic
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path_key
 
 from .base import InternalLintReport, build_internal_report
 from .utils import collect_python_files
+
+if TYPE_CHECKING:  # pragma: no cover
+    from pyqa.cli.commands.lint.preparation import PreparedLintState
 
 
 @dataclass(slots=True)
@@ -111,7 +110,15 @@ def run_suppression_linter(state: PreparedLintState, *, emit_to_logger: bool = T
 
 
 def _parse_suppression_reason(comment: str) -> tuple[bool, bool, str, frozenset[str]]:
-    """Return marker presence, validity, reason, and targeted lint identifiers."""
+    """Return marker details extracted from ``comment``.
+
+    Args:
+        comment: Comment text containing a potential suppression directive.
+
+    Returns:
+        tuple[bool, bool, str, frozenset[str]]: Marker presence flag, validity flag,
+        cleaned justification, and targeted lint identifiers.
+    """
 
     lower = comment.lower()
     index = lower.find(_SUPPRESSION_VALID_MARKER)
@@ -134,7 +141,11 @@ def _parse_suppression_reason(comment: str) -> tuple[bool, bool, str, frozenset[
 
 
 def _append_valid_suppression(context: ValidSuppressionContext) -> None:
-    """Record an informational diagnostic describing an accepted suppression."""
+    """Record an informational diagnostic describing an accepted suppression.
+
+    Args:
+        context: Context object containing suppression metadata and buffers to update.
+    """
 
     normalized = normalize_path_key(context.file_path, base_dir=context.state.root)
     message = f"Valid suppression justification on line {context.line_number}: {context.reason}"
@@ -154,18 +165,44 @@ def _append_valid_suppression(context: ValidSuppressionContext) -> None:
 
 @dataclass(slots=True)
 class _SuppressionIssues:
+    """Collect diagnostics and stdout lines emitted during suppression parsing."""
+
     diagnostics: list[Diagnostic]
     stdout: list[str]
+
+
+@dataclass(frozen=True, slots=True)
+class _CommentEvaluation:
+    """Aggregate results produced while evaluating a suppression comment."""
+
+    entries: tuple[SuppressionEntry, ...]
+    diagnostics: tuple[Diagnostic, ...]
+    stdout: tuple[str, ...]
 
 
 class SuppressionRegistry:
     """Lazy accessor for validated ``suppression_valid`` directives."""
 
     def __init__(self, root: Path) -> None:
+        """Initialise the registry cache.
+
+        Args:
+            root: Repository root used to normalise stored paths.
+        """
+
         self._root = root
         self._cache: dict[Path, tuple[SuppressionEntry, ...]] = {}
 
     def entries_for(self, path: Path) -> tuple[SuppressionEntry, ...]:
+        """Return cached suppression entries for ``path``.
+
+        Args:
+            path: File path whose suppressions should be retrieved.
+
+        Returns:
+            tuple[SuppressionEntry, ...]: Cached suppression entries for the file.
+        """
+
         resolved = path.resolve()
         try:
             return self._cache[resolved]
@@ -175,6 +212,18 @@ class SuppressionRegistry:
             return entries
 
     def should_suppress(self, path: Path, line: int, *, tool: str, code: str) -> bool:
+        """Return ``True`` when a diagnostic should be suppressed.
+
+        Args:
+            path: File containing the diagnostic.
+            line: Line number of the diagnostic (1-indexed).
+            tool: Tool identifier associated with the diagnostic.
+            code: Diagnostic code emitted by the tool.
+
+        Returns:
+            bool: ``True`` when a matching suppression directive exists.
+        """
+
         candidates = self.entries_for(path)
         if not candidates:
             return False
@@ -192,7 +241,15 @@ class SuppressionRegistry:
 
 
 def _line_matches(diagnostic_line: int, suppression_line: int) -> bool:
-    """Return ``True`` when a suppression comment applies to the diagnostic line."""
+    """Return ``True`` when a suppression comment applies to the diagnostic line.
+
+    Args:
+        diagnostic_line: Line number reported by the diagnostic.
+        suppression_line: Line where the suppression directive is present.
+
+    Returns:
+        bool: ``True`` when the suppression applies to the diagnostic.
+    """
 
     if diagnostic_line == suppression_line:
         return True
@@ -205,6 +262,18 @@ def _parse_suppressions_for_file(
     *,
     root: Path | None = None,
 ) -> tuple[tuple[SuppressionEntry, ...], _SuppressionIssues]:
+    """Return validated suppression entries and any parsing issues.
+
+    Args:
+        file_path: Path to the Python source file under inspection.
+        state: Prepared lint state used for diagnostics; ``None`` when only entries are required.
+        root: Optional repository root used to normalise diagnostic paths.
+
+    Returns:
+        tuple[tuple[SuppressionEntry, ...], _SuppressionIssues]: Parsed suppression entries
+        alongside any diagnostics and stdout lines emitted during parsing.
+    """
+
     entries: list[SuppressionEntry] = []
     diagnostics: list[Diagnostic] = []
     stdout: list[str] = []
@@ -215,47 +284,75 @@ def _parse_suppressions_for_file(
         if token.type != tokenize.COMMENT:
             continue
         comment = token.string
-        if not _SUPPRESSION_PATTERN.search(comment):
-            continue
-        if any(hint in comment for hint in _ALLOWED_HINTS):
-            continue
-        marker_present, valid_reason, reason, lint_ids = _parse_suppression_reason(comment)
-        if marker_present and valid_reason:
-            entries.append(
-                SuppressionEntry(
-                    line=token.start[0],
-                    lints=lint_ids,
-                    reason=reason,
-                ),
-            )
-            continue
-        if state is None:
-            continue
-        if marker_present and not valid_reason:
-            message = (
-                f"Suppression justification must provide at least {_MIN_REASON_WORDS} words after"
-                " 'suppression_valid:'; refactor or expand the explanation."
-            )
-        else:
-            message = (
-                f"Suppression directive on line {token.start[0]} violates the coding rules; "
-                "provide a justification or refactor the code instead."
-            )
-        normalized = normalize_path_key(file_path, base_dir=base_dir)
-        diagnostics.append(
-            Diagnostic(
-                file=normalized,
-                line=token.start[0],
-                column=None,
-                severity=Severity.WARNING,
-                message=message,
-                tool="internal-suppressions",
-                code="internal:suppressions",
-            ),
+        evaluation = _evaluate_suppression_comment(
+            comment=comment,
+            token=token,
+            file_path=file_path,
+            base_dir=base_dir,
+            state=state,
         )
-        stdout.append(f"{normalized}:{token.start[0]}: {message}")
+        entries.extend(evaluation.entries)
+        diagnostics.extend(evaluation.diagnostics)
+        stdout.extend(evaluation.stdout)
 
     return tuple(entries), _SuppressionIssues(diagnostics=diagnostics, stdout=stdout)
+
+
+def _evaluate_suppression_comment(
+    *,
+    comment: str,
+    token: tokenize.TokenInfo,
+    file_path: Path,
+    base_dir: Path,
+    state: PreparedLintState | None,
+) -> _CommentEvaluation:
+    """Inspect ``comment`` and return parsed suppression artefacts.
+
+    Args:
+        comment: Comment text extracted from the token stream.
+        token: Token describing the original comment location.
+        file_path: Path to the source file containing the comment.
+        base_dir: Base directory used to normalise diagnostic paths.
+        state: Prepared lint state or ``None`` when diagnostics are not required.
+
+    Returns:
+        _CommentEvaluation: Evaluation results containing entries, diagnostics, and stdout lines.
+    """
+
+    if not _SUPPRESSION_PATTERN.search(comment):
+        return _CommentEvaluation(entries=(), diagnostics=(), stdout=())
+    if any(hint in comment for hint in _ALLOWED_HINTS):
+        return _CommentEvaluation(entries=(), diagnostics=(), stdout=())
+
+    marker_present, valid_reason, reason, lint_ids = _parse_suppression_reason(comment)
+    line_number = token.start[0]
+    if marker_present and valid_reason:
+        entry = SuppressionEntry(line=line_number, lints=lint_ids, reason=reason)
+        return _CommentEvaluation(entries=(entry,), diagnostics=(), stdout=())
+    if state is None:
+        return _CommentEvaluation(entries=(), diagnostics=(), stdout=())
+
+    normalized = normalize_path_key(file_path, base_dir=base_dir)
+    message = (
+        f"Suppression justification must provide at least {_MIN_REASON_WORDS} words after"
+        " 'suppression_valid:'; refactor or expand the explanation."
+        if marker_present and not valid_reason
+        else (
+            "Suppression directive on line "
+            f"{line_number} violates the coding rules; provide a justification or refactor the code instead."
+        )
+    )
+    diagnostic = Diagnostic(
+        file=normalized,
+        line=line_number,
+        column=None,
+        severity=Severity.WARNING,
+        message=message,
+        tool="internal-suppressions",
+        code="internal:suppressions",
+    )
+    stdout_line = f"{normalized}:{line_number}: {message}"
+    return _CommentEvaluation(entries=(), diagnostics=(diagnostic,), stdout=(stdout_line,))
 
 
 __all__ = ["run_suppression_linter", "SuppressionRegistry"]

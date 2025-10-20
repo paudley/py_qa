@@ -40,7 +40,17 @@ def apply_severity_rules(
     *,
     rules: SeverityRuleView | None = None,
 ) -> Severity:
-    """Apply tool-specific overrides to a diagnostic severity."""
+    """Apply tool-specific overrides to a diagnostic severity.
+
+    Args:
+        tool: Tool identifier associated with the diagnostic.
+        code_or_message: Diagnostic code or message text used when matching rules.
+        severity: Baseline severity reported by the tool.
+        rules: Optional overrides mapping per-tool regex patterns to severities.
+
+    Returns:
+        Severity: Overridden severity when a rule matches, otherwise the original severity.
+    """
     active_rules: SeverityRuleView = rules if rules is not None else DEFAULT_SEVERITY_RULES
     candidates = active_rules.get(tool, cast("Iterable[SeverityRule]", ()))
     for pattern, sev in candidates:
@@ -54,7 +64,15 @@ def add_custom_rule(
     *,
     rules: SeverityRuleMap | None = None,
 ) -> str | None:
-    """Add a custom severity override defined as ``tool:regex=level``."""
+    """Add a custom severity override defined as ``tool:regex=level``.
+
+    Args:
+        spec: Rule specification using ``tool:regex=severity`` format.
+        rules: Override mapping to update; defaults to :data:`DEFAULT_SEVERITY_RULES`.
+
+    Returns:
+        str | None: Error message when parsing fails, otherwise ``None``.
+    """
     target: SeverityRuleMap = rules if rules is not None else DEFAULT_SEVERITY_RULES
     if _RULE_TOOL_SEPARATOR not in spec or _RULE_LEVEL_SEPARATOR not in spec:
         return f"invalid rule '{spec}': missing ':' or '=' separators"
@@ -70,7 +88,15 @@ def add_custom_rule(
 
 
 def severity_from_code(code: str | None, default: Severity = Severity.ERROR) -> Severity:
-    """Infer severity from conventional code prefixes (e.g. E, W)."""
+    """Infer severity from conventional code prefixes (e.g. E, W).
+
+    Args:
+        code: Diagnostic code emitted by the tool.
+        default: Severity returned when the code does not match known prefixes.
+
+    Returns:
+        Severity: Severity derived from the code or ``default`` when unmatched.
+    """
     if not code:
         return default
     head = code[0].upper()
@@ -90,7 +116,14 @@ _SEVERITY_TO_SARIF_LEVEL: Final[dict[Severity, str]] = {
 
 
 def severity_to_sarif(severity: Severity) -> str:
-    """Map :class:`Severity` to a SARIF reporting level."""
+    """Map :class:`Severity` to a SARIF reporting level.
+
+    Args:
+        severity: Severity value to translate.
+
+    Returns:
+        str: SARIF level string compatible with SARIF output.
+    """
     return _SEVERITY_TO_SARIF_LEVEL.get(severity, "warning")
 
 

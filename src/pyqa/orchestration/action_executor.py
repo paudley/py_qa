@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shlex
+from abc import abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -29,18 +30,22 @@ from ..core.runtime.process import CommandOptions, CommandOverrideMapping
 from ..diagnostics.pipeline import DiagnosticPipeline as DiagnosticPipelineImpl
 from ..filesystem.paths import normalize_path_key
 from ..interfaces.analysis import ContextResolver
+from ..interfaces.cache import ResultCacheProtocol
 from ..interfaces.diagnostics import DiagnosticPipeline as DiagnosticPipelineProtocol
 from ..interfaces.diagnostics import DiagnosticPipelineRequest
 from ..parsers.base import JsonParser
 from ..tools import InternalActionRunner, ToolAction, ToolContext
 
 _DIAGNOSTIC_PIPELINE: Final[DiagnosticPipelineProtocol] = DiagnosticPipelineImpl()
+_SERIALISED_KIND_RAW: Final[str] = "raw"
+_SERIALISED_KIND_DIAGNOSTIC: Final[str] = "diagnostic"
 
 
 @runtime_checkable
 class RunnerCallable(Protocol):
     """Callable protocol for invoking external tool commands."""
 
+    @abstractmethod
     def __call__(
         self,
         cmd: Sequence[str],
@@ -57,26 +62,17 @@ class RunnerCallable(Protocol):
 
         Returns:
             CompletedProcess[str]: Completed subprocess with captured output.
-
-        Raises:
-            NotImplementedError: Always raised; method must be provided by
-                concrete runner implementations.
         """
+        raise RuntimeError("RunnerCallable.__call__ must be implemented by concrete runner")
 
-        raise NotImplementedError
-
+    @abstractmethod
     def __repr__(self) -> str:
         """Return a diagnostic representation of the runner.
 
         Returns:
             str: Readable description for debugging.
-
-        Raises:
-            NotImplementedError: Always raised; method must be provided by
-                concrete implementations.
         """
-
-        raise NotImplementedError
+        return f"{self.__class__.__qualname__}()"
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,11 +207,21 @@ class ActionExecutor:
 
     @property
     def executor_name(self) -> str:
-        """Return the human-readable name for this executor."""
+        """Return the human-readable name for this executor.
+
+        Returns:
+            str: Identifier used for logging and debugging messages.
+        """
 
         return "action-executor"
 
     def _debug(self, message: str) -> None:
+        """Emit ``message`` to the configured debug logger when available.
+
+        Args:
+            message: Textual message describing executor state.
+        """
+
         if self.debug_logger:
             self.debug_logger(message)
 
@@ -408,39 +414,13 @@ class ActionExecutor:
         )
         filters = tuple(invocation.context.cfg.output.tool_filters.get(invocation.tool_name, []))
 
-        completed: CompletedProcess[str] | None = None
-        stdout_lines: list[str]
-        stderr_lines: list[str]
-        raw_candidates: Sequence[RawDiagnostic | Diagnostic]
-        base_returncode: int
-
-        if invocation.internal_runner is not None:
-            outcome = invocation.internal_runner(invocation.context)
-            stdout_lines = list(outcome.stdout)
-            stderr_lines = list(outcome.stderr)
-            raw_candidates = tuple(outcome.diagnostics)
-            base_returncode = outcome.returncode
-        else:
-            env = self._compose_environment(invocation)
-            completed = self.runner(
-                list(invocation.command),
-                options=CommandOptions(
-                    cwd=environment.root,
-                    env=env,
-                    timeout=invocation.action.timeout_s,
-                    capture_output=True,
-                    discard_stdin=True,
-                    check=False,
-                ),
-            )
-            stdout_lines, stderr_lines = self._filter_outputs(invocation, completed, filters)
-            raw_candidates = self._parse_diagnostics(
-                invocation,
-                stdout_lines,
-                stderr_lines,
-                cache_context=environment.cache,
-            )
-            base_returncode = completed.returncode
+        (
+            stdout_lines,
+            stderr_lines,
+            raw_candidates,
+            base_returncode,
+            completed,
+        ) = self._execute_invocation(invocation, environment, filters)
 
         pipeline_request = DiagnosticPipelineRequest(
             tool_name=invocation.tool_name,
@@ -466,11 +446,13 @@ class ActionExecutor:
                 from_cache=False,
             )
             self._debug(
-                f"{invocation.tool_name}:{invocation.action.name} returned failure returncode={evaluation.returncode}"
+                f"{invocation.tool_name}:{invocation.action.name} returned failure "
+                f"returncode={evaluation.returncode}"
             )
 
         self._debug(
-            f"completed {invocation.tool_name}:{invocation.action.name} returncode={evaluation.returncode} diagnostics={len(diagnostics)}"
+            f"completed {invocation.tool_name}:{invocation.action.name} returncode="
+            f"{evaluation.returncode} diagnostics={len(diagnostics)}"
         )
 
         return ToolOutcome(
@@ -481,6 +463,62 @@ class ActionExecutor:
             stderr=stderr_lines,
             diagnostics=list(diagnostics),
             exit_category=evaluation.category,
+        )
+
+    def _execute_invocation(
+        self,
+        invocation: ActionInvocation,
+        environment: ExecutionEnvironment,
+        filters: Sequence[str],
+    ) -> tuple[list[str], list[str], Sequence[RawDiagnostic | Diagnostic], int, CompletedProcess[str] | None]:
+        """Execute ``invocation`` returning captured output and raw candidates.
+
+        Args:
+            invocation: Action invocation metadata describing the command.
+            environment: Execution environment providing root and cache context.
+            filters: Output filter patterns applied to captured streams.
+
+        Returns:
+            tuple[list[str], list[str], Sequence[RawDiagnostic | Diagnostic], int, CompletedProcess[str] | None]:
+            Filtered stdout lines, filtered stderr lines, raw diagnostic candidates, the raw return code, and
+            the completed process when the invocation executed an external command.
+        """
+
+        if invocation.internal_runner is not None:
+            outcome = invocation.internal_runner(invocation.context)
+            return (
+                list(outcome.stdout),
+                list(outcome.stderr),
+                tuple(outcome.diagnostics),
+                outcome.returncode,
+                None,
+            )
+
+        env = self._compose_environment(invocation)
+        completed = self.runner(
+            list(invocation.command),
+            options=CommandOptions(
+                cwd=environment.root,
+                env=env,
+                timeout=invocation.action.timeout_s,
+                capture_output=True,
+                discard_stdin=True,
+                check=False,
+            ),
+        )
+        stdout_lines, stderr_lines = self._filter_outputs(invocation, completed, filters)
+        raw_candidates = self._parse_diagnostics(
+            invocation,
+            stdout_lines,
+            stderr_lines,
+            cache_context=environment.cache,
+        )
+        return (
+            stdout_lines,
+            stderr_lines,
+            raw_candidates,
+            completed.returncode,
+            completed,
         )
 
     def _execute_in_parallel(self, environment: ExecutionEnvironment, state: ExecutionState) -> None:
@@ -596,43 +634,16 @@ class ActionExecutor:
         parser = invocation.action.parser
         if parser is None:
             return ()
-        cache = cache_context.cache
-        token = cache_context.token
-        if cache is not None and token is not None and isinstance(parser, JsonParser):
-            stdout_text = "\n".join(stdout_lines)
-            digest = hashlib.sha256(stdout_text.encode("utf-8")).hexdigest()
-            request = CacheRequest(
-                tool=f"{invocation.tool_name}:parser",
-                action=invocation.action.name,
-                command=tuple(invocation.command) + (digest,),
-                files=(),
-                token=f"{token}:parser",
+        if isinstance(parser, JsonParser):
+            cached_result = ActionExecutor._parse_with_cache_if_available(
+                invocation=invocation,
+                parser=parser,
+                stdout_lines=stdout_lines,
+                stderr_lines=stderr_lines,
+                cache_context=cache_context,
             )
-            cached_entry = cache.load(request)
-            if cached_entry is not None:
-                cached_payload = cached_entry.outcome.stdout[0] if cached_entry.outcome.stdout else None
-                restored = ActionExecutor._deserialize_cached_candidates(cached_payload)
-                if restored is not None:
-                    return restored
-            diagnostics = tuple(
-                parser.parse(
-                    stdout_lines,
-                    stderr_lines,
-                    context=invocation.context,
-                )
-            )
-            serialised = ActionExecutor._serialise_candidates(diagnostics)
-            outcome = ToolOutcome(
-                tool=f"{invocation.tool_name}:parser",
-                action=invocation.action.name,
-                returncode=0,
-                stdout=[json.dumps(serialised, sort_keys=True)],
-                stderr=[],
-                diagnostics=[],
-                exit_category=ToolExitCategory.SUCCESS,
-            )
-            cache.store(request=request, outcome=outcome, file_metrics={})
-            return diagnostics
+            if cached_result is not None:
+                return cached_result
         return parser.parse(
             stdout_lines,
             stderr_lines,
@@ -640,17 +651,118 @@ class ActionExecutor:
         )
 
     @staticmethod
+    def _parse_with_cache_if_available(
+        *,
+        invocation: ActionInvocation,
+        parser: JsonParser,
+        stdout_lines: Sequence[str],
+        stderr_lines: Sequence[str],
+        cache_context: CacheContext,
+    ) -> Sequence[RawDiagnostic | Diagnostic] | None:
+        """Return cached parser results when available, otherwise ``None``.
+
+        Args:
+            invocation: Action invocation metadata.
+            parser: Parser associated with the tool action.
+            stdout_lines: Normalised stdout lines produced by the tool.
+            stderr_lines: Normalised stderr lines produced by the tool.
+            cache_context: Cache context providing cache access.
+
+        Returns:
+            Sequence[RawDiagnostic | Diagnostic] | None: Cached parser output when available.
+        """
+
+        cache = cache_context.cache
+        if cache is None or cache_context.token is None:
+            return None
+
+        digest = hashlib.sha256("\n".join(stdout_lines).encode("utf-8")).hexdigest()
+        request = CacheRequest(
+            tool=f"{invocation.tool_name}:parser",
+            action=invocation.action.name,
+            command=tuple(invocation.command) + (digest,),
+            files=(),
+            token=f"{cache_context.token}:parser",
+        )
+        cached_entry = cache.load(request)
+        if cached_entry is not None:
+            cached_payload = cached_entry.outcome.stdout[0] if cached_entry.outcome.stdout else None
+            restored = ActionExecutor._deserialize_cached_candidates(cached_payload)
+            if restored is not None:
+                return restored
+
+        diagnostics = tuple(
+            parser.parse(
+                stdout_lines,
+                stderr_lines,
+                context=invocation.context,
+            )
+        )
+        ActionExecutor._store_parser_cache_entry(
+            cache=cache,
+            request=request,
+            diagnostics=diagnostics,
+        )
+        return diagnostics
+
+    @staticmethod
+    def _store_parser_cache_entry(
+        *,
+        cache: ResultCacheProtocol,
+        request: CacheRequest,
+        diagnostics: Sequence[RawDiagnostic | Diagnostic],
+    ) -> None:
+        """Persist parser diagnostics in the cache for future reuse.
+
+        Args:
+            cache: Result cache used to persist parser outcomes.
+            request: Cache request describing the parser invocation.
+            diagnostics: Diagnostics generated by the parser.
+        """
+
+        serialised = ActionExecutor._serialise_candidates(diagnostics)
+        outcome = ToolOutcome(
+            tool=request.tool,
+            action=request.action,
+            returncode=0,
+            stdout=[json.dumps(serialised, sort_keys=True)],
+            stderr=[],
+            diagnostics=[],
+            exit_category=ToolExitCategory.SUCCESS,
+        )
+        cache.store(request=request, outcome=outcome, file_metrics={})
+
+    @staticmethod
     def _serialise_candidates(candidates: Sequence[RawDiagnostic | Diagnostic]) -> list[dict[str, JsonValue]]:
+        """Return a JSON-serialisable representation of diagnostic candidates.
+
+        Args:
+            candidates: Raw diagnostics and structured diagnostics yielded by parsers.
+
+        Returns:
+            list[dict[str, JsonValue]]: Serialised candidate payloads tagged by diagnostic kind.
+        """
+
         serialised: list[dict[str, JsonValue]] = []
         for item in candidates:
             if isinstance(item, RawDiagnostic):
-                serialised.append({"kind": "raw", "data": item.model_dump(mode="json")})
+                serialised.append({"kind": _SERIALISED_KIND_RAW, "data": item.model_dump(mode="json")})
             elif isinstance(item, Diagnostic):
-                serialised.append({"kind": "diagnostic", "data": item.model_dump(mode="json")})
+                serialised.append({"kind": _SERIALISED_KIND_DIAGNOSTIC, "data": item.model_dump(mode="json")})
         return serialised
 
     @staticmethod
     def _deserialize_cached_candidates(payload: JsonValue | None) -> tuple[RawDiagnostic | Diagnostic, ...] | None:
+        """Return candidates deserialised from cached JSON payloads.
+
+        Args:
+            payload: Cached JSON payload containing serialised diagnostic entries.
+
+        Returns:
+            tuple[RawDiagnostic | Diagnostic, ...] | None: Restored candidate sequence when payload
+            is valid, otherwise ``None``.
+        """
+
         if isinstance(payload, str):
             try:
                 payload = json.loads(payload)
@@ -664,9 +776,9 @@ class ActionExecutor:
                 return None
             kind = entry.get("kind")
             data = entry.get("data")
-            if kind == "raw" and isinstance(data, Mapping):
+            if kind == _SERIALISED_KIND_RAW and isinstance(data, Mapping):
                 restored.append(RawDiagnostic.model_validate(data))
-            elif kind == "diagnostic" and isinstance(data, Mapping):
+            elif kind == _SERIALISED_KIND_DIAGNOSTIC and isinstance(data, Mapping):
                 restored.append(Diagnostic.model_validate(data))
             else:
                 return None
@@ -730,7 +842,15 @@ def _log_action_failure(
     root: Path,
     from_cache: bool,
 ) -> None:
-    """Emit a structured warning describing a failed tool action."""
+    """Emit a structured warning describing a failed tool action.
+
+    Args:
+        invocation: Action invocation metadata describing the failing tool.
+        completed: Completed subprocess containing stdout/stderr payloads.
+        diagnostics: Diagnostics emitted before the failure was detected.
+        root: Repository root used to shorten file paths in log output.
+        from_cache: ``True`` when the outcome originated from the cache.
+    """
 
     command_repr = _format_command(invocation.command)
     files_repr = _summarize_files(invocation.context.files, root)
@@ -762,13 +882,28 @@ def _log_action_failure(
 
 
 def _format_command(command: Sequence[str]) -> str:
-    """Return a shell-friendly representation of ``command``."""
+    """Return a shell-friendly representation of ``command``.
+
+    Args:
+        command: Command arguments including the executable.
+
+    Returns:
+        str: Quoted command string suitable for display.
+    """
 
     return shlex.join(command)
 
 
 def _summarize_files(files: Sequence[Path], root: Path) -> str | None:
-    """Return a compact string summarising target ``files`` relative to *root*."""
+    """Return a compact string summarising target ``files`` relative to ``root``.
+
+    Args:
+        files: Sequence of file paths targeted by the tool.
+        root: Repository root used for relative path normalisation.
+
+    Returns:
+        str | None: Comma-separated summary or ``None`` when no files are provided.
+    """
 
     if not files:
         return None
@@ -785,7 +920,14 @@ def _summarize_files(files: Sequence[Path], root: Path) -> str | None:
 
 
 def _split_output(payload: str | Sequence[str] | None) -> list[str]:
-    """Return *payload* as a list of lines."""
+    """Return ``payload`` as a list of lines.
+
+    Args:
+        payload: Output payload captured from stdout or stderr.
+
+    Returns:
+        list[str]: Output expressed as individual lines.
+    """
 
     if payload is None:
         return []
@@ -795,7 +937,14 @@ def _split_output(payload: str | Sequence[str] | None) -> list[str]:
 
 
 def _last_non_empty_line(lines: Sequence[str]) -> str | None:
-    """Return the last non-empty line from ``lines`` truncated for readability."""
+    """Return the last non-empty line from ``lines`` truncated for readability.
+
+    Args:
+        lines: Sequence of output lines in chronological order.
+
+    Returns:
+        str | None: Truncated final non-empty line, if present.
+    """
 
     for raw_line in reversed(lines):
         hint = raw_line.strip()

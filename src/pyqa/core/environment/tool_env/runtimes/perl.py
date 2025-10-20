@@ -18,10 +18,17 @@ from .base import RuntimeContext, RuntimeHandler
 
 
 class PerlRuntime(RuntimeHandler):
-    """Provision Perl tooling using cpanm."""
+    """Provide the runtime for Perl tooling using cpanm."""
 
     def _try_project(self, context: RuntimeContext) -> PreparedCommand | None:
-        """Reuse project ``bin`` directory when a Perl binary exists."""
+        """Return the project command when a Perl binary exists in ``bin``.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            PreparedCommand | None: Prepared project command, or ``None`` when absent.
+        """
 
         project_cmd = self._project_binary(context)
         if project_cmd is None:
@@ -35,7 +42,14 @@ class PerlRuntime(RuntimeHandler):
         return project_cmd
 
     def _prepare_local(self, context: RuntimeContext) -> PreparedCommand:
-        """Install Perl tooling using cpanm and return the command."""
+        """Return the command after installing Perl tooling with cpanm.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            PreparedCommand: Prepared command referencing the cached Perl binary.
+        """
 
         return self._prepare_cached_command(
             context,
@@ -44,7 +58,18 @@ class PerlRuntime(RuntimeHandler):
         )
 
     def _ensure_local_tool(self, context: RuntimeContext, binary_name: str) -> Path:
-        """Ensure ``binary_name`` is installed for ``tool`` via cpanm."""
+        """Ensure the binary ``binary_name`` is installed for the requested tool via cpanm.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+            binary_name: Executable name expected in the Perl cache.
+
+        Returns:
+            Path: Filesystem path to the installed Perl binary.
+
+        Raises:
+            RuntimeError: If cpanm fails to install the requested tool.
+        """
 
         tool = context.tool
         layout = context.cache_layout
@@ -85,7 +110,14 @@ class PerlRuntime(RuntimeHandler):
 
     @staticmethod
     def _perl_env(context: RuntimeContext) -> dict[str, str]:
-        """Return environment variables required for Perl tool execution."""
+        """Return the environment variables required for Perl tool execution.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            dict[str, str]: Environment variables enabling the cached Perl runtime.
+        """
         path_value = os.environ.get("PATH", "")
         bin_dir = context.cache_layout.perl.bin_dir
         combined = f"{bin_dir}{os.pathsep}{path_value}" if path_value else str(bin_dir)

@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 
+"""Type hints describing lint CLI models and parameters."""
+
 from __future__ import annotations
 
 from .literals import (
@@ -54,16 +56,39 @@ USE_LOCAL_LINTERS_HELP: str
 VALIDATE_SCHEMA_HELP: str
 
 class LintDisplayOptions:
+    """Public display toggles exposed by the lint CLI."""
+
     no_emoji: bool
     quiet: bool
     verbose: bool
     debug: bool
 
-    def __init__(self, *, no_emoji: bool, quiet: bool, verbose: bool, debug: bool) -> None: ...
+    def __init__(self, *, no_emoji: bool, quiet: bool, verbose: bool, debug: bool) -> None:
+        """Initialise display toggles for the CLI.
+
+        Args:
+            no_emoji: Flag disabling emoji output.
+            quiet: Flag minimising console output.
+            verbose: Flag enabling verbose console output.
+            debug: Flag enabling debug output.
+        """
+        ...
 
 def _build_lint_cli_inputs(
     targets: LintTargetGroup,
     execution: LintExecutionGroup,
     output: LintOutputGroup,
     advanced: LintAdvancedGroup,
-) -> LintCLIInputs: ...
+) -> LintCLIInputs:
+    """Construct structured lint CLI inputs from dependency groups.
+
+    Args:
+        targets: Target parameters resolved from CLI options.
+        execution: Execution parameters resolved from CLI options.
+        output: Output parameters resolved from CLI options.
+        advanced: Advanced lint parameters resolved from CLI options.
+
+    Returns:
+        LintCLIInputs: Consolidated lint CLI configuration.
+    """
+    ...

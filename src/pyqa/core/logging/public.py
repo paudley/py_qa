@@ -23,7 +23,17 @@ ANSI = {
 
 
 def colorize(text: str, code: str, enable: bool) -> str:
-    """Wrap ``text`` in ANSI colour codes when *enable* is truthy."""
+    """Apply ANSI colour codes to ``text`` when colouring is enabled.
+
+    Args:
+        text: Message text that may be colourised.
+        code: Rich-style or ANSI colour identifier to apply.
+        enable: Flag indicating whether colour output is requested.
+
+    Returns:
+        str: Colourised text when colouring is enabled and supported; otherwise the original text.
+    """
+
     if not enable or not detect_tty():
         return text
     if code.startswith("ansi256:"):
@@ -36,7 +46,16 @@ def colorize(text: str, code: str, enable: bool) -> str:
 
 
 def emoji(symbol: str, enable: bool) -> str:
-    """Return *symbol* when emoji output is enabled, otherwise blank."""
+    """Select an emoji symbol based on the caller's preference.
+
+    Args:
+        symbol: Emoji text to include in the output.
+        enable: Flag indicating whether emoji output is desired.
+
+    Returns:
+        str: Emoji symbol when enabled, otherwise an empty string.
+    """
+
     return symbol if enable else ""
 
 
@@ -47,6 +66,15 @@ def _print_line(
     use_emoji: bool,
     use_color: bool | None = None,
 ) -> None:
+    """Render ``msg`` to the console using shared styling helpers.
+
+    Args:
+        msg: Message text to print to the console.
+        style: Rich style name to apply when colour output is active.
+        use_emoji: Flag indicating whether emoji output is desired.
+        use_color: Optional explicit colour flag overriding TTY detection.
+    """
+
     color_enabled = detect_tty() if use_color is None else use_color
     console = get_console_manager().get(color=color_enabled, emoji=use_emoji)
     text = Text(msg)
@@ -56,7 +84,13 @@ def _print_line(
 
 
 def section(title: str, *, use_color: bool) -> None:
-    """Print a section header."""
+    """Render a section header to delineate console output blocks.
+
+    Args:
+        title: Section title displayed to the user.
+        use_color: Flag indicating whether ANSI colour support is desired.
+    """
+
     console = get_console_manager().get(color=use_color, emoji=True)
     if use_color:
         console.print()
@@ -66,24 +100,52 @@ def section(title: str, *, use_color: bool) -> None:
 
 
 def info(msg: str, *, use_emoji: bool, use_color: bool | None = None) -> None:
-    """Emit an informational message."""
+    """Emit an informational message.
+
+    Args:
+        msg: Message text to display.
+        use_emoji: Flag indicating whether emoji output is desired.
+        use_color: Optional explicit colour flag overriding TTY detection.
+    """
+
     prefix = emoji("ℹ️ ", use_emoji)
     _print_line(f"{prefix}{msg}", style="cyan", use_emoji=use_emoji, use_color=use_color)
 
 
 def ok(msg: str, *, use_emoji: bool, use_color: bool | None = None) -> None:
-    """Emit a success message."""
+    """Emit a success message.
+
+    Args:
+        msg: Message text to display.
+        use_emoji: Flag indicating whether emoji output is desired.
+        use_color: Optional explicit colour flag overriding TTY detection.
+    """
+
     prefix = emoji("✅ ", use_emoji)
     _print_line(f"{prefix}{msg}", style="green", use_emoji=use_emoji, use_color=use_color)
 
 
 def warn(msg: str, *, use_emoji: bool, use_color: bool | None = None) -> None:
-    """Emit a warning message."""
+    """Emit a warning message.
+
+    Args:
+        msg: Message text to display.
+        use_emoji: Flag indicating whether emoji output is desired.
+        use_color: Optional explicit colour flag overriding TTY detection.
+    """
+
     prefix = emoji("⚠️ ", use_emoji)
     _print_line(f"{prefix}{msg}", style="yellow", use_emoji=use_emoji, use_color=use_color)
 
 
 def fail(msg: str, *, use_emoji: bool, use_color: bool | None = None) -> None:
-    """Emit an error message."""
+    """Emit an error message.
+
+    Args:
+        msg: Message text to display.
+        use_emoji: Flag indicating whether emoji output is desired.
+        use_color: Optional explicit colour flag overriding TTY detection.
+    """
+
     prefix = emoji("❌ ", use_emoji)
     _print_line(f"{prefix}{msg}", style="red", use_emoji=use_emoji, use_color=use_color)

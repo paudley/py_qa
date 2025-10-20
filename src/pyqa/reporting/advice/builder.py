@@ -48,7 +48,11 @@ class AdviceCategory(str, Enum):
     PRIORITISE = "Prioritise"
 
     def __str__(self) -> str:  # pragma: no cover - trivial
-        """Return the human-readable category label."""
+        """Return the human-readable category label.
+
+        Returns:
+            str: Friendly label exposed to downstream consumers.
+        """
 
         return self.value
 
@@ -70,16 +74,36 @@ class AdviceBuilder:
         annotation_engine: AnnotationProvider | None = None,
         function_scale_estimator: FunctionScaleEstimator | None = None,
     ) -> None:
+        """Create an advice builder with optional annotation and scale providers.
+
+        Args:
+            annotation_engine: Annotation provider used to enrich diagnostic context.
+            function_scale_estimator: Optional estimator that supplies function scale
+                metrics for prioritising complexity-related advice.
+        """
+
         self._engine: AnnotationProvider = annotation_engine or _create_default_annotation_provider()
         self._function_scale: FunctionScaleEstimator = function_scale_estimator or resolve_function_scale_estimator()
 
     @property
     def annotation_engine(self) -> AnnotationProvider:
-        """Return the underlying annotation provider (useful for cache priming)."""
+        """Return the underlying annotation provider (useful for cache priming).
+
+        Returns:
+            AnnotationProvider: Provider used to analyse message content.
+        """
         return self._engine
 
     def build(self, entries: Sequence[tuple[str, int, str, str, str, str]]) -> list[AdviceEntry]:
-        """Generate advice entries from concise formatter tuples."""
+        """Return advice entries derived from formatter tuples.
+
+        Args:
+            entries: Sequence of tuples matching ``generate_advice`` input shape.
+
+        Returns:
+            list[AdviceEntry]: Advice entries materialised from ``entries``.
+        """
+
         return generate_advice(entries, self._engine, self._function_scale)
 
 
@@ -149,24 +173,42 @@ class _AdviceAccumulator:
     """Accumulator that deduplicates advice entries before emission."""
 
     def __init__(self, annotation_engine: AnnotationProvider) -> None:
+        """Create an accumulator bound to an annotation engine.
+
+        Args:
+            annotation_engine: Engine used to extract annotation metadata.
+        """
         self._annotation_engine = annotation_engine
         self._seen: set[tuple[AdviceCategory, str]] = set()
         self._entries: list[AdviceEntry] = []
 
     @property
     def annotation_engine(self) -> AnnotationProvider:
-        """Return the annotation engine used for message parsing."""
+        """Return the annotation engine used for message parsing.
+
+        Returns:
+            AnnotationProvider: Engine leveraged while generating advice.
+        """
 
         return self._annotation_engine
 
     @property
     def entries(self) -> list[AdviceEntry]:
-        """Return the accumulated advice entries."""
+        """Return the accumulated advice entries.
+
+        Returns:
+            list[AdviceEntry]: Copy of advice entries accumulated so far.
+        """
 
         return list(self._entries)
 
     def add(self, category: AdviceCategory, body: str) -> None:
-        """Append an advice entry when not already emitted."""
+        """Append an advice entry when not already emitted.
+
+        Args:
+            category: Advice category to associate with the entry.
+            body: Human-readable recommendation text.
+        """
 
         key = (category, body)
         if key in self._seen:
@@ -226,7 +268,14 @@ def generate_advice(
 def _normalise_entries(
     entries: Sequence[tuple[str, int, str, str, str, str]],
 ) -> list[DiagnosticRecord]:
-    """Return normalised diagnostic records derived from formatter tuples."""
+    """Return normalised diagnostic records derived from formatter tuples.
+
+    Args:
+        entries: Raw diagnostic tuples supplied by the formatter pipeline.
+
+    Returns:
+        list[DiagnosticRecord]: Normalised diagnostic representations.
+    """
 
     records: list[DiagnosticRecord] = []
     for file_path, line, function, tool, code, message in entries:
@@ -250,7 +299,13 @@ def _append_complexity_guidance(
     diagnostics: Sequence[DiagnosticRecord],
     estimator: FunctionScaleEstimator,
 ) -> None:
-    """Highlight complexity hotspots by function and file."""
+    """Highlight complexity hotspots by function and file.
+
+    Args:
+        accumulator: Collector that records emitted advice.
+        diagnostics: Diagnostic records extracted from tool output.
+        estimator: Function scale estimator used to rank complexity.
+    """
 
     function_targets, file_targets = _collect_complexity_targets(diagnostics)
     _append_function_complexity_guidance(accumulator, function_targets, estimator)
@@ -260,7 +315,15 @@ def _append_complexity_guidance(
 def _collect_complexity_targets(
     diagnostics: Sequence[DiagnosticRecord],
 ) -> tuple[list[tuple[str, str]], set[str]]:
-    """Return complexity targets grouped by function and file."""
+    """Return complexity targets grouped by function and file.
+
+    Args:
+        diagnostics: Diagnostic records gathered from complexity tools.
+
+    Returns:
+        tuple[list[tuple[str, str]], set[str]]: Function targets paired with
+        file paths and a set of files requiring complexity attention.
+    """
 
     function_targets: list[tuple[str, str]] = []
     file_targets: set[str] = set()
@@ -286,7 +349,13 @@ def _append_function_complexity_guidance(
     function_targets: Sequence[tuple[str, str]],
     estimator: FunctionScaleEstimator,
 ) -> None:
-    """Add refactor priority advice for complex functions."""
+    """Add refactor priority advice for complex functions.
+
+    Args:
+        accumulator: Collector receiving generated advice entries.
+        function_targets: Functions identified as complexity hotspots.
+        estimator: Function scale estimator that supplies size metrics.
+    """
 
     if not function_targets:
         return
@@ -327,7 +396,12 @@ def _append_file_complexity_guidance(
     accumulator: _AdviceAccumulator,
     file_targets: Iterable[str],
 ) -> None:
-    """Add advice for files flagged by complexity heuristics."""
+    """Add advice for files flagged by complexity heuristics.
+
+    Args:
+        accumulator: Collector receiving generated advice entries.
+        file_targets: Collection of files that exceed complexity thresholds.
+    """
 
     unique_targets = sorted(set(file_targets))
     if not unique_targets:
@@ -345,7 +419,12 @@ def _append_documentation_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
 ) -> None:
-    """Surface documentation nudges when doc warnings pile up."""
+    """Surface documentation nudges when doc warnings pile up.
+
+    Args:
+        accumulator: Collector receiving documentation advice entries.
+        diagnostics: Diagnostic records emitted by documentation linters.
+    """
 
     counts: defaultdict[str, int] = defaultdict(int)
     for record in diagnostics:
@@ -380,7 +459,12 @@ def _append_annotation_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
 ) -> None:
-    """Encourage stronger typing based on annotation-related diagnostics."""
+    """Encourage stronger typing based on annotation-related diagnostics.
+
+    Args:
+        accumulator: Collector receiving type-related advice entries.
+        diagnostics: Diagnostic records containing annotation findings.
+    """
 
     counts: defaultdict[str, int] = defaultdict(int)
     engine = accumulator.annotation_engine
@@ -422,7 +506,12 @@ def _append_stub_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
 ) -> None:
-    """Nudge teams to align stubs with implementations when inconsistent."""
+    """Nudge teams to align stubs with implementations when inconsistent.
+
+    Args:
+        accumulator: Collector receiving stub-alignment advice.
+        diagnostics: Diagnostic records that include stub mismatches.
+    """
 
     stub_files = {
         record.file_path
@@ -458,7 +547,12 @@ def _append_packaging_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
 ) -> None:
-    """Recommend adding namespace packages where missing."""
+    """Recommend adding namespace packages where missing.
+
+    Args:
+        accumulator: Collector receiving packaging-related advice.
+        diagnostics: Diagnostic records highlighting namespace issues.
+    """
 
     for record in diagnostics:
         if record.code != IMP_NAMESPACE_CODE:
@@ -477,7 +571,12 @@ def _append_encapsulation_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
 ) -> None:
-    """Flag private import usage across tools."""
+    """Flag private import usage across tools.
+
+    Args:
+        accumulator: Collector that records encapsulation advice entries.
+        diagnostics: Diagnostic records noting private import usage.
+    """
 
     private_keywords = {"private import", "module is internal"}
     for record in diagnostics:
@@ -502,7 +601,12 @@ def _append_magic_number_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
 ) -> None:
-    """Encourage extracting repeated magic numbers."""
+    """Encourage extracting repeated magic numbers.
+
+    Args:
+        accumulator: Collector receiving advice about constants.
+        diagnostics: Diagnostic records that flag magic number usage.
+    """
 
     counts: defaultdict[str, int] = defaultdict(int)
     for record in diagnostics:
@@ -527,7 +631,12 @@ def _append_debug_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
 ) -> None:
-    """Remind teams to strip debugging artefacts before merging."""
+    """Remind teams to strip debugging artefacts before merging.
+
+    Args:
+        accumulator: Collector receiving logging-related advice.
+        diagnostics: Diagnostic records that include debug artefacts.
+    """
 
     if any(record.code in DEBUG_CODES for record in diagnostics):
         accumulator.add(
@@ -540,7 +649,12 @@ def _append_runtime_assertion_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
 ) -> None:
-    """Discourage production asserts outside test suites."""
+    """Discourage production asserts outside test suites.
+
+    Args:
+        accumulator: Collector receiving runtime safety advice.
+        diagnostics: Diagnostic records surfacing assert misuse.
+    """
 
     for record in diagnostics:
         if record.code in ASSERT_CODES and not _is_test_path(record.file_path):
@@ -555,7 +669,12 @@ def _append_test_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
 ) -> None:
-    """Surface test hygiene advice when noisy suites dominate."""
+    """Surface test hygiene advice when noisy suites dominate.
+
+    Args:
+        accumulator: Collector receiving test hygiene advice entries.
+        diagnostics: Diagnostic records captured from test-focused tools.
+    """
 
     test_diagnostics = [record for record in diagnostics if _is_test_path(record.file_path)]
     if len(test_diagnostics) >= MIN_TEST_HYGIENE_DIAGNOSTICS:
@@ -569,7 +688,12 @@ def _append_duplicate_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
 ) -> None:
-    """Encourage deduplication when catalog hints flag duplicates."""
+    """Encourage deduplication when catalog hints flag duplicates.
+
+    Args:
+        accumulator: Collector receiving structural advice entries.
+        diagnostics: Diagnostic records referencing duplicate findings.
+    """
 
     duplicate_codes = _duplicate_hint_code_map()
     for record in diagnostics:
@@ -589,7 +713,12 @@ def _append_di_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
 ) -> None:
-    """Encourage DI wiring to remain inside approved composition roots."""
+    """Encourage DI wiring to remain inside approved composition roots.
+
+    Args:
+        accumulator: Collector receiving structure-related advice entries.
+        diagnostics: Diagnostic records referencing DI boundary violations.
+    """
 
     includes_di = any(record.tool == PYQA_DI_TOOL or record.code == PYQA_DI_CODE for record in diagnostics)
     if not includes_di:
@@ -610,7 +739,12 @@ def _append_interfaces_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
 ) -> None:
-    """Promote clean interfaces-only modules when pyqa-interface finds concrete code."""
+    """Promote clean interfaces-only modules when pyqa-interface finds concrete code.
+
+    Args:
+        accumulator: Collector receiving interface-focused advice entries.
+        diagnostics: Diagnostic records emitted by the interface checker.
+    """
 
     includes_interfaces = any(
         record.tool == PYQA_INTERFACES_TOOL or record.code == PYQA_INTERFACES_CODE for record in diagnostics
@@ -631,7 +765,12 @@ def _append_interface_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
 ) -> None:
-    """Highlight undefined interfaces reported by type checkers."""
+    """Highlight undefined interfaces reported by type checkers.
+
+    Args:
+        accumulator: Collector receiving interface hygiene advice.
+        diagnostics: Diagnostic records signalling missing or undefined members.
+    """
 
     for record in diagnostics:
         if record.tool in {PYRIGHT_TOOL, MYPY_TOOL} and record.code in {
@@ -651,7 +790,12 @@ def _append_python_hygiene_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
 ) -> None:
-    """Encourage structured logging and orchestrated exits for hygiene findings."""
+    """Encourage structured logging and orchestrated exits for hygiene findings.
+
+    Args:
+        accumulator: Collector receiving hygiene advice entries.
+        diagnostics: Diagnostic records produced by python-hygiene tooling.
+    """
 
     if not diagnostics:
         return
@@ -687,7 +831,12 @@ def _append_focus_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
 ) -> None:
-    """Identify high-density diagnostic files to direct focus."""
+    """Identify high-density diagnostic files to direct focus.
+
+    Args:
+        accumulator: Collector receiving prioritisation advice entries.
+        diagnostics: Diagnostic records generated during the run.
+    """
 
     counter = Counter(record.file_path for record in diagnostics if record.file_path)
     if not counter:
@@ -702,7 +851,14 @@ def _append_focus_guidance(
 
 
 def _is_test_path(path: str | None) -> bool:
-    """Return ``True`` when ``path`` belongs to a test directory."""
+    """Return ``True`` when ``path`` belongs to a test directory.
+
+    Args:
+        path: File system path to evaluate.
+
+    Returns:
+        bool: ``True`` when the path appears to reference a test-related file.
+    """
 
     if not path:
         return False
@@ -728,7 +884,15 @@ def _duplicate_hint_code_map() -> dict[str, set[str]]:
 
 
 def _summarise_paths(paths: Sequence[str], *, limit: int = 5) -> str:
-    """Return a human-readable summary of the provided paths."""
+    """Return a human-readable summary of the provided paths.
+
+    Args:
+        paths: Ordered collection of file system paths to summarise.
+        limit: Maximum number of paths to include explicitly.
+
+    Returns:
+        str: Comma separated summary string suitable for advice copy.
+    """
 
     if not paths:
         return ""
@@ -744,7 +908,15 @@ ANNOTATION_SPAN_STYLE: Final[str] = "ansi256:213"
 
 
 def _infer_annotation_targets(message: str, engine: AnnotationProvider) -> int:
-    """Return the number of highlighted annotation spans within *message*."""
+    """Return the number of highlighted annotation spans within *message*.
+
+    Args:
+        message: Diagnostic message generated by the linter.
+        engine: Annotation provider capable of highlighting spans.
+
+    Returns:
+        int: Estimated number of targets requiring annotations.
+    """
 
     spans = engine.message_spans(message)
     highlighted = sum(1 for span in spans if span.style == ANNOTATION_SPAN_STYLE)

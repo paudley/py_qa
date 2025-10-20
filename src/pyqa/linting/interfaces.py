@@ -5,14 +5,12 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import ClassVar, Final, cast
 
-if TYPE_CHECKING:  # pragma: no cover
-    from pyqa.cli.commands.lint.preparation import PreparedLintState
-else:  # pragma: no cover
-    PreparedLintState = object
+from pyqa.cli.commands.lint.preparation import PreparedLintState
 
 from ._ast_visitors import BaseAstLintVisitor, VisitorMetadata, run_ast_linter
 from ._module_utils import module_name_from_path
@@ -91,6 +89,7 @@ _ALLOWED_CLASS_DECORATORS: Final[frozenset[str]] = frozenset(
         "final",
     }
 )
+_PATH_SEGMENT_DOMAIN_LIMIT: Final[int] = 2
 _BANNED_CONSTRUCTORS: Final[tuple[str, ...]] = (
     "TreeSitterContextResolver",
     "AnnotationEngine",
@@ -99,6 +98,18 @@ _ALLOWED_CONSTRUCTOR_MODULES: Final[set[str]] = {
     "pyqa.analysis.bootstrap",
     "pyqa.cli.commands.doctor.command",
 }
+_EXCLUDED_TEST_PARTS: Final[frozenset[str]] = frozenset({"tests"})
+_EXCLUDED_INTERNAL_PARTS: Final[tuple[frozenset[str], ...]] = (frozenset({"pyqa", "linting"}),)
+_ALL_EXPORT_NAME: Final[str] = "__all__"
+_ALLOWED_TYPING_SUBSCRIPTS: Final[frozenset[str]] = frozenset(
+    {"Literal", "Final", "Annotated", "Union", "Optional", "Tuple"}
+)
+_ALLOWED_SIMPLE_NAME_LITERALS: Final[frozenset[str]] = frozenset({"None", "True", "False"})
+_CONCRETE_CALL_EXCLUSIONS: Final[frozenset[str]] = frozenset({"tuple", "frozenset", "literal"})
+_CAST_FUNCTION_NAME: Final[str] = "cast"
+_CONSTRUCTOR_VIOLATION_MESSAGE: Final[str] = (
+    "Constructor '{fully_qualified}' may only be used in designated composition modules"
+)
 
 
 def run_pyqa_interface_linter(
@@ -139,7 +150,16 @@ def _build_interface_visitor(
     state: PreparedLintState,
     metadata: VisitorMetadata,
 ) -> _InterfaceVisitor:
-    """Return an interface visitor instance bound to ``path``."""
+    """Return an interface visitor instance bound to ``path``.
+
+    Args:
+        path: File system path of the module under inspection.
+        state: Prepared lint state constructed by the CLI layer.
+        metadata: Lint visitor metadata describing the active tool.
+
+    Returns:
+        _InterfaceVisitor: Visitor prepared to analyse the module.
+    """
 
     return _InterfaceVisitor(path, state, metadata)
 
@@ -147,8 +167,25 @@ def _build_interface_visitor(
 class _InterfaceVisitor(BaseAstLintVisitor):
     """AST visitor that audits imports and constructor usage."""
 
+    _HANDLER_NAMES: ClassVar[dict[type[ast.AST], str]] = {
+        ast.FunctionDef: "_handle_function_definition",
+        ast.AsyncFunctionDef: "_handle_async_function_definition",
+        ast.ClassDef: "_handle_class_definition",
+        ast.Assign: "_handle_assignment",
+        ast.AnnAssign: "_handle_annotated_assignment",
+        ast.Import: "_handle_import",
+        ast.ImportFrom: "_handle_from_import",
+        ast.Call: "_handle_call",
+    }
+
     def __init__(self, path: Path, state: PreparedLintState, metadata: VisitorMetadata) -> None:
-        """Initialise module metadata used during linting."""
+        """Initialise module metadata used during linting.
+
+        Args:
+            path: File system path of the module under inspection.
+            state: Prepared lint state constructed by the CLI layer.
+            metadata: Lint visitor metadata describing the active tool.
+        """
 
         super().__init__(path, state, metadata)
         self._module = module_name_from_path(path, state.options.target_options.root)
@@ -159,19 +196,63 @@ class _InterfaceVisitor(BaseAstLintVisitor):
         self._is_interface_module = _is_interface_module_name(self._module)
         self._class_stack: list[str] = []
 
-    # --- Interface concretion detection --------------------------------------------------
+    def visit(self, node: ast.AST) -> None:
+        """Dispatch ``node`` to specialised handlers where required.
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:  # noqa: D401 suppression_valid
+        Args:
+            node: AST node currently visited by the walker.
+        """
+
+        if self._try_handle_node(node):
+            return
+        super().visit(node)
+
+    def _try_handle_node(self, node: ast.AST) -> bool:
+        """Return ``True`` when ``node`` is handled by a specialised method.
+
+        Args:
+            node: AST node currently visited by the walker.
+
+        Returns:
+            bool: ``True`` when a specific handler processed the node.
+        """
+
+        handler_name = self._HANDLER_NAMES.get(type(node))
+        if handler_name is None:
+            return False
+        handler = cast(Callable[[ast.AST], None], getattr(self, handler_name))
+        handler(node)
+        return True
+
+    def _handle_function_definition(self, node: ast.FunctionDef) -> None:
+        """Inspect top-level function definitions for interface violations.
+
+        Args:
+            node: Function definition node encountered during traversal.
+        """
+
         if self._is_interface_module and not self._class_stack:
             self._record_concrete_symbol(node, "function")
         self.generic_visit(node)
 
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:  # noqa: D401 suppression_valid
+    def _handle_async_function_definition(self, node: ast.AsyncFunctionDef) -> None:
+        """Inspect top-level async function definitions for interface violations.
+
+        Args:
+            node: Async function definition node encountered during traversal.
+        """
+
         if self._is_interface_module and not self._class_stack:
             self._record_concrete_symbol(node, "async function")
         self.generic_visit(node)
 
-    def visit_ClassDef(self, node: ast.ClassDef) -> None:  # noqa: D401 suppression_valid
+    def _handle_class_definition(self, node: ast.ClassDef) -> None:
+        """Inspect class definitions and track nested scope state.
+
+        Args:
+            node: Class definition node encountered during traversal.
+        """
+
         is_interface = self._is_interface_module and not _is_allowed_interface_class(node)
         self._class_stack.append(node.name)
         if is_interface:
@@ -179,27 +260,48 @@ class _InterfaceVisitor(BaseAstLintVisitor):
         self.generic_visit(node)
         self._class_stack.pop()
 
-    def visit_Assign(self, node: ast.Assign) -> None:  # noqa: D401 suppression_valid
+    def _handle_assignment(self, node: ast.Assign) -> None:
+        """Inspect assignments within interface modules for concretion.
+
+        Args:
+            node: Assignment node encountered during traversal.
+        """
+
         if self._is_interface_module and not self._class_stack and _is_concrete_expression(node.value):
             self._record_concrete_symbol(node, "assignment")
         self.generic_visit(node)
 
-    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:  # noqa: D401 suppression_valid
+    def _handle_annotated_assignment(self, node: ast.AnnAssign) -> None:
+        """Inspect annotated assignments within interface modules for concretion.
+
+        Args:
+            node: Annotated assignment node encountered during traversal.
+        """
+
         if self._is_interface_module and not self._class_stack and _is_concrete_expression(node.value):
             self._record_concrete_symbol(node, "assignment")
         self.generic_visit(node)
 
-    # --- Import handling -----------------------------------------------------------------
+    def _handle_import(self, node: ast.Import) -> None:
+        """Inspect import statements to guard against concrete dependencies.
 
-    def visit_import(self, node: ast.Import) -> None:  # noqa: D401 suppression_valid
+        Args:
+            node: Import node encountered during traversal.
+        """
+
         for alias in node.names:
-            target = alias.name
-            violation = self._check_import_target(target)
+            violation = self._check_import_target(alias.name)
             if violation is not None:
                 self.record_issue(node, violation.message)
         self.generic_visit(node)
 
-    def visit_import_from(self, node: ast.ImportFrom) -> None:  # noqa: D401 suppression_valid
+    def _handle_from_import(self, node: ast.ImportFrom) -> None:
+        """Inspect ``from`` import statements to guard against concrete dependencies.
+
+        Args:
+            node: ``from`` import node encountered during traversal.
+        """
+
         target = node.module
         if node.level:
             target = self._resolve_relative_module(target, node.level)
@@ -210,8 +312,35 @@ class _InterfaceVisitor(BaseAstLintVisitor):
             self.record_issue(node, violation.message)
         self.generic_visit(node)
 
+    def _handle_call(self, node: ast.Call) -> None:
+        """Inspect constructor calls to prevent instantiating concrete services.
+
+        Args:
+            node: Call expression node encountered during traversal.
+        """
+
+        fully_qualified = _call_qualifier(node.func)
+        if fully_qualified is not None:
+            if (
+                fully_qualified.split(".")[-1] in _BANNED_CONSTRUCTORS
+                and self._module not in _ALLOWED_CONSTRUCTOR_MODULES
+            ):
+                self.record_issue(
+                    node,
+                    _CONSTRUCTOR_VIOLATION_MESSAGE.format(fully_qualified=fully_qualified),
+                )
+        self.generic_visit(node)
+
     def _resolve_relative_module(self, module: str | None, level: int) -> str | None:
-        """Resolve a relative import against the current module."""
+        """Resolve a relative import against the current module.
+
+        Args:
+            module: Module path referenced by the import.
+            level: Relative import level derived from leading periods.
+
+        Returns:
+            str | None: Resolved absolute module path, when available.
+        """
 
         parts = self._module.split(".")[:-1]
         if level > len(parts) + 1:
@@ -222,7 +351,14 @@ class _InterfaceVisitor(BaseAstLintVisitor):
         return ".".join(resolved_parts) if resolved_parts else None
 
     def _check_import_target(self, target: str) -> _ImportViolation | None:
-        """Return a violation when ``target`` imports a concrete implementation."""
+        """Return a violation when ``target`` imports a concrete implementation.
+
+        Args:
+            target: Module name referenced by the import.
+
+        Returns:
+            _ImportViolation | None: Violation describing the import issue.
+        """
 
         if _is_interface_module_name(target):
             return None
@@ -243,7 +379,14 @@ class _InterfaceVisitor(BaseAstLintVisitor):
         return None
 
     def _is_allowed_concrete_import(self, target: str) -> bool:
-        """Return ``True`` when ``target`` is allow-listed for concrete imports."""
+        """Return ``True`` when ``target`` is allow-listed for concrete imports.
+
+        Args:
+            target: Module name referenced by the import.
+
+        Returns:
+            bool: ``True`` when the import is explicitly allowed.
+        """
 
         if self._module in _ALLOWED_INTERFACE_PACKAGES:
             return True
@@ -253,33 +396,33 @@ class _InterfaceVisitor(BaseAstLintVisitor):
         return False
 
     def _shares_domain(self, target: str) -> bool:
-        """Return ``True`` when ``target`` resides in the same domain package."""
+        """Return ``True`` when ``target`` resides in the same domain package.
+
+        Args:
+            target: Module name referenced by the import.
+
+        Returns:
+            bool: ``True`` when the module shares the same first two path segments.
+        """
 
         module_parts = self._module.split(".")
         target_parts = target.split(".")
-        if len(module_parts) < 2 or len(target_parts) < 2:
+        if len(module_parts) < _PATH_SEGMENT_DOMAIN_LIMIT or len(target_parts) < _PATH_SEGMENT_DOMAIN_LIMIT:
             return True
-        module_domain = ".".join(module_parts[:2])
-        target_domain = ".".join(target_parts[:2])
+        module_domain = ".".join(module_parts[:_PATH_SEGMENT_DOMAIN_LIMIT])
+        target_domain = ".".join(target_parts[:_PATH_SEGMENT_DOMAIN_LIMIT])
         return module_domain == target_domain
 
-    # --- Constructor bans ----------------------------------------------------------------
-
-    def visit_call(self, node: ast.Call) -> None:  # noqa: D401 suppression_valid: Call visitor adheres to NodeVisitor API and its behaviour is fully described by the base class.
-        fully_qualified = _call_qualifier(node.func)
-        if fully_qualified is None:
-            self.generic_visit(node)
-            return
-        if fully_qualified.split(".")[-1] in _BANNED_CONSTRUCTORS and self._module not in _ALLOWED_CONSTRUCTOR_MODULES:
-            self.record_issue(
-                node,
-                (f"Constructor '{fully_qualified}' may only be used in designated composition" " modules"),
-            )
-        self.generic_visit(node)
-
     def _record_concrete_symbol(self, node: ast.AST, symbol_kind: str) -> None:
+        """Record an issue when a concrete symbol exists within an interface module.
+
+        Args:
+            node: AST node defining the symbol.
+            symbol_kind: High-level description of the symbol (e.g. function).
+        """
+
         symbol = getattr(node, "name", None)
-        if symbol == "__all__":
+        if symbol == _ALL_EXPORT_NAME:
             return
         name_part = f" '{symbol}'" if symbol else ""
         message = f"Interfaces module '{self._module}' must not define concrete {symbol_kind}{name_part}"
@@ -301,24 +444,32 @@ class _InterfaceVisitor(BaseAstLintVisitor):
 
 
 def _call_qualifier(func: ast.AST) -> str | None:
-    """Return dotted name for ``func`` if it can be resolved statically."""
+    """Return dotted name for ``func`` if it can be resolved statically.
+
+    Args:
+        func: Call target whose qualified name should be derived.
+
+    Returns:
+        str | None: Dotted name or ``None`` when the name cannot be derived.
+    """
 
     if isinstance(func, ast.Name):
         return func.id
     if isinstance(func, ast.Attribute):
-        parts: list[str] = []
-        current: ast.AST | None = func
-        while isinstance(current, ast.Attribute):
-            parts.append(current.attr)
-            current = current.value
-        if isinstance(current, ast.Name):
-            parts.append(current.id)
-            return ".".join(reversed(parts))
+        parts = _collect_attribute_parts(func)
+        return ".".join(parts) if parts else None
     return None
 
 
 def _is_interface_module_name(name: str | None) -> bool:
-    """Return ``True`` when ``name`` denotes a module within an interfaces package."""
+    """Return ``True`` when ``name`` denotes a module within an interfaces package.
+
+    Args:
+        name: Candidate module name extracted from the AST.
+
+    Returns:
+        bool: ``True`` when the module path includes the interfaces segment.
+    """
 
     if not name:
         return False
@@ -326,17 +477,31 @@ def _is_interface_module_name(name: str | None) -> bool:
 
 
 def _should_visit_file(path: Path) -> bool:
-    """Return ``True`` when ``path`` is outside traditional test directories."""
+    """Return ``True`` when ``path`` is outside traditional test directories.
+
+    Args:
+        path: File path bound to the module currently under inspection.
+
+    Returns:
+        bool: ``True`` when the visitor should analyse the file.
+    """
 
     lowered_parts = {part.lower() for part in path.parts}
-    if "tests" in lowered_parts:
+    if lowered_parts & _EXCLUDED_TEST_PARTS:
         return False
-    if "pyqa" in lowered_parts and "linting" in lowered_parts:
-        return False
-    return True
+    return not any(group.issubset(lowered_parts) for group in _EXCLUDED_INTERNAL_PARTS)
 
 
 def _is_allowed_interface_class(node: ast.ClassDef) -> bool:
+    """Return ``True`` when ``node`` resembles an abstract or protocol class.
+
+    Args:
+        node: Class definition node encountered in an interfaces module.
+
+    Returns:
+        bool: ``True`` when the class satisfies abstract structure requirements.
+    """
+
     base_names = {_qualify_expr(base) for base in node.bases}
     if any(name.endswith(_ALLOWED_ABSTRACT_CLASS_SUFFIXES) for name in base_names if name):
         return True
@@ -349,49 +514,126 @@ def _is_allowed_interface_class(node: ast.ClassDef) -> bool:
 
 
 def _is_concrete_expression(expr: ast.AST | None) -> bool:
+    """Return ``True`` when ``expr`` denotes a concrete implementation detail.
+
+    Args:
+        expr: Expression node found in an interfaces module.
+
+    Returns:
+        bool: ``True`` when the expression represents concrete state.
+    """
+
     if expr is None:
         return False
+    result = False
     if isinstance(expr, ast.Subscript):
-        base_name = _qualify_expr(expr.value)
-        if base_name.split(".")[-1] in {"Literal", "Final", "Annotated", "Union", "Optional", "Tuple"}:
-            return False
-        return True
-    if isinstance(expr, ast.Call):
-        func_name = _qualify_expr(expr.func)
-        simple_name = func_name.split(".")[-1]
-        if simple_name in {"cast", "tuple", "frozenset", "literal"}:
-            return any(_is_concrete_expression(arg) for arg in expr.args[1:]) if simple_name == "cast" else False
-        return True
-    if isinstance(expr, (ast.Attribute, ast.Lambda)):
-        return True
-    if isinstance(expr, ast.Name):
-        return expr.id not in {"None", "True", "False"}
-    if isinstance(expr, (ast.List, ast.Tuple, ast.Set)):
-        return any(_is_concrete_expression(element) for element in expr.elts)
-    if isinstance(expr, ast.Dict):
-        return any(_is_concrete_expression(value) for value in expr.values)
-    if isinstance(expr, ast.JoinedStr):
-        return any(_is_concrete_expression(value) for value in expr.values)
-    return False
+        result = _is_non_literal_subscript(expr)
+    elif isinstance(expr, ast.Call):
+        result = _is_concrete_call(expr)
+    elif isinstance(expr, (ast.Attribute, ast.Lambda)):
+        result = True
+    elif isinstance(expr, ast.Name):
+        result = expr.id not in _ALLOWED_SIMPLE_NAME_LITERALS
+    else:
+        container_elements = _container_elements(expr)
+        if container_elements:
+            result = any(_is_concrete_expression(element) for element in container_elements)
+        elif isinstance(expr, ast.Dict):
+            result = any(_is_concrete_expression(value) for value in expr.values)
+        elif isinstance(expr, ast.JoinedStr):
+            result = any(_is_concrete_expression(value) for value in expr.values)
+    return result
+
+
+def _is_non_literal_subscript(expr: ast.Subscript) -> bool:
+    """Return ``True`` when the subscript expression denotes a concrete value.
+
+    Args:
+        expr: Subscription expression to assess.
+
+    Returns:
+        bool: ``True`` when the subscription references a concrete type.
+    """
+
+    base_name = _qualify_expr(expr.value)
+    return base_name.split(".")[-1] not in _ALLOWED_TYPING_SUBSCRIPTS
+
+
+def _is_concrete_call(expr: ast.Call) -> bool:
+    """Return ``True`` when the call expression constructs a concrete value.
+
+    Args:
+        expr: Call expression encountered within the AST.
+
+    Returns:
+        bool: ``True`` when the call constructs concrete runtime behaviour.
+    """
+
+    func_name = _qualify_expr(expr.func)
+    simple_name = func_name.split(".")[-1]
+    if simple_name == _CAST_FUNCTION_NAME:
+        return any(_is_concrete_expression(arg) for arg in expr.args[1:])
+    if simple_name in _CONCRETE_CALL_EXCLUSIONS:
+        return False
+    return True
+
+
+def _container_elements(expr: ast.AST) -> tuple[ast.AST, ...]:
+    """Return contained expression elements for literal container nodes.
+
+    Args:
+        expr: Expression encountered within the AST.
+
+    Returns:
+        tuple[ast.AST, ...]: Child expressions contained by the node.
+    """
+
+    if isinstance(expr, ast.List):
+        return tuple(expr.elts)
+    if isinstance(expr, ast.Tuple):
+        return tuple(expr.elts)
+    if isinstance(expr, ast.Set):
+        return tuple(expr.elts)
+    return ()
+
+
+def _collect_attribute_parts(node: ast.AST) -> tuple[str, ...]:
+    """Return the attribute chain represented by ``node``.
+
+    Args:
+        node: Attribute expression whose dotted name should be derived.
+
+    Returns:
+        tuple[str, ...]: Attribute tokens ordered from root to leaf.
+    """
+
+    if isinstance(node, ast.Attribute):
+        return (*_collect_attribute_parts(node.value), node.attr)
+    if isinstance(node, ast.Name):
+        return (node.id,)
+    return ()
 
 
 def _qualify_expr(node: ast.AST) -> str:
+    """Return a dotted identifier for ``node`` when it can be derived.
+
+    Args:
+        node: Expression whose dotted identifier should be resolved.
+
+    Returns:
+        str: Qualified name or an empty string if resolution fails.
+    """
+
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute):
-        parts: list[str] = []
-        current: ast.AST | None = node
-        while isinstance(current, ast.Attribute):
-            parts.append(current.attr)
-            current = current.value
-        if isinstance(current, ast.Name):
-            parts.append(current.id)
-            return ".".join(reversed(parts))
+        parts = _collect_attribute_parts(node)
+        return ".".join(parts) if parts else ""
     if isinstance(node, ast.Call):
         return _qualify_expr(node.func)
     try:
         return ast.unparse(node)
-    except Exception:  # pragma: no cover - resilience for Python AST edge cases.
+    except (AttributeError, ValueError, TypeError):  # pragma: no cover - resilience for Python AST edge cases.
         return ""
 
 

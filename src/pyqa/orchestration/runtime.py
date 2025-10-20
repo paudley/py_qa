@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Runtime helpers for orchestrator file discovery and filtering."""
 
 from __future__ import annotations

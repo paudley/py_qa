@@ -76,7 +76,11 @@ class DiagnosticPipeline(DiagnosticPipelineProtocol):
 
     @property
     def pipeline_name(self) -> str:
-        """Return the identifier for this diagnostic pipeline."""
+        """Return the identifier for this diagnostic pipeline.
+
+        Returns:
+            str: Human-readable identifier for the pipeline implementation.
+        """
 
         return "default"
 

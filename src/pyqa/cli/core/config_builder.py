@@ -143,7 +143,15 @@ def _collect_severity_overrides(
     options: LintOptions,
     has_option: Callable[[LintOptionKey], bool],
 ) -> SeverityOverrides:
-    """Return severity overrides derived from CLI arguments."""
+    """Return severity overrides derived from CLI arguments.
+
+    Args:
+        options: Lint CLI options capturing parsed override values.
+        has_option: Predicate indicating whether a particular CLI flag was provided.
+
+    Returns:
+        SeverityOverrides: Structured severity overrides suitable for configuration updates.
+    """
 
     sensitivity = None
     if has_option(LintOptionKey.SENSITIVITY) and options.sensitivity is not None:
@@ -185,7 +193,15 @@ def _collect_complexity_overrides(
     options: LintOptions,
     has_option: Callable[[LintOptionKey], bool],
 ) -> ComplexityOverrides:
-    """Return complexity overrides derived from CLI arguments."""
+    """Return complexity overrides derived from CLI arguments.
+
+    Args:
+        options: Lint CLI options capturing parsed override values.
+        has_option: Predicate indicating whether a particular CLI flag was provided.
+
+    Returns:
+        ComplexityOverrides: Structured complexity overrides suitable for configuration updates.
+    """
 
     max_complexity = options.max_complexity if has_option(LintOptionKey.MAX_COMPLEXITY) else None
     max_arguments = options.max_arguments if has_option(LintOptionKey.MAX_ARGUMENTS) else None
@@ -200,7 +216,15 @@ def _collect_strictness_overrides(
     options: LintOptions,
     has_option: Callable[[LintOptionKey], bool],
 ) -> StrictnessOverrides:
-    """Return strictness overrides derived from CLI arguments."""
+    """Return strictness overrides derived from CLI arguments.
+
+    Args:
+        options: Lint CLI options capturing parsed override values.
+        has_option: Predicate indicating whether a particular CLI flag was provided.
+
+    Returns:
+        StrictnessOverrides: Structured strictness overrides suitable for configuration updates.
+    """
 
     type_checking = None
     if has_option(LintOptionKey.TYPE_CHECKING) and options.type_checking is not None:

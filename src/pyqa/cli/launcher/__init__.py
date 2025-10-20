@@ -11,6 +11,7 @@ while preserving the import contract for entry-point shims.
 from __future__ import annotations
 
 import ast
+import http.client
 import logging
 import os
 import platform
@@ -19,11 +20,12 @@ import stat
 import subprocess
 import sys
 import tarfile
-import urllib.request
 from collections.abc import Iterable
+from contextlib import closing
 from enum import StrEnum
 from pathlib import Path
 from typing import Final
+from urllib.parse import urljoin, urlparse
 
 PYQA_ROOT: Final[Path] = Path(__file__).resolve().parents[4]
 SRC_DIR: Final[Path] = PYQA_ROOT / "src"
@@ -39,6 +41,10 @@ MIN_PYTHON: Final[tuple[int, int]] = (3, 12)
 PROG_NAME: Final[str] = "pyqa"
 VERSION_COMPONENTS: Final[int] = 2
 PATH_TRAVERSAL_COMPONENT: Final[str] = ".."
+HTTPS_SCHEME: Final[str] = "https"
+UV_MAX_REDIRECTS: Final[int] = 3
+HTTP_REDIRECT_STATUSES: Final[frozenset[int]] = frozenset({301, 302, 303, 307, 308})
+HTTP_OK_STATUS: Final[int] = 200
 
 
 class ProbeStatus(StrEnum):
@@ -63,13 +69,14 @@ UV_TRIPLES: Final[dict[tuple[str, str], str]] = {
     ("darwin", "aarch64"): "aarch64-apple-darwin",
 }
 
+ALLOWED_UV_HOSTS: Final[frozenset[str]] = frozenset({"github.com", "objects.githubusercontent.com"})
+
 
 class ProbeError(RuntimeError):
     """Raised when probing an interpreter fails."""
 
 
 LOGGER = logging.getLogger(__name__)
-_VERBOSE_LOGGER_INITIALISED = False
 
 PROBE_SCRIPT: Final[str] = (
     "import importlib\n"
@@ -103,15 +110,14 @@ __all__ = ["launch"]
 def _ensure_verbose_logger() -> None:
     """Configure the launcher logger to stream debug messages to stderr."""
 
-    global _VERBOSE_LOGGER_INITIALISED
-    if _VERBOSE_LOGGER_INITIALISED:
+    if getattr(LOGGER, "_pyqa_verbose_configured", False):
         return
     handler = logging.StreamHandler(stream=sys.stderr)
     handler.setFormatter(logging.Formatter("%(message)s"))
     LOGGER.addHandler(handler)
     LOGGER.setLevel(logging.DEBUG)
     LOGGER.propagate = False
-    _VERBOSE_LOGGER_INITIALISED = True
+    setattr(LOGGER, "_pyqa_verbose_configured", True)
 
 
 def launch(command: str, argv: Iterable[str] | None = None) -> None:
@@ -150,7 +156,11 @@ def _debug(message: str) -> None:
 
 
 def _select_interpreter() -> Path:
-    """Return the interpreter that should execute the CLI."""
+    """Return the interpreter that should execute the CLI.
+
+    Returns:
+        Path: Interpreter selected according to environment overrides and repository defaults.
+    """
 
     override = os.environ.get(PYTHON_OVERRIDE_ENV)
     if override:
@@ -172,7 +182,14 @@ def _select_interpreter() -> Path:
 
 
 def _build_env(python_path: Path) -> dict[str, str]:
-    """Return an environment mapping with repository ``src`` on the path."""
+    """Return an environment mapping with repository ``src`` on the path.
+
+    Args:
+        python_path: Interpreter selected for launching the CLI.
+
+    Returns:
+        dict[str, str]: Environment variables suitable for subprocess execution.
+    """
 
     env = os.environ.copy()
     env["PYQA_SELECTED_PYTHON"] = str(python_path)
@@ -213,7 +230,15 @@ def _build_env(python_path: Path) -> dict[str, str]:
 
 
 def _probe_interpreter(python_path: Path, env: dict[str, str]) -> bool:
-    """Return ``True`` when ``python_path`` can import pyqa from ``src``."""
+    """Return ``True`` when ``python_path`` can import pyqa from ``src``.
+
+    Args:
+        python_path: Interpreter under inspection.
+        env: Environment variables used during the probe.
+
+    Returns:
+        bool: ``True`` when the interpreter can import pyqa modules from ``SRC_DIR``.
+    """
 
     if not _is_python_version_compatible(python_path):
         _debug("Interpreter version too old; will use uv fallback.")
@@ -237,7 +262,14 @@ def _probe_interpreter(python_path: Path, env: dict[str, str]) -> bool:
 
 
 def _is_python_version_compatible(python_path: Path) -> bool:
-    """Return whether ``python_path`` reports a compatible version."""
+    """Return whether ``python_path`` reports a compatible version.
+
+    Args:
+        python_path: Interpreter under inspection.
+
+    Returns:
+        bool: ``True`` when the interpreter meets the minimum supported version.
+    """
 
     try:
         major, minor = _read_python_version_info(python_path)
@@ -282,7 +314,14 @@ def _run_with_python(
     args: list[str],
     env: dict[str, str],
 ) -> None:
-    """Execute ``command`` using ``python_path`` within the repository environment."""
+    """Execute ``command`` using ``python_path`` within the repository environment.
+
+    Args:
+        python_path: Interpreter used to execute the CLI command.
+        command: Primary CLI command name (for example ``"lint"``).
+        args: Command-line arguments forwarded to the CLI.
+        env: Environment variables supplied to the interpreter or spawned process.
+    """
 
     current_executable = Path(sys.executable).resolve()
     selected_executable = python_path.resolve()
@@ -417,17 +456,83 @@ def _download_uv_archive() -> Path:
     archive_name = f"uv-{triple}.tar.gz"
     url = f"https://github.com/astral-sh/uv/releases/latest/download/{archive_name}"
     archive_path = UV_CACHE_DIR / archive_name
-    _debug(f"Downloading uv from {url}")
-    # Bandit B310: The download is restricted to HTTPS GitHub releases; the
-    # generated URL never uses file or custom schemes, so this network fetch is
-    # a deliberate and safe dependency bootstrap.
-    # ``urllib`` fetch is limited to the trusted upgrade URL constructed above.
-    with (
-        urllib.request.urlopen(url) as response,
-        open(archive_path, "wb") as handle,
-    ):  # nosec B310 suppression_valid: HTTPS download target is pinned to an official GitHub release artifact and never incorporates user input.
-        shutil.copyfileobj(response, handle)
+    _download_https_resource(url, archive_path)
     return archive_path
+
+
+def _download_https_resource(url: str, destination: Path, *, redirects: int = 0) -> None:
+    """Download ``url`` to ``destination`` following safe HTTPS redirects.
+
+    Args:
+        url: HTTPS URL to download.
+        destination: Local file path where the response should be written.
+        redirects: Current redirect depth used for recursion limits.
+    """
+
+    parsed = urlparse(url)
+    if parsed.scheme != HTTPS_SCHEME or parsed.netloc not in ALLOWED_UV_HOSTS:
+        raise ProbeError(f"Unexpected uv download target: {url}")
+    if redirects > UV_MAX_REDIRECTS:
+        raise ProbeError("uv download exceeded maximum redirect depth")
+
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+
+    with closing(http.client.HTTPSConnection(parsed.netloc, timeout=60)) as connection:
+        try:
+            connection.request("GET", path)
+        except OSError as exc:  # pragma: no cover - network failure path
+            raise ProbeError(f"Failed to download uv archive: {exc}") from exc
+
+        try:
+            response = connection.getresponse()
+        except OSError as exc:  # pragma: no cover - network failure path
+            raise ProbeError(f"Failed to read uv download response: {exc}") from exc
+
+        if _handle_uv_redirect(url, response, destination, redirects):
+            return
+
+        if response.status != HTTP_OK_STATUS:
+            raise ProbeError(f"Failed to download uv archive: HTTP {response.status}")
+
+        _write_response_body(response, destination)
+
+
+def _handle_uv_redirect(url: str, response: http.client.HTTPResponse, destination: Path, redirects: int) -> bool:
+    """Return ``True`` when the response triggers a safe redirect.
+
+    Args:
+        url: Original download URL.
+        response: HTTP response returned by the previous request.
+        destination: Local file path where the response should be written.
+        redirects: Current redirect depth used for recursion limits.
+
+    Returns:
+        bool: ``True`` when a redirect was followed; otherwise ``False``.
+    """
+
+    if response.status not in HTTP_REDIRECT_STATUSES:
+        return False
+    location = response.getheader("Location")
+    if not location:
+        raise ProbeError("uv download redirected without a location header")
+    next_url = urljoin(url, location)
+    _debug(f"uv download redirected to {next_url}")
+    _download_https_resource(next_url, destination, redirects=redirects + 1)
+    return True
+
+
+def _write_response_body(response: http.client.HTTPResponse, destination: Path) -> None:
+    """Persist the HTTPS response body to ``destination``.
+
+    Args:
+        response: HTTP response object containing the archive payload.
+        destination: Local file path where the body should be written.
+    """
+
+    with open(destination, "wb") as handle:
+        shutil.copyfileobj(response, handle)
 
 
 def _resolve_uv_triple() -> str:
@@ -495,7 +600,15 @@ def _run_with_uv(
     *,
     require_locked: bool = False,
 ) -> None:
-    """Execute ``command`` using ``uv`` when a local interpreter is unsuitable."""
+    """Execute ``command`` using ``uv`` when a local interpreter is unsuitable.
+
+    Args:
+        uv_path: Filesystem path to the ``uv`` executable.
+        command: Primary CLI command name (for example ``"lint"``).
+        args: Command-line arguments forwarded to the CLI.
+        require_locked: Whether to pass ``--locked`` to ``uv run`` so dependencies
+            are resolved from the lock file before execution.
+    """
 
     _debug(f"Running with uv: {uv_path}")
     env = os.environ.copy()
@@ -513,7 +626,14 @@ def _run_with_uv(
 
 
 def _build_cli_invocation_code(argv_payload: Iterable[str]) -> str:
-    """Return a Python snippet that executes the Typer command directly."""
+    """Return a Python snippet that executes the Typer command directly.
+
+    Args:
+        argv_payload: CLI arguments to inject when invoking the Typer application.
+
+    Returns:
+        str: Python source code executed by the interpreter or ``uv`` runner.
+    """
 
     argv_list = list(argv_payload)
     return (

@@ -9,20 +9,41 @@ from .base import RuntimeContext, RuntimeHandler
 
 
 class BinaryRuntime(RuntimeHandler):
-    """Fallback runtime for tools executed directly as system binaries."""
+    """Provide the fallback runtime for tools executed as system binaries."""
 
     def _try_system(self, context: RuntimeContext) -> PreparedCommand | None:
-        """Binary runtime delegates system execution without modification."""
+        """Return the system command when the binary is available.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            PreparedCommand | None: Prepared system command, or ``None`` when unavailable.
+        """
 
         return PreparedCommand.from_parts(cmd=context.command, env=None, version=None, source="system")
 
     def _try_project(self, context: RuntimeContext) -> PreparedCommand | None:
-        """Use ``bin`` directory inside the project when present."""
+        """Return the project-local command when the ``bin`` directory contains the executable.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            PreparedCommand | None: Prepared project command, or ``None`` when the binary is absent.
+        """
 
         return self._project_binary(context)
 
     def _prepare_local(self, context: RuntimeContext) -> PreparedCommand:
-        """Local fallback simply reuses the base command."""
+        """Return the fallback command used for local execution.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            PreparedCommand: Prepared command matching the original invocation.
+        """
 
         return PreparedCommand.from_parts(cmd=context.command, env=None, version=None, source="system")
 

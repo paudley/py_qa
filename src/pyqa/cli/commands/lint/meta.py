@@ -80,7 +80,14 @@ def handle_runtime_meta_actions(
 
 
 def _handle_explain_tools_action(runtime: LintRuntimeContext) -> MetaActionOutcome:
-    """Render tool-selection diagnostics when requested by the CLI state."""
+    """Render tool-selection diagnostics when requested by the CLI state.
+
+    Args:
+        runtime: Runtime context containing orchestrator, configuration, and state.
+
+    Returns:
+        MetaActionOutcome: Outcome indicating whether explain mode executed and any exit code.
+    """
 
     meta = runtime.state.meta
     if not meta.explain_tools:
@@ -147,11 +154,11 @@ def _handle_tool_info_action(runtime: LintRuntimeContext) -> MetaActionOutcome:
         MetaActionOutcome: Outcome describing execution of the tool-info action.
     """
 
-    meta = runtime.state.meta
-    if meta.tool_info is None:
+    tool_name = runtime.state.meta.actions.tool_info
+    if tool_name is None:
         return MetaActionOutcome()
     exit_code = run_tool_info(
-        meta.tool_info,
+        tool_name,
         root=runtime.state.root,
         cfg=runtime.config,
         catalog_snapshot=runtime.catalog_snapshot,

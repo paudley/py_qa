@@ -147,13 +147,3 @@ class OrchestratorHooks:
     after_discovery: Callable[[int], None] | None = None
     after_execution: Callable[[RunResult], None] | None = None
     after_plan: Callable[[int], None] | None = None
-
-    @property
-    def supported_phases(self) -> Sequence[str]:
-        """Provide lifecycle phases that may trigger hooks.
-
-        Returns:
-            Sequence[str]: Phases that cause the orchestrator hooks to fire.
-        """
-
-        return ("plan", "discovery", "tool", "execution")

@@ -9,7 +9,7 @@ import re
 import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Final, Literal, cast
+from typing import Final, cast
 
 from pyqa.cache.in_memory import memoize
 
@@ -19,21 +19,13 @@ from ...interfaces.analysis import (
     AnnotationProvider,
     ContextResolver,
     DiagnosticAnnotation,
+    HighlightKind,
     MessageSpan,
     SimpleMessageSpan,
 )
 from ..spacy.loader import SpacyLanguage, load_language
 from ..spacy.message_spans import build_spacy_spans, iter_signature_tokens
 from ..warnings import record_tool_warning
-
-HighlightKind = Literal[
-    "file",
-    "function",
-    "class",
-    "argument",
-    "variable",
-    "attribute",
-]
 
 _PATH_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+(?:\.[A-Za-z0-9_]+)?)",
@@ -447,5 +439,6 @@ __all__ = [
     "AnnotationEngine",
     "DiagnosticAnnotation",
     "MessageAnalysis",
+    "HighlightKind",
     "MessageSpan",
 ]

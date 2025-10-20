@@ -10,19 +10,37 @@ _DEFAULT_HOOKS: tuple[str, ...] = ("pre-commit", "pre-push", "commit-msg")
 
 
 def available_hooks() -> tuple[str, ...]:
-    """Return the default sequence of supported git hook names."""
+    """Return the default sequence of supported git hook names.
+
+    Returns:
+        tuple[str, ...]: Supported git hook identifiers.
+    """
 
     return _DEFAULT_HOOKS
 
 
 def is_supported(name: str) -> bool:
-    """Return ``True`` when ``name`` identifies a supported hook."""
+    """Return whether ``name`` identifies a supported hook.
+
+    Args:
+        name: Hook name supplied by the caller.
+
+    Returns:
+        bool: ``True`` when the hook is recognised by the registry.
+    """
 
     return name in _DEFAULT_HOOKS
 
 
 def normalise_hook_order(hooks: Iterable[str] | None = None) -> tuple[str, ...]:
-    """Return hook names ordered consistently with the default registry."""
+    """Return hook names ordered consistently with the default registry.
+
+    Args:
+        hooks: Optional iterable of hook names provided by the caller.
+
+    Returns:
+        tuple[str, ...]: Hook names ordered with defaults first, then extras.
+    """
 
     if hooks is None:
         return _DEFAULT_HOOKS

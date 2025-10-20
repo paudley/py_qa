@@ -22,7 +22,7 @@ INCLUDE_OPTION = Annotated[
     typer.Option(
         True,
         "--include-optional/--no-include-optional",
-        help="Install optional typing stubs when runtime packages are present.",
+        help="Install optional typing helper packages when runtime dependencies are present.",
     ),
 ]
 GENERATE_STUBS_OPTION = Annotated[
@@ -30,7 +30,7 @@ GENERATE_STUBS_OPTION = Annotated[
     typer.Option(
         True,
         "--generate-stubs/--no-generate-stubs",
-        help="Generate stub skeletons for installed runtime packages.",
+        help="Generate typing scaffolds for installed runtime packages.",
     ),
 ]
 EMOJI_OPTION = Annotated[
@@ -58,8 +58,8 @@ def build_install_options(
 
     Args:
         root: Project root supplied via CLI options.
-        include_optional: Flag indicating whether optional stubs should be installed.
-        generate_stubs: Flag indicating whether stub generation is enabled.
+        include_optional: Flag indicating whether optional typing helpers should be installed.
+        generate_stubs: Flag toggling generation of typing scaffolds for runtime packages.
         emoji: Flag controlling emoji usage in logging output.
 
     Returns:

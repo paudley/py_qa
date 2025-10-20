@@ -18,11 +18,15 @@ _KEYWORD_PATTERN: Final[re.Pattern[str]] = re.compile(
 
 @dataclass(slots=True)
 class FunctionScaleEstimatorService(FunctionScaleEstimator):
-    """Compute approximate function size and cyclomatic complexity."""
+    """Evaluate approximate function size and cyclomatic complexity."""
 
     @property
     def supported_languages(self) -> tuple[str, ...]:
-        """Return the languages supported by the estimator."""
+        """Return the languages supported by the estimator.
+
+        Returns:
+            tuple[str, ...]: Tuple of language identifiers handled by the estimator.
+        """
 
         return ("python",)
 

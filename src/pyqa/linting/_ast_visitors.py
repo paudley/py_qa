@@ -10,17 +10,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
-if TYPE_CHECKING:  # pragma: no cover
-    from pyqa.cli.commands.lint.preparation import PreparedLintState
-else:  # pragma: no cover
-    PreparedLintState = object
-
 from pyqa.core.models import Diagnostic, JsonValue
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path_key
 
 from .base import InternalLintReport, build_internal_report
 from .utils import collect_python_files
+
+if TYPE_CHECKING:  # pragma: no cover
+    from pyqa.cli.commands.lint.preparation import PreparedLintState
+else:  # pragma: no cover
+    PreparedLintState = object
 
 
 @dataclass(frozen=True)
@@ -77,6 +77,14 @@ class BaseAstLintVisitor(ast.NodeVisitor):
                 setattr(cls, alias, value)
 
     def __init__(self, path: Path, state: PreparedLintState, metadata: VisitorMetadata) -> None:
+        """Initialise a lint visitor for ``path`` using ``state`` metadata.
+
+        Args:
+            path: File currently being analysed.
+            state: Prepared lint state describing the workspace and suppressions.
+            metadata: Tool metadata describing diagnostic ownership and severity.
+        """
+
         self._path = path
         self._state = state
         self._metadata = metadata
@@ -142,6 +150,7 @@ def run_ast_linter(
         visitor_factory: Callable that creates a concrete visitor for a file.
         parse_error_handler: Optional callable emitting a message when a file
             fails to parse; returning the rendered warning for stdout.
+        file_filter: Optional predicate restricting the files the visitor should inspect.
 
     Returns:
         ``InternalLintReport`` capturing diagnostics, stdout, and the scanned

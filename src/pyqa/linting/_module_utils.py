@@ -4,14 +4,16 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
 from pathlib import Path
 from typing import Final
 
+from pyqa.cache.in_memory import memoize
+
 _PACKAGE_SENTINEL: Final[str] = "pyqa"
+_INIT_SENTINEL: Final[str] = "__init__"
 
 
-@lru_cache(maxsize=1024)
+@memoize(maxsize=1024)
 def module_name_from_path(path: Path, root: Path) -> str:
     """Return the fully-qualified module name for ``path`` relative to ``root``.
 
@@ -44,7 +46,7 @@ def module_name_from_path(path: Path, root: Path) -> str:
         else:
             module_parts = (_PACKAGE_SENTINEL, *module_parts)
 
-    if module_parts and module_parts[-1] == "__init__":
+    if module_parts and module_parts[-1] == _INIT_SENTINEL:
         module_parts = module_parts[:-1]
     if not module_parts:
         return _PACKAGE_SENTINEL

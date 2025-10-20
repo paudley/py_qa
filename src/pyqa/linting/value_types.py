@@ -109,7 +109,14 @@ def run_value_type_linter(
 
 
 def _missing_methods(contract: _ValueTypeContract) -> Sequence[str]:
-    """Return the methods from ``contract`` that are absent on the class."""
+    """Return required methods from ``contract`` that the class omits.
+
+    Args:
+        contract: Contract describing the module path, class, and required methods.
+
+    Returns:
+        Sequence[str]: Tuple of method names that are missing on the class definition.
+    """
 
     module = _import_module(contract.module_path)
     if module is None:
@@ -123,7 +130,14 @@ def _missing_methods(contract: _ValueTypeContract) -> Sequence[str]:
 
 
 def _definition_location(contract: _ValueTypeContract) -> tuple[Path, int]:
-    """Return the source file path and line number for ``contract``."""
+    """Return the source file path and line number for ``contract``.
+
+    Args:
+        contract: Contract describing the class to inspect.
+
+    Returns:
+        tuple[Path, int]: Tuple containing the path to the source file and the first line number.
+    """
 
     module = _import_module(contract.module_path)
     if module is None:
@@ -145,7 +159,14 @@ def _definition_location(contract: _ValueTypeContract) -> tuple[Path, int]:
 
 
 def _import_module(path: str) -> ModuleType | None:
-    """Return the imported module for ``path`` when available."""
+    """Return the imported module for ``path`` when available.
+
+    Args:
+        path: Dotted module path to import.
+
+    Returns:
+        ModuleType | None: Imported module when it exists, otherwise ``None``.
+    """
 
     try:
         return __import__(path, fromlist=[path.rsplit(".", 1)[-1]])
@@ -154,7 +175,14 @@ def _import_module(path: str) -> ModuleType | None:
 
 
 def _fallback_location(contract: _ValueTypeContract) -> tuple[Path, int]:
-    """Return a conservative file/line tuple when introspection fails."""
+    """Return a conservative file/line tuple when introspection fails.
+
+    Args:
+        contract: Contract describing the class to inspect.
+
+    Returns:
+        tuple[Path, int]: Tuple containing the inferred path and a best-effort line number.
+    """
 
     return Path(contract.module_path.replace(".", "/") + ".py"), 1
 

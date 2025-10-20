@@ -4,24 +4,31 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, Literal, Protocol, TypeAlias, runtime_checkable
+from typing import Final, Literal, Protocol, TypeAlias, cast, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
+from ..config import Config
 from ..config.types import ConfigValue
 from ..core.models import Diagnostic, OutputFilter, RawDiagnostic, ToolOutcome
 
+ConfigField: TypeAlias = Config
 ToolSettingsMap: TypeAlias = Mapping[str, ConfigValue]
 ToolContextValue: TypeAlias = ConfigValue | Sequence[Path]
 ToolContextExtras: TypeAlias = Mapping[str, ToolContextValue]
+ToolContextPayloadValue: TypeAlias = ConfigField | Path | Sequence[Path] | ToolSettingsMap | ToolContextValue
+ToolContextRawMapping: TypeAlias = Mapping[str, ToolContextPayloadValue | ToolContextExtras]
+_EXTRA_KEY: Final[str] = "extra"
 
 
 @runtime_checkable
 class Parser(Protocol):
     """Protocol implemented by output parsers."""
 
+    @abstractmethod
     def parse(
         self,
         stdout: Sequence[str],
@@ -29,32 +36,81 @@ class Parser(Protocol):
         *,
         context: ToolContext,
     ) -> Sequence[RawDiagnostic | Diagnostic]:
-        """Convert raw tool output into diagnostics or raw diagnostics."""
-        raise NotImplementedError
+        """Parse output streams produced by an external tool.
+
+        Implementations must return diagnostics or raw diagnostic payloads derived from
+        the provided ``stdout``/``stderr`` sequences.
+
+        Args:
+            stdout: Lines emitted on standard output by the external tool.
+            stderr: Lines emitted on standard error by the external tool.
+            context: Tool execution context describing configuration and files.
+
+        Returns:
+            Sequence[RawDiagnostic | Diagnostic]: Parsed diagnostics or raw diagnostic payloads.
+
+        Raises:
+            RuntimeError: Always raised by the protocol to signal missing implementation.
+        """
+
+        raise RuntimeError("Parser.parse must be implemented by concrete parsers")
+
+    def __call__(
+        self,
+        stdout: Sequence[str],
+        stderr: Sequence[str],
+        *,
+        context: ToolContext,
+    ) -> Sequence[RawDiagnostic | Diagnostic]:
+        """Forward to :meth:`parse` to support call-style parsers.
+
+        Args:
+            stdout: Lines emitted on standard output by the external tool.
+            stderr: Lines emitted on standard error by the external tool.
+            context: Tool execution context describing configuration and files.
+
+        Returns:
+            Sequence[RawDiagnostic | Diagnostic]: Parsed diagnostics or raw diagnostic payloads.
+        """
+
+        return self.parse(stdout, stderr, context=context)
 
 
 @runtime_checkable
 class CommandBuilder(Protocol):
     """Build a command for execution based on the tool context."""
 
+    @abstractmethod
     def build(self, ctx: ToolContext) -> Sequence[str]:
-        """Return the executable command derived from *ctx*."""
-        raise NotImplementedError
+        """Return command-line arguments for the tool invocation.
 
+        Implementations must assemble the command aligned with the supplied
+        :class:`ToolContext`.
 
-if TYPE_CHECKING:
-    from ..config import Config
+        Args:
+            ctx: Tool execution context containing configuration and file selections.
 
-    ConfigField = Config
-else:
+        Returns:
+            Sequence[str]: Command arguments to be executed.
 
-    @runtime_checkable
-    class _ConfigProtocol(Protocol):
-        """Runtime placeholder satisfied by configuration models."""
+        Raises:
+            RuntimeError: Always raised by the protocol to signal missing implementation.
+        """
 
-        ...
+        raise RuntimeError("CommandBuilder.build must be implemented by concrete builders")
 
-    ConfigField = _ConfigProtocol
+    def __call__(self, ctx: ToolContext) -> Sequence[str]:
+        """Invoke :meth:`build` allowing builders to act as callables.
+
+        Args:
+            ctx: Tool execution context containing configuration and file selections.
+
+        Returns:
+            Sequence[str]: Command arguments to be executed.
+        """
+
+        return self.build(ctx)
+
 
 CommandField: TypeAlias = CommandBuilder
 ParserField: TypeAlias = Parser | None
@@ -70,33 +126,38 @@ class ToolContext(BaseModel):
     files: tuple[Path, ...] = Field(default_factory=tuple)
     settings: ToolSettingsMap = Field(default_factory=dict)
 
-    # suppression_valid: lint=internal-signatures context initializer mirrors historical call signature so tool integrations can pass arbitrary metadata without wrapper shims.
-    def __init__(
-        self,
-        *,
-        cfg: ConfigField,
-        root: Path,
-        files: Sequence[Path] | None = None,
-        settings: ToolSettingsMap | None = None,
-        extra: ToolContextExtras | None = None,
-    ) -> None:
-        """Initialise a tool context used during command construction.
+    @model_validator(mode="before")
+    @classmethod
+    def _merge_extra(
+        cls,
+        data: ToolContextRawMapping,
+    ) -> Mapping[str, ToolContextPayloadValue]:
+        """Merge legacy ``extra`` payloads into the ToolContext mapping.
 
         Args:
-            cfg: Active configuration model for the invocation.
-            root: Project root directory associated with the run.
-            files: Optional sequence of files selected for the tool.
-            settings: Tool-specific configuration overrides.
-            extra: Optional mapping of additional attributes carried forward for
-                compatibility with historical call sites.
+            data: Raw payload supplied to the Pydantic model.
+
+        Returns:
+            Mapping[str, ToolContextPayloadValue]: Normalised payload ready for validation.
+
+        Raises:
+            TypeError: If ``data`` is not a mapping.
         """
 
-        payload: dict[str, ToolContextValue] = dict(extra or {})
-        if files is not None:
-            payload.setdefault("files", files)
-        if settings is not None:
-            payload.setdefault("settings", settings)
-        super().__init__(cfg=cfg, root=root, **payload)
+        if not isinstance(data, Mapping):
+            raise TypeError("ToolContext requires a mapping of field values")
+
+        payload: dict[str, ToolContextPayloadValue] = {}
+        extra_obj = data.get(_EXTRA_KEY)
+        for key, value in data.items():
+            if key == _EXTRA_KEY:
+                continue
+            payload[key] = cast(ToolContextPayloadValue, value)
+
+        if isinstance(extra_obj, Mapping):
+            for key, value in extra_obj.items():
+                payload.setdefault(key, value)  # preserve explicit keyword arguments
+        return payload
 
     @field_validator("files", mode="before")
     @classmethod
@@ -130,9 +191,22 @@ class InstallerCallable(Protocol):
     """Protocol implemented by installer callbacks."""
 
     def __call__(self, ctx: ToolContext) -> None:
-        """Perform installation steps for the tool using *ctx*."""
+        """Perform installation steps for the tool using ``ctx``.
 
-        ...
+        Args:
+            ctx: Tool execution context containing configuration and file selections.
+        """
+
+        del ctx  # pragma: no cover - protocol definition
+
+    def __repr__(self) -> str:
+        """Return a debugging representation of the installer callable.
+
+        Returns:
+            str: Identifier derived from the callable metadata.
+        """
+
+        return f"InstallerCallable({self.__class__.__qualname__})"
 
 
 @runtime_checkable
@@ -140,9 +214,25 @@ class InternalActionRunner(Protocol):
     """Protocol implemented by internal tool action runners."""
 
     def __call__(self, ctx: ToolContext) -> ToolOutcome:
-        """Execute the action and return a :class:`ToolOutcome`."""
+        """Execute the action and return a :class:`ToolOutcome`.
 
-        ...
+        Args:
+            ctx: Tool execution context containing configuration and file selections.
+
+        Returns:
+            ToolOutcome: Result bundle describing the internal action execution.
+        """
+
+        raise RuntimeError("InternalActionRunner protocol requires implementation")
+
+    def __repr__(self) -> str:
+        """Return a debugging representation of the action runner.
+
+        Returns:
+            str: Identifier derived from the callable metadata.
+        """
+
+        return f"InternalActionRunner({self.__class__.__qualname__})"
 
 
 class ActionExitCodes(BaseModel):
@@ -186,7 +276,12 @@ class ActionExitCodes(BaseModel):
         raise TypeError("exit code collections must contain integers")
 
     def as_sets(self) -> tuple[set[int], set[int], set[int]]:
-        """Return success, diagnostic, and tool-failure codes as sets."""
+        """Return success, diagnostic, and tool-failure codes as sets.
+
+        Returns:
+            tuple[set[int], set[int], set[int]]: Tuple containing the success,
+            diagnostic, and tool-failure exit codes respectively.
+        """
 
         return set(self.success), set(self.diagnostic), set(self.tool_failure)
 
@@ -196,7 +291,7 @@ class DeferredCommand(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
-    args: tuple[str, ...]
+    args: tuple[str, ...] = Field(default_factory=tuple)
 
     @field_validator("args", mode="before")
     @classmethod
@@ -243,15 +338,38 @@ class DeferredCommand(BaseModel):
         super().__init__(**payload)
 
     def build(self, ctx: ToolContext) -> Sequence[str]:
-        """Return the deferred command regardless of the provided *ctx*."""
+        """Return the deferred command regardless of the provided context.
+
+        Args:
+            ctx: Tool execution context; unused for deferred commands.
+
+        Returns:
+            Sequence[str]: Command arguments captured during construction.
+        """
 
         del ctx
         return tuple(self.args)
 
     def describe(self) -> str:
-        """Return a human-readable description of the deferred command."""
+        """Return a human-readable description of the deferred command.
+
+        Returns:
+            str: Static identifier representing the deferred command.
+        """
 
         return "DeferredCommand"
+
+    def __call__(self, ctx: ToolContext) -> Sequence[str]:
+        """Support call-style invocation mirroring :meth:`build`.
+
+        Args:
+            ctx: Tool execution context; unused for deferred commands.
+
+        Returns:
+            Sequence[str]: Command arguments captured during construction.
+        """
+
+        return self.build(ctx)
 
 
 class ToolAction(BaseModel):
@@ -348,7 +466,14 @@ class ToolAction(BaseModel):
         raise TypeError("internal_runner must be callable")
 
     def build_command(self, ctx: ToolContext) -> list[str]:
-        """Return the command arguments for this action within *ctx*."""
+        """Return the command arguments for this action within ``ctx``.
+
+        Args:
+            ctx: Tool execution context containing configuration and file selections.
+
+        Returns:
+            list[str]: Command arguments including optional file parameters.
+        """
 
         cmd = list(self.command.build(ctx))
         if self.append_files and ctx.files:
@@ -357,22 +482,52 @@ class ToolAction(BaseModel):
 
     @property
     def is_internal(self) -> bool:
-        """Return ``True`` when the action executes via an internal runner."""
+        """Return ``True`` when the action executes via an internal runner.
+
+        Returns:
+            bool: ``True`` when :attr:`internal_runner` is configured.
+        """
 
         return self.internal_runner is not None
 
     def filter_stdout(self, text: str, extra_patterns: Sequence[str] | None = None) -> str:
-        """Filter stdout text using configured patterns and *extra_patterns*."""
+        """Filter stdout text using configured patterns and ``extra_patterns``.
+
+        Args:
+            text: Raw stdout string emitted by the tool.
+            extra_patterns: Optional glob or regex patterns applied in addition to
+                the action's configured filters.
+
+        Returns:
+            str: Filtered stdout text with matching patterns removed.
+        """
 
         return self._apply_filters(text, extra_patterns)
 
     def filter_stderr(self, text: str, extra_patterns: Sequence[str] | None = None) -> str:
-        """Filter stderr text using configured patterns and *extra_patterns*."""
+        """Filter stderr text using configured patterns and ``extra_patterns``.
+
+        Args:
+            text: Raw stderr string emitted by the tool.
+            extra_patterns: Optional glob or regex patterns applied in addition to
+                the action's configured filters.
+
+        Returns:
+            str: Filtered stderr text with matching patterns removed.
+        """
 
         return self._apply_filters(text, extra_patterns)
 
     def _apply_filters(self, text: str, extra_patterns: Sequence[str] | None) -> str:
-        """Apply output filtering for the action and return the filtered text."""
+        """Apply output filtering for the action and return the filtered text.
+
+        Args:
+            text: Output string to filter.
+            extra_patterns: Additional patterns layered on top of :attr:`filter_patterns`.
+
+        Returns:
+            str: Filtered output string.
+        """
 
         patterns = list(self.filter_patterns)
         if extra_patterns:
@@ -478,7 +633,11 @@ class Tool(BaseModel):
 
     @model_validator(mode="after")
     def _populate_action_index(self) -> Tool:
-        """Populate the private action index after validation completes."""
+        """Populate the private action index after validation completes.
+
+        Returns:
+            Tool: Instance with refreshed action index for fluent chaining.
+        """
 
         self._refresh_action_index()
         return self
@@ -493,18 +652,41 @@ class Tool(BaseModel):
         )
 
     def __len__(self) -> int:
-        """Return the number of actions associated with the tool."""
+        """Return the number of actions associated with the tool.
+
+        Returns:
+            int: Count of actions defined on this tool.
+        """
 
         return len(self.actions)
 
     def __contains__(self, item: ToolAction | str) -> bool:
-        """Return ``True`` when *item* refers to an action in this tool."""
+        """Return whether ``item`` refers to an action in this tool.
+
+        Args:
+            item: Tool action instance or action name.
+
+        Returns:
+            bool: ``True`` when the action exists on this tool.
+        """
 
         if isinstance(item, ToolAction):
             return item in self.actions
         return isinstance(item, str) and item in self._actions_by_name
 
     def __getitem__(self, key: int | str) -> ToolAction:
+        """Return the action identified by ``key``.
+
+        Args:
+            key: Action index or action name.
+
+        Returns:
+            ToolAction: Action associated with ``key``.
+
+        Raises:
+            TypeError: If ``key`` is neither an ``int`` nor ``str``.
+        """
+
         if isinstance(key, int):
             return self.actions[key]
         if isinstance(key, str):
@@ -512,32 +694,60 @@ class Tool(BaseModel):
         raise TypeError("Tool indices must be integers or action names")
 
     def keys(self) -> Iterable[str]:
-        """Return an iterable over the action names managed by the tool."""
+        """Return an iterable over the action names managed by the tool.
+
+        Returns:
+            Iterable[str]: Iterable producing action names.
+        """
 
         return self._actions_by_name.keys()
 
     def values(self) -> Iterable[ToolAction]:
-        """Return an iterable over the tool actions."""
+        """Return an iterable over the tool actions.
+
+        Returns:
+            Iterable[ToolAction]: Iterable yielding tool actions.
+        """
 
         return self._actions_by_name.values()
 
     def items(self) -> Iterable[tuple[str, ToolAction]]:
-        """Return (name, action) pairs for all actions."""
+        """Return ``(name, action)`` pairs for all actions.
+
+        Returns:
+            Iterable[tuple[str, ToolAction]]: Iterable yielding action name/action pairs.
+        """
 
         return self._actions_by_name.items()
 
     def get(self, name: str, default: ToolAction | None = None) -> ToolAction | None:
-        """Return the action identified by *name*, falling back to *default*."""
+        """Return the action identified by ``name``.
+
+        Args:
+            name: Action name to resolve.
+            default: Fallback action returned when ``name`` is unknown.
+
+        Returns:
+            ToolAction | None: Matching action or ``default`` when not found.
+        """
 
         return self._actions_by_name.get(name, default)
 
     def action_names(self) -> tuple[str, ...]:
-        """Return the tuple of action names in declaration order."""
+        """Return the tuple of action names in declaration order.
+
+        Returns:
+            tuple[str, ...]: Action names preserving declaration order.
+        """
 
         return tuple(self._actions_by_name.keys())
 
     def iter_actions(self) -> Iterator[ToolAction]:
-        """Return an iterator over actions preserving declaration order."""
+        """Return an iterator over actions preserving declaration order.
+
+        Returns:
+            Iterator[ToolAction]: Iterator traversing the configured actions.
+        """
 
         return iter(self.actions)
 
@@ -681,7 +891,17 @@ class Tool(BaseModel):
 
     @staticmethod
     def _require_installer(candidate: InstallerCallable) -> InstallerCallable:
-        """Return ``candidate`` when it satisfies the :class:`InstallerCallable` protocol."""
+        """Return ``candidate`` when it satisfies the :class:`InstallerCallable` protocol.
+
+        Args:
+            candidate: Installer callable being validated.
+
+        Returns:
+            InstallerCallable: Validated installer callable.
+
+        Raises:
+            TypeError: If ``candidate`` does not implement :class:`InstallerCallable`.
+        """
 
         if not isinstance(candidate, InstallerCallable):
             raise TypeError("installers must contain callables")
@@ -693,7 +913,15 @@ class Tool(BaseModel):
         language: str | None = None,
         files: Sequence[Path] | None = None,
     ) -> bool:
-        """Return ``True`` when the tool is applicable to *language*/*files*."""
+        """Return whether the tool applies to the supplied ``language``/``files`` selection.
+
+        Args:
+            language: Language identifier associated with the invocation.
+            files: Candidate files that may be passed to the tool.
+
+        Returns:
+            bool: ``True`` when the tool should run with the supplied parameters.
+        """
 
         if language and self.languages and language not in self.languages:
             return False

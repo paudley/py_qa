@@ -10,6 +10,7 @@ import shutil
 import stat
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 from pyqa.core.runtime.process import CommandOptions, run_command
 from pyqa.tools.base import Tool
@@ -17,7 +18,7 @@ from pyqa.tools.base import Tool
 from ..constants import ToolCacheLayout
 from ..models import PreparedCommand
 from ..utils import _slugify, _split_package_spec
-from .base import RuntimeContext, RuntimeHandler
+from .base import BuildEnvFn, RuntimeContext, RuntimeHandler
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,7 +33,7 @@ class RustInstallPlan:
     meta_file: Path = field(init=False)
 
     def __post_init__(self) -> None:
-        """Initialise derived paths for the installation plan.
+        """Prepare the derived paths for the installation plan.
 
         Returns:
             None: Initialisation mutates frozen attributes via ``object.__setattr__``.
@@ -56,10 +57,17 @@ class CargoRequirement:
 
 
 class RustRuntime(RuntimeHandler):
-    """Provision Rust tooling using ``cargo install`` with caching."""
+    """Provide the runtime for Rust tooling using ``cargo install`` with caching."""
 
     def _try_project(self, context: RuntimeContext) -> PreparedCommand | None:
-        """Reuse project ``bin`` directory for Rust tooling when available."""
+        """Return the project command when the Rust binary exists.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            PreparedCommand | None: Prepared project command, or ``None`` when absent.
+        """
 
         project_cmd = self._project_binary(context)
         if project_cmd is None:
@@ -71,7 +79,17 @@ class RustRuntime(RuntimeHandler):
         return project_cmd
 
     def _prepare_local(self, context: RuntimeContext) -> PreparedCommand:
-        """Install Rust tooling via cargo and return the cached command."""
+        """Return the command after installing Rust tooling via cargo.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+
+        Returns:
+            PreparedCommand: Prepared command referencing the cached Rust binary.
+
+        Raises:
+            RuntimeError: If the cargo toolchain is unavailable.
+        """
 
         if not shutil.which("cargo"):
             raise RuntimeError("Cargo toolchain is required to install rust-based linters")
@@ -79,11 +97,19 @@ class RustRuntime(RuntimeHandler):
         return self._prepare_cached_command(
             context,
             self._ensure_local_tool,
-            self._rust_env,
+            cast(BuildEnvFn, self._rust_env),
         )
 
     def _ensure_local_tool(self, context: RuntimeContext, binary_name: str) -> Path:
-        """Install or reuse a cargo-installed binary for ``tool``."""
+        """Ensure the cargo-installed binary for the requested tool exists.
+
+        Args:
+            context: Runtime context describing command preparation parameters.
+            binary_name: Executable name expected in the Rust cache.
+
+        Returns:
+            Path: Filesystem path to the installed Rust binary.
+        """
         tool = context.tool
         layout = context.cache_layout
         crate, version_spec = self._crate_spec(tool)
@@ -107,7 +133,14 @@ class RustRuntime(RuntimeHandler):
 
     @staticmethod
     def _crate_spec(tool: Tool) -> tuple[str, str | None]:
-        """Return crate name and version derived from ``tool`` metadata."""
+        """Return the crate name and version derived from tool metadata.
+
+        Args:
+            tool: Tool metadata describing the Rust crate requirement.
+
+        Returns:
+            tuple[str, str | None]: Crate name and optional version specification.
+        """
         if tool.package:
             crate, version = _split_package_spec(tool.package)
             if version is None:
@@ -116,7 +149,14 @@ class RustRuntime(RuntimeHandler):
         return tool.name, tool.min_version
 
     def _install_rustup_component(self, component: str) -> None:
-        """Install a rustup component required by a tool."""
+        """Install the rustup component required by a tool.
+
+        Args:
+            component: Rustup component identifier to install.
+
+        Raises:
+            RuntimeError: If rustup is unavailable to perform the installation.
+        """
         if not shutil.which("rustup"):
             raise RuntimeError("rustup is required to install rustup components")
         run_command(
@@ -164,7 +204,7 @@ class RustRuntime(RuntimeHandler):
         return bool(metadata and metadata.get("requirement") == requirement)
 
     def _install_cargo_tool(self, plan: RustInstallPlan, spec: CargoRequirement) -> None:
-        """Install ``crate`` into the cached tool environment described by ``plan``.
+        """Install the crate into the cached tool environment described by ``plan``.
 
         Args:
             plan: Installation plan describing the cache layout.

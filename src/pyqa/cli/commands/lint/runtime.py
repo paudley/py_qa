@@ -20,6 +20,7 @@ from ....discovery import build_default_discovery
 from ....discovery.base import SupportsDiscovery
 from ....interfaces.orchestration import ExecutionPipeline, OrchestratorHooks
 from ....interfaces.orchestration_selection import SelectionResult
+from ....interfaces.runtime import ServiceRegistryProtocol
 from ....linting.registry import configure_internal_tool_defaults, ensure_internal_tools_registered
 from ....orchestration.orchestrator import (
     FetchCallback,
@@ -45,7 +46,7 @@ class LintRuntimeContext:
     orchestrator: ExecutionPipeline
     hooks: OrchestratorHooks
     catalog_snapshot: CatalogSnapshot
-    services: ServiceContainer | None = None
+    services: ServiceRegistryProtocol | None = None
     plugins: SimpleNamespace | None = None
 
 
@@ -60,7 +61,7 @@ class LintRuntimeDependencies:
         ExecutionPipeline,
     ]
     catalog_initializer: Callable[[ToolRegistry], CatalogSnapshot]
-    services: ServiceContainer | None = None
+    services: ServiceRegistryProtocol | None = None
 
 
 def _default_orchestrator_factory(
@@ -68,10 +69,21 @@ def _default_orchestrator_factory(
     discovery: SupportsDiscovery,
     hooks: OrchestratorHooks,
     *,
-    services: ServiceContainer | None = None,
+    services: ServiceRegistryProtocol | None = None,
     debug_logger: Callable[[str], None] | None = None,
 ) -> ExecutionPipeline:
-    """Return an execution pipeline backed by the default orchestrator."""
+    """Return an execution pipeline backed by the default orchestrator.
+
+    Args:
+        registry: Tool registry providing available tool implementations.
+        discovery: Discovery strategy responsible for enumerating project files.
+        hooks: Hook bundle receiving orchestrator lifecycle callbacks.
+        services: Optional service registry supplying runtime collaborators.
+        debug_logger: Optional logger invoked with debug diagnostics.
+
+    Returns:
+        Pipeline that drives tool planning and execution.
+    """
 
     overrides = OrchestratorOverrides(
         hooks=_coerce_hooks(hooks),
@@ -83,7 +95,14 @@ def _default_orchestrator_factory(
 
 
 def _coerce_hooks(hooks: OrchestratorHooks) -> ConcreteOrchestratorHooks:
-    """Return a concrete orchestrator hooks instance that proxies callbacks."""
+    """Return a concrete orchestrator hooks instance that proxies callbacks.
+
+    Args:
+        hooks: Hook bundle supplied by the CLI layer.
+
+    Returns:
+        Hook adapter forwarding invocations safely.
+    """
 
     concrete = ConcreteOrchestratorHooks()
 
@@ -120,7 +139,11 @@ class _AfterToolProxy:
     hooks: OrchestratorHooks
 
     def run(self, outcome: ToolOutcome) -> None:
-        """Invoke ``after_tool`` when defined."""
+        """Invoke ``after_tool`` when defined.
+
+        Args:
+            outcome: Tool outcome generated after execution.
+        """
 
         callback = self.hooks.after_tool
         if callback is not None:
@@ -134,7 +157,11 @@ class _AfterDiscoveryProxy:
     hooks: OrchestratorHooks
 
     def run(self, file_count: int) -> None:
-        """Invoke ``after_discovery`` when defined."""
+        """Invoke ``after_discovery`` when defined.
+
+        Args:
+            file_count: Number of files discovered for analysis.
+        """
 
         callback = self.hooks.after_discovery
         if callback is not None:
@@ -148,7 +175,11 @@ class _AfterExecutionProxy:
     hooks: OrchestratorHooks
 
     def run(self, result: RunResult) -> None:
-        """Invoke ``after_execution`` when defined."""
+        """Invoke ``after_execution`` when defined.
+
+        Args:
+            result: Aggregated run result emitted after orchestrator completion.
+        """
 
         callback = self.hooks.after_execution
         if callback is not None:
@@ -162,7 +193,11 @@ class _AfterPlanProxy:
     hooks: OrchestratorHooks
 
     def run(self, planned_tools: int) -> None:
-        """Invoke ``after_plan`` when defined."""
+        """Invoke ``after_plan`` when defined.
+
+        Args:
+            planned_tools: Number of tools scheduled for execution.
+        """
 
         callback = self.hooks.after_plan
         if callback is not None:
@@ -173,16 +208,34 @@ class _OrchestratorExecutionPipeline(ExecutionPipeline):
     """Execution pipeline backed by the core orchestrator implementation."""
 
     def __init__(self, orchestrator: Orchestrator) -> None:
+        """Initialise the execution pipeline.
+
+        Args:
+            orchestrator: Underlying orchestrator coordinating tool execution.
+        """
+
         self._orchestrator = orchestrator
 
     @property
     def pipeline_name(self) -> str:
-        """Return the descriptive pipeline name."""
+        """Return the descriptive pipeline name.
+
+        Returns:
+            Human-readable identifier for the pipeline.
+        """
 
         return "orchestrator"
 
     def run(self, config: Config, *, root: Path) -> RunResult:
-        """Execute the orchestrator for ``config`` rooted at ``root``."""
+        """Execute the orchestrator for ``config`` rooted at ``root``.
+
+        Args:
+            config: Lint configuration controlling selection and execution.
+            root: Project root directory used for tool invocations.
+
+        Returns:
+            Aggregated run result generated by the orchestrator.
+        """
 
         return self._orchestrator.run(config, root=root)
 
@@ -193,12 +246,29 @@ class _OrchestratorExecutionPipeline(ExecutionPipeline):
         root: Path,
         callback: FetchCallback | None = None,
     ) -> list[tuple[str, str, PreparedCommand | None, str | None]]:
-        """Prepare tool executions without running them."""
+        """Prepare tool executions without running them.
+
+        Args:
+            config: Lint configuration controlling tool selection.
+            root: Project root directory used for tool resolution.
+            callback: Optional hook invoked for each fetch event.
+
+        Returns:
+            Collection describing prepared tool actions, associated commands, and error messages.
+        """
 
         return self._orchestrator.fetch_all_tools(config, root=root, callback=callback)
 
     def plan_tools(self, config: Config, *, root: Path) -> SelectionResult:
-        """Return the orchestrator plan without executing actions."""
+        """Return the orchestrator plan without executing actions.
+
+        Args:
+            config: Lint configuration steering tool selection.
+            root: Project root directory used to contextualise analysis.
+
+        Returns:
+            Planning metadata enumerating planned tool actions ready for execution.
+        """
 
         return self._orchestrator.plan_tools(config, root=root)
 
@@ -214,7 +284,17 @@ def _orchestrator_with_default_services(
     hooks: OrchestratorHooks,
     debug_logger: Callable[[str], None] | None = None,
 ) -> ExecutionPipeline:
-    """Return an orchestrator wired with the shared default services."""
+    """Return an orchestrator wired with the shared default services.
+
+    Args:
+        registry: Tool registry providing available tool implementations.
+        discovery: Discovery strategy used to enumerate project files.
+        hooks: Hook bundle provided by CLI dependencies.
+        debug_logger: Optional logger receiving debug diagnostics.
+
+    Returns:
+        Pipeline configured with default runtime services.
+    """
 
     return _default_orchestrator_factory(
         registry,
@@ -234,11 +314,11 @@ DEFAULT_LINT_DEPENDENCIES = LintRuntimeDependencies(
 )
 
 
-def _resolve_plugin_namespace(services: ServiceContainer | None) -> SimpleNamespace | None:
+def _resolve_plugin_namespace(services: ServiceRegistryProtocol | None) -> SimpleNamespace | None:
     """Return the plugin namespace resolved from ``services`` when available.
 
     Args:
-        services: Optional container providing service resolution helpers.
+        services: Optional service registry providing resolution helpers.
 
     Returns:
         SimpleNamespace | None: Loaded plugin namespace when resolvable; otherwise ``None``.

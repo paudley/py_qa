@@ -31,7 +31,16 @@ from .versioning import VersionResolver
 
 @dataclass(frozen=True, slots=True)
 class CommandPreparationRequest:
-    """Inputs required to prepare a tool command."""
+    """Capture the inputs required to prepare a tool command.
+
+    Attributes:
+        tool: Tool metadata describing runtime behaviour.
+        command: Command tuple requested by the caller.
+        root: Project root used to resolve workspace binaries.
+        cache_dir: Directory containing cached runtime installations.
+        system_preferred: Whether system installations should be preferred.
+        use_local_override: Whether vendored runtimes must be forced.
+    """
 
     tool: Tool
     command: tuple[str, ...]
@@ -45,6 +54,8 @@ class CommandPreparer:
     """Decide whether to use system, project, or vendored tooling."""
 
     def __init__(self) -> None:
+        """Construct a command preparer with default runtime handlers."""
+
         self._versions: VersionResolver = VersionResolver()
         self._handlers: dict[str, RuntimeHandler] = {
             "python": PythonRuntime(self._versions),
@@ -169,7 +180,11 @@ class CommandPreparer:
         )
 
     def _ensure_dirs(self, layout: ToolCacheLayout) -> None:
-        """Ensure cache directories for ``layout`` exist exactly once."""
+        """Ensure cache directories for ``layout`` exist exactly once.
+
+        Args:
+            layout: Cache layout whose directories must be materialised.
+        """
 
         root = layout.tools_root.resolve()
         if root in self._ensured_roots:
@@ -190,7 +205,14 @@ class CommandPreparer:
         return self.prepare(request=request)
 
     def prepare_from_mapping(self, legacy_kwargs: LegacyCommandMapping) -> PreparedCommand:
-        """Prepare a command using the legacy keyword argument contract."""
+        """Prepare a command using the legacy keyword argument contract.
+
+        Args:
+            legacy_kwargs: Mapping-based legacy arguments accepted by older APIs.
+
+        Returns:
+            PreparedCommand: Command ready for execution.
+        """
 
         return self.prepare(legacy_kwargs=legacy_kwargs)
 

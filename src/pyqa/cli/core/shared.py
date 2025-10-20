@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Final, Generic, TypeVar, overload
+from typing import TYPE_CHECKING, Final, Generic, TypeVar, overload
 
 import typer
 from rich.console import Console
@@ -25,6 +25,13 @@ class CLIError(RuntimeError):
     """Error raised when a CLI command fails and should exit with a status code."""
 
     def __init__(self, message: str, *, exit_code: int = 1) -> None:
+        """Initialise the error with a message and exit code.
+
+        Args:
+            message: Human-readable error message shown to the user.
+            exit_code: Exit status associated with the failure.
+        """
+
         super().__init__(message)
         self.exit_code = exit_code
 
@@ -39,27 +46,47 @@ class CLILogger:
     _key_value_re: re.Pattern[str] = re.compile(r"([\w-]+)=(\".*?\"|\S+)")
 
     def fail(self, message: str) -> None:
-        """Log a failure message honouring emoji preferences."""
+        """Log a failure message honouring emoji preferences.
+
+        Args:
+            message: Text describing the failure state.
+        """
 
         core_fail(message, use_emoji=self.use_emoji)
 
     def warn(self, message: str) -> None:
-        """Log a warning message honouring emoji preferences."""
+        """Log a warning message honouring emoji preferences.
+
+        Args:
+            message: Text describing the warning condition.
+        """
 
         core_warn(message, use_emoji=self.use_emoji)
 
     def ok(self, message: str) -> None:
-        """Log a success message honouring emoji preferences."""
+        """Log a success message honouring emoji preferences.
+
+        Args:
+            message: Text describing the successful state.
+        """
 
         core_ok(message, use_emoji=self.use_emoji)
 
     def echo(self, message: str) -> None:
-        """Write ``message`` to stdout using Typer's echo helper."""
+        """Write ``message`` to stdout using Typer's echo helper.
+
+        Args:
+            message: Text written to standard output.
+        """
 
         typer.echo(message)
 
     def debug(self, message: str) -> None:
-        """Emit a debug message when debug logging is enabled."""
+        """Emit a debug message when debug logging is enabled.
+
+        Args:
+            message: Debug payload rendered with simple highlighting.
+        """
 
         if self.debug_enabled:
             text = Text("[debug] ", style="bold cyan")
@@ -82,7 +109,16 @@ class CLILogger:
 
 
 def build_cli_logger(*, emoji: bool, debug: bool = False, no_color: bool = False) -> CLILogger:
-    """Return a ``CLILogger`` configured for the provided emoji preference."""
+    """Return a ``CLILogger`` configured for the provided emoji preference.
+
+    Args:
+        emoji: Whether log output may include emoji glyphs.
+        debug: Whether debug logging should be enabled.
+        no_color: Whether terminal colour output should be disabled.
+
+    Returns:
+        CLILogger: Logger instance bound to a dedicated Rich console.
+    """
 
     console = Console(no_color=no_color, highlight=False)
     return CLILogger(console=console, use_emoji=emoji, debug_enabled=debug)
@@ -171,24 +207,25 @@ def command_decorator(
     return helper
 
 
-@overload
-def register_command(
-    app: typer.Typer,
-    callback: CommandCallable,
-    *,
-    name: str | None = None,
-    help_text: str | None = None,
-) -> CommandCallable: ...
+if TYPE_CHECKING:
 
+    @overload
+    def register_command(
+        app: typer.Typer,
+        callback: CommandCallable,
+        *,
+        name: str | None = None,
+        help_text: str | None = None,
+    ) -> CommandCallable: ...
 
-@overload
-def register_command(
-    app: typer.Typer,
-    callback: None = ...,
-    *,
-    name: str | None = None,
-    help_text: str | None = None,
-) -> CommandDecoratorCallable: ...
+    @overload
+    def register_command(
+        app: typer.Typer,
+        callback: None = ...,
+        *,
+        name: str | None = None,
+        help_text: str | None = None,
+    ) -> CommandDecoratorCallable: ...
 
 
 def register_command(
@@ -207,8 +244,8 @@ def register_command(
         help_text: Help text shown in CLI usage output.
 
     Returns:
-        Callable or callback: Either the registered callback or a decorator for
-        deferred registration.
+        CommandDecoratorCallable | CommandCallable: Either the registered callback or
+        a decorator for deferred registration.
     """
 
     decorator = command_decorator(
@@ -226,7 +263,15 @@ def callback_decorator(
     *,
     invoke_without_command: bool = False,
 ) -> CommandDecoratorCallable:
-    """Return a decorator that registers a Typer callback when applied."""
+    """Return a decorator that registers a Typer callback when applied.
+
+    Args:
+        app: Typer application receiving the callback registration.
+        invoke_without_command: Whether the callback fires without subcommands.
+
+    Returns:
+        CommandDecoratorCallable: Decorator registering a callback when applied.
+    """
 
     helper = _CallbackDecorator(
         app=app,
@@ -235,22 +280,23 @@ def callback_decorator(
     return helper
 
 
-@overload
-def register_callback(
-    app: typer.Typer,
-    callback: CommandCallable,
-    *,
-    invoke_without_command: bool = False,
-) -> CommandCallable: ...
+if TYPE_CHECKING:
 
+    @overload
+    def register_callback(
+        app: typer.Typer,
+        callback: CommandCallable,
+        *,
+        invoke_without_command: bool = False,
+    ) -> CommandCallable: ...
 
-@overload
-def register_callback(
-    app: typer.Typer,
-    callback: None = ...,
-    *,
-    invoke_without_command: bool = False,
-) -> CommandDecoratorCallable: ...
+    @overload
+    def register_callback(
+        app: typer.Typer,
+        callback: None = ...,
+        *,
+        invoke_without_command: bool = False,
+    ) -> CommandDecoratorCallable: ...
 
 
 def register_callback(
@@ -268,8 +314,8 @@ def register_callback(
             subcommands.
 
     Returns:
-        Callable or callback: Either the registered callback or a decorator for
-        deferred registration.
+        CommandDecoratorCallable | CommandCallable: Either the registered callback or
+        a decorator for deferred registration.
     """
 
     decorator = callback_decorator(

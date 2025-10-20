@@ -73,7 +73,11 @@ class _ProgressHandler:
     handler: Callable[[ProgressPayload], None]
 
     def process(self, data: ProgressEventData) -> None:
-        """Convert *data* into a :class:`ProgressPayload` and dispatch it."""
+        """Convert ``data`` into a :class:`ProgressPayload` and dispatch it.
+
+        Args:
+            data: Structured progress event emitted by the orchestrator.
+        """
 
         payload = _progress_payload_from_data(data)
         self.handler(payload)
@@ -106,7 +110,14 @@ def _wrap_progress_handler(
 
 
 def _progress_payload_from_data(data: ProgressEventData) -> ProgressPayload:
-    """Return a structured payload tuple derived from ``data``."""
+    """Return a structured payload tuple derived from ``data``.
+
+    Args:
+        data: Progress event containing metadata for the current tool action.
+
+    Returns:
+        ProgressPayload: Tuple suitable for downstream rendering and logging.
+    """
 
     return (
         _coerce_progress_event(data.event),
@@ -214,6 +225,12 @@ def _fetch_with_progress(
     task_id = progress.add_task("Preparing tools", total=total_actions)
 
     def handle_progress(payload: ProgressPayload) -> None:
+        """Update progress state based on ``payload`` emitted by orchestrator.
+
+        Args:
+            payload: Tuple describing the current tool preparation event.
+        """
+
         record = _coerce_progress_record(payload)
         description = f"{record.tool_name}:{record.action_name}"
         if record.event == EVENT_START:

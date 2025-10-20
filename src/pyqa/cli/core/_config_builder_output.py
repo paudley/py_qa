@@ -47,7 +47,15 @@ def apply_output_overrides(
     current: OutputConfig,
     overrides: OutputOverrides,
 ) -> OutputConfig:
-    """Return ``current`` updated with the supplied override mapping."""
+    """Return ``current`` updated with the supplied override mapping.
+
+    Args:
+        current: Baseline output configuration prior to mutation.
+        overrides: Override values derived from CLI selections.
+
+    Returns:
+        OutputConfig: New output configuration reflecting ``overrides``.
+    """
 
     return current.model_copy(update=dict(overrides), deep=True)
 
@@ -188,7 +196,17 @@ def resolve_tool_filters(
 
 
 def parse_filters(specs: Iterable[str]) -> ToolFilters:
-    """Parse CLI filter specifications into a tool-to-pattern mapping."""
+    """Parse CLI filter specifications into a tool-to-pattern mapping.
+
+    Args:
+        specs: Iterable of CLI filter specifications in ``TOOL:pattern`` format.
+
+    Returns:
+        ToolFilters: Mapping of tool identifiers to associated filter patterns.
+
+    Raises:
+        ValueError: If a specification omits the tool identifier or separator.
+    """
 
     filters: ToolFilters = {tool: list(patterns) for tool, patterns in DEFAULT_TOOL_FILTERS.items()}
     for spec in specs:
@@ -206,7 +224,17 @@ def parse_filters(specs: Iterable[str]) -> ToolFilters:
 
 
 def normalize_output_mode(value: str) -> OutputMode:
-    """Validate and normalise the output mode CLI token."""
+    """Validate and normalise the output mode CLI token.
+
+    Args:
+        value: CLI token supplied for output mode selection.
+
+    Returns:
+        OutputMode: Normalised output mode literal.
+
+    Raises:
+        ValueError: If the provided token is not recognised.
+    """
 
     normalized = value.lower()
     if normalized not in _ALLOWED_OUTPUT_MODES:
@@ -215,7 +243,17 @@ def normalize_output_mode(value: str) -> OutputMode:
 
 
 def normalize_min_severity(value: str) -> SummarySeverity:
-    """Validate and normalise the PR summary minimum severity token."""
+    """Validate and normalise the PR summary minimum severity token.
+
+    Args:
+        value: CLI token supplied for minimum severity selection.
+
+    Returns:
+        SummarySeverity: Normalised minimum severity literal.
+
+    Raises:
+        ValueError: If the provided token is not recognised.
+    """
 
     normalized = value.lower()
     if normalized not in _ALLOWED_SUMMARY_SEVERITIES:
