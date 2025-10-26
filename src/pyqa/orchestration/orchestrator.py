@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import cast
 
 from pyqa.core.environment.tool_env import CommandPreparer, PreparedCommand
+from pyqa.interfaces.analysis import AnnotationProvider
 
 from ..analysis.bootstrap import register_analysis_services
 from ..analysis.change_impact import apply_change_impact
@@ -54,6 +55,7 @@ from .action_executor import (
     ExecutionEnvironment,
     ExecutionState,
     RunnerCallable,
+    wrap_runner,
 )
 from .runtime import discover_files, prepare_runtime
 from .tool_selection import SelectionResult, ToolDecision, ToolSelector
@@ -61,7 +63,15 @@ from .tool_selection import SelectionResult, ToolDecision, ToolSelector
 FetchCallback = Callable[[FetchEvent, str, str, int, int, str | None], None]
 
 
-def _resolve_cache_builder(services: ServiceRegistryProtocol | None) -> Callable[[Config, Path], CacheContext]:
+def _noop_debug(_: str) -> None:
+    """Default debug logger used when debugging is disabled."""
+
+    return None
+
+
+def _resolve_cache_builder(
+    services: ServiceRegistryProtocol | None,
+) -> Callable[[Config, Path], CacheContext]:
     """Return the cache context builder available from ``services``.
 
     Args:
@@ -160,25 +170,19 @@ class Orchestrator(_OrchestratorActionMixin):
         if registry is None or discovery is None:
             raise TypeError("Orchestrator requires 'registry' and 'discovery' dependencies")
 
-        self._context = _RuntimeContext(registry=registry, discovery=discovery)
+        self._context = _RuntimeContext(
+            registry=registry,
+            discovery=discovery,
+        )
         base_runner = final_runner or build_default_runner()
         self._runner = base_runner if isinstance(base_runner, RunnerCallable) else wrap_runner(base_runner)
         self._hooks = final_hooks or OrchestratorHooks()
         self._services: ServiceRegistryProtocol = services or ServiceContainer()
         self._ensure_bootstrap_services()
-        self._debug_logger: Callable[[str], None] | None = debug_logger
+        debug_fn = debug_logger or _noop_debug
+        self._debug: Callable[[str], None] = debug_fn
         self._analysis = self._create_analysis_providers()
         self._pipeline = self._create_pipeline(final_preparer)
-
-    def _debug(self, message: str) -> None:
-        """Emit ``message`` to the configured debug logger when available.
-
-        Args:
-            message: Textual content describing the orchestration step.
-        """
-
-        if self._debug_logger:
-            self._debug_logger(message)
 
     def _ensure_bootstrap_services(self) -> None:
         """Ensure core analysis/default services exist on the container."""
@@ -210,7 +214,7 @@ class Orchestrator(_OrchestratorActionMixin):
             runner=self._runner,
             after_tool_hook=self._hooks.after_tool,
             context_resolver=self._analysis.context_resolver,
-            debug_logger=self._debug_logger,
+            debug_logger=None if self._debug is _noop_debug else self._debug,
         )
         return _ToolingPipeline(selector=selector, executor=executor, prepare_command=prepare_fn)
 
@@ -360,7 +364,11 @@ class Orchestrator(_OrchestratorActionMixin):
                 callback(event, tool_name, action_name, index, total, error)
         return results
 
-    def _build_environment(self, cfg: Config, root: Path | None) -> tuple[ExecutionEnvironment, list[Path]]:
+    def _build_environment(
+        self,
+        cfg: Config,
+        root: Path | None,
+    ) -> tuple[ExecutionEnvironment, list[Path]]:
         """Return the execution environment and discovered files for ``cfg``.
 
         Args:
@@ -402,7 +410,11 @@ class Orchestrator(_OrchestratorActionMixin):
             SelectionResult: Plan describing actions to execute or skip.
         """
 
-        selection = self._pipeline.selector.plan_selection(cfg, matched_files, environment.root)
+        selection = self._pipeline.selector.plan_selection(
+            cfg,
+            matched_files,
+            environment.root,
+        )
         self._debug_selection(selection, cfg)
         return selection
 
@@ -414,7 +426,7 @@ class Orchestrator(_OrchestratorActionMixin):
             cfg: Configuration providing filtering and CLI inputs.
         """
 
-        if not self._debug_logger:
+        if self._debug is _noop_debug:
             return
         run_names = list(selection.run_names)
         self._debug(f"selected tools: {run_names}")
@@ -424,7 +436,10 @@ class Orchestrator(_OrchestratorActionMixin):
             if decision.action == _TOOL_DECISION_SKIP and decision.eligibility.available
         ]
         if skipped:
-            self._debug(f"skipped tools: {skipped} -- only={cfg.execution.only} languages={cfg.execution.languages}")
+            skipped_message = (
+                f"skipped tools: {skipped} " f"-- only={cfg.execution.only} " f"languages={cfg.execution.languages}"
+            )
+            self._debug(skipped_message)
         for decision in selection.decisions:
             self._debug(self._format_decision_debug(decision))
 
@@ -564,10 +579,18 @@ class Orchestrator(_OrchestratorActionMixin):
         for action in tool.actions:
             should_run = self._should_run_action(cfg, action)
             if not should_run:
-                self._debug(self._format_skip_reason(loop_context.tool.name, action, loop_context.cfg))
+                skip_reason = self._format_skip_reason(
+                    loop_context.tool.name,
+                    action,
+                    loop_context.cfg,
+                )
+                self._debug(skip_reason)
                 continue
 
-            outcome = self._handle_tool_action(action=action, loop_context=loop_context)
+            outcome = self._handle_tool_action(
+                action=action,
+                loop_context=loop_context,
+            )
             if outcome is _ActionPlanOutcome.BAIL:
                 return True
         return False

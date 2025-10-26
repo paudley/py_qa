@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 
+"""Aggregate catalog model exports for static type checking."""
+
 from __future__ import annotations
 
 from typing import Final

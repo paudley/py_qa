@@ -14,7 +14,12 @@ from typing import cast
 
 from pyqa.core.serialization import JsonValue, SerializableValue
 from pyqa.interfaces.cache import CacheProvider
-from pyqa.interfaces.runtime import ServiceFactory, ServiceProtocol, ServiceProvider, ServiceRegistryProtocol
+from pyqa.interfaces.runtime import (
+    ServiceFactory,
+    ServiceProtocol,
+    ServiceProvider,
+    ServiceRegistryProtocol,
+)
 from pyqa.runtime.console.manager import get_console_manager
 
 from ...cache import create_cache_provider, default_cache_provider
@@ -432,6 +437,14 @@ def register_default_services(container: ServiceRegistryProtocol) -> None:
         *,
         singleton: bool = True,
     ) -> None:
+        """Register ``factory`` under ``key`` when the container lacks a binding.
+
+        Args:
+            key: Service identifier consulted during lookups.
+            factory: Factory responsible for producing the service instance.
+            singleton: ``True`` to reuse a single instance across resolutions.
+        """
+
         if key in container:
             return
         container.register(key, factory, singleton=singleton)
@@ -479,14 +492,26 @@ def register_default_services(container: ServiceRegistryProtocol) -> None:
         singleton=False,
     )
 
-    _register_if_missing("catalog_plugins", _StaticServiceFactory("catalog_plugins", _catalog_plugins), singleton=False)
-    _register_if_missing("cli_plugins", _StaticServiceFactory("cli_plugins", _cli_plugins), singleton=False)
+    _register_if_missing(
+        "catalog_plugins",
+        _StaticServiceFactory("catalog_plugins", _catalog_plugins),
+        singleton=False,
+    )
+    _register_if_missing(
+        "cli_plugins",
+        _StaticServiceFactory("cli_plugins", _cli_plugins),
+        singleton=False,
+    )
     _register_if_missing(
         "diagnostics_plugins",
         _StaticServiceFactory("diagnostics_plugins", _diagnostics_plugins),
         singleton=False,
     )
-    _register_if_missing("all_plugins", _StaticServiceFactory("all_plugins", _all_plugins), singleton=False)
+    _register_if_missing(
+        "all_plugins",
+        _StaticServiceFactory("all_plugins", _all_plugins),
+        singleton=False,
+    )
 
 
 class _JsonSerializer:

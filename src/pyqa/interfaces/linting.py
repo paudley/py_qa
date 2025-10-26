@@ -14,6 +14,8 @@ from pyqa.cli.core.options import ExecutionFormattingOptions, LintOptions
 from pyqa.cli.core.shared import CLILogger
 from pyqa.interfaces.discovery import DiscoveryOptions
 
+from .common import RepositoryRootProvider
+
 
 class SuppressionDirective(Protocol):
     """Protocol describing the metadata stored for an inline suppression directive."""
@@ -78,7 +80,7 @@ else:
 class LintTargetOptions(DiscoveryOptions, Protocol):
     """Lint-specific wrapper around discovery options."""
 
-    pass
+    __slots__ = ()
 
 
 @runtime_checkable
@@ -157,7 +159,7 @@ class LintOptionsView(Protocol):
 
 
 @runtime_checkable
-class PreparedLintState(Protocol):
+class PreparedLintState(RepositoryRootProvider, Protocol):
     """Minimal protocol describing the lint command state shared with linters."""
 
     @property
@@ -176,16 +178,6 @@ class PreparedLintState(Protocol):
 
         Returns:
             LintMetaParams: Meta parameters influencing lint execution.
-        """
-
-        raise NotImplementedError
-
-    @property
-    def root(self) -> Path:
-        """Return the repository root resolved for the lint run.
-
-        Returns:
-            Path: Repository root directory.
         """
 
         raise NotImplementedError

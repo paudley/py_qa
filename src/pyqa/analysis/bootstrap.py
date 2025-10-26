@@ -6,12 +6,20 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import cast
+from typing import Final, Literal, cast
 
 from ..core.metrics.function_scale import FunctionScaleEstimatorService
 from ..interfaces.runtime import ServiceFactory, ServiceProtocol, ServiceRegistryProtocol
 from .annotations import AnnotationEngine
 from .treesitter import TreeSitterContextResolver
+
+ContextResolverKey = Literal["context_resolver"]
+AnnotationProviderKey = Literal["annotation_provider"]
+FunctionScaleEstimatorKey = Literal["function_scale_estimator"]
+
+CONTEXT_RESOLVER_SERVICE_KEY: Final[ContextResolverKey] = "context_resolver"
+ANNOTATION_PROVIDER_SERVICE_KEY: Final[AnnotationProviderKey] = "annotation_provider"
+FUNCTION_SCALE_ESTIMATOR_SERVICE_KEY: Final[FunctionScaleEstimatorKey] = "function_scale_estimator"
 
 
 def _context_resolver_factory(_: ServiceRegistryProtocol) -> ServiceProtocol:
@@ -37,7 +45,7 @@ def _annotation_engine_factory(services: ServiceRegistryProtocol) -> ServiceProt
         ServiceProtocol: Annotation engine wired with the context resolver.
     """
 
-    resolver = services.resolve("context_resolver")
+    resolver = services.resolve(CONTEXT_RESOLVER_SERVICE_KEY)
     return AnnotationEngine(
         context_resolver=cast(TreeSitterContextResolver, resolver),
     )
@@ -63,17 +71,20 @@ def register_analysis_services(container: ServiceRegistryProtocol) -> None:
         container: Dependency injection interface receiving analysis services.
     """
 
-    if "context_resolver" not in container:
-        container.register("context_resolver", _AnalysisServiceFactory("context_resolver", _context_resolver_factory))
-    if "annotation_provider" not in container:
+    if CONTEXT_RESOLVER_SERVICE_KEY not in container:
         container.register(
-            "annotation_provider",
-            _AnalysisServiceFactory("annotation_provider", _annotation_engine_factory),
+            CONTEXT_RESOLVER_SERVICE_KEY,
+            _AnalysisServiceFactory(CONTEXT_RESOLVER_SERVICE_KEY, _context_resolver_factory),
         )
-    if "function_scale_estimator" not in container:
+    if ANNOTATION_PROVIDER_SERVICE_KEY not in container:
         container.register(
-            "function_scale_estimator",
-            _AnalysisServiceFactory("function_scale_estimator", _function_scale_factory),
+            ANNOTATION_PROVIDER_SERVICE_KEY,
+            _AnalysisServiceFactory(ANNOTATION_PROVIDER_SERVICE_KEY, _annotation_engine_factory),
+        )
+    if FUNCTION_SCALE_ESTIMATOR_SERVICE_KEY not in container:
+        container.register(
+            FUNCTION_SCALE_ESTIMATOR_SERVICE_KEY,
+            _AnalysisServiceFactory(FUNCTION_SCALE_ESTIMATOR_SERVICE_KEY, _function_scale_factory),
         )
 
 

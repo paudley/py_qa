@@ -12,10 +12,14 @@ from pathlib import Path
 from subprocess import CompletedProcess
 from typing import Final, Literal, cast
 
-from pyqa.core.environment.tool_env import CommandPreparationRequest, CommandPreparer, PreparedCommand
+from pyqa.core.environment.tool_env import (
+    CommandPreparationRequest,
+    CommandPreparer,
+    PreparedCommand,
+)
 from pyqa.core.runtime.process import CommandOptions, CommandOverrideMapping
+from pyqa.interfaces.analysis import AnnotationProvider, ContextResolver, FunctionScaleEstimator
 
-from ..analysis.services import AnnotationProvider, ContextResolver, FunctionScaleEstimator
 from ..config import Config
 from ..discovery.base import SupportsDiscovery
 from ..tools import Tool, ToolContext

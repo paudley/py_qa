@@ -113,7 +113,6 @@ class ResultCacheFactory(Protocol):
         Returns:
             str: Identifier describing the concrete cache factory implementation.
         """
-
         raise NotImplementedError
 
     @abstractmethod
@@ -166,7 +165,6 @@ class CacheTokenBuilder(Protocol):
         Returns:
             str: Identifier describing the concrete builder.
         """
-
         raise NotImplementedError
 
     @abstractmethod
@@ -193,7 +191,6 @@ class CacheContextFactory(Protocol):
         Returns:
             str: Identifier describing the concrete context factory implementation.
         """
-
         raise NotImplementedError
 
     @abstractmethod

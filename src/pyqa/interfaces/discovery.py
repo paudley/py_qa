@@ -10,6 +10,8 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from .common import PathSelectionOptions
+
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking clarity
     from ..config import FileDiscoveryConfig
 
@@ -110,68 +112,8 @@ class DiscoveryStrategy(Protocol):
 
 
 @runtime_checkable
-class DiscoveryOptions(Protocol):
+class DiscoveryOptions(PathSelectionOptions, Protocol):
     """Target discovery options propagated to tooling layers."""
-
-    @property
-    def root(self) -> Path:
-        """Return the filesystem root used when resolving targets.
-
-        Returns:
-            Path: Filesystem root for lint discovery.
-        """
-
-        raise NotImplementedError
-
-    @property
-    def paths(self) -> Sequence[Path]:
-        """Return explicit file paths selected for discovery.
-
-        Returns:
-            Sequence[Path]: Files explicitly requested for discovery.
-        """
-
-        raise NotImplementedError
-
-    @property
-    def dirs(self) -> Sequence[Path]:
-        """Return directory paths that should be recursively explored.
-
-        Returns:
-            Sequence[Path]: Directories to scan recursively.
-        """
-
-        raise NotImplementedError
-
-    @property
-    def exclude(self) -> Sequence[Path]:
-        """Return paths that must be excluded from discovery.
-
-        Returns:
-            Sequence[Path]: Paths excluded from discovery.
-        """
-
-        raise NotImplementedError
-
-    @property
-    def include_dotfiles(self) -> bool:
-        """Indicate whether dot-prefixed files should be included.
-
-        Returns:
-            bool: ``True`` when dotfiles should be considered.
-        """
-
-        raise NotImplementedError
-
-    @property
-    def paths_from_stdin(self) -> bool:
-        """Return whether target paths were supplied via standard input.
-
-        Returns:
-            bool: ``True`` when target paths originated from standard input.
-        """
-
-        raise NotImplementedError
 
 
 __all__ = [

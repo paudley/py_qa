@@ -39,7 +39,28 @@ _STRATEGY_TYPE_ALIASES: Final[dict[str, StrategyType]] = {
 class StrategyCallable(Protocol):
     """Callable produced by catalog strategies."""
 
-    def __call__(self, config: Mapping[str, JSONValue] | None = None) -> JSONValue | None: ...
+    def __call__(self, config: Mapping[str, JSONValue] | None = None) -> JSONValue | None:
+        """Execute the strategy implementation.
+
+        Args:
+            config: Optional configuration mapping scoped to the strategy.
+
+        Returns:
+            JSONValue | None: Strategy execution result serialisable to JSON.
+        """
+
+    @classmethod
+    def __subclasshook__(cls, subclass: type, /) -> bool:
+        """Return ``True`` when ``subclass`` exposes a callable strategy interface.
+
+        Args:
+            subclass: Candidate class inspected during ``issubclass`` checks.
+
+        Returns:
+            bool: ``True`` when ``subclass`` implements ``__call__``.
+        """
+
+        return hasattr(subclass, "__call__")
 
 
 @dataclass(slots=True)
@@ -48,7 +69,6 @@ class _StrategyFactory:
 
     implementation: Callable[..., JSONValue | None]
 
-    # suppression_valid: lint=internal-signatures strategy wrapper preserves the variadic factory signature expected by catalogue integrations while adding structured payload handling.
     def __call__(
         self,
         config: Mapping[str, JSONValue] | None = None,
@@ -168,38 +188,56 @@ class StrategyDefinition:
 
     @property
     def schema_version(self) -> str:
-        """Return the declared schema version for the strategy definition."""
+        """Return the declared schema version for the strategy definition.
 
+        Returns:
+            str: Schema version declared in the strategy metadata.
+        """
         return self.metadata.schema_version
 
     @property
     def identifier(self) -> str:
-        """Return the unique identifier for the strategy."""
+        """Return the unique identifier for the strategy.
 
+        Returns:
+            str: Strategy identifier used within the catalog.
+        """
         return self.metadata.identifier
 
     @property
     def strategy_type(self) -> StrategyType:
-        """Return the strategy type describing runtime behaviour."""
+        """Return the strategy type describing runtime behaviour.
 
+        Returns:
+            StrategyType: Normalised strategy type value.
+        """
         return self.metadata.strategy_type
 
     @property
     def description(self) -> str | None:
-        """Return the optional human-readable description."""
+        """Return the optional human-readable description.
 
+        Returns:
+            str | None: Strategy description when supplied by the catalog entry.
+        """
         return self.metadata.description
 
     @property
     def implementation(self) -> str:
-        """Return the module path implementing the strategy."""
+        """Return the module path implementing the strategy.
 
+        Returns:
+            str: Dotted module path of the strategy implementation.
+        """
         return self.implementation_details.module
 
     @property
     def entry(self) -> str | None:
-        """Return the optional attribute referenced within the implementation module."""
+        """Return the optional attribute referenced within the implementation module.
 
+        Returns:
+            str | None: Attribute name resolved within ``implementation`` when provided.
+        """
         return self.implementation_details.entry
 
     def to_dict(self) -> Mapping[str, JSONValue]:
@@ -234,13 +272,13 @@ class StrategyDefinition:
             attribute = getattr(module, self.entry, None)
             if attribute is None:
                 raise CatalogIntegrityError(
-                    f"{self.source}: module '{self.implementation}' has no attribute '{self.entry}'",
+                    (f"{self.source}: module '{self.implementation}' " f"has no attribute '{self.entry}'"),
                 )
         else:
             module_path, _, attribute_name = self.implementation.rpartition(".")
             if not module_path:
                 raise CatalogIntegrityError(
-                    f"{self.source}: implementation '{self.implementation}' must include a module path",
+                    (f"{self.source}: implementation '{self.implementation}' " "must include a module path"),
                 )
             try:
                 module = importlib.import_module(module_path)
@@ -256,7 +294,7 @@ class StrategyDefinition:
 
         if not callable(attribute):
             raise CatalogIntegrityError(
-                f"{self.source}: strategy implementation '{self.implementation}' is not callable",
+                (f"{self.source}: strategy implementation '{self.implementation}' " "is not callable"),
             )
         return cast(Callable[..., JSONValue | None], attribute)
 
@@ -319,7 +357,18 @@ def parse_strategy_metadata(
     *,
     context: str,
 ) -> StrategyMetadata:
-    """Return :class:`StrategyMetadata` parsed from the provided mapping."""
+    """Return :class:`StrategyMetadata` parsed from the provided mapping.
+
+    Args:
+        data: Mapping describing the strategy metadata fields.
+        context: Human-readable context included in diagnostic messages.
+
+    Returns:
+        StrategyMetadata: Frozen metadata extracted from ``data``.
+
+    Raises:
+        CatalogIntegrityError: If required metadata is missing or invalid.
+    """
 
     schema_version_value = expect_string(
         data.get("schemaVersion"),
@@ -328,7 +377,10 @@ def parse_strategy_metadata(
     )
     if schema_version_value != STRATEGY_SCHEMA_VERSION:
         raise CatalogIntegrityError(
-            f"{context}: schemaVersion '{schema_version_value}' is not supported; expected '{STRATEGY_SCHEMA_VERSION}'",
+            (
+                f"{context}: schemaVersion '{schema_version_value}' is not supported; "
+                f"expected '{STRATEGY_SCHEMA_VERSION}'"
+            ),
         )
     return StrategyMetadata(
         schema_version=schema_version_value,

@@ -97,7 +97,14 @@ class CatalogScanner:
 
 
 def _dedupe(paths: Iterable[Path]) -> Sequence[Path]:
-    """Return ``paths`` with duplicates removed while preserving order."""
+    """Return ``paths`` with duplicates removed while preserving order.
+
+    Args:
+        paths: Iterable of filesystem paths that may contain duplicates.
+
+    Returns:
+        Sequence[Path]: Ordered sequence containing the first instance of each path.
+    """
     seen: set[Path] = set()
     ordered: list[Path] = []
     for path in paths:

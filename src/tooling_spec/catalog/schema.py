@@ -20,8 +20,24 @@ class SchemaValidationError(Protocol):
 
     @property
     def message(self) -> str:
-        """Return the descriptive validation error message."""
-        raise NotImplementedError
+        """Return the descriptive validation error message.
+
+        Returns:
+            str: Human-readable message describing the validation failure.
+        """
+
+    @classmethod
+    def __subclasshook__(cls, subclass: type, /) -> bool:
+        """Return ``True`` when ``subclass`` exposes a jsonschema error interface.
+
+        Args:
+            subclass: Candidate class inspected during ``issubclass`` checks.
+
+        Returns:
+            bool: ``True`` when ``subclass`` defines a ``message`` attribute.
+        """
+
+        return hasattr(subclass, "message")
 
 
 @runtime_checkable
@@ -37,7 +53,6 @@ class SchemaValidator(Protocol):
         Raises:
             Exception: Implementations may raise jsonschema validation errors when invalid.
         """
-        raise NotImplementedError
 
     def iter_errors(self, instance: JSONValue) -> Iterable[SchemaValidationError]:
         """Iterate over validation errors for ``instance``.
@@ -48,7 +63,19 @@ class SchemaValidator(Protocol):
         Returns:
             Iterable[SchemaValidationError]: Iterator yielding validation errors.
         """
-        raise NotImplementedError
+
+    @classmethod
+    def __subclasshook__(cls, subclass: type, /) -> bool:
+        """Return ``True`` when ``subclass`` provides jsonschema validator hooks.
+
+        Args:
+            subclass: Candidate class inspected during ``issubclass`` checks.
+
+        Returns:
+            bool: ``True`` when ``subclass`` implements ``validate`` and ``iter_errors``.
+        """
+
+        return hasattr(subclass, "validate") and hasattr(subclass, "iter_errors")
 
 
 SchemaValidatorFactory = Callable[[JSONValue], SchemaValidator]

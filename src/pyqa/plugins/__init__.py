@@ -29,7 +29,7 @@ else:  # pragma: no cover - typer may be unavailable in minimal environments
     except ModuleNotFoundError:  # pragma: no cover - fallback stub for tooling tests
 
         class Typer:  # type: ignore[too-many-ancestors]
-            """Fallback stub used when Typer is not installed."""
+            """Fallback shim used when Typer is not installed."""
 
             ...
 

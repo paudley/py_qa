@@ -4,7 +4,8 @@
 
 from __future__ import annotations
 
-from ...interfaces.core import ConsoleManager
+from pyqa.interfaces.core import ConsoleManager
+
 from .manager import RichConsoleManager, console_manager, is_tty
 
 __all__ = ["ConsoleManager", "RichConsoleManager", "console_manager", "is_tty"]

@@ -97,98 +97,164 @@ class ToolDefinition:
 
     @property
     def schema_version(self) -> str:
-        """Return the schema version associated with this tool definition."""
+        """Return the schema version associated with this tool definition.
+
+        Returns:
+            str: Schema version declared by the catalog entry.
+        """
         return self.metadata.schema_version
 
     @property
     def name(self) -> str:
-        """Return the primary identifier of the catalog tool."""
+        """Return the primary identifier of the catalog tool.
+
+        Returns:
+            str: Tool name used within the catalog.
+        """
         return self.metadata.identity.name
 
     @property
     def aliases(self) -> tuple[str, ...]:
-        """Return alternate names referencing the tool."""
+        """Return alternate names referencing the tool.
+
+        Returns:
+            tuple[str, ...]: Canonical aliases supplied by the catalog metadata.
+        """
         return self.metadata.identity.aliases
 
     @property
     def description(self) -> str:
-        """Return the human-readable description of the tool."""
+        """Return the human-readable description of the tool.
+
+        Returns:
+            str: Tool description shown to end users.
+        """
         return self.metadata.identity.description
 
     @property
     def languages(self) -> tuple[str, ...]:
-        """Return languages targeted by the tool's actions."""
+        """Return languages targeted by the tool's actions.
+
+        Returns:
+            tuple[str, ...]: Languages the tool can operate on.
+        """
         return self.metadata.identity.languages
 
     @property
     def tags(self) -> tuple[str, ...]:
-        """Return tag metadata associated with the tool definition."""
+        """Return tag metadata associated with the tool definition.
+
+        Returns:
+            tuple[str, ...]: Catalog tags assigned to the tool.
+        """
         return self.metadata.identity.tags
 
     @property
     def default_enabled(self) -> bool:
-        """Return ``True`` when the tool should be enabled by default."""
+        """Return ``True`` when the tool should be enabled by default.
+
+        Returns:
+            bool: ``True`` when the tool is enabled by default in catalogs.
+        """
         return self.metadata.behaviour.default_enabled
 
     @property
     def auto_install(self) -> bool:
-        """Return ``True`` when the tool supports automatic runtime installation."""
+        """Return ``True`` when the tool supports automatic runtime installation.
 
+        Returns:
+            bool: ``True`` when automatic installation is available.
+        """
         return self.metadata.behaviour.auto_install
 
     @property
     def automatically_fix(self) -> bool:
-        """Return ``True`` when fix actions should run automatically."""
+        """Return ``True`` when fix actions should run automatically.
 
+        Returns:
+            bool: ``True`` when the catalog marks fix actions as automatic.
+        """
         return self.metadata.behaviour.automatically_fix
 
     @property
     def phase(self) -> str:
-        """Return the execution phase in which the tool participates."""
+        """Return the execution phase in which the tool participates.
+
+        Returns:
+            str: Tool execution phase label.
+        """
         return self.metadata.ordering.phase
 
     @property
     def before(self) -> tuple[str, ...]:
-        """Return tool identifiers that should run before this tool."""
+        """Return tool identifiers that should run before this tool.
+
+        Returns:
+            tuple[str, ...]: Tool identifiers that must precede this tool.
+        """
         return self.metadata.ordering.before
 
     @property
     def after(self) -> tuple[str, ...]:
-        """Return tool identifiers that should run after this tool."""
+        """Return tool identifiers that should run after this tool.
+
+        Returns:
+            tuple[str, ...]: Tool identifiers scheduled after this tool.
+        """
         return self.metadata.ordering.after
 
     @property
     def file_extensions(self) -> tuple[str, ...]:
-        """Return supported file extensions for the tool actions."""
+        """Return supported file extensions for the tool actions.
+
+        Returns:
+            tuple[str, ...]: File extensions associated with tool execution.
+        """
         return self.metadata.files.file_extensions
 
     @property
     def config_files(self) -> tuple[str, ...]:
-        """Return recognized configuration files for the tool."""
+        """Return recognized configuration files for the tool.
+
+        Returns:
+            tuple[str, ...]: Config file names the tool recognises.
+        """
         return self.metadata.files.config_files
 
     @property
     def diagnostics_bundle(self) -> DiagnosticsBundle:
-        """Return diagnostics metadata associated with the tool."""
+        """Return diagnostics metadata associated with the tool.
 
+        Returns:
+            DiagnosticsBundle: Bundle containing diagnostics metadata.
+        """
         return self.components.diagnostics_bundle
 
     @property
     def documentation(self) -> DocumentationBundle | None:
-        """Return the documentation bundle describing the tool."""
+        """Return the documentation bundle describing the tool.
 
+        Returns:
+            DocumentationBundle | None: Documentation bundle when provided.
+        """
         return self.components.documentation
 
     @property
     def options(self) -> tuple[OptionDefinition, ...]:
-        """Return the option definitions exposed by the tool."""
+        """Return the option definitions exposed by the tool.
 
+        Returns:
+            tuple[OptionDefinition, ...]: Option definitions in declaration order.
+        """
         return self.components.options
 
     @property
     def actions(self) -> tuple[ActionDefinition, ...]:
-        """Return the action definitions that implement the tool."""
+        """Return the action definitions that implement the tool.
 
+        Returns:
+            tuple[ActionDefinition, ...]: Action definitions providing behaviour.
+        """
         return self.components.actions
 
     def to_dict(self) -> Mapping[str, JSONValue]:
@@ -234,7 +300,10 @@ class ToolDefinition:
         )
         if schema_version_value != TOOL_SCHEMA_VERSION:
             raise CatalogIntegrityError(
-                f"{context}: schemaVersion '{schema_version_value}' is not supported; expected '{TOOL_SCHEMA_VERSION}'",
+                (
+                    f"{context}: schemaVersion '{schema_version_value}' is not supported; "
+                    f"expected '{TOOL_SCHEMA_VERSION}'"
+                ),
             )
 
         metadata = parse_tool_metadata(
@@ -421,7 +490,11 @@ TOOL_MODEL_EXPORTS: Final[tuple[str, ...]] = (
 
 
 def _tool_model_objects() -> tuple[ToolModelObject, ...]:
-    """Return the objects corresponding to ``TOOL_MODEL_EXPORTS``."""
+    """Return the objects corresponding to ``TOOL_MODEL_EXPORTS``.
+
+    Returns:
+        tuple[ToolModelObject, ...]: Tuple of exported model classes and parsers.
+    """
 
     return (
         ToolBehaviour,
@@ -463,7 +536,18 @@ class ToolDocumentationParser(Protocol):
             DocumentationBundle | None: Structured documentation bundle when available.
         """
 
-        ...
+    @classmethod
+    def __subclasshook__(cls, subclass: type, /) -> bool:
+        """Return ``True`` when ``subclass`` exposes a documentation parser interface.
+
+        Args:
+            subclass: Candidate class inspected during ``issubclass`` checks.
+
+        Returns:
+            bool: ``True`` when ``subclass`` implements ``__call__``.
+        """
+
+        return hasattr(subclass, "__call__")
 
 
 class ToolRuntimeParser(Protocol):
@@ -485,7 +569,18 @@ class ToolRuntimeParser(Protocol):
             RuntimeDefinition | None: Runtime definition or ``None`` when the mapping is absent.
         """
 
-        ...
+    @classmethod
+    def __subclasshook__(cls, subclass: type, /) -> bool:
+        """Return ``True`` when ``subclass`` exposes a runtime parser interface.
+
+        Args:
+            subclass: Candidate class inspected during ``issubclass`` checks.
+
+        Returns:
+            bool: ``True`` when ``subclass`` implements ``__call__``.
+        """
+
+        return hasattr(subclass, "__call__")
 
 
 class ToolMetadataParser(Protocol):
@@ -509,7 +604,18 @@ class ToolMetadataParser(Protocol):
             ToolMetadata: Parsed tool metadata matching ``schema_version``.
         """
 
-        ...
+    @classmethod
+    def __subclasshook__(cls, subclass: type, /) -> bool:
+        """Return ``True`` when ``subclass`` exposes a metadata parser interface.
+
+        Args:
+            subclass: Candidate class inspected during ``issubclass`` checks.
+
+        Returns:
+            bool: ``True`` when ``subclass`` implements ``__call__``.
+        """
+
+        return hasattr(subclass, "__call__")
 
 
 ToolModelObject: TypeAlias = (

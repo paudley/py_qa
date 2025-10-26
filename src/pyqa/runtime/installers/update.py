@@ -8,17 +8,28 @@ from __future__ import annotations
 import os
 import shutil
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from enum import Enum
 from pathlib import Path
 from subprocess import CompletedProcess
-from typing import Final, Protocol, cast
-
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import Final, cast
 
 from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS, PY_QA_DIR_NAME
 from pyqa.core.logging import fail, info, ok, warn
 from pyqa.core.runtime.process import CommandOptions, run_command
 from pyqa.platform.workspace import is_py_qa_workspace
+
+from .update_models import (
+    SKIPPED_STATUS,
+    CommandSpec,
+    ExecutionDetail,
+    ExecutionStatus,
+    PlanCommand,
+    UpdatePlan,
+    UpdatePlanItem,
+    UpdateResult,
+    Workspace,
+    WorkspaceKind,
+    WorkspaceStrategy,
+)
 
 CommandRunner = Callable[[Sequence[str], Path | None], CompletedProcess[str]]
 
@@ -29,226 +40,6 @@ YARN_LOCKFILE: Final[str] = "yarn.lock"
 NPM_MANIFEST: Final[str] = "package.json"
 GO_MANIFEST: Final[str] = "go.mod"
 CARGO_MANIFEST: Final[str] = "Cargo.toml"
-
-
-class ExecutionStatus(str, Enum):
-    """Execution lifecycle markers emitted for each plan command."""
-
-    RAN = "ran"
-    SKIPPED = "skipped"
-    FAILED = "failed"
-
-
-SKIPPED_STATUS: Final[ExecutionStatus] = ExecutionStatus.SKIPPED
-
-
-class WorkspaceKind(Enum):
-    """Enumeration describing supported workspace categories."""
-
-    PYTHON = "python"
-    PNPM = "pnpm"
-    YARN = "yarn"
-    NPM = "npm"
-    GO = "go"
-    RUST = "rust"
-
-    @classmethod
-    def from_str(cls, value: str) -> WorkspaceKind:
-        """Return the matching :class:`WorkspaceKind` for ``value``.
-
-        Args:
-            value: Normalised string representation of a workspace kind.
-
-        Returns:
-            WorkspaceKind: Enum instance associated with *value*.
-
-        Raises:
-            ValueError: If *value* does not represent a known workspace kind.
-
-        """
-
-        try:
-            return cls(value)
-        except ValueError as exc:  # pragma: no cover - defensive
-            raise ValueError(value) from exc
-
-
-class Workspace(BaseModel):
-    """Description of a detected workspace slated for dependency updates."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    directory: Path
-    kind: WorkspaceKind
-    manifest: Path
-
-    def __str__(self) -> str:
-        """Return a concise string representation of the workspace."""
-
-        return f"{self.kind.value}:{self.directory}"
-
-
-class CommandSpec(BaseModel):
-    """Specification describing an update command and its prerequisites."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    args: tuple[str, ...]
-    description: str | None = None
-    requires: tuple[str, ...] = Field(default_factory=tuple)
-
-    @field_validator("args", mode="before")
-    @classmethod
-    def _coerce_args(cls, value: Sequence[str] | str) -> tuple[str, ...]:
-        if isinstance(value, str):
-            return (value,)
-        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-            return tuple(str(entry) for entry in value)
-        raise TypeError("CommandSpec.args must be a sequence of strings")
-
-    @field_validator("requires", mode="before")
-    @classmethod
-    def _coerce_requires(cls, value: Sequence[str] | set[str] | str | None) -> tuple[str, ...]:
-        if value is None:
-            return ()
-        if isinstance(value, str):
-            return (value,)
-        if isinstance(value, set):
-            return tuple(str(entry) for entry in value)
-        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-            return tuple(str(entry) for entry in value)
-        raise TypeError("CommandSpec.requires must be a sequence of strings")
-
-
-class PlanCommand(BaseModel):
-    """Wrapper pairing a :class:`CommandSpec` with optional rationale."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    spec: CommandSpec
-    reason: str | None = None
-
-
-class ExecutionDetail(BaseModel):
-    """Outcome captured for a command executed (or skipped) during updates."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    command: CommandSpec
-    status: ExecutionStatus
-    message: str | None = None
-
-
-class UpdatePlanItem(BaseModel):
-    """Plan representation for updating a single workspace."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    workspace: Workspace
-    commands: list[PlanCommand] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
-
-
-class UpdatePlan(BaseModel):
-    """Aggregated plan covering all workspaces slated for updates."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    items: list[UpdatePlanItem] = Field(default_factory=list)
-
-
-class UpdateResult(BaseModel):
-    """Execution results captured while applying an :class:`UpdatePlan`."""
-
-    model_config = ConfigDict(validate_assignment=True)
-
-    successes: list[Workspace] = Field(default_factory=list)
-    failures: list[tuple[Workspace, str]] = Field(default_factory=list)
-    skipped: list[Workspace] = Field(default_factory=list)
-    details: list[tuple[Workspace, list[ExecutionDetail]]] = Field(default_factory=list)
-
-    def register_success(self, workspace: Workspace, executions: list[ExecutionDetail]) -> None:
-        """Record a successfully updated workspace.
-
-        Args:
-            workspace: Workspace that completed all commands without failure.
-            executions: Execution details describing the commands that ran.
-
-        """
-
-        self.successes = [*self.successes, workspace]
-        self.details = [*self.details, (workspace, executions)]
-
-    def register_failure(
-        self,
-        workspace: Workspace,
-        message: str,
-        executions: list[ExecutionDetail],
-    ) -> None:
-        """Record a workspace failure and persist its execution details.
-
-        Args:
-            workspace: Workspace that encountered an error.
-            message: Human-readable summary for the failure.
-            executions: Execution details collected up to the failure.
-
-        """
-
-        self.failures = [*self.failures, (workspace, message)]
-        self.details = [*self.details, (workspace, executions)]
-
-    def register_skip(self, workspace: Workspace, executions: list[ExecutionDetail]) -> None:
-        """Record a skipped workspace (dry-run or unsupported).
-
-        Args:
-            workspace: Workspace that did not run any update commands.
-            executions: Execution details collected for the workspace.
-
-        """
-
-        self.skipped = [*self.skipped, workspace]
-        self.details = [*self.details, (workspace, executions)]
-
-    def exit_code(self) -> int:
-        """Return ``1`` when failures were observed, otherwise ``0``.
-
-        Returns:
-            int: ``1`` if any workspace failed, otherwise ``0``.
-
-        """
-
-        return 1 if self.failures else 0
-
-
-class WorkspaceStrategy(Protocol):
-    """Abstraction implemented by per-ecosystem update strategies."""
-
-    kind: WorkspaceKind
-
-    def detect(self, directory: Path, filenames: set[str]) -> bool:
-        """Return ``True`` when ``directory`` belongs to this strategy.
-
-        Args:
-            directory: Directory being evaluated.
-            filenames: Filenames contained within ``directory``.
-
-        Returns:
-            bool: ``True`` when the strategy can manage the workspace, ``False`` otherwise.
-        """
-
-        raise NotImplementedError
-
-    def plan(self, workspace: Workspace) -> list[CommandSpec]:
-        """Return the commands required to update ``workspace``.
-
-        Args:
-            workspace: Workspace to update.
-
-        Returns:
-            list[CommandSpec]: Commands that perform the update or an empty list when none are required.
-        """
-
-        raise NotImplementedError
 
 
 class PythonStrategy:
@@ -277,8 +68,8 @@ class PythonStrategy:
             workspace: Workspace whose dependencies should be updated.
 
         Returns:
-            list[CommandSpec]: Ordered command specifications for uv; empty when no work is required.
-
+            list[CommandSpec]: Ordered command specifications for uv; empty when no
+            work is required.
         """
 
         commands: list[CommandSpec] = []
@@ -335,7 +126,8 @@ class PnpmStrategy:
             workspace: Workspace whose dependencies should be updated.
 
         Returns:
-            list[CommandSpec]: Command specifications to run with pnpm; empty when no update is required.
+            list[CommandSpec]: Command specifications to run with pnpm; empty when no
+            update is required.
         """
 
         label = workspace.directory.name or str(workspace.directory)
@@ -609,14 +401,22 @@ class WorkspacePlanner:
     """Create update plans for discovered workspaces."""
 
     def __init__(self, strategies: Iterable[WorkspaceStrategy]) -> None:
-        """Initialise the planner with the set of available strategies."""
+        """Initialise the planner with the set of available strategies.
+
+        Args:
+            strategies: Concrete workspace strategies keyed by :class:`WorkspaceKind`.
+        """
 
         self._strategies: Mapping[WorkspaceKind, WorkspaceStrategy] = {
             strategy.kind: strategy for strategy in strategies
         }
 
     def supported_kinds(self) -> tuple[WorkspaceKind, ...]:
-        """Return the workspace kinds understood by the planner."""
+        """Return the workspace kinds understood by the planner.
+
+        Returns:
+            tuple[WorkspaceKind, ...]: Workspace kinds for which strategies are registered.
+        """
 
         return tuple(self._strategies.keys())
 
@@ -804,7 +604,7 @@ class WorkspaceUpdater:
 
         completed = self._runner(spec.args, workspace.directory)
         if completed.returncode != 0:
-            message = f"Command '{' '.join(spec.args)}' failed with exit code {completed.returncode}"
+            message = f"Command '{' '.join(spec.args)}' failed with exit code " f"{completed.returncode}"
             fail(message, use_emoji=self._use_emoji)
             detail = ExecutionDetail(
                 command=spec,
@@ -819,7 +619,13 @@ class WorkspaceUpdater:
 
 
 def ensure_lint_install(root: Path, runner: CommandRunner, *, dry_run: bool) -> None:
-    """Ensure the mono-repo lint shim installs its managed dependencies."""
+    """Ensure the mono-repo lint shim installs its managed dependencies.
+
+    Args:
+        root: Repository root containing the ``py-qa`` lint shim.
+        runner: Callable used to execute subprocess commands.
+        dry_run: ``True`` to log actions without invoking the shim.
+    """
 
     lint_shim = root / "py-qa" / "lint"
     if not lint_shim.exists():
@@ -838,7 +644,15 @@ def ensure_lint_install(root: Path, runner: CommandRunner, *, dry_run: bool) -> 
 
 
 def _manifest_for(kind: WorkspaceKind, directory: Path) -> Path:
-    """Return the manifest path associated with ``kind`` inside ``directory``."""
+    """Return the manifest path associated with ``kind`` inside ``directory``.
+
+    Args:
+        kind: Workspace kind whose manifest should be resolved.
+        directory: Workspace directory containing the manifest file.
+
+    Returns:
+        Path: Expected path to the manifest; ``directory`` when unknown.
+    """
 
     mapping = {
         WorkspaceKind.PYTHON: "pyproject.toml",
@@ -853,14 +667,30 @@ def _manifest_for(kind: WorkspaceKind, directory: Path) -> Path:
 
 
 def _default_runner(args: Sequence[str], cwd: Path | None) -> CompletedProcess[str]:
-    """Invoke :func:`run_command` using the configured runner signature."""
+    """Invoke :func:`run_command` using the configured runner signature.
+
+    Args:
+        args: Command line arguments to execute.
+        cwd: Optional working directory for the command.
+
+    Returns:
+        CompletedProcess[str]: Completed process metadata from the invocation.
+    """
 
     options = CommandOptions(cwd=cwd, check=False)
     return run_command(args, options=options)
 
 
 def _format_relative(path: Path, root: Path) -> str:
-    """Return ``path`` relative to ``root`` when possible."""
+    """Return ``path`` relative to ``root`` when possible.
+
+    Args:
+        path: Filesystem path to render.
+        root: Root directory used as the relativity anchor.
+
+    Returns:
+        str: Relative string when ``path`` is within ``root``; otherwise the absolute path.
+    """
 
     try:
         relative = path.relative_to(root)
