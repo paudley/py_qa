@@ -14,7 +14,7 @@ from pyqa.cli.core.options import ExecutionFormattingOptions, LintOptions
 from pyqa.cli.core.shared import CLILogger
 from pyqa.interfaces.discovery import DiscoveryOptions
 
-from .common import RepositoryRootProvider
+from .common import CacheControlOptions, RepositoryRootProvider
 
 
 class SuppressionDirective(Protocol):
@@ -84,28 +84,10 @@ class LintTargetOptions(DiscoveryOptions, Protocol):
 
 
 @runtime_checkable
-class LintRuntimeOptions(Protocol):
+class LintRuntimeOptions(CacheControlOptions, Protocol):
     """Execution runtime switches relevant to internal linters."""
 
-    @property
-    def cache_dir(self) -> Path:
-        """Return the cache directory applicable to the lint run.
-
-        Returns:
-            Path: Directory used for caching lint results.
-        """
-
-        raise NotImplementedError
-
-    @property
-    def no_cache(self) -> bool:
-        """Indicate whether caching should be bypassed for this run.
-
-        Returns:
-            bool: ``True`` when caching should be disabled.
-        """
-
-        raise NotImplementedError
+    __slots__ = ()
 
 
 @runtime_checkable

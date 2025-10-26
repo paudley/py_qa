@@ -18,7 +18,14 @@ except ModuleNotFoundError as exc:  # pragma: no cover - environment invariant
 
 
 def is_py_qa_workspace(root: Path) -> bool:
-    """Return ``True`` when *root* appears to be the py_qa project itself."""
+    """Return whether ``root`` appears to be the py_qa project itself.
+
+    Args:
+        root: Candidate project root directory.
+
+    Returns:
+        bool: ``True`` when the directory matches the py_qa workspace layout.
+    """
     try:
         resolved = root.resolve()
     except OSError:
@@ -28,6 +35,15 @@ def is_py_qa_workspace(root: Path) -> bool:
 
 @cache
 def _is_py_qa_workspace_cached(root_str: str) -> bool:
+    """Cached helper implementing :func:`is_py_qa_workspace` resolution.
+
+    Args:
+        root_str: String representation of the candidate root directory.
+
+    Returns:
+        bool: ``True`` when the directory satisfies py_qa workspace checks.
+    """
+
     root = Path(root_str)
     pyproject = root / "pyproject.toml"
     if not pyproject.is_file():
@@ -47,6 +63,15 @@ PyProjectPayload: TypeAlias = Mapping[str, TomlValue]
 
 
 def _extract_project_name(payload: PyProjectPayload) -> str | None:
+    """Return the project name declared within ``payload`` when present.
+
+    Args:
+        payload: Parsed ``pyproject.toml`` mapping.
+
+    Returns:
+        str | None: Project name or ``None`` when not present.
+    """
+
     project = payload.get("project")
     if isinstance(project, Mapping):
         candidate = project.get("name")
@@ -68,6 +93,8 @@ _SENTINEL_FILES = ("REORG_PLAN.md",)
 
 
 def _has_required_entries(root: Path) -> bool:
+    """Return whether ``root`` contains sentinel files and directories."""
+
     for relative in _SENTINEL_DIRECTORIES:
         candidate = root / relative
         if not candidate.is_dir():

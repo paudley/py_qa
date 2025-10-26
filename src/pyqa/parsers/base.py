@@ -274,9 +274,6 @@ def iter_pattern_matches(
 
     Yields:
         re.Match[str]: Match objects produced by ``pattern``.
-
-    Returns:
-        Iterator[re.Match[str]]: Iterator yielding regex matches.
     """
 
     forbidden = tuple(skip_prefixes)

@@ -11,13 +11,15 @@ from typing import Final, Literal, Protocol, TypeAlias, runtime_checkable
 
 from pyqa.interfaces.discovery import DiscoveryOptions
 
+from .common import CacheControlOptions
+
 StrictnessLiteral: TypeAlias = Literal["lenient", "standard", "strict"]
 BanditLevelLiteral: TypeAlias = Literal["low", "medium", "high"]
 SensitivityLiteral: TypeAlias = Literal["low", "medium", "high", "maximum"]
 
 
 @runtime_checkable
-class RuntimeOptions(Protocol):
+class RuntimeOptions(CacheControlOptions, Protocol):
     """Execution runtime configuration shared across tool integrations."""
 
     @property
@@ -35,24 +37,6 @@ class RuntimeOptions(Protocol):
 
         Returns:
             bool: ``True`` when execution should bail on the first error.
-        """
-        raise NotImplementedError
-
-    @property
-    def no_cache(self) -> bool:
-        """Return whether caching should be disabled for the tool run.
-
-        Returns:
-            bool: ``True`` when caching should be bypassed.
-        """
-        raise NotImplementedError
-
-    @property
-    def cache_dir(self) -> Path:
-        """Return the repository-local directory used for tool caches.
-
-        Returns:
-            Path: Filesystem path used for tool caches.
         """
         raise NotImplementedError
 

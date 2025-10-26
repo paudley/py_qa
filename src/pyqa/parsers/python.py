@@ -21,13 +21,27 @@ from .base import (
 
 
 def _mapping_from_json(value: JsonValue | None) -> Mapping[str, JsonValue]:
-    """Return ``value`` when it is a mapping, otherwise an empty mapping."""
+    """Return ``value`` when it is a mapping, otherwise an empty mapping.
+
+    Args:
+        value: JSON value that may represent a mapping of attributes.
+
+    Returns:
+        Mapping[str, JsonValue]: Mapping extracted from *value* or an empty mapping.
+    """
 
     return value if isinstance(value, Mapping) else {}
 
 
 def _iter_mapping_sequence(value: JsonValue | None) -> tuple[Mapping[str, JsonValue], ...]:
-    """Return tuple of mappings extracted from ``value`` when iterable."""
+    """Return tuple of mappings extracted from ``value`` when iterable.
+
+    Args:
+        value: JSON value that may contain a sequence of mapping entries.
+
+    Returns:
+        tuple[Mapping[str, JsonValue], ...]: Tuple containing mapping entries discovered in *value*.
+    """
 
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return tuple(entry for entry in value if isinstance(entry, Mapping))
@@ -35,30 +49,32 @@ def _iter_mapping_sequence(value: JsonValue | None) -> tuple[Mapping[str, JsonVa
 
 
 def _iter_json_sequence(value: JsonValue | None) -> tuple[JsonValue, ...]:
-    """Return non-string sequence items derived from ``value``."""
+    """Return non-string sequence items derived from ``value``.
+
+    Args:
+        value: JSON value that may contain an arbitrary sequence.
+
+    Returns:
+        tuple[JsonValue, ...]: Tuple containing entries discovered in *value*.
+    """
 
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return tuple(value)
     return ()
 
 
-def parse_ruff(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_ruff(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse Ruff JSON output into raw diagnostics.
 
     Args:
         payload: JSON payload returned by Ruff.
-        context: Tool execution context supplied by the orchestrator.
+        _context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Normalised diagnostics representing Ruff findings.
     """
-    del context
     results: list[RawDiagnostic] = []
-    source: JsonValue | None
-    if isinstance(payload, Mapping):
-        source = payload.get("diagnostics")
-    else:
-        source = payload
+    source: JsonValue | None = payload.get("diagnostics") if isinstance(payload, Mapping) else payload
     for item in iter_dicts(source):
         filename = coerce_optional_str(item.get("filename")) or coerce_optional_str(item.get("file"))
         location = _mapping_from_json(item.get("location"))
@@ -81,7 +97,15 @@ def parse_ruff(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnost
 
 
 def _normalise_pylint_code(symbol: JsonValue, item: Mapping[str, JsonValue]) -> str | None:
-    """Return a Pylint diagnostic code in canonical hyphenated form."""
+    """Return a Pylint diagnostic code in canonical hyphenated form.
+
+    Args:
+        symbol: Symbol value reported by Pylint for the diagnostic.
+        item: Mapping describing the JSON diagnostic entry.
+
+    Returns:
+        str | None: Normalised diagnostic code or ``None`` when unavailable.
+    """
 
     if isinstance(symbol, str) and symbol.strip():
         return symbol.strip().replace("_", "-")
@@ -93,17 +117,16 @@ def _normalise_pylint_code(symbol: JsonValue, item: Mapping[str, JsonValue]) -> 
     return None
 
 
-def parse_pylint(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_pylint(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse Pylint JSON output into raw diagnostics.
 
     Args:
         payload: JSON payload emitted by Pylint.
-        context: Tool execution context supplied by the orchestrator.
+        _context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics prepared for downstream processing.
     """
-    del context
     results: list[RawDiagnostic] = []
     for item in iter_dicts(payload):
         path = coerce_optional_str(item.get("path")) or coerce_optional_str(item.get("filename"))
@@ -132,17 +155,16 @@ def parse_pylint(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagno
     return results
 
 
-def parse_pyright(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_pyright(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse Pyright JSON diagnostics.
 
     Args:
         payload: JSON payload emitted by Pyright.
-        context: Tool execution context supplied by the orchestrator.
+        _context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics ready for downstream processing.
     """
-    del context
     if isinstance(payload, Mapping):
         diagnostics = _iter_mapping_sequence(payload.get("generalDiagnostics"))
         if not diagnostics:
@@ -178,7 +200,14 @@ def parse_pyright(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagn
 
 
 def _extract_mypy_function(entry: Mapping[str, JsonValue]) -> str | None:
-    """Extract the function or symbol name referenced by a MyPy diagnostic."""
+    """Extract the function or symbol name referenced by a MyPy diagnostic.
+
+    Args:
+        entry: Mapping describing a MyPy diagnostic entry.
+
+    Returns:
+        str | None: Symbol name referenced by the diagnostic, or ``None`` if missing.
+    """
 
     candidates = (
         entry.get("function"),
@@ -202,7 +231,18 @@ def _build_python_details(
     code: str | None = None,
     function: str | None = None,
 ) -> DiagnosticDetails:
-    """Construct :class:`DiagnosticDetails` for Python tooling."""
+    """Return :class:`DiagnosticDetails` populated for Python tooling.
+
+    Args:
+        tool: Tool identifier associated with the diagnostic.
+        severity: Enum identifying diagnostic severity.
+        message: Human-readable diagnostic message.
+        code: Optional diagnostic code provided by the tool.
+        function: Optional function or symbol name associated with the diagnostic.
+
+    Returns:
+        DiagnosticDetails: Structured detail payload describing the diagnostic.
+    """
 
     return DiagnosticDetails(
         severity=severity,
@@ -213,17 +253,16 @@ def _build_python_details(
     )
 
 
-def parse_mypy(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_mypy(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse MyPy JSON diagnostics.
 
     Args:
         payload: JSON payload produced by MyPy.
-        context: Tool execution context supplied by the orchestrator.
+        _context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics prepared for downstream processing.
     """
-    del context
     results: list[RawDiagnostic] = []
     if isinstance(payload, Mapping):
         error_entries = _iter_mapping_sequence(payload.get("errors"))
@@ -269,6 +308,15 @@ SELENE_DIAGNOSTIC_TYPE: Final[str] = "diagnostic"
 
 
 def _iter_selene_records(payload: JsonValue) -> Iterator[Mapping[str, JsonValue]]:
+    """Iterate over mapping entries representing Selene diagnostics.
+
+    Args:
+        payload: JSON payload produced by Selene.
+
+    Yields:
+        Mapping[str, JsonValue]: Diagnostic entries captured in *payload*.
+    """
+
     if isinstance(payload, list):
         yield from (item for item in payload if isinstance(item, Mapping))
     elif isinstance(payload, Mapping):
@@ -276,11 +324,29 @@ def _iter_selene_records(payload: JsonValue) -> Iterator[Mapping[str, JsonValue]
 
 
 def _is_selene_diagnostic(entry: Mapping[str, JsonValue]) -> bool:
+    """Return whether ``entry`` represents a diagnostic record.
+
+    Args:
+        entry: Mapping describing a potential Selene diagnostic entry.
+
+    Returns:
+        bool: ``True`` when *entry* corresponds to a diagnostic record.
+    """
+
     entry_type = str(entry.get("type", "")).lower()
     return entry_type == SELENE_DIAGNOSTIC_TYPE
 
 
 def _extract_selene_location(entry: Mapping[str, JsonValue]) -> tuple[str | None, int | None, int | None]:
+    """Return location metadata extracted from a Selene entry.
+
+    Args:
+        entry: Mapping describing a Selene diagnostic.
+
+    Returns:
+        tuple[str | None, int | None, int | None]: Tuple containing file, line, and column metadata.
+    """
+
     primary = entry.get("primary_label")
     if not isinstance(primary, Mapping):
         return None, None, None
@@ -296,6 +362,15 @@ def _extract_selene_location(entry: Mapping[str, JsonValue]) -> tuple[str | None
 
 
 def _collect_selene_notes(entry: Mapping[str, JsonValue]) -> list[str]:
+    """Collect supplemental notes attached to a Selene diagnostic.
+
+    Args:
+        entry: Mapping describing a Selene diagnostic entry.
+
+    Returns:
+        list[str]: List of supplemental notes associated with the diagnostic.
+    """
+
     notes: list[str] = []
     for note in _iter_json_sequence(entry.get("notes")):
         text = coerce_optional_str(note) or ""
@@ -310,6 +385,15 @@ def _collect_selene_notes(entry: Mapping[str, JsonValue]) -> list[str]:
 
 
 def _build_selene_message(entry: Mapping[str, JsonValue]) -> str:
+    """Construct a diagnostic message incorporating supplemental notes.
+
+    Args:
+        entry: Mapping describing a Selene diagnostic entry.
+
+    Returns:
+        str: Message string ready for inclusion in a :class:`RawDiagnostic`.
+    """
+
     base_message = str(entry.get("message", "")).strip()
     notes = _collect_selene_notes(entry)
     if not notes:
@@ -321,6 +405,15 @@ def _build_selene_message(entry: Mapping[str, JsonValue]) -> str:
 
 
 def _parse_selene_entry(entry: Mapping[str, JsonValue]) -> RawDiagnostic | None:
+    """Return a :class:`RawDiagnostic` constructed from ``entry`` when possible.
+
+    Args:
+        entry: Mapping describing a Selene diagnostic entry.
+
+    Returns:
+        RawDiagnostic | None: Constructed diagnostic or ``None`` when *entry* is not diagnostic.
+    """
+
     if not _is_selene_diagnostic(entry):
         return None
     severity_label = str(entry.get("severity", "warning")).lower()
@@ -339,7 +432,15 @@ def _parse_selene_entry(entry: Mapping[str, JsonValue]) -> RawDiagnostic | None:
 
 
 def parse_selene(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse selene JSON output (display-style json2)."""
+    """Parse Selene JSON output (display-style json2).
+
+    Args:
+        payload: JSON payload produced by Selene.
+        _context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics derived from the Selene payload.
+    """
     results: list[RawDiagnostic] = []
     for entry in _iter_selene_records(payload):
         diagnostic = _parse_selene_entry(entry)

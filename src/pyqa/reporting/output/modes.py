@@ -15,7 +15,12 @@ from .diagnostics import dump_diagnostics, join_output
 
 
 def render_quiet_mode(result: RunResult, cfg: OutputConfig) -> None:
-    """Render diagnostics in quiet mode."""
+    """Render diagnostics in quiet mode.
+
+    Args:
+        result: Run result produced by the orchestrator.
+        cfg: Output configuration controlling colour/emoji usage.
+    """
 
     console = get_console_manager().get(color=cfg.color, emoji=cfg.emoji)
     failed = [outcome for outcome in result.outcomes if not outcome.ok]
@@ -31,7 +36,12 @@ def render_quiet_mode(result: RunResult, cfg: OutputConfig) -> None:
 
 
 def render_pretty_mode(result: RunResult, cfg: OutputConfig) -> None:
-    """Render orchestrator results in a human-friendly pretty format."""
+    """Render orchestrator results in a human-friendly pretty format.
+
+    Args:
+        result: Run result produced by the orchestrator.
+        cfg: Output configuration controlling formatting options.
+    """
 
     root_display = colorize(str(Path(result.root).resolve()), "blue", cfg.color)
     console = get_console_manager().get(color=cfg.color, emoji=cfg.emoji)
@@ -54,7 +64,11 @@ def render_pretty_mode(result: RunResult, cfg: OutputConfig) -> None:
 
 
 def render_raw_mode(result: RunResult) -> None:
-    """Render orchestrator stdout/stderr streams without additional formatting."""
+    """Render orchestrator stdout/stderr streams without additional formatting.
+
+    Args:
+        result: Run result produced by the orchestrator.
+    """
 
     console = get_console_manager().get(color=False, emoji=False)
     for outcome in result.outcomes:

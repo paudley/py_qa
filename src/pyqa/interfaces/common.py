@@ -79,4 +79,29 @@ class PathSelectionOptions(RepositoryRootProvider, Protocol):
         raise NotImplementedError
 
 
-__all__ = ["PathSelectionOptions", "RepositoryRootProvider"]
+@runtime_checkable
+class CacheControlOptions(RepositoryRootProvider, Protocol):
+    """Expose cache directory configuration shared across tooling interfaces."""
+
+    @property
+    def cache_dir(self) -> Path:
+        """Return the cache directory applicable to the current invocation.
+
+        Returns:
+            Path: Directory used for caching tool or linter results.
+        """
+
+        raise NotImplementedError
+
+    @property
+    def no_cache(self) -> bool:
+        """Return whether caching behaviour should be disabled.
+
+        Returns:
+            bool: ``True`` when caching must be bypassed entirely.
+        """
+
+        raise NotImplementedError
+
+
+__all__ = ["CacheControlOptions", "PathSelectionOptions", "RepositoryRootProvider"]

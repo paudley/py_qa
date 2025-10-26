@@ -7,9 +7,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
-from typing import Final
+from typing import Final, Iterator, Protocol
 
 from tree_sitter import Node, Parser
 
@@ -17,6 +16,7 @@ from pyqa.core.models import Diagnostic
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path_key
 from pyqa.interfaces.linting import PreparedLintState
+from pyqa.cache.in_memory import memoize
 
 from .base import InternalLintReport, build_internal_report
 from .tree_sitter_utils import resolve_python_parser
@@ -65,6 +65,60 @@ _ABSTRACT_DECORATOR_TOKENS: Final[tuple[str, ...]] = (
     "abstractproperty",
     "abstractstaticmethod",
 )
+_DECORATOR_NODE_TYPE: Final[str] = "decorator"
+_PROTOCOL_TOKEN: Final[str] = "protocol"
+_NOT_IMPLEMENTED_ERROR_TOKEN: Final[str] = "NotImplementedError"
+
+_MARKER_MESSAGE_TEMPLATE: Final[str] = "Marker '{marker}' indicates missing implementation."
+_NOT_IMPLEMENTED_ERROR_MESSAGE: Final[str] = "Raising NotImplementedError indicates missing functionality."
+_NOT_IMPLEMENTED_EXCEPTION_MESSAGE: Final[str] = "Throwing NotImplemented/NotSupported indicates missing functionality."
+_PLACEHOLDER_MACRO_MESSAGE: Final[str] = "Placeholder macro indicates missing implementation."
+_NOT_IMPLEMENTED_PHRASE_MESSAGE: Final[str] = "Line references 'not implemented', suggesting incomplete code."
+
+
+@dataclass(frozen=True, slots=True)
+class _FileScanContext:
+    """Describe immutable file-level metadata required during scanning."""
+
+    path: Path
+    suffix: str
+    skip_not_implemented: bool
+    safe_not_implemented_lines: frozenset[int]
+
+    @property
+    def is_python(self) -> bool:
+        """Return whether the current file should follow Python-specific heuristics.
+
+        Returns:
+            bool: ``True`` when the file extension matches Python expectations.
+        """
+
+        return self.suffix in _PYTHON_SUFFIXES
+
+
+@dataclass(frozen=True, slots=True)
+class _LineContext:
+    """Describe immutable line-level metadata used by detectors."""
+
+    number: int
+    raw_text: str
+    stripped_text: str
+
+
+class _LineDetector(Protocol):
+    """Protocol implemented by line-level detection helpers."""
+
+    def __call__(self, file_ctx: _FileScanContext, line_ctx: _LineContext) -> tuple[_Finding, ...]:
+        """Return findings detected for ``line_ctx`` within ``file_ctx``.
+
+        Args:
+            file_ctx: File-level context applied to the current scan.
+            line_ctx: Line context describing the source under inspection.
+
+        Returns:
+            tuple[_Finding, ...]: Findings that should be recorded for the line.
+        """
+
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,7 +181,7 @@ def run_missing_linter(
 
 
 def _scan_file(path: Path) -> list[_Finding]:
-    """Collect missing-functionality findings from ``path``.
+    """Collect missing-functionality findings detected within ``path``.
 
     Args:
         path: File path under inspection.
@@ -136,106 +190,253 @@ def _scan_file(path: Path) -> list[_Finding]:
         list[_Finding]: Findings detected within the file.
     """
 
-    try:
-        text = path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    lines = text.splitlines()
+    text = _read_text(path)
+    file_ctx = _build_file_scan_context(path, text)
     findings: list[_Finding] = []
-    suffix = path.suffix.lower()
-    skip_not_implemented = _INTERFACES_SEGMENT in path.parts
-    safe_not_implemented_lines: frozenset[int] = frozenset()
-    if suffix in _PYTHON_SUFFIXES:
-        safe_not_implemented_lines = _collect_python_stub_lines(text)
-    for line_number, raw_line in enumerate(lines, start=1):
-        stripped = raw_line.strip()
-        generic_marker = _match_generic_marker(raw_line)
-        if generic_marker is not None:
-            findings.append(
-                _Finding(
-                    file=path,
-                    line=line_number,
-                    message=f"Marker '{generic_marker}' indicates missing implementation.",
-                    code="missing:marker",
-                ),
-            )
-            continue
-
-        python_match = None
-        if suffix in _PYTHON_SUFFIXES:
-            python_match = _PYTHON_NOT_IMPLEMENTED_PATTERN.search(raw_line)
-        if python_match is not None and not _is_within_string(raw_line, python_match.start()):
-            if skip_not_implemented or line_number in safe_not_implemented_lines:
-                continue
-            findings.append(
-                _Finding(
-                    file=path,
-                    line=line_number,
-                    message="Raising NotImplementedError indicates missing functionality.",
-                    code="missing:not-implemented-error",
-                ),
-            )
-            continue
-
-        cs_match = _CS_NOT_IMPLEMENTED_PATTERN.search(raw_line) or _CS_NOT_SUPPORTED_PATTERN.search(
-            raw_line,
-        )
-        if cs_match is not None and not _is_within_string(raw_line, cs_match.start()):
-            findings.append(
-                _Finding(
-                    file=path,
-                    line=line_number,
-                    message="Throwing NotImplemented/NotSupported indicates missing functionality.",
-                    code="missing:not-implemented-exception",
-                ),
-            )
-            continue
-
-        if _RUST_PLACEHOLDER_PATTERN.search(stripped):
-            findings.append(
-                _Finding(
-                    file=path,
-                    line=line_number,
-                    message="Placeholder macro indicates missing implementation.",
-                    code="missing:placeholder-macro",
-                ),
-            )
-            continue
-
-        not_impl_match = _NOT_IMPLEMENTED_PATTERN.search(raw_line)
-        if (
-            not_impl_match is not None
-            and not skip_not_implemented
-            and not _is_within_string(raw_line, not_impl_match.start())
-        ):
-            findings.append(
-                _Finding(
-                    file=path,
-                    line=line_number,
-                    message="Line references 'not implemented', suggesting incomplete code.",
-                    code="missing:not-implemented-text",
-                ),
-            )
-            continue
+    for line_ctx in _iter_line_contexts(text.splitlines()):
+        detections = _detect_line_findings(file_ctx, line_ctx)
+        if detections:
+            findings.extend(detections)
     return findings
 
 
-def _match_generic_marker(line: str) -> str | None:
-    """Identify the missing-work marker present within ``line``.
+def _read_text(path: Path) -> str:
+    """Return the decoded contents of ``path`` using a tolerant UTF-8 strategy.
 
     Args:
-        line: Line of source text to inspect.
+        path: File path whose contents should be loaded.
 
     Returns:
-        str | None: Matched marker text when detected; otherwise ``None``.
+        str: UTF-8 decoded file contents.
     """
 
-    marker_match = _GENERIC_MARKER_PATTERN.search(line)
-    if marker_match is not None and not _is_within_string(line, marker_match.start()):
-        return marker_match.group(0)
-    return None
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-8", errors="replace")
 
 
+def _build_file_scan_context(path: Path, text: str) -> _FileScanContext:
+    """Return a file-scan context capturing metadata required for detectors.
+
+    Args:
+        path: File path under inspection.
+        text: Raw text content of the file.
+
+    Returns:
+        _FileScanContext: Immutable context describing file-level configuration.
+    """
+
+    suffix = path.suffix.lower()
+    safe_lines = _collect_python_stub_lines(text) if suffix in _PYTHON_SUFFIXES else frozenset()
+    return _FileScanContext(
+        path=path,
+        suffix=suffix,
+        skip_not_implemented=_INTERFACES_SEGMENT in path.parts,
+        safe_not_implemented_lines=safe_lines,
+    )
+
+
+def _iter_line_contexts(lines: list[str]) -> Iterator[_LineContext]:
+    """Yield :class:`_LineContext` entries for ``lines``.
+
+    Args:
+        lines: Sequence of raw line contents.
+
+    Yields:
+        _LineContext: Immutable view of each line suitable for detectors.
+    """
+
+    for number, raw_line in enumerate(lines, start=1):
+        yield _LineContext(number=number, raw_text=raw_line, stripped_text=raw_line.strip())
+
+
+def _detect_line_findings(file_ctx: _FileScanContext, line_ctx: _LineContext) -> list[_Finding]:
+    """Return findings generated by the detection pipeline for ``line_ctx``.
+
+    Args:
+        file_ctx: Context describing the file being scanned.
+        line_ctx: Context describing the current line under inspection.
+
+    Returns:
+        list[_Finding]: Findings detected for the supplied line.
+    """
+
+    for detector in _LINE_DETECTORS:
+        findings = detector(file_ctx, line_ctx)
+        if findings:
+            return list(findings)
+    return []
+
+
+def _detect_generic_marker(file_ctx: _FileScanContext, line_ctx: _LineContext) -> tuple[_Finding, ...]:
+    """Detect generic TODO-style markers present within the line.
+
+    Args:
+        file_ctx: File-level context applied to the current scan.
+        line_ctx: Line context describing the source under inspection.
+
+    Returns:
+        tuple[_Finding, ...]: Findings highlighting generic TODO markers.
+    """
+
+    marker_match = _GENERIC_MARKER_PATTERN.search(line_ctx.raw_text)
+    if marker_match is None or _is_within_string(line_ctx.raw_text, marker_match.start()):
+        return ()
+    marker = marker_match.group(0)
+    return (
+        _build_finding(
+            file_ctx,
+            line_ctx,
+            _MARKER_MESSAGE_TEMPLATE.format(marker=marker),
+            "missing:marker",
+        ),
+    )
+
+
+def _detect_python_not_implemented_error(
+    file_ctx: _FileScanContext,
+    line_ctx: _LineContext,
+) -> tuple[_Finding, ...]:
+    """Detect ``NotImplementedError`` raises that lack abstract context.
+
+    Args:
+        file_ctx: File-level context applied to the current scan.
+        line_ctx: Line context describing the source under inspection.
+
+    Returns:
+        tuple[_Finding, ...]: Findings created for disallowed ``NotImplementedError`` raises.
+    """
+
+    if not file_ctx.is_python:
+        return ()
+    match = _PYTHON_NOT_IMPLEMENTED_PATTERN.search(line_ctx.raw_text)
+    if match is None or _is_within_string(line_ctx.raw_text, match.start()):
+        return ()
+    if file_ctx.skip_not_implemented or line_ctx.number in file_ctx.safe_not_implemented_lines:
+        return ()
+    return (
+        _build_finding(
+            file_ctx,
+            line_ctx,
+            _NOT_IMPLEMENTED_ERROR_MESSAGE,
+            "missing:not-implemented-error",
+        ),
+    )
+
+
+def _detect_cs_placeholder(
+    file_ctx: _FileScanContext,
+    line_ctx: _LineContext,
+) -> tuple[_Finding, ...]:
+    """Detect C# placeholders such as ``NotImplementedException`` raises.
+
+    Args:
+        file_ctx: File-level context applied to the current scan.
+        line_ctx: Line context describing the source under inspection.
+
+    Returns:
+        tuple[_Finding, ...]: Findings capturing C# placeholder exceptions.
+    """
+
+    match = _CS_NOT_IMPLEMENTED_PATTERN.search(line_ctx.raw_text)
+    if match is None:
+        match = _CS_NOT_SUPPORTED_PATTERN.search(line_ctx.raw_text)
+    if match is None or _is_within_string(line_ctx.raw_text, match.start()):
+        return ()
+    return (
+        _build_finding(
+            file_ctx,
+            line_ctx,
+            _NOT_IMPLEMENTED_EXCEPTION_MESSAGE,
+            "missing:not-implemented-exception",
+        ),
+    )
+
+
+def _detect_rust_placeholder(
+    file_ctx: _FileScanContext,
+    line_ctx: _LineContext,
+) -> tuple[_Finding, ...]:
+    """Detect Rust placeholder macros such as ``todo!`` and ``unimplemented!``.
+
+    Args:
+        file_ctx: File-level context applied to the current scan.
+        line_ctx: Line context describing the source under inspection.
+
+    Returns:
+        tuple[_Finding, ...]: Findings describing placeholder macro usage.
+    """
+
+    if _RUST_PLACEHOLDER_PATTERN.search(line_ctx.stripped_text):
+        return (
+            _build_finding(
+                file_ctx,
+                line_ctx,
+                _PLACEHOLDER_MACRO_MESSAGE,
+                "missing:placeholder-macro",
+            ),
+        )
+    return ()
+
+
+def _detect_not_implemented_phrase(
+    file_ctx: _FileScanContext,
+    line_ctx: _LineContext,
+) -> tuple[_Finding, ...]:
+    """Detect textual ``not implemented`` references outside of interfaces.
+
+    Args:
+        file_ctx: File-level context applied to the current scan.
+        line_ctx: Line context describing the source under inspection.
+
+    Returns:
+        tuple[_Finding, ...]: Findings documenting textual ``not implemented`` references.
+    """
+
+    if file_ctx.skip_not_implemented:
+        return ()
+    match = _NOT_IMPLEMENTED_PATTERN.search(line_ctx.raw_text)
+    if match is None or _is_within_string(line_ctx.raw_text, match.start()):
+        return ()
+    return (
+        _build_finding(
+            file_ctx,
+            line_ctx,
+            _NOT_IMPLEMENTED_PHRASE_MESSAGE,
+            "missing:not-implemented-text",
+        ),
+    )
+
+
+def _build_finding(
+    file_ctx: _FileScanContext,
+    line_ctx: _LineContext,
+    message: str,
+    code: str,
+) -> _Finding:
+    """Construct a :class:`_Finding` with shared metadata helpers.
+
+    Args:
+        file_ctx: File-level context applied to the current scan.
+        line_ctx: Line context describing the source under inspection.
+        message: Human-readable diagnostic message.
+        code: Diagnostic code emitted by the detector.
+
+    Returns:
+        _Finding: Populated finding ready for aggregation.
+    """
+
+    return _Finding(file=file_ctx.path, line=line_ctx.number, message=message, code=code)
+
+
+_LINE_DETECTORS: Final[tuple[_LineDetector, ...]] = (
+    _detect_generic_marker,
+    _detect_python_not_implemented_error,
+    _detect_cs_placeholder,
+    _detect_rust_placeholder,
+    _detect_not_implemented_phrase,
+)
 def _collect_python_stub_lines(source: str) -> frozenset[int]:
     """Return line numbers where ``NotImplementedError`` is raised in an abstract context.
 
@@ -250,20 +451,31 @@ def _collect_python_stub_lines(source: str) -> frozenset[int]:
     source_bytes = source.encode("utf-8")
     tree = parser.parse(source_bytes)
     safe_lines: set[int] = set()
-
-    def _visit(node: Node) -> None:
-        if node.type == _RAISE_STATEMENT and _node_raises_not_implemented(node, source_bytes):
-            function_node = _nearest_function_node(node)
-            if function_node is not None and _function_is_abstract(function_node, source_bytes):
-                safe_lines.add(node.start_point[0] + 1)
-        for child in node.children:
-            _visit(child)
-
-    _visit(tree.root_node)
+    _collect_abstract_raise_lines(tree.root_node, source_bytes, safe_lines)
     return frozenset(safe_lines)
 
 
-@lru_cache(maxsize=1)
+def _collect_abstract_raise_lines(node: Node, source_bytes: bytes, safe_lines: set[int]) -> None:
+    """Populate ``safe_lines`` with raises deemed valid inside abstract contracts.
+
+    Args:
+        node: Current Tree-sitter node under inspection.
+        source_bytes: Encoded module source used for slicing snippets.
+        safe_lines: Collector for line numbers that should be considered safe.
+
+    Returns:
+        None
+    """
+
+    if node.type == _RAISE_STATEMENT and _node_raises_not_implemented(node, source_bytes):
+        function_node = _nearest_function_node(node)
+        if function_node is not None and _function_is_abstract(function_node, source_bytes):
+            safe_lines.add(node.start_point[0] + 1)
+    for child in node.children:
+        _collect_abstract_raise_lines(child, source_bytes, safe_lines)
+
+
+@memoize(maxsize=1)
 def _python_parser() -> Parser:
     """Return a cached Tree-sitter parser for Python source.
 
@@ -272,6 +484,23 @@ def _python_parser() -> Parser:
     """
 
     return resolve_python_parser()
+
+
+def _iter_parent_nodes(node: Node) -> Iterator[Node]:
+    """Yield parent nodes for ``node`` starting from the immediate parent.
+
+    Args:
+        node: Tree-sitter node whose ancestors are desired.
+
+    Yields:
+        Node: Parent nodes beginning with the immediate parent.
+    """
+
+    parent = node.parent
+    if parent is None:
+        return
+    yield parent
+    yield from _iter_parent_nodes(parent)
 
 
 def _node_raises_not_implemented(node: Node, source_bytes: bytes) -> bool:
@@ -286,7 +515,7 @@ def _node_raises_not_implemented(node: Node, source_bytes: bytes) -> bool:
     """
 
     snippet = source_bytes[node.start_byte : node.end_byte].decode("utf-8", errors="ignore")
-    return "NotImplementedError" in snippet
+    return _NOT_IMPLEMENTED_ERROR_TOKEN in snippet
 
 
 def _nearest_function_node(node: Node) -> Node | None:
@@ -299,11 +528,9 @@ def _nearest_function_node(node: Node) -> Node | None:
         Node | None: Function definition node when present; otherwise ``None``.
     """
 
-    current = node.parent
-    while current is not None:
-        if current.type in _FUNCTION_NODE_TYPES:
-            return current
-        current = current.parent
+    for ancestor in _iter_parent_nodes(node):
+        if ancestor.type in _FUNCTION_NODE_TYPES:
+            return ancestor
     return None
 
 
@@ -344,7 +571,7 @@ def _function_has_abstract_decorator(function_node: Node, source_bytes: bytes) -
     if decorators is None:
         return False
     for decorator in decorators.children:
-        if decorator.type != "decorator":
+        if decorator.type != _DECORATOR_NODE_TYPE:
             continue
         text = (
             source_bytes[decorator.start_byte : decorator.end_byte]
@@ -369,11 +596,9 @@ def _nearest_class_node(node: Node) -> Node | None:
         Node | None: Class definition node when present; otherwise ``None``.
     """
 
-    current = node.parent
-    while current is not None:
-        if current.type == _CLASS_NODE_TYPE:
-            return current
-        current = current.parent
+    for ancestor in _iter_parent_nodes(node):
+        if ancestor.type == _CLASS_NODE_TYPE:
+            return ancestor
     return None
 
 
@@ -391,7 +616,7 @@ def _class_is_protocol(class_node: Node, source_bytes: bytes) -> bool:
     body = class_node.child_by_field_name("body")
     header_end = body.start_byte if body is not None else class_node.end_byte
     header_text = source_bytes[class_node.start_byte : header_end].decode("utf-8", errors="ignore")
-    return "protocol" in header_text.lower()
+    return _PROTOCOL_TOKEN in header_text.lower()
 
 
 def _is_within_string(line: str, index: int) -> bool:

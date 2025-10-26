@@ -26,13 +26,27 @@ MISSING_CODE_PLACEHOLDER: Final[str] = "-"
 
 
 def join_output(lines: Sequence[str]) -> str:
-    """Join output lines for deterministic console rendering."""
+    """Return ``lines`` joined by newlines for deterministic rendering.
+
+    Args:
+        lines: Sequence of output strings that should be concatenated.
+
+    Returns:
+        str: Output text joined by ``"\\n"`` separators.
+    """
 
     return "\n".join(lines)
 
 
 def severity_color(sev: Severity) -> str:
-    """Return the rich colour name associated with a severity level."""
+    """Return the Rich colour name associated with ``sev``.
+
+    Args:
+        sev: Severity enumeration describing the diagnostic level.
+
+    Returns:
+        str: Rich colour token that should represent *sev*.
+    """
 
     return {
         Severity.ERROR: "red",
@@ -43,7 +57,14 @@ def severity_color(sev: Severity) -> str:
 
 
 def raw_location(diagnostic: Diagnostic) -> str:
-    """Return the raw location string used for diagnostic dumps."""
+    """Return the raw location string used for diagnostic dumps.
+
+    Args:
+        diagnostic: Diagnostic whose location should be rendered.
+
+    Returns:
+        str: ``file:line:column`` representation (when available).
+    """
 
     if not diagnostic.file:
         return ""
@@ -56,7 +77,15 @@ def raw_location(diagnostic: Diagnostic) -> str:
 
 
 def clean_message(code: str | None, message: str) -> str:
-    """Strip redundant prefixes and whitespace from diagnostic messages."""
+    """Strip redundant prefixes and whitespace from diagnostic messages.
+
+    Args:
+        code: Diagnostic code that may be duplicated in ``message``.
+        message: Raw diagnostic message emitted by the tool.
+
+    Returns:
+        str: Message with redundant code prefixes removed.
+    """
 
     if not message:
         return message
@@ -94,7 +123,17 @@ def format_diagnostic_line(
     location_width: int,
     cfg: OutputConfig,
 ) -> Text:
-    """Return a formatted diagnostic line for quiet/pretty output."""
+    """Return a formatted diagnostic line for quiet/pretty output.
+
+    Args:
+        diagnostic: Diagnostic to render.
+        location: Raw location string derived from :func:`raw_location`.
+        location_width: Width used to left-pad location output.
+        cfg: Effective output configuration determining colour/emoji usage.
+
+    Returns:
+        Text: Rich text object representing the formatted diagnostic.
+    """
 
     severity_style = severity_color(diagnostic.severity)
     severity_text = Text(diagnostic.severity.value)
@@ -126,7 +165,12 @@ def format_diagnostic_line(
 
 
 def dump_diagnostics(diags: Iterable[Diagnostic], cfg: OutputConfig) -> None:
-    """Print formatted diagnostics in pretty or quiet modes."""
+    """Print formatted diagnostics in pretty or quiet modes.
+
+    Args:
+        diags: Iterable of diagnostics destined for display.
+        cfg: Output configuration controlling presentation options.
+    """
 
     collected = list(diags)
     if not collected:

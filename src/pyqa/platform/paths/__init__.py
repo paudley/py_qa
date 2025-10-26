@@ -26,6 +26,9 @@ def get_pyqa_root() -> Path:
     upwards from the current module location until a valid py_qa workspace is
     located.
 
+    Returns:
+        Path: Directory representing the py_qa project root.
+
     Raises:
         RuntimeError: If no suitable project root can be located.
 
@@ -50,6 +53,12 @@ def get_pyqa_root() -> Path:
 
 
 def _auto_detect_pyqa_root() -> Path | None:
+    """Return an auto-detected py_qa project root when available.
+
+    Returns:
+        Path | None: Resolved project root or ``None`` when detection fails.
+    """
+
     search_start = Path(__file__).resolve().parent
     for candidate in _iter_candidates(search_start):
         try:
@@ -60,7 +69,14 @@ def _auto_detect_pyqa_root() -> Path | None:
 
 
 def _iter_candidates(start: Path) -> Iterable[Path]:
-    """Yield unique parent directories starting at ``start`` up to root."""
+    """Yield unique parent directories starting at ``start`` up to root.
+
+    Args:
+        start: Directory whose ancestors should be traversed.
+
+    Yields:
+        Path: Candidate directories considered during root discovery.
+    """
 
     seen: set[Path] = set()
     for candidate in chain([start], start.parents):
@@ -72,6 +88,18 @@ def _iter_candidates(start: Path) -> Iterable[Path]:
 
 
 def _validate_candidate(path: Path) -> Path:
+    """Return ``path`` when it satisfies py_qa root constraints.
+
+    Args:
+        path: Candidate directory to evaluate.
+
+    Returns:
+        Path: Resolved directory when validation succeeds.
+
+    Raises:
+        ValueError: If the candidate fails any validation step.
+    """
+
     resolved = path.expanduser().resolve()
     if not resolved.is_dir():
         raise ValueError(f"{resolved} is not a directory")
@@ -83,6 +111,13 @@ def _validate_candidate(path: Path) -> Path:
 
 
 def _warn_on_suspicious_layout(root: Path, *, source: str) -> None:
+    """Emit a warning when expected project entries are missing.
+
+    Args:
+        root: Candidate project root that may have missing entries.
+        source: Human-readable description of the root discovery method.
+    """
+
     missing = [entry for entry in _REQUIRED_ENTRIES if not (root / entry).exists()]
     if missing:
         joined = ", ".join(missing)

@@ -11,7 +11,15 @@ from ..constants import LANGUAGE_EXTENSIONS, LANGUAGE_FILENAMES, LANGUAGE_MARKER
 
 
 def detect_languages(root: Path, files: Iterable[Path]) -> set[str]:
-    """Infer languages present in *files* or by marker files under *root*."""
+    """Infer languages present in *files* or via marker files under *root*.
+
+    Args:
+        root: Repository root used to search for language marker files.
+        files: Iterable of file paths considered for extension-based detection.
+
+    Returns:
+        set[str]: Detected language identifiers.
+    """
     root = root.resolve()
     languages: set[str] = set()
     for language, markers in LANGUAGE_MARKERS.items():

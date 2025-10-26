@@ -96,6 +96,8 @@ class PRSummaryOptions:
 
 @dataclass(slots=True)
 class _AdviceOptions:
+    """Derived advice configuration used when rendering summaries."""
+
     include: bool
     limit: int
     template: str

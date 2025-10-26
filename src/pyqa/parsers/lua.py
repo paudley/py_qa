@@ -24,18 +24,16 @@ LUALINT_TOOL_NAME: Final[str] = "lualint"
 LUACHECK_TOOL_NAME: Final[str] = "luacheck"
 
 
-def parse_lualint(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_lualint(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse lualint text output into diagnostics.
 
     Args:
         stdout: Sequence of lines returned by lualint.
-        context: Tool execution context supplied by the orchestrator.
+        _context: Tool execution context supplied by the orchestrator (unused).
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics flagged by lualint.
     """
-
-    del context
     results: list[RawDiagnostic] = []
     for match in iter_pattern_matches(stdout, LUALINT_PATTERN, skip_prefixes=("Usage",)):
         location = DiagnosticLocation(
@@ -57,18 +55,16 @@ LUACHECK_PATTERN = re.compile(
 )
 
 
-def parse_luacheck(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_luacheck(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse luacheck plain formatter output into diagnostics.
 
     Args:
         stdout: Sequence of luacheck output lines.
-        context: Tool execution context supplied by the orchestrator.
+        _context: Tool execution context supplied by the orchestrator (unused).
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics describing luacheck findings.
     """
-
-    del context
     results: list[RawDiagnostic] = []
     for match in iter_pattern_matches(stdout, LUACHECK_PATTERN, skip_prefixes=("Total:",)):
         code = match.group("code")
@@ -94,7 +90,17 @@ def _build_lua_details(
     severity: Severity,
     code: str | None = None,
 ) -> DiagnosticDetails:
-    """Return diagnostic metadata for Lua tooling."""
+    """Return diagnostic metadata for Lua tooling.
+
+    Args:
+        tool: Tool identifier that produced the diagnostic.
+        message: Raw diagnostic message emitted by the tool.
+        severity: Severity classification assigned to the diagnostic.
+        code: Optional diagnostic code provided by the tool.
+
+    Returns:
+        DiagnosticDetails: Metadata bundle describing the diagnostic.
+    """
 
     normalized_message = message.strip()
     normalized_code = code.upper() if code and tool == LUACHECK_TOOL_NAME else code

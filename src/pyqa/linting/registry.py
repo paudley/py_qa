@@ -8,7 +8,7 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from pyqa.config import Config
 from pyqa.core.models import ToolOutcome
@@ -45,10 +45,17 @@ from .suppressions import run_suppression_linter
 from .typing_strict import run_typing_linter
 from .value_types import run_value_type_linter
 
+class _PreparedLintStateProtocol(Protocol):
+    """Runtime placeholder for the lint state protocol used during registration."""
+
+    # Protocol intentionally empty; registry logic treats lint state as opaque.
+    pass
+
+
 if TYPE_CHECKING:
     from pyqa.interfaces.linting import PreparedLintState
 else:
-    PreparedLintState = Any
+    PreparedLintState = _PreparedLintStateProtocol
 
 _TEST_SUPPRESSION_SUFFIX = r"(?:.+/)?tests?/.*$"
 

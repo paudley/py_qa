@@ -97,7 +97,14 @@ _LITERAL_PATTERN = re.compile(r"''(.*?)''")
 
 
 def _coerce_span(span: MessageSpan) -> SimpleMessageSpan:
-    """Return a ``SimpleMessageSpan`` mirroring ``span`` values."""
+    """Return a ``SimpleMessageSpan`` mirroring ``span`` values.
+
+    Args:
+        span: Span emitted by an annotation provider.
+
+    Returns:
+        SimpleMessageSpan: Span with guaranteed ``style`` and ``kind`` attributes.
+    """
 
     style = getattr(span, "style", ANNOTATION_SPAN_STYLE)
     kind = getattr(span, "kind", None)
@@ -105,7 +112,14 @@ def _coerce_span(span: MessageSpan) -> SimpleMessageSpan:
 
 
 def _coerce_spans(spans: Sequence[MessageSpan]) -> list[SimpleMessageSpan]:
-    """Return ``spans`` converted into ``SimpleMessageSpan`` instances."""
+    """Return ``spans`` converted into ``SimpleMessageSpan`` instances.
+
+    Args:
+        spans: Sequence of spans that may not expose ``SimpleMessageSpan`` fields.
+
+    Returns:
+        list[SimpleMessageSpan]: Converted span sequence.
+    """
 
     return [_coerce_span(span) for span in spans]
 
@@ -176,7 +190,16 @@ def apply_highlighting_text(
     base_style: str | None = None,
     engine: AnnotationProvider | None = None,
 ) -> Text:
-    """Return a Rich text object with annotation-aware highlighting applied."""
+    """Return a Rich text object with annotation-aware highlighting applied.
+
+    Args:
+        message: Diagnostic message subject to highlighting.
+        base_style: Optional Rich style applied to the entire message.
+        engine: Optional annotation provider overriding the module default.
+
+    Returns:
+        Text: Rich text object carrying the highlighted message content.
+    """
 
     clean = message.replace("`", "")
     clean, literal_spans = strip_literal_quotes(clean)
@@ -228,7 +251,17 @@ def highlight_for_output(
     extra_spans: Sequence[MessageSpan] | None = None,
     engine: AnnotationProvider | None = None,
 ) -> Text:
-    """Return Rich text with inline highlighting suitable for terminal output."""
+    """Return Rich text with inline highlighting suitable for terminal output.
+
+    Args:
+        message: Text to highlight for console output.
+        color: Flag indicating whether colour highlighting is enabled.
+        extra_spans: Additional spans that should be highlighted.
+        engine: Optional provider overriding the module-level annotation engine.
+
+    Returns:
+        Text: Highlighted message (or plain text when colouring disabled).
+    """
 
     clean = message.replace("`", "")
     if not color:
@@ -250,7 +283,15 @@ def highlight_for_output(
 
 
 def format_code_value(code: str, color_enabled: bool) -> Text:
-    """Return a colourised diagnostic code for concise output."""
+    """Return a colourised diagnostic code for concise output.
+
+    Args:
+        code: Diagnostic code string.
+        color_enabled: Flag indicating whether colour styling should apply.
+
+    Returns:
+        Text: Rich text object containing the diagnostic code.
+    """
 
     clean = code.strip() or EMPTY_CODE_PLACEHOLDER
     text = Text(clean)
@@ -263,7 +304,14 @@ def format_code_value(code: str, color_enabled: bool) -> Text:
 
 
 def _style_from_code(style_code: str | None) -> Style | None:
-    """Return a Rich style constructed from ``style_code`` tokens."""
+    """Return a Rich style constructed from ``style_code`` tokens.
+
+    Args:
+        style_code: Style token describing colour information.
+
+    Returns:
+        Style | None: Rich style when recognised; otherwise ``None``.
+    """
 
     if not style_code:
         return None

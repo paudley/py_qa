@@ -24,7 +24,15 @@ _TSC_ERROR_LABEL: Final[str] = "error"
 
 
 def parse_eslint(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse ESLint JSON output."""
+    """Parse ESLint JSON diagnostics into raw diagnostic objects.
+
+    Args:
+        payload: JSON payload produced by ESLint when invoked with ``--format json``.
+        _context: Tool execution context supplied by the orchestrator (unused).
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics derived from the ESLint result set.
+    """
     items = payload if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)) else []
     results: list[RawDiagnostic] = []
     for entry in items:
@@ -65,7 +73,15 @@ def parse_eslint(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagn
 
 
 def parse_stylelint(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse stylelint JSON output."""
+    """Parse stylelint JSON diagnostics into raw diagnostic objects.
+
+    Args:
+        payload: JSON payload produced by stylelint.
+        _context: Tool execution context supplied by the orchestrator (unused).
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics describing stylelint findings.
+    """
     items = payload if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)) else []
     results: list[RawDiagnostic] = []
     for entry in items:
@@ -102,7 +118,15 @@ def parse_stylelint(payload: JsonValue, _context: ToolContext) -> Sequence[RawDi
 
 
 def parse_tsc(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse TypeScript compiler text diagnostics."""
+    """Parse TypeScript compiler textual diagnostics.
+
+    Args:
+        stdout: Sequence of textual TypeScript compiler diagnostics.
+        _context: Tool execution context supplied by the orchestrator (unused).
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics surfaced by ``tsc`` execution.
+    """
     results: list[RawDiagnostic] = []
     for line in stdout:
         match = _TSC_PATTERN.match(line.strip())

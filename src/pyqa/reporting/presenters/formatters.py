@@ -119,6 +119,15 @@ class ConciseDiagnostic:
         )
 
 
+@dataclass(slots=True)
+class _ConciseSummaryContext:
+    """Precomputed values required for concise summary rendering."""
+
+    label: str
+    color: str
+    stats_body: str
+
+
 _MERGEABLE_MESSAGE = re.compile(r"^(?P<prefix>.*?)(`(?P<detail>[^`]+)`)(?P<suffix>.*)$")
 
 
@@ -212,6 +221,43 @@ def _render_concise_summary(
         failed_actions: Count of actions that failed.
         diagnostics_count: Number of concise diagnostics emitted.
     """
+    summary_context = _build_concise_summary_context(
+        result,
+        cfg,
+        total_actions=total_actions,
+        failed_actions=failed_actions,
+        diagnostics_count=diagnostics_count,
+    )
+    console = get_console_manager().get(color=cfg.color, emoji=cfg.emoji)
+    summary_line = _format_summary_line(
+        summary_context.label,
+        summary_context.color,
+        summary_context.stats_body,
+        cfg,
+    )
+    console.print(summary_line)
+
+
+def _build_concise_summary_context(
+    result: RunResult,
+    cfg: OutputConfig,
+    *,
+    total_actions: int,
+    failed_actions: int,
+    diagnostics_count: int,
+) -> _ConciseSummaryContext:
+    """Return precomputed values used to render the concise summary.
+
+    Args:
+        result: Completed orchestrator run result to summarise.
+        cfg: Output configuration describing formatting preferences.
+        total_actions: Total actions executed in the run.
+        failed_actions: Count of actions that failed.
+        diagnostics_count: Number of concise diagnostics emitted.
+
+    Returns:
+        _ConciseSummaryContext: Derived summary label, colour, and stats body.
+    """
 
     files_count = len(result.files)
     cached_actions = sum(1 for outcome in result.outcomes if outcome.cached)
@@ -230,9 +276,7 @@ def _render_concise_summary(
         stats_parts.append(f"{cached_actions} cached action(s)")
 
     stats_body = "— " + "; ".join(stats_parts)
-    console = get_console_manager().get(color=cfg.color, emoji=cfg.emoji)
-    summary_line = _format_summary_line(summary_label, summary_color, stats_body, cfg)
-    console.print(summary_line)
+    return _ConciseSummaryContext(label=summary_label, color=summary_color, stats_body=stats_body)
 
 
 def _format_summary_line(
@@ -280,7 +324,15 @@ def _resolve_root_path(raw_root: str | Path) -> Path:
 
 
 def _normalize_concise_path(path_str: str | None, root: Path) -> str:
-    """Return the diagnostic path normalised relative to *root*."""
+    """Return the diagnostic path normalised relative to ``root``.
+
+    Args:
+        path_str: Raw file path emitted by the tool, or ``None``.
+        root: Resolved project root used for normalisation.
+
+    Returns:
+        str: Relative path when possible, falling back to the original string.
+    """
 
     if not path_str:
         return "<unknown>"
@@ -468,27 +520,50 @@ def _print_concise_entries(
             item.message,
         ),
     ):
-        spacer = " " * max(tool_width - len(entry.tool), 0) if tool_width else ""
-        location = (entry.file_path or "") + entry.location_suffix()
-        location_display = highlight_for_output(
-            location,
-            color=cfg.color,
-            extra_spans=location_function_spans(location),
-        )
-        message_display = highlight_for_output(entry.message, color=cfg.color)
-        code_display = format_code_value(entry.code, cfg.color)
-        tool_display = tint_tool(entry.tool)
-        line = Text()
-        line.append_text(tool_display)
-        line.append(", ")
-        if spacer:
-            line.append(spacer)
-        line.append_text(location_display)
-        line.append(", ")
-        line.append_text(code_display)
-        line.append(", ")
-        line.append_text(message_display)
+        line = _render_concise_entry(entry, tool_width, tint_tool, cfg)
         console.print(line)
+
+
+def _render_concise_entry(
+    entry: ConciseDiagnostic,
+    tool_width: int,
+    tint_tool: Callable[[str], Text],
+    cfg: OutputConfig,
+) -> Text:
+    """Return a Rich text line representing a concise diagnostic.
+
+    Args:
+        entry: Concise diagnostic slated for rendering.
+        tool_width: Width used to align tool names in the output.
+        tint_tool: Callable responsible for styling tool identifiers.
+        cfg: Output configuration describing formatting preferences.
+
+    Returns:
+        Text: Rich text line representing the concise diagnostic.
+    """
+
+    spacer = " " * max(tool_width - len(entry.tool), 0) if tool_width else ""
+    location = (entry.file_path or "") + entry.location_suffix()
+    location_display = highlight_for_output(
+        location,
+        color=cfg.color,
+        extra_spans=location_function_spans(location),
+    )
+    message_display = highlight_for_output(entry.message, color=cfg.color)
+    code_display = format_code_value(entry.code, cfg.color)
+    tool_display = tint_tool(entry.tool)
+
+    line = Text()
+    line.append_text(tool_display)
+    line.append(", ")
+    if spacer:
+        line.append(spacer)
+    line.append_text(location_display)
+    line.append(", ")
+    line.append_text(code_display)
+    line.append(", ")
+    line.append_text(message_display)
+    return line
 
 
 def _plain_tool_tinter(tool: str) -> Text:
@@ -535,7 +610,7 @@ def _tool_tinter(result: RunResult, cfg: OutputConfig) -> Callable[[str], Text]:
         cfg: Output configuration describing formatting preferences.
 
     Returns:
-        Callable[[str], str]: Function that colourises tool names for output.
+        Callable[[str], Text]: Function that colourises tool names for output.
     """
     if not cfg.color:
         return _plain_tool_tinter
