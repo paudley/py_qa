@@ -8,9 +8,14 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome
-from pyqa.interfaces.linting import PreparedLintState
+
+if TYPE_CHECKING:
+    from pyqa.interfaces.linting import PreparedLintState
+else:
+    PreparedLintState = Any
 
 
 @dataclass(slots=True)

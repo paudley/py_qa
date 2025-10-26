@@ -66,6 +66,7 @@ _ABSTRACT_DECORATOR_TOKENS: Final[tuple[str, ...]] = (
     "abstractstaticmethod",
 )
 
+
 @dataclass(frozen=True, slots=True)
 class _Finding:
     """Represent a missing-functionality finding discovered in a file."""
@@ -163,10 +164,7 @@ def _scan_file(path: Path) -> list[_Finding]:
         python_match = None
         if suffix in _PYTHON_SUFFIXES:
             python_match = _PYTHON_NOT_IMPLEMENTED_PATTERN.search(raw_line)
-        if (
-            python_match is not None
-            and not _is_within_string(raw_line, python_match.start())
-        ):
+        if python_match is not None and not _is_within_string(raw_line, python_match.start()):
             if skip_not_implemented or line_number in safe_not_implemented_lines:
                 continue
             findings.append(
@@ -348,10 +346,14 @@ def _function_has_abstract_decorator(function_node: Node, source_bytes: bytes) -
     for decorator in decorators.children:
         if decorator.type != "decorator":
             continue
-        text = source_bytes[decorator.start_byte : decorator.end_byte].decode(
-            "utf-8",
-            errors="ignore",
-        ).lower()
+        text = (
+            source_bytes[decorator.start_byte : decorator.end_byte]
+            .decode(
+                "utf-8",
+                errors="ignore",
+            )
+            .lower()
+        )
         if any(token in text for token in _ABSTRACT_DECORATOR_TOKENS):
             return True
     return False
@@ -388,7 +390,7 @@ def _class_is_protocol(class_node: Node, source_bytes: bytes) -> bool:
 
     body = class_node.child_by_field_name("body")
     header_end = body.start_byte if body is not None else class_node.end_byte
-    header_text = source_bytes[class_node.start_byte:header_end].decode("utf-8", errors="ignore")
+    header_text = source_bytes[class_node.start_byte : header_end].decode("utf-8", errors="ignore")
     return "protocol" in header_text.lower()
 
 

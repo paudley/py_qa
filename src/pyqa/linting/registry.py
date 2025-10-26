@@ -4,14 +4,14 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from functools import partial
-from typing import cast
+from typing import TYPE_CHECKING, Any, cast
 
 from pyqa.config import Config
 from pyqa.core.models import ToolOutcome
-from pyqa.interfaces.linting import PreparedLintState
 from pyqa.platform.workspace import is_py_qa_workspace
 from pyqa.tools.base import (
     DeferredCommand,
@@ -44,6 +44,13 @@ from .signatures import run_signature_linter
 from .suppressions import run_suppression_linter
 from .typing_strict import run_typing_linter
 from .value_types import run_value_type_linter
+
+if TYPE_CHECKING:
+    from pyqa.interfaces.linting import PreparedLintState
+else:
+    PreparedLintState = Any
+
+_TEST_SUPPRESSION_SUFFIX = r"(?:.+/)?tests?/.*$"
 
 
 @dataclass(slots=True)
@@ -312,6 +319,7 @@ def ensure_internal_tools_registered(
 
     for definition in INTERNAL_LINTERS:
         if registry.try_get(definition.name) is not None:
+            _inject_internal_test_suppression(config, definition.name)
             continue
         runner_callable = definition.runner
         if definition.options.requires_config:
@@ -323,6 +331,21 @@ def ensure_internal_tools_registered(
             runner=runner,
         )
         registry.register(tool)
+        _inject_internal_test_suppression(config, definition.name)
+
+
+def _inject_internal_test_suppression(config: Config, tool_name: str) -> None:
+    """Ensure internal linters suppress diagnostics originating from tests.
+
+    Args:
+        config: Effective configuration passed to internal linters.
+        tool_name: Name of the internal linter being configured.
+    """
+
+    pattern = rf"^{re.escape(tool_name)}, {_TEST_SUPPRESSION_SUFFIX}"
+    filters = config.output.tool_filters.setdefault(tool_name, [])
+    if pattern not in filters:
+        filters.append(pattern)
 
 
 def _build_internal_tool(

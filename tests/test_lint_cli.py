@@ -1021,6 +1021,10 @@ def test_ensure_internal_tools_registered(tmp_path: Path) -> None:
     context = ToolContext(cfg=config, root=tmp_path, files=tuple(), settings={})
     outcome = action.internal_runner(context)
     assert outcome.tool == "docstrings"
+    patterns = config.output.tool_filters.get("docstrings")
+    assert patterns is not None
+    expected_pattern = r"^docstrings, (?:.+/)?tests?/.*$"
+    assert patterns.count(expected_pattern) == 1
 
 
 def test_lint_meta_normal_applies_defaults(monkeypatch, tmp_path: Path) -> None:

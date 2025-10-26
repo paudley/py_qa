@@ -5,22 +5,12 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Final
 
 from pyqa.cache.in_memory import memoize
 
 from ..catalog.metadata import catalog_test_suppressions
 
 TestSuppressionsMap = dict[str, dict[str, tuple[str, ...]]]
-
-_MANUAL_TEST_SUPPRESSIONS: Final[TestSuppressionsMap] = {
-    "*": {
-        # Ignore missing-implementation diagnostics in test suites; tests often
-        # use lightweight stand-ins and assertions that intentionally raise
-        # NotImplementedError as sentinels.
-        "missing": (r"^missing, .*/tests/.*",),
-    },
-}
 
 
 @memoize(maxsize=1)
@@ -35,12 +25,6 @@ def _catalog_test_suppressions() -> TestSuppressionsMap:
     mapping: TestSuppressionsMap = {}
     for language, tool_map in catalog_map.items():
         mapping[language] = {tool: tuple(patterns) for tool, patterns in tool_map.items()}
-    for language, tool_map in _MANUAL_TEST_SUPPRESSIONS.items():
-        target = mapping.setdefault(language, {})
-        for tool, patterns in tool_map.items():
-            existing = list(target.get(tool, ()))
-            existing.extend(patterns)
-            target[tool] = tuple(dict.fromkeys(existing))
     return mapping
 
 
