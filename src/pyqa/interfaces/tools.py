@@ -6,9 +6,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from enum import Enum
-from functools import singledispatch
-from typing import Final, Literal, NoReturn, Protocol, TypeAlias, runtime_checkable
+from pathlib import Path
+from typing import Final, Literal, Protocol, TypeAlias, runtime_checkable
 
+from pyqa.config.model_defs.config_container import Config
+from pyqa.config.types import ConfigValue
 from pyqa.interfaces.discovery import DiscoveryOptions
 
 from .common import CacheControlOptions
@@ -19,46 +21,49 @@ BanditLevelLiteral: TypeAlias = Literal["low", "medium", "high"]
 SensitivityLiteral: TypeAlias = Literal["low", "medium", "high", "maximum"]
 
 
-@singledispatch
-def _enum_label(value: BanditLevelLiteral | str | None) -> str | None:
-    """Return the value unchanged when already string-like.
+@runtime_checkable
+class ToolContext(Protocol):
+    """Describe the minimum surface area required from tool execution contexts."""
 
-    Args:
-        value: Label value provided by the caller.
+    @property
+    def cfg(self) -> Config | ToolConfiguration:
+        """Return the configuration object bound to the tool context.
 
-    Returns:
-        str | None: String label suitable for serialization.
-    """
+        Returns:
+            Config | ToolConfiguration: Configuration instance associated with the context.
+        """
 
-    return value
+        raise NotImplementedError(f"{self.__class__.__qualname__}.cfg must be implemented by runtime contexts")
 
+    @property
+    def root(self) -> Path:
+        """Return the execution root directory for the tool invocation.
 
-@_enum_label.register
-def _(value: Enum) -> str:
-    """Return the string representation of enum values used in severity mapping.
+        Returns:
+            Path: Root directory used when resolving tool paths.
+        """
 
-    Args:
-        value: Enum instance produced by catalog data.
+        raise NotImplementedError(f"{self.__class__.__qualname__}.root must be implemented by runtime contexts")
 
-    Returns:
-        str: String form of the enum value.
-    """
+    @property
+    def files(self) -> tuple[Path, ...]:
+        """Return the immutable collection of files targeted by the execution.
 
-    raw = value.value
-    return raw if isinstance(raw, str) else str(raw)
+        Returns:
+            tuple[Path, ...]: Tuple of file paths supplied to the tool.
+        """
 
+        raise NotImplementedError(f"{self.__class__.__qualname__}.files must be implemented by runtime contexts")
 
-def _unimplemented_tool_option(method: str) -> NoReturn:
-    """Raise :class:`NotImplementedError` for abstract tool option accessors.
+    @property
+    def settings(self) -> Mapping[str, ConfigValue]:
+        """Return catalog-derived settings made available to tool builders.
 
-    Args:
-        method: Qualified method name displayed in the error message.
+        Returns:
+            Mapping[str, ConfigValue]: Mapping of setting names to their effective values.
+        """
 
-    Raises:
-        NotImplementedError: Always raised to indicate missing implementation.
-    """
-
-    raise NotImplementedError(f"{method} must be implemented by concrete tool configurations")
+        raise NotImplementedError(f"{self.__class__.__qualname__}.settings must be implemented by runtime contexts")
 
 
 @runtime_checkable
@@ -80,7 +85,7 @@ class RuntimeOptions(CacheControlOptions, Protocol):
             int | None: Maximum concurrent job count or ``None`` when unlimited.
         """
 
-        return _unimplemented_tool_option("RuntimeOptions.jobs")
+        raise NotImplementedError("RuntimeOptions.jobs must be implemented")
 
     @property
     def bail(self) -> bool:
@@ -90,7 +95,7 @@ class RuntimeOptions(CacheControlOptions, Protocol):
             bool: ``True`` when the run should stop on the first failure.
         """
 
-        return _unimplemented_tool_option("RuntimeOptions.bail")
+        raise NotImplementedError("RuntimeOptions.bail must be implemented")
 
     @property
     def use_local_linters(self) -> bool:
@@ -100,7 +105,7 @@ class RuntimeOptions(CacheControlOptions, Protocol):
             bool: ``True`` when locally installed linters may be used.
         """
 
-        return _unimplemented_tool_option("RuntimeOptions.use_local_linters")
+        raise NotImplementedError("RuntimeOptions.use_local_linters must be implemented")
 
     @property
     def strict_config(self) -> bool:
@@ -110,7 +115,7 @@ class RuntimeOptions(CacheControlOptions, Protocol):
             bool: ``True`` when strict configuration validation is enforced.
         """
 
-        return _unimplemented_tool_option("RuntimeOptions.strict_config")
+        raise NotImplementedError("RuntimeOptions.strict_config must be implemented")
 
     def concurrency_enabled(self) -> bool:
         """Return ``True`` when more than one concurrent job is permitted.
@@ -141,7 +146,7 @@ class FormattingOptions(Protocol):
             int: Maximum formatted line length in characters.
         """
 
-        return _unimplemented_tool_option("ExecutionOptions.runtime")
+        raise NotImplementedError("ExecutionOptions.runtime must be implemented")
 
     @property
     def sql_dialect(self) -> str:
@@ -151,7 +156,7 @@ class FormattingOptions(Protocol):
             str: SQL dialect identifier requested by the user.
         """
 
-        return _unimplemented_tool_option("ExecutionOptions.formatting")
+        raise NotImplementedError("ExecutionOptions.formatting must be implemented")
 
     @property
     def python_version(self) -> str | None:
@@ -161,7 +166,7 @@ class FormattingOptions(Protocol):
             str | None: Target Python version or ``None`` when unspecified.
         """
 
-        return _unimplemented_tool_option("ExecutionOptions.line_length")
+        raise NotImplementedError("ExecutionOptions.line_length must be implemented")
 
     def has_python_target(self) -> bool:
         """Return ``True`` when a target Python version has been specified.
@@ -205,7 +210,7 @@ class ExecutionOptions(Protocol):
         Returns:
             RuntimeOptions: Runtime options inherited from the CLI configuration.
         """
-        return _unimplemented_tool_option("ExecutionOptions.sql_dialect")
+        raise NotImplementedError("ExecutionOptions.sql_dialect must be implemented")
 
     @property
     def formatting(self) -> FormattingOptions:
@@ -214,7 +219,7 @@ class ExecutionOptions(Protocol):
         Returns:
             FormattingOptions: Formatting overrides propagated to tooling.
         """
-        return _unimplemented_tool_option("ExecutionOptions.python_version")
+        raise NotImplementedError("ExecutionOptions.python_version must be implemented")
 
     @property
     def line_length(self) -> int:
@@ -395,9 +400,23 @@ class SeverityOptions(Protocol):
             dict[str, float | int | str | None]: Threshold information keyed by metric.
         """
 
+        def _coerce(label: BanditLevelLiteral | Enum | str | None) -> str | None:
+            """Return ``label`` as a string when possible while preserving ``None`` values.
+
+            Args:
+                label: Severity label that may be a literal string or enum member.
+
+            Returns:
+                str | None: Normalised label suitable for serialisation.
+            """
+            if isinstance(label, Enum):
+                raw = label.value
+                return raw if isinstance(raw, str) else str(raw)
+            return label
+
         return {
-            "bandit_level": _enum_label(self.bandit_level),
-            "bandit_confidence": _enum_label(self.bandit_confidence),
+            "bandit_level": _coerce(self.bandit_level),
+            "bandit_confidence": _coerce(self.bandit_confidence),
             "pylint_fail_under": self.pylint_fail_under,
             "max_warnings": self.max_warnings,
             "sensitivity": self.sensitivity,
@@ -634,5 +653,6 @@ __all__: Final = [
     "SeverityOptions",
     "StrictnessLiteral",
     "StrictnessOptions",
+    "ToolContext",
     "ToolConfiguration",
 ]

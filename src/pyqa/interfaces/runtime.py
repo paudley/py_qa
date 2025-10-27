@@ -5,20 +5,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import NoReturn, Protocol, runtime_checkable
-
-
-def _unimplemented_runtime(method: str) -> NoReturn:
-    """Raise :class:`NotImplementedError` for abstract service operations.
-
-    Args:
-        method: Qualified method name used in the error message.
-
-    Raises:
-        NotImplementedError: Always raised to indicate the method must be implemented.
-    """
-
-    raise NotImplementedError(f"{method} must be implemented by concrete registries")
+from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -120,7 +107,7 @@ class ServiceRegistryProtocol(Protocol):
             singleton: When ``True`` cache the instance after first resolution.
             replace: When ``True`` replace an existing registration for ``key``.
         """
-        return _unimplemented_runtime("ServiceRegistryProtocol.register")
+        raise NotImplementedError("ServiceRegistryProtocol.register must be implemented")
 
     @abstractmethod
     def resolve(self, key: str) -> ServiceProtocol:
@@ -132,7 +119,7 @@ class ServiceRegistryProtocol(Protocol):
         Returns:
             ServiceProtocol: Service bound to ``key``.
         """
-        return _unimplemented_runtime("ServiceRegistryProtocol.resolve")
+        raise NotImplementedError("ServiceRegistryProtocol.resolve must be implemented")
 
     @abstractmethod
     def provide(self, key: str) -> ServiceProvider:
@@ -144,7 +131,7 @@ class ServiceRegistryProtocol(Protocol):
         Returns:
             ServiceProvider: Zero-argument provider that resolves the service.
         """
-        return _unimplemented_runtime("ServiceRegistryProtocol.provide")
+        raise NotImplementedError("ServiceRegistryProtocol.provide must be implemented")
 
     @abstractmethod
     def __contains__(self, key: str) -> bool:
@@ -156,7 +143,7 @@ class ServiceRegistryProtocol(Protocol):
         Returns:
             bool: ``True`` when a factory is registered for ``key``.
         """
-        return _unimplemented_runtime("ServiceRegistryProtocol.__contains__")
+        raise NotImplementedError("ServiceRegistryProtocol.__contains__ must be implemented")
 
     @abstractmethod
     def __len__(self) -> int:
@@ -165,7 +152,7 @@ class ServiceRegistryProtocol(Protocol):
         Returns:
             int: Count of registered service factories.
         """
-        return _unimplemented_runtime("ServiceRegistryProtocol.__len__")
+        raise NotImplementedError("ServiceRegistryProtocol.__len__ must be implemented")
 
 
 __all__ = [

@@ -13,6 +13,7 @@ mutation of the loaded plugin sequences.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from functools import partial
 from importlib import metadata
 from importlib.metadata import EntryPoint, EntryPoints
 from types import SimpleNamespace
@@ -44,11 +45,20 @@ else:  # pragma: no cover - typer may be unavailable in minimal environments
             def command(self, name: str) -> Callable[[Callable[..., _FactoryT]], Callable[..., _FactoryT]]:
                 """Return a decorator that records the command without executing."""
 
-                def decorator(func: Callable[..., _FactoryT]) -> Callable[..., _FactoryT]:
-                    self.register_command(name, cast(Callable[..., None], func))
-                    return func
+                return cast(
+                    Callable[[Callable[..., _FactoryT]], Callable[..., _FactoryT]],
+                    partial(self._register_command, name),
+                )
 
-                return decorator
+            def _register_command(
+                self,
+                name: str,
+                func: Callable[..., _FactoryT],
+            ) -> Callable[..., _FactoryT]:
+                """Store ``func`` under ``name`` and return it unchanged."""
+
+                self.register_command(name, cast(Callable[..., None], func))
+                return func
 
             def __call__(self) -> None:
                 """Raise an informative error when attempting to invoke the stub."""

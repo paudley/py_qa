@@ -6,28 +6,12 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, NoReturn, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from pyqa.core.models import Diagnostic, RawDiagnostic, ToolOutcome
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .base import ToolContext
-
-
-def _protocol_not_implemented(identifier: str) -> NoReturn:
-    """Raise :class:`NotImplementedError` for abstract protocol methods.
-
-    Args:
-        identifier: Fully qualified method identifier used in the error message.
-
-    Returns:
-        NoReturn: This helper never returns because it always raises an error.
-
-    Raises:
-        NotImplementedError: Always raised to highlight missing implementations.
-    """
-
-    raise NotImplementedError(f"{identifier} must be implemented by conforming objects")
 
 
 @runtime_checkable
@@ -59,7 +43,7 @@ class Parser(Protocol):
             NotImplementedError: When the parser has not been implemented.
         """
 
-        _protocol_not_implemented(f"{self.__class__.__qualname__}.parse")
+        raise NotImplementedError("Parser.parse must be implemented")
 
     def __call__(
         self,
@@ -108,7 +92,7 @@ class ParserLike(Protocol):
             NotImplementedError: When the parser-like object fails to implement parsing.
         """
 
-        _protocol_not_implemented(f"{self.__class__.__qualname__}.parse")
+        raise NotImplementedError("ParserLike.parse must be implemented")
 
     def __call__(
         self,
@@ -119,57 +103,16 @@ class ParserLike(Protocol):
     ) -> Sequence[RawDiagnostic | Diagnostic]:
         """Return parsed diagnostics when invoked as a callable.
 
+        Args:
+            stdout: Lines emitted on standard output by the external tool.
+            stderr: Lines emitted on standard error by the external tool.
+            context: Tool execution context describing configuration and files.
+
         Returns:
             Sequence[RawDiagnostic | Diagnostic]: Parsed diagnostics produced by :meth:`parse`.
         """
 
         return self.parse(stdout, stderr, context=context)
-
-
-class ParserAdapter(Parser):
-    """Adapter that wraps parser-like objects with the :class:`Parser` protocol."""
-
-    __slots__ = ("_delegate",)
-
-    def __init__(self, delegate: ParserLike) -> None:
-        """Store the parser delegate used to handle diagnostic parsing.
-
-        Args:
-            delegate: Parser-like object that will perform diagnostic parsing.
-        """
-
-        self._delegate = delegate
-
-    def parse(
-        self,
-        stdout: Sequence[str],
-        stderr: Sequence[str],
-        *,
-        context: ToolContext,
-    ) -> Sequence[RawDiagnostic | Diagnostic]:
-        """Delegate parsing to the wrapped object and normalise the result.
-
-        Args:
-            stdout: Lines captured on standard output during execution.
-            stderr: Lines captured on standard error during execution.
-            context: Tool execution context passed to the delegate.
-
-        Returns:
-            Sequence[RawDiagnostic | Diagnostic]: Normalised diagnostic records returned by the delegate.
-        """
-
-        result = self._delegate.parse(stdout, stderr, context=context)
-        return tuple(result)
-
-    @property
-    def delegate(self) -> ParserLike:
-        """Return the wrapped parser delegate.
-
-        Returns:
-            ParserLike: Parser delegate provided at construction time.
-        """
-
-        return self._delegate
 
 
 @runtime_checkable
@@ -190,10 +133,13 @@ class CommandBuilder(Protocol):
             NotImplementedError: When the builder has not been implemented.
         """
 
-        _protocol_not_implemented(f"{self.__class__.__qualname__}.build")
+        raise NotImplementedError("CommandBuilder.build must be implemented")
 
     def __call__(self, ctx: ToolContext) -> Sequence[str]:
         """Invoke :meth:`build` allowing builders to act as callables.
+
+        Args:
+            ctx: Tool execution context containing configuration and file selections.
 
         Returns:
             Sequence[str]: Command arguments produced by :meth:`build`.
@@ -216,10 +162,13 @@ class CommandBuilderLike(Protocol):
             Sequence[str]: Command arguments emitted by the builder.
         """
 
-        _protocol_not_implemented(f"{self.__class__.__qualname__}.build")
+        raise NotImplementedError("CommandBuilderLike.build must be implemented")
 
     def __call__(self, ctx: ToolContext) -> Sequence[str]:
         """Return command arguments when invoked as a callable.
+
+        Args:
+            ctx: Tool execution context describing files and configuration.
 
         Returns:
             Sequence[str]: Command arguments produced by :meth:`build`.
@@ -242,7 +191,7 @@ class InstallerCallable(Protocol):
             None
         """
 
-        _protocol_not_implemented(f"{self.__class__.__qualname__}.__call__")
+        raise NotImplementedError("InstallerCallable.__call__ must be implemented")
 
     def __repr__(self) -> str:
         """Return a debugging representation of the installer callable.
@@ -268,7 +217,7 @@ class InternalActionRunner(Protocol):
             ToolOutcome: Result bundle describing the internal action.
         """
 
-        _protocol_not_implemented(f"{self.__class__.__qualname__}.__call__")
+        raise NotImplementedError("InternalActionRunner.__call__ must be implemented")
 
     def __repr__(self) -> str:
         """Return a debugging representation of the action runner.
@@ -286,6 +235,5 @@ __all__ = [
     "InstallerCallable",
     "InternalActionRunner",
     "Parser",
-    "ParserAdapter",
     "ParserLike",
 ]

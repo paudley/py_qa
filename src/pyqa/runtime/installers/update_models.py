@@ -339,6 +339,8 @@ class WorkspaceStrategy(Protocol):
             bool: ``True`` when the strategy can manage the workspace, ``False`` otherwise.
         """
 
+        raise NotImplementedError("WorkspaceStrategy.detect must be implemented")
+
     def plan(self, workspace: Workspace) -> list[CommandSpec]:
         """Return the commands required to update ``workspace``.
 
@@ -349,6 +351,8 @@ class WorkspaceStrategy(Protocol):
             list[CommandSpec]: Commands that update the workspace or an empty list
             when no actions are required.
         """
+
+        raise NotImplementedError("WorkspaceStrategy.plan must be implemented")
 
 
 __all__ = [
