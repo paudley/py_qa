@@ -26,6 +26,8 @@ class SchemaValidationError(Protocol):
             str: Human-readable message describing the validation failure.
         """
 
+        raise NotImplementedError("SchemaValidationError.message must be implemented")
+
     @classmethod
     def __subclasshook__(cls, subclass: type, /) -> bool:
         """Return ``True`` when ``subclass`` exposes a jsonschema error interface.
@@ -63,6 +65,8 @@ class SchemaValidator(Protocol):
         Returns:
             Iterable[SchemaValidationError]: Iterator yielding validation errors.
         """
+
+        raise NotImplementedError("SchemaValidator.iter_errors must be implemented")
 
     @classmethod
     def __subclasshook__(cls, subclass: type, /) -> bool:

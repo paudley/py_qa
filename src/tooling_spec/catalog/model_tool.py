@@ -489,30 +489,6 @@ TOOL_MODEL_EXPORTS: Final[tuple[str, ...]] = (
 )
 
 
-def _tool_model_objects() -> tuple[ToolModelObject, ...]:
-    """Return the objects corresponding to ``TOOL_MODEL_EXPORTS``.
-
-    Returns:
-        tuple[ToolModelObject, ...]: Tuple of exported model classes and parsers.
-    """
-
-    return (
-        ToolBehaviour,
-        ToolComponents,
-        ToolDefinition,
-        ToolFiles,
-        ToolIdentity,
-        ToolMetadata,
-        ToolOrdering,
-        parse_documentation_bundle,
-        parse_runtime_definition,
-        parse_tool_metadata,
-    )
-
-
-TOOL_MODEL_OBJECTS = _tool_model_objects()
-
-
 class ToolDocumentationParser(Protocol):
     """Protocol describing documentation parser callables."""
 
@@ -535,6 +511,8 @@ class ToolDocumentationParser(Protocol):
         Returns:
             DocumentationBundle | None: Structured documentation bundle when available.
         """
+
+        raise NotImplementedError("ToolDocumentationParser.__call__ must be implemented")
 
     @classmethod
     def __subclasshook__(cls, subclass: type, /) -> bool:
@@ -568,6 +546,8 @@ class ToolRuntimeParser(Protocol):
         Returns:
             RuntimeDefinition | None: Runtime definition or ``None`` when the mapping is absent.
         """
+
+        raise NotImplementedError("ToolRuntimeParser.__call__ must be implemented")
 
     @classmethod
     def __subclasshook__(cls, subclass: type, /) -> bool:
@@ -604,6 +584,8 @@ class ToolMetadataParser(Protocol):
             ToolMetadata: Parsed tool metadata matching ``schema_version``.
         """
 
+        raise NotImplementedError("ToolMetadataParser.__call__ must be implemented")
+
     @classmethod
     def __subclasshook__(cls, subclass: type, /) -> bool:
         """Return ``True`` when ``subclass`` exposes a metadata parser interface.
@@ -630,3 +612,30 @@ ToolModelObject: TypeAlias = (
     | ToolRuntimeParser
     | ToolMetadataParser
 )
+
+
+def _tool_model_objects() -> tuple[ToolModelObject, ...]:
+    """Return the objects corresponding to ``TOOL_MODEL_EXPORTS``.
+
+    Returns:
+        tuple[ToolModelObject, ...]: Tuple containing model classes and parser callables.
+    """
+
+    return cast(
+        tuple[ToolModelObject, ...],
+        (
+            ToolBehaviour,
+            ToolComponents,
+            ToolDefinition,
+            ToolFiles,
+            ToolIdentity,
+            ToolMetadata,
+            ToolOrdering,
+            parse_documentation_bundle,
+            parse_runtime_definition,
+            parse_tool_metadata,
+        ),
+    )
+
+
+TOOL_MODEL_OBJECTS = _tool_model_objects()

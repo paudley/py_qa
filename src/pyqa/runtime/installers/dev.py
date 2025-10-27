@@ -51,52 +51,52 @@ DEV_DEPENDENCIES: tuple[str, ...] = (
 
 
 @dataclass(frozen=True)
-class StubRequirement:
-    """Runtime package accompanied by its optional typing stubs."""
+class TypingSupportRequirement:
+    """Runtime package accompanied by supplemental typing support packages."""
 
     runtime: str
     packages: tuple[str, ...]
 
 
-OPTIONAL_TYPED: tuple[StubRequirement, ...] = (
-    StubRequirement("pymysql", ("types-PyMySQL",)),
-    StubRequirement("cachetools", ("types-cachetools",)),
-    StubRequirement("cffi", ("types-cffi",)),
-    StubRequirement("colorama", ("types-colorama",)),
-    StubRequirement("python-dateutil", ("types-python-dateutil",)),
-    StubRequirement("defusedxml", ("types-defusedxml",)),
-    StubRequirement("docutils", ("types-docutils",)),
-    StubRequirement("gevent", ("types-gevent",)),
-    StubRequirement("greenlet", ("types-greenlet",)),
-    StubRequirement("html5lib", ("types-html5lib",)),
-    StubRequirement("httplib2", ("types-httplib2",)),
-    StubRequirement("jsonschema", ("types-jsonschema",)),
-    StubRequirement("libsass", ("types-libsass",)),
-    StubRequirement("networkx", ("types-networkx",)),
-    StubRequirement("openpyxl", ("types-openpyxl",)),
-    StubRequirement("pandas", ("pandas-stubs",)),
-    StubRequirement("protobuf", ("types-protobuf",)),
-    StubRequirement("psutil", ("types-psutil",)),
-    StubRequirement("psycopg2", ("types-psycopg2",)),
-    StubRequirement("pyasn1", ("types-pyasn1",)),
-    StubRequirement("pyarrow", ("pyarrow-stubs",)),
-    StubRequirement("pycurl", ("types-pycurl",)),
-    StubRequirement("pygments", ("types-pygments",)),
-    StubRequirement("pyopenssl", ("types-pyopenssl",)),
-    StubRequirement("pytz", ("types-pytz",)),
-    StubRequirement("pywin32", ("types-pywin32",)),
-    StubRequirement("pyyaml", ("types-pyyaml",)),
-    StubRequirement("requests", ("types-requests",)),
-    StubRequirement("scipy", ("scipy-stubs",)),
-    StubRequirement("setuptools", ("types-setuptools",)),
-    StubRequirement("shapely", ("types-shapely",)),
-    StubRequirement("simplejson", ("types-simplejson",)),
-    StubRequirement("tabulate", ("types-tabulate",)),
-    StubRequirement("tensorflow", ("types-tensorflow",)),
-    StubRequirement("tqdm", ("types-tqdm",)),
+OPTIONAL_TYPING_PACKAGES: tuple[TypingSupportRequirement, ...] = (
+    TypingSupportRequirement("pymysql", ("types-PyMySQL",)),
+    TypingSupportRequirement("cachetools", ("types-cachetools",)),
+    TypingSupportRequirement("cffi", ("types-cffi",)),
+    TypingSupportRequirement("colorama", ("types-colorama",)),
+    TypingSupportRequirement("python-dateutil", ("types-python-dateutil",)),
+    TypingSupportRequirement("defusedxml", ("types-defusedxml",)),
+    TypingSupportRequirement("docutils", ("types-docutils",)),
+    TypingSupportRequirement("gevent", ("types-gevent",)),
+    TypingSupportRequirement("greenlet", ("types-greenlet",)),
+    TypingSupportRequirement("html5lib", ("types-html5lib",)),
+    TypingSupportRequirement("httplib2", ("types-httplib2",)),
+    TypingSupportRequirement("jsonschema", ("types-jsonschema",)),
+    TypingSupportRequirement("libsass", ("types-libsass",)),
+    TypingSupportRequirement("networkx", ("types-networkx",)),
+    TypingSupportRequirement("openpyxl", ("types-openpyxl",)),
+    TypingSupportRequirement("pandas", ("pandas-stubs",)),
+    TypingSupportRequirement("protobuf", ("types-protobuf",)),
+    TypingSupportRequirement("psutil", ("types-psutil",)),
+    TypingSupportRequirement("psycopg2", ("types-psycopg2",)),
+    TypingSupportRequirement("pyasn1", ("types-pyasn1",)),
+    TypingSupportRequirement("pyarrow", ("pyarrow-stubs",)),
+    TypingSupportRequirement("pycurl", ("types-pycurl",)),
+    TypingSupportRequirement("pygments", ("types-pygments",)),
+    TypingSupportRequirement("pyopenssl", ("types-pyopenssl",)),
+    TypingSupportRequirement("pytz", ("types-pytz",)),
+    TypingSupportRequirement("pywin32", ("types-pywin32",)),
+    TypingSupportRequirement("pyyaml", ("types-pyyaml",)),
+    TypingSupportRequirement("requests", ("types-requests",)),
+    TypingSupportRequirement("scipy", ("scipy-stubs",)),
+    TypingSupportRequirement("setuptools", ("types-setuptools",)),
+    TypingSupportRequirement("shapely", ("types-shapely",)),
+    TypingSupportRequirement("simplejson", ("types-simplejson",)),
+    TypingSupportRequirement("tabulate", ("types-tabulate",)),
+    TypingSupportRequirement("tensorflow", ("types-tensorflow",)),
+    TypingSupportRequirement("tqdm", ("types-tqdm",)),
 )
 
-STUB_GENERATION: dict[str, tuple[str, ...]] = {
+TYPING_MODULE_TARGETS: dict[str, tuple[str, ...]] = {
     "chromadb": ("chromadb",),
     "geopandas": ("geopandas",),
     "polars": ("polars",),
@@ -111,8 +111,8 @@ STUB_GENERATION: dict[str, tuple[str, ...]] = {
 class InstallSummary:
     """Aggregated details about an installation run."""
 
-    optional_stub_packages: tuple[str, ...]
-    generated_stub_modules: tuple[str, ...]
+    optional_typing_packages: tuple[str, ...]
+    generated_typing_modules: tuple[str, ...]
     marker_path: Path
 
 
@@ -120,22 +120,22 @@ def install_dev_environment(
     root: Path,
     *,
     include_optional: bool = True,
-    generate_stubs: bool = True,
-    on_optional_stub: Callable[[str], None] | None = None,
-    on_stub_generation: Callable[[str], None] | None = None,
+    generate_typing_modules: bool = True,
+    on_optional_package: Callable[[str], None] | None = None,
+    on_module_generation: Callable[[str], None] | None = None,
 ) -> InstallSummary:
-    """Install development dependencies and optional typing assets for ``root``.
+    """Install development dependencies and optional typing support assets for ``root``.
 
     Args:
         root: Project directory whose development environment should be provisioned.
-        include_optional: When ``True`` install optional runtime-specific stub packages.
-        generate_stubs: When ``True`` generate stub skeletons for selected runtimes.
-        on_optional_stub: Optional callback invoked for each installed optional stub package.
-        on_stub_generation: Optional callback invoked for each generated stub module.
+        include_optional: When ``True`` install optional runtime-specific typing packages.
+        generate_typing_modules: When ``True`` generate typing skeletons for selected runtimes.
+        on_optional_package: Optional callback invoked for each optional typing package installed.
+        on_module_generation: Optional callback invoked for each generated typing module.
 
     Returns:
-        InstallSummary: Summary describing installed optional stubs, generated modules,
-        and the project marker location.
+        InstallSummary: Summary describing installed optional typing packages,
+        generated modules, and the project marker location.
     """
     project_root = root.resolve()
     _run_uv(
@@ -148,26 +148,26 @@ def install_dev_environment(
     optional_added: list[str] = []
     if include_optional:
         installed = _installed_packages(project_root)
-        optional_added = _install_optional_stubs(
+        optional_added = _install_optional_typing_packages(
             project_root,
             installed,
-            on_optional_stub=on_optional_stub,
+            on_optional_package=on_optional_package,
         )
 
     generated_modules: list[str] = []
-    if generate_stubs:
+    if generate_typing_modules:
         if installed is None:
             installed = _installed_packages(project_root)
-        generated_modules = _generate_runtime_stubs(
+        generated_modules = _generate_typing_modules(
             project_root,
             installed,
-            on_stub_generation=on_stub_generation,
+            on_module_generation=on_module_generation,
         )
 
     marker = _write_project_marker(project_root)
     return InstallSummary(
-        optional_stub_packages=tuple(optional_added),
-        generated_stub_modules=tuple(generated_modules),
+        optional_typing_packages=tuple(optional_added),
+        generated_typing_modules=tuple(generated_modules),
         marker_path=marker,
     )
 
@@ -218,30 +218,30 @@ def _installed_packages(project_root: Path) -> set[str]:
     return packages
 
 
-def _install_optional_stubs(
+def _install_optional_typing_packages(
     project_root: Path,
     installed: set[str],
     *,
-    on_optional_stub: Callable[[str], None] | None,
+    on_optional_package: Callable[[str], None] | None,
 ) -> list[str]:
-    """Install optional stub packages when their runtime dependency is present.
+    """Install optional typing support packages when the runtime dependency is present.
 
     Args:
-        project_root: Project directory where stubs should be installed.
+        project_root: Project directory where typing support packages should be installed.
         installed: Lowercase set of already installed runtime packages.
-        on_optional_stub: Optional callback invoked when a stub package is added.
+        on_optional_package: Optional callback invoked when a typing package is added.
 
     Returns:
-        list[str]: Names of stub packages that were installed.
+        list[str]: Names of typing support packages that were installed.
     """
 
     added: list[str] = []
-    for requirement in OPTIONAL_TYPED:
+    for requirement in OPTIONAL_TYPING_PACKAGES:
         if requirement.runtime.lower() not in installed:
             continue
         for package in requirement.packages:
-            if on_optional_stub is not None:
-                on_optional_stub(package)
+            if on_optional_package is not None:
+                on_optional_package(package)
             _run_uv(
                 ["uv", "add", "-q", "--dev", package],
                 project_root,
@@ -251,28 +251,28 @@ def _install_optional_stubs(
     return added
 
 
-def _generate_runtime_stubs(
+def _generate_typing_modules(
     project_root: Path,
     installed: set[str],
     *,
-    on_stub_generation: Callable[[str], None] | None,
+    on_module_generation: Callable[[str], None] | None,
 ) -> list[str]:
-    """Generate stub modules for installed runtimes not covered by third-party packages.
+    """Generate typing modules for installed runtimes not covered by third-party packages.
 
     Args:
-        project_root: Project directory within which stubs are created.
+        project_root: Project directory within which typing modules are created.
         installed: Lowercase set of installed runtime packages.
-        on_stub_generation: Optional callback invoked when stubs are generated.
+        on_module_generation: Optional callback invoked when modules are generated.
 
     Returns:
-        list[str]: Module names for which stubs were generated.
+        list[str]: Module names for which typing support was generated.
     """
 
     stubs_root = project_root / "stubs"
     stubs_root.mkdir(exist_ok=True)
 
     generated: list[str] = []
-    for runtime, modules in STUB_GENERATION.items():
+    for runtime, modules in TYPING_MODULE_TARGETS.items():
         if runtime.lower() not in installed:
             continue
         for module in modules:
@@ -280,8 +280,8 @@ def _generate_runtime_stubs(
             if target.exists():
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
-            if on_stub_generation is not None:
-                on_stub_generation(module)
+            if on_module_generation is not None:
+                on_module_generation(module)
             _run_uv(
                 ["uv", "run", "stubgen", "--package", module, "--output", str(target)],
                 project_root,

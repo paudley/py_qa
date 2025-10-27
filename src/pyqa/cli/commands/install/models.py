@@ -25,7 +25,7 @@ INCLUDE_OPTION = Annotated[
         help="Install optional typing helper packages when runtime dependencies are present.",
     ),
 ]
-GENERATE_STUBS_OPTION = Annotated[
+GENERATE_TYPING_OPTION = Annotated[
     bool,
     typer.Option(
         True,
@@ -51,7 +51,7 @@ class InstallCLIOptions:
 def build_install_options(
     root: ROOT_OPTION,
     include_optional: INCLUDE_OPTION,
-    generate_stubs: GENERATE_STUBS_OPTION,
+    generate_typing_modules: GENERATE_TYPING_OPTION,
     emoji: EMOJI_OPTION,
 ) -> InstallCLIOptions:
     """Construct ``InstallCLIOptions`` from Typer parameters.
@@ -59,7 +59,7 @@ def build_install_options(
     Args:
         root: Project root supplied via CLI options.
         include_optional: Flag indicating whether optional typing helpers should be installed.
-        generate_stubs: Flag toggling generation of typing scaffolds for runtime packages.
+        generate_typing_modules: Flag toggling generation of typing scaffolds for runtime packages.
         emoji: Flag controlling emoji usage in logging output.
 
     Returns:
@@ -70,7 +70,7 @@ def build_install_options(
         root=root.resolve(),
         install=InstallOptions(
             include_optional=include_optional,
-            generate_stubs=generate_stubs,
+            generate_typing_modules=generate_typing_modules,
         ),
         use_emoji=emoji,
     )

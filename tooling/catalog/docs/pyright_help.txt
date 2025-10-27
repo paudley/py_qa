@@ -2,7 +2,7 @@ pyright --help
 
 Usage: pyright [options] files...
   Options:
-  --createstub <IMPORT>              Create type stub file(s) for import
+  --createstub <IMPORT>              Create type support file(s) for import (flag name preserved for compatibility)
   --dependencies                     Emit import dependency information
   -h,--help                          Show this help message
   --ignoreexternal                   Ignore external imports for --verifytypes
@@ -14,7 +14,7 @@ Usage: pyright [options] files...
   --pythonversion <VERSION>          Analyze for a specific version (3.3, 3.4, etc.)
   --skipunannotated                  Skip analysis of functions with no type annotations
   --stats                            Print detailed performance stats
-  -t,--typeshedpath <DIRECTORY>      Use typeshed type stubs at this location
+  -t,--typeshedpath <DIRECTORY>      Use typeshed type information at this location
   --threads <optional COUNT>         Use separate threads to parallelize type checking 
   -v,--venvpath <DIRECTORY>          Directory that contains virtual environments
   --verbose                          Emit verbose diagnostics
@@ -23,4 +23,3 @@ Usage: pyright [options] files...
   --warnings                         Use exit code of 1 if warnings are reported
   -w,--watch                         Continue to run and watch for changes
   -                                  Read files from stdin
-

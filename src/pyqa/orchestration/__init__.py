@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
 """Orchestration package initialisation.
 
 Submodules expose the orchestrator implementation and supporting helpers;

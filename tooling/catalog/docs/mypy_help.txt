@@ -46,11 +46,11 @@ Import discovery:
 
   --no-namespace-packages   Disable support for namespace packages (PEP 420, __init__.py-less) (inverse: --namespace-packages)
   --ignore-missing-imports  Silently ignore imports of missing modules
-  --follow-untyped-imports  Typecheck modules without stubs or py.typed marker
+  --follow-untyped-imports  Typecheck modules without dedicated typing packages or py.typed marker
   --follow-imports {normal,silent,skip,error}
                             How to treat imports (default normal)
   --python-executable EXECUTABLE
-                            Python executable used for finding PEP 561 compliant installed packages and stubs
+                            Python executable used for finding PEP 561 compliant installed packages and typing data
   --no-site-packages        Do not search for installed PEP 561 compliant packages
   --no-silence-site-packages
                             Do not silence errors in PEP 561 compliant installed packages
@@ -159,7 +159,7 @@ Advanced options:
                             Use a custom typing module
   --custom-typeshed-dir DIR
                             Use the custom typeshed in DIR
-  --warn-incomplete-stub    Warn if missing type annotation in typeshed, only relevant with --disallow-untyped-defs or --disallow-incomplete-defs enabled (inverse: --no-warn-incomplete-stub)
+  --warn-incomplete-typeshed    Warn if missing type annotation in typeshed when strict modes are active (inverse: --no-warn-incomplete-typeshed)
   --shadow-file SOURCE_FILE SHADOW_FILE
                             When encountering SOURCE_FILE, read and type check the contents of SHADOW_FILE instead.
 
@@ -182,8 +182,8 @@ Miscellaneous:
   --find-occurrences CLASS.MEMBER
                             Print out all usages of a class member (experimental)
   --scripts-are-modules     Script x becomes module x instead of __main__
-  --install-types           Install detected missing library stub packages using pip (inverse: --no-install-types)
-  --non-interactive         Install stubs without asking for confirmation and hide errors, with --install-types (inverse: --interactive)
+  --install-types           Install detected missing typing packages using pip (inverse: --no-install-types)
+  --non-interactive         Install typing packages without prompting when combined with --install-types (inverse: --interactive)
 
 Running code:
   Specify the code you want to type check. For more details, see mypy.readthedocs.io/en/stable/running_mypy.html#running-mypy

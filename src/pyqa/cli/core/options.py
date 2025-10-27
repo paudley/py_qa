@@ -603,7 +603,7 @@ class InstallOptions:
     """Options controlling installation of managed tools."""
 
     include_optional: bool = True
-    generate_stubs: bool = True
+    generate_typing_modules: bool = True
 
 
 ToolFilters = dict[str, list[str]]

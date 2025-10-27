@@ -248,7 +248,7 @@ def generate_advice(
     _append_complexity_guidance(accumulator, diagnostics, estimator)
     _append_documentation_guidance(accumulator, diagnostics)
     _append_annotation_guidance(accumulator, diagnostics)
-    _append_stub_guidance(accumulator, diagnostics)
+    _append_signature_alignment_guidance(accumulator, diagnostics)
     _append_packaging_guidance(accumulator, diagnostics)
     _append_encapsulation_guidance(accumulator, diagnostics)
     _append_magic_number_guidance(accumulator, diagnostics)
@@ -511,18 +511,18 @@ def _append_annotation_guidance(
         )
 
 
-def _append_stub_guidance(
+def _append_signature_alignment_guidance(
     accumulator: _AdviceAccumulator,
     diagnostics: Sequence[DiagnosticRecord],
 ) -> None:
-    """Nudge teams to align stubs with implementations when inconsistent.
+    """Prompt teams to align type definition files with implementations when inconsistent.
 
     Args:
-        accumulator: Collector receiving stub-alignment advice.
-        diagnostics: Diagnostic records that include stub mismatches.
+        accumulator: Collector receiving signature-alignment advice.
+        diagnostics: Diagnostic records that include discrepancies between .pyi files and sources.
     """
 
-    stub_files = {
+    type_definition_files = {
         record.file_path
         for record in diagnostics
         if (
@@ -532,7 +532,7 @@ def _append_stub_guidance(
             and record.code.startswith("ANN")
         )
     }
-    override_files = {
+    override_targets = {
         record.file_path
         for record in diagnostics
         if (
@@ -545,10 +545,10 @@ def _append_stub_guidance(
             )
         )
     }
-    if stub_files and override_files:
+    if type_definition_files and override_targets:
         accumulator.add(
             AdviceCategory.TYPING,
-            "Align stubs with implementations—keep signatures in sync as upstream changes land.",
+            "Align .pyi definitions with implementations to keep signatures in sync as upstream changes land.",
         )
 
 

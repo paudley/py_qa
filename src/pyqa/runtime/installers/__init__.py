@@ -6,10 +6,10 @@ from __future__ import annotations
 
 from .dev import (
     DEV_DEPENDENCIES,
-    OPTIONAL_TYPED,
-    STUB_GENERATION,
+    OPTIONAL_TYPING_PACKAGES,
+    TYPING_MODULE_TARGETS,
     InstallSummary,
-    StubRequirement,
+    TypingSupportRequirement,
     install_dev_environment,
 )
 from .update import (
@@ -32,10 +32,10 @@ from .update import (
 
 __all__ = [
     "DEV_DEPENDENCIES",
-    "OPTIONAL_TYPED",
-    "STUB_GENERATION",
+    "OPTIONAL_TYPING_PACKAGES",
+    "TYPING_MODULE_TARGETS",
     "InstallSummary",
-    "StubRequirement",
+    "TypingSupportRequirement",
     "install_dev_environment",
     "DEFAULT_STRATEGIES",
     "CommandRunner",

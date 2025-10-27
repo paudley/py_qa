@@ -27,13 +27,13 @@ if TYPE_CHECKING:
 else:  # pragma: no cover - typer may be unavailable in minimal environments
     try:
         from typer import Typer
-    except ModuleNotFoundError:  # pragma: no cover - fallback stub for tooling tests
+    except ModuleNotFoundError:  # pragma: no cover - fallback shim for tooling tests
 
         class Typer:
             """Fallback shim used when Typer is not installed."""
 
             def __init__(self) -> None:
-                """Initialise a Typer-like stub with no runtime behaviour."""
+                """Initialise a Typer-like stand-in with no runtime behaviour."""
 
                 self._commands: dict[str, Callable[..., None]] = {}
 
@@ -61,7 +61,7 @@ else:  # pragma: no cover - typer may be unavailable in minimal environments
                 return func
 
             def __call__(self) -> None:
-                """Raise an informative error when attempting to invoke the stub."""
+                """Raise an informative error when attempting to invoke the fallback."""
 
                 raise RuntimeError("Typer is unavailable in this environment") from None
 

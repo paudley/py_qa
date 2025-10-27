@@ -41,15 +41,15 @@ def install_command(
         summary: InstallSummary = install_dev_environment(
             resolved_root,
             include_optional=install_options.include_optional,
-            generate_stubs=install_options.generate_stubs,
-            on_optional_stub=(
-                (lambda dep: info(f"Adding optional typing stub {dep}", use_emoji=use_emoji))
+            generate_typing_modules=install_options.generate_typing_modules,
+            on_optional_package=(
+                (lambda dep: info(f"Adding optional typing package {dep}", use_emoji=use_emoji))
                 if install_options.include_optional
                 else None
             ),
-            on_stub_generation=(
-                (lambda module: info(f"Generating stubs for {module}", use_emoji=use_emoji))
-                if install_options.generate_stubs
+            on_module_generation=(
+                (lambda module: info(f"Generating typing scaffolds for {module}", use_emoji=use_emoji))
+                if install_options.generate_typing_modules
                 else None
             ),
         )
@@ -60,9 +60,9 @@ def install_command(
         fail(str(exc), use_emoji=use_emoji)
         raise typer.Exit(code=exc.returncode or 1) from exc
 
-    if summary.optional_stub_packages and not install_options.include_optional:
+    if summary.optional_typing_packages and not install_options.include_optional:
         info(
-            "Optional stub packages detected but not installed due to CLI flags.",
+            "Optional typing packages detected but not installed due to CLI flags.",
             use_emoji=use_emoji,
         )
 
