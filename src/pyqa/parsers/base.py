@@ -6,9 +6,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Iterator
-from collections.abc import Mapping as MappingABC
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import cast
 
@@ -75,7 +73,7 @@ def _coerce_object_mapping(value: JsonValue) -> dict[str, JsonValue]:
         dict[str, JsonValue]: Mapping with stringified keys when applicable.
     """
 
-    if isinstance(value, MappingABC):
+    if isinstance(value, Mapping):
         return {str(key): entry for key, entry in value.items()}
     return {}
 
@@ -94,7 +92,7 @@ def _coerce_dict_sequence(value: JsonValue) -> list[dict[str, JsonValue]]:
         return []
     collected: list[dict[str, JsonValue]] = []
     for item in value:
-        if isinstance(item, MappingABC):
+        if isinstance(item, Mapping):
             collected.append(_coerce_object_mapping(item))
     return collected
 
@@ -116,23 +114,54 @@ def _coerce_optional_str(value: JsonValue | None) -> str | None:
     return str(value)
 
 
-def iter_dicts(value: JsonValue) -> Iterator[MappingABC[str, JsonValue]]:
-    """Yield mapping items from ``value`` when it is a sequence of dict-like objects.
+def mapping_sequence(value: JsonValue | None) -> tuple[Mapping[str, JsonValue], ...]:
+    """Return mapping entries extracted from ``value`` when possible.
+
+    Args:
+        value: JSON payload that may contain mapping entries.
+
+    Returns:
+        tuple[Mapping[str, JsonValue], ...]: Tuple of mapping entries discovered in *value*.
+    """
+
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return tuple(entry for entry in value if isinstance(entry, Mapping))
+    if isinstance(value, Mapping):
+        return (value,)
+    return ()
+
+
+def first_mapping(value: JsonValue | None) -> Mapping[str, JsonValue]:
+    """Return ``value`` when it is a mapping, otherwise an empty mapping.
+
+    Args:
+        value: JSON payload that may contain mapping data.
+
+    Returns:
+        Mapping[str, JsonValue]: Extracted mapping or an empty mapping when absent.
+    """
+
+    return value if isinstance(value, Mapping) else {}
+
+
+def iter_dicts(value: JsonValue) -> tuple[Mapping[str, JsonValue], ...]:
+    """Return mapping items from ``value`` when it is a sequence of dict-like objects.
 
     Args:
         value: JSON value that may contain dictionary entries.
 
-    Yields:
-        MappingABC[str, JsonValue]: Mapping entries extracted from ``value``.
+    Returns:
+        tuple[Mapping[str, JsonValue], ...]: Tuple containing mapping entries in ``value``.
     """
 
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        for item in value:
-            if isinstance(item, MappingABC):
-                yield item
+        return tuple(item for item in value if isinstance(item, Mapping))
+    if isinstance(value, Mapping):
+        return (value,)
+    return ()
 
 
-def map_severity(label: JsonValue, mapping: MappingABC[str, Severity], default: Severity) -> Severity:
+def map_severity(label: JsonValue, mapping: Mapping[str, Severity], default: Severity) -> Severity:
     """Return a :class:`Severity` derived from ``label`` using ``mapping``.
 
     Args:
@@ -263,8 +292,8 @@ def iter_pattern_matches(
     *,
     skip_prefixes: Sequence[str] = (),
     skip_blank: bool = True,
-) -> Iterator[re.Match[str]]:
-    """Yield regex matches from ``lines`` while filtering unwanted entries.
+) -> tuple[re.Match[str], ...]:
+    """Return regex matches from ``lines`` while filtering unwanted entries.
 
     Args:
         lines: Sequence of raw lines emitted by a tool.
@@ -272,11 +301,12 @@ def iter_pattern_matches(
         skip_prefixes: Optional prefixes that, when present, skip the line.
         skip_blank: When ``True`` blank lines are ignored.
 
-    Yields:
-        re.Match[str]: Match objects produced by ``pattern``.
+    Returns:
+        tuple[re.Match[str], ...]: Tuple of matches that satisfy ``pattern``.
     """
 
     forbidden = tuple(skip_prefixes)
+    matches: list[re.Match[str]] = []
     for raw_line in lines:
         line = raw_line.strip()
         if skip_blank and not line:
@@ -285,7 +315,8 @@ def iter_pattern_matches(
             continue
         match = pattern.match(line)
         if match:
-            yield match
+            matches.append(match)
+    return tuple(matches)
 
 
 @dataclass(slots=True)
@@ -359,9 +390,11 @@ __all__ = [
     "JsonTransform",
     "TextParser",
     "TextTransform",
+    "first_mapping",
     "iter_dicts",
     "iter_pattern_matches",
     "map_severity",
+    "mapping_sequence",
     "_coerce_dict_sequence",
     "_coerce_object_mapping",
     "_coerce_optional_str",

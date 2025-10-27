@@ -396,6 +396,10 @@ class _OrchestratorActionMixin:
             tuple[int, int, str, str, PreparedCommand | None, str | None]: Tuple
             containing the current index, total action count, tool name, action
             name, prepared command, and optional error message.
+
+        Returns:
+            Iterator[tuple[int, int, str, str, PreparedCommand | None, str | None]]:
+            Iterator producing tuples describing prepared fetch actions.
         """
 
         actions = self._iter_tool_actions()

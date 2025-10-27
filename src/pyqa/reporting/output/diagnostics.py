@@ -170,6 +170,7 @@ def dump_diagnostics(diags: Iterable[Diagnostic], cfg: OutputConfig) -> None:
     Args:
         diags: Iterable of diagnostics destined for display.
         cfg: Output configuration controlling presentation options.
+
     """
 
     collected = list(diags)

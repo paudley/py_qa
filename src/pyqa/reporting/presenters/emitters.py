@@ -32,7 +32,11 @@ class _AdviceProviderContext:
 
     @property
     def annotation_engine(self) -> AnnotationProvider:
-        """Return the active annotation provider used by the builder."""
+        """Return the active annotation provider used by the builder.
+
+        Returns:
+            AnnotationProvider: Active annotation provider for the builder.
+        """
 
         return self.builder.annotation_engine
 

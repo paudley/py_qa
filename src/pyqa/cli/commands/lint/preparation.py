@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -72,17 +72,94 @@ PROVIDED_FLAG_INTERNAL_LINTERS: Final[str] = "internal_linters"
 
 
 @dataclass(slots=True)
+class PreparedLintStateParams:
+    """Grouped constructor parameters for :class:`PreparedLintState`."""
+
+    options: LintOptions
+    meta: LintMetaParams
+    root: Path
+    ignored_py_qa: Sequence[str]
+    artifacts: LintOutputArtifacts
+    suppressions: SuppressionRegistry | None
+    presentation: tuple[CLIDisplayOptions, CLILogger]
+
+
+@dataclass(slots=True, init=False)
 class PreparedLintState:
     """Contain normalized inputs and metadata required to execute linting."""
 
     options: LintOptions
     meta: LintMetaParams
     root: Path
-    ignored_py_qa: list[str]
+    ignored_py_qa: tuple[str, ...]
     artifacts: LintOutputArtifacts
-    display: CLIDisplayOptions
-    logger: CLILogger
-    suppressions: SuppressionRegistry
+    suppressions: SuppressionRegistry | None
+    _presentation: tuple[CLIDisplayOptions, CLILogger]
+
+    def __init__(self, params: PreparedLintStateParams) -> None:
+        """Initialize the prepared lint state container.
+
+        Args:
+            params: Aggregated constructor parameters produced by the preparation services.
+        """
+
+        self.options = params.options
+        self.meta = params.meta
+        self.root = params.root
+        self.ignored_py_qa = tuple(params.ignored_py_qa)
+        self.artifacts = params.artifacts
+        self.suppressions = params.suppressions
+        self._presentation = params.presentation
+
+    def has_meta_flag(self, flag: str) -> bool:
+        """Return ``True`` when ``flag`` is present on the meta options.
+
+        Args:
+            flag: Name of the meta attribute to inspect.
+
+        Returns:
+            bool: ``True`` when the requested meta attribute evaluates to truthy.
+        """
+
+        return bool(getattr(self.meta, flag, False))
+
+    def iter_ignored_py_qa(self) -> tuple[str, ...]:
+        """Return immutable view of ``PY_QA`` discovery exclusions.
+
+        Returns:
+            tuple[str, ...]: Tuple containing ignored ``PY_QA`` directories.
+        """
+
+        return self.ignored_py_qa
+
+    def has_suppressions(self) -> bool:
+        """Return ``True`` when a suppression registry has been configured.
+
+        Returns:
+            bool: ``True`` when a suppression registry is available.
+        """
+
+        return self.suppressions is not None
+
+    @property
+    def display(self) -> CLIDisplayOptions:
+        """Return display options governing console output.
+
+        Returns:
+            CLIDisplayOptions: Display configuration for lint output.
+        """
+
+        return self._presentation[0]
+
+    @property
+    def logger(self) -> CLILogger:
+        """Return the logger instance bound to the lint run.
+
+        Returns:
+            CLILogger: Logger instance recording lint messages.
+        """
+
+        return self._presentation[1]
 
 
 @dataclass(slots=True)
@@ -231,16 +308,16 @@ def prepare_lint_state(
     if is_py_qa_workspace(normalized_targets.root):
         inputs.advanced.meta.runtime.additional.pyqa_rules = True
 
-    return PreparedLintState(
+    params = PreparedLintStateParams(
         options=options,
         meta=inputs.advanced.meta,
         root=normalized_targets.root,
-        ignored_py_qa=normalized_targets.ignored_py_qa,
+        ignored_py_qa=tuple(normalized_targets.ignored_py_qa),
         artifacts=artifacts,
-        display=display,
-        logger=logger,
         suppressions=SuppressionRegistry(normalized_targets.root),
+        presentation=(display, logger),
     )
+    return PreparedLintState(params)
 
 
 # Internal helpers --------------------------------------------------------------------
@@ -370,7 +447,12 @@ def _build_execution_options(
         LintExecutionOptions: Runtime and formatting configuration for linting.
     """
 
-    runtime = _build_runtime_options(execution.runtime, cache_dir, use_local_linters, effective_jobs)
+    runtime = _build_runtime_options(
+        execution.runtime,
+        cache_dir,
+        use_local_linters,
+        effective_jobs,
+    )
     formatting = _build_formatting_options(advanced.overrides)
     return LintExecutionOptions(runtime=runtime, formatting=formatting)
 

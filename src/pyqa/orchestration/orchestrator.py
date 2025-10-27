@@ -63,10 +63,14 @@ from .tool_selection import SelectionResult, ToolDecision, ToolSelector
 FetchCallback = Callable[[FetchEvent, str, str, int, int, str | None], None]
 
 
-def _noop_debug(_: str) -> None:
-    """Default debug logger used when debugging is disabled."""
+def _noop_debug(message: str) -> None:
+    """Default debug logger used when debugging is disabled.
 
-    return None
+    Args:
+        message: Debug message emitted by the orchestrator (ignored).
+    """
+
+    _ = message
 
 
 def _resolve_cache_builder(

@@ -25,16 +25,18 @@ from .base import (
 )
 
 
-def parse_actionlint(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_actionlint(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse actionlint JSON diagnostics into raw diagnostic objects.
 
     Args:
         payload: JSON payload emitted by actionlint.
-        _context: Tool execution context supplied by the orchestrator (unused).
+        context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Normalised diagnostics describing actionable issues.
     """
+
+    del context
     results: list[RawDiagnostic] = []
     for item in iter_dicts(payload):
         path = _coerce_optional_str(item.get("filepath") or item.get("path"))
@@ -55,16 +57,18 @@ def parse_actionlint(payload: JsonValue, _context: ToolContext) -> Sequence[RawD
     return results
 
 
-def parse_kube_linter(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_kube_linter(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse kube-linter JSON diagnostics into raw diagnostic objects.
 
     Args:
         payload: JSON payload emitted by kube-linter.
-        _context: Tool execution context supplied by the orchestrator (unused).
+        context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics describing kube-linter findings.
     """
+
+    del context
     reports: list[dict[str, JsonValue]] = []
     if isinstance(payload, dict):
         reports.extend(_coerce_dict_sequence(payload.get("Reports")))
@@ -98,16 +102,18 @@ def parse_kube_linter(payload: JsonValue, _context: ToolContext) -> Sequence[Raw
     return diagnostics
 
 
-def parse_dockerfilelint(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_dockerfilelint(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse dockerfilelint JSON output into raw diagnostic objects.
 
     Args:
         payload: JSON payload emitted by dockerfilelint.
-        _context: Tool execution context supplied by the orchestrator (unused).
+        context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics constructed from dockerfilelint issues.
     """
+
+    del context
     results: list[RawDiagnostic] = []
     source = payload.get("files") if isinstance(payload, Mapping) else payload
     for entry in iter_dicts(source):

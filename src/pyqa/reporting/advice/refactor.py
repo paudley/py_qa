@@ -82,9 +82,11 @@ def _iter_refactor_payload(value: JsonValue | None) -> Iterable[Mapping[str, Jso
     Args:
         value: JSON payload retrieved from analysis metadata.
 
+    Returns:
+        Iterable[Mapping[str, JsonValue]]: Iterable producing refactor payload entries.
+
     Yields:
-        Mapping[str, JsonValue]: Candidate entries ready for conversion into
-        structured navigator rows.
+        Mapping[str, JsonValue]: Candidate entries ready for conversion into structured navigator rows.
     """
 
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):

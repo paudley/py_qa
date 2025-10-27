@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import Final
 
 from pyqa.core.severity import Severity
@@ -18,8 +18,10 @@ from .base import (
     DiagnosticLocation,
     append_diagnostic,
     create_spec,
+    first_mapping,
     iter_dicts,
     map_severity,
+    mapping_sequence,
 )
 
 SHFMT_DIFF_PREFIX_LENGTH: Final[int] = 4
@@ -37,47 +39,18 @@ CHECKMAKE_SEVERITY_MAP: Final[dict[str, Severity]] = {
 }
 
 
-def _mapping_sequence(value: JsonValue | None) -> tuple[Mapping[str, JsonValue], ...]:
-    """Return tuple of mapping entries extracted from ``value`` when possible.
-
-    Args:
-        value: Arbitrary JSON payload that may contain mapping entries.
-
-    Returns:
-        tuple[Mapping[str, JsonValue], ...]: Sequence of mapping entries discovered in ``value``.
-    """
-
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return tuple(item for item in value if isinstance(item, Mapping))
-    if isinstance(value, Mapping):
-        return (value,)
-    return ()
-
-
-def _first_mapping(value: JsonValue | None) -> Mapping[str, JsonValue]:
-    """Return ``value`` when it is a mapping, otherwise an empty mapping.
-
-    Args:
-        value: Arbitrary JSON payload that may contain mapping data.
-
-    Returns:
-        Mapping[str, JsonValue]: Mapping representation extracted from ``value``.
-    """
-
-    return value if isinstance(value, Mapping) else {}
-
-
-def parse_shfmt(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_shfmt(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse shfmt unified diff output lines into diagnostics.
 
     Args:
         stdout: Sequence of shfmt output lines.
-        _context: Tool execution context supplied by the orchestrator (unused).
+        context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics indicating files requiring reformatting.
     """
 
+    del context
     results: list[RawDiagnostic] = []
     current_file: str | None = None
     for raw_line in stdout:
@@ -108,17 +81,18 @@ PHPLINT_PATTERN = re.compile(
 )
 
 
-def parse_phplint(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_phplint(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse phplint textual output into diagnostics.
 
     Args:
         stdout: Sequence of phplint output lines using the standard format.
-        _context: Tool execution context supplied by the orchestrator (unused).
+        context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics describing parse errors reported by phplint.
     """
 
+    del context
     results: list[RawDiagnostic] = []
     for raw_line in stdout:
         line = raw_line.strip()
@@ -150,17 +124,18 @@ PERLCRITIC_PATTERN = re.compile(
 )
 
 
-def parse_perlcritic(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_perlcritic(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse perlcritic textual output using the verbose template.
 
     Args:
         stdout: Sequence of perlcritic output lines.
-        _context: Tool execution context supplied by the orchestrator (unused).
+        context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics describing perlcritic findings.
     """
 
+    del context
     results: list[RawDiagnostic] = []
     for raw_line in stdout:
         line = raw_line.strip()
@@ -184,16 +159,17 @@ def parse_perlcritic(stdout: Sequence[str], _context: ToolContext) -> Sequence[R
     return results
 
 
-def parse_checkmake(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_checkmake(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse checkmake JSON diagnostics into normalised objects.
 
     Args:
         payload: Parsed JSON payload emitted by checkmake.
-        _context: Tool execution context supplied by the orchestrator (unused).
+        context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics suitable for downstream processing.
     """
+    del context
     results: list[RawDiagnostic] = []
     for entry in _iter_checkmake_entries(payload):
         file_path = entry.get("file") or entry.get("filename") or entry.get("name")
@@ -244,21 +220,20 @@ def _build_checkmake_diagnostic(
     return create_spec(location=location, details=details).build()
 
 
-def _iter_checkmake_entries(payload: JsonValue) -> Iterator[Mapping[str, JsonValue]]:
-    """Yield checkmake file entries from ``payload``.
+def _iter_checkmake_entries(payload: JsonValue) -> tuple[Mapping[str, JsonValue], ...]:
+    """Return checkmake file entries extracted from ``payload``.
 
     Args:
         payload: JSON payload emitted by checkmake.
 
-    Yields:
-        Mapping[str, JsonValue]: File-level diagnostic collections present in the payload.
+    Returns:
+        tuple[Mapping[str, JsonValue], ...]: Tuple containing per-file diagnostic entries.
     """
 
     if isinstance(payload, Mapping):
         candidates = payload.get("files") or payload.get("results")
-        yield from _mapping_sequence(candidates)
-        return
-    yield from _mapping_sequence(payload)
+        return tuple(mapping_sequence(candidates))
+    return tuple(mapping_sequence(payload))
 
 
 _CPPLINT_PATTERN = re.compile(
@@ -270,17 +245,18 @@ _CPPLINT_PATTERN = re.compile(
 )
 
 
-def parse_cpplint(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_cpplint(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse cpplint textual diagnostics into normalised objects.
 
     Args:
         stdout: Sequence of cpplint output lines.
-        _context: Tool execution context supplied by the orchestrator (unused).
+        context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics representing cpplint rule violations.
     """
 
+    del context
     results: list[RawDiagnostic] = []
     for line in stdout:
         stripped = line.strip()
@@ -326,17 +302,18 @@ TOMBI_SEVERITY_MAP: Final[dict[str, Severity]] = {
 }
 
 
-def parse_tombi(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_tombi(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse tombi textual diagnostics into canonical RawDiagnostic objects.
 
     Args:
         stdout: Sequence of tombi output lines containing ANSI highlighting.
-        _context: Tool execution context supplied by the orchestrator (unused).
+        context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics describing tombi lint findings.
     """
 
+    del context
     cleaned = _ANSI_ESCAPE_RE.sub("", "\n".join(stdout))
     results: list[RawDiagnostic] = []
     for header, body in _split_tombi_blocks(cleaned.splitlines()):
@@ -346,31 +323,33 @@ def parse_tombi(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDia
     return results
 
 
-def _split_tombi_blocks(lines: Sequence[str]) -> Iterable[tuple[str, list[str]]]:
-    """Yield (header, body) pairs for tombi diagnostic blocks.
+def _split_tombi_blocks(lines: Sequence[str]) -> tuple[tuple[str, list[str]], ...]:
+    """Return (header, body) pairs for tombi diagnostic blocks.
 
     Args:
         lines: Sequence of tombi output lines stripped of ANSI escapes.
 
-    Yields:
-        tuple[str, list[str]]: Header line and associated body lines.
+    Returns:
+        tuple[tuple[str, list[str]], ...]: Tuple containing tombi diagnostic blocks.
     """
 
     current_header: str | None = None
     current_body: list[str] = []
+    blocks: list[tuple[str, list[str]]] = []
     for raw_line in lines:
         line = raw_line.strip()
         header = _TOMBI_HEADER_RE.match(line)
         if header:
             if current_header is not None:
-                yield current_header, current_body
+                blocks.append((current_header, current_body))
             current_header = line
             current_body = []
             continue
         if current_header is not None and line:
             current_body.append(line)
     if current_header is not None:
-        yield current_header, current_body
+        blocks.append((current_header, current_body))
+    return tuple(blocks)
 
 
 def _build_tombi_diagnostic(header_line: str, body: Sequence[str]) -> RawDiagnostic | None:
@@ -413,16 +392,17 @@ def _build_tombi_diagnostic(header_line: str, body: Sequence[str]) -> RawDiagnos
     )
 
 
-def parse_golangci_lint(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_golangci_lint(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse golangci-lint JSON output into raw diagnostics.
 
     Args:
         payload: Parsed JSON payload emitted by golangci-lint.
-        _context: Tool execution context supplied by the orchestrator (unused).
+        context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics reported by golangci-lint or its contributors.
     """
+    del context
     results: list[RawDiagnostic] = []
     for issue in _iter_golangci_entries(payload):
         diagnostic = _build_golangci_diagnostic(issue)
@@ -431,21 +411,20 @@ def parse_golangci_lint(payload: JsonValue, _context: ToolContext) -> Sequence[R
     return results
 
 
-def _iter_golangci_entries(payload: JsonValue) -> Iterator[Mapping[str, JsonValue]]:
-    """Yield golangci-lint issue entries from ``payload``.
+def _iter_golangci_entries(payload: JsonValue) -> tuple[Mapping[str, JsonValue], ...]:
+    """Return golangci-lint issue entries from ``payload``.
 
     Args:
         payload: JSON payload emitted by golangci-lint.
 
-    Yields:
-        Mapping[str, JsonValue]: Individual issue entries.
+    Returns:
+        tuple[Mapping[str, JsonValue], ...]: Tuple containing golangci-lint issues.
     """
 
     if isinstance(payload, Mapping):
         candidates = payload.get("Issues") or payload.get("issues")
-        yield from _mapping_sequence(candidates)
-        return
-    yield from _mapping_sequence(payload)
+        return tuple(mapping_sequence(candidates))
+    return tuple(mapping_sequence(payload))
 
 
 def _build_golangci_diagnostic(issue: Mapping[str, JsonValue]) -> RawDiagnostic | None:
@@ -486,29 +465,33 @@ def _build_golangci_diagnostic(issue: Mapping[str, JsonValue]) -> RawDiagnostic 
     return create_spec(location=location, details=details).build()
 
 
-def parse_cargo_clippy(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_cargo_clippy(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse Cargo Clippy JSON payloads into RawDiagnostic objects.
 
     Args:
         payload: JSON payload emitted by Cargo Clippy.
-        _context: Tool execution context supplied by the orchestrator (unused).
+        context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics representing Clippy findings.
     """
 
+    del context
     results: list[RawDiagnostic] = []
-    for record in _mapping_sequence(payload):
+    for record in mapping_sequence(payload):
         if record.get("reason") != CARGO_CLIPPY_DIAGNOSTIC_REASON:
             continue
-        message_mapping = _first_mapping(record.get("message"))
+        message_mapping = first_mapping(record.get("message"))
         level = str(message_mapping.get("level", "warning")).lower()
-        spans = _mapping_sequence(message_mapping.get("spans"))
-        primary = next((span for span in spans if span.get("is_primary")), spans[0] if spans else None)
+        spans = mapping_sequence(message_mapping.get("spans"))
+        primary = next(
+            (span for span in spans if span.get("is_primary")),
+            spans[0] if spans else None,
+        )
         file_name = coerce_optional_str(primary.get("file_name")) if primary else None
         line = coerce_optional_int(primary.get("line_start")) if primary else None
         column = coerce_optional_int(primary.get("column_start")) if primary else None
-        code_mapping = _first_mapping(message_mapping.get("code"))
+        code_mapping = first_mapping(message_mapping.get("code"))
         code = coerce_optional_str(code_mapping.get("code"))
         sev_enum = {
             "error": Severity.ERROR,

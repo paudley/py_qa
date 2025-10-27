@@ -26,6 +26,13 @@ class _AnnotationRouter(AnnotationProvider):
     """Route annotation calls to the currently active provider."""
 
     def __init__(self, provider: AnnotationProvider) -> None:
+        """Initialise the router with ``provider`` as the active delegate.
+
+        Args:
+            provider: Default provider that will receive annotation calls until
+                :meth:`replace` is invoked.
+        """
+
         self._provider = provider
 
     def replace(self, provider: AnnotationProvider) -> None:
@@ -83,6 +90,7 @@ def set_annotation_provider(provider: AnnotationProvider) -> None:
 
     Args:
         provider: Provider that should power highlighting operations.
+
     """
 
     _ANNOTATION_ROUTER.replace(provider)

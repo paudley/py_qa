@@ -8,22 +8,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
 
 from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome
-
-
-class _PreparedLintStateProtocol(Protocol):
-    """Runtime placeholder for the prepared lint state protocol."""
-
-    # The protocol intentionally omits members; runtime code treats it as opaque.
-    pass
-
-
-if TYPE_CHECKING:
-    from pyqa.interfaces.linting import PreparedLintState
-else:
-    PreparedLintState = _PreparedLintStateProtocol
+from pyqa.interfaces.linting import PreparedLintState
 
 
 @dataclass(slots=True)

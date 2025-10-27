@@ -4,15 +4,17 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import cast
 
 from pyqa.config import Config
 from pyqa.core.models import ToolOutcome
+from pyqa.interfaces.internal_linting import INTERNAL_LINTER_TOOL_NAMES
+from pyqa.interfaces.linting import PreparedLintState
 from pyqa.platform.workspace import is_py_qa_workspace
+from pyqa.testing.suppressions import build_internal_test_suppression_pattern
 from pyqa.tools.base import (
     DeferredCommand,
     InternalActionRunner,
@@ -44,20 +46,6 @@ from .signatures import run_signature_linter
 from .suppressions import run_suppression_linter
 from .typing_strict import run_typing_linter
 from .value_types import run_value_type_linter
-
-class _PreparedLintStateProtocol(Protocol):
-    """Runtime placeholder for the lint state protocol used during registration."""
-
-    # Protocol intentionally empty; registry logic treats lint state as opaque.
-    pass
-
-
-if TYPE_CHECKING:
-    from pyqa.interfaces.linting import PreparedLintState
-else:
-    PreparedLintState = _PreparedLintStateProtocol
-
-_TEST_SUPPRESSION_SUFFIX = r"(?:.+/)?tests?/.*$"
 
 
 @dataclass(slots=True)
@@ -299,6 +287,13 @@ INTERNAL_LINTERS: tuple[InternalLinterDefinition, ...] = (
     ),
 )
 
+_DEFINED_INTERNAL_NAMES: tuple[str, ...] = tuple(definition.name for definition in INTERNAL_LINTERS)
+if _DEFINED_INTERNAL_NAMES != INTERNAL_LINTER_TOOL_NAMES:
+    raise RuntimeError(
+        "INTERNAL_LINTER_TOOL_NAMES does not match the registered internal linters. "
+        "Update pyqa.interfaces.internal_linting to include the current registry entries.",
+    )
+
 
 def iter_internal_linters() -> Sequence[InternalLinterDefinition]:
     """Return the registered internal lint definitions.
@@ -349,7 +344,7 @@ def _inject_internal_test_suppression(config: Config, tool_name: str) -> None:
         tool_name: Name of the internal linter being configured.
     """
 
-    pattern = rf"^{re.escape(tool_name)}, {_TEST_SUPPRESSION_SUFFIX}"
+    pattern = build_internal_test_suppression_pattern(tool_name)
     filters = config.output.tool_filters.setdefault(tool_name, [])
     if pattern not in filters:
         filters.append(pattern)

@@ -28,10 +28,32 @@ else:  # pragma: no cover - typer may be unavailable in minimal environments
         from typer import Typer
     except ModuleNotFoundError:  # pragma: no cover - fallback stub for tooling tests
 
-        class Typer:  # type: ignore[too-many-ancestors]
+        class Typer:
             """Fallback shim used when Typer is not installed."""
 
-            ...
+            def __init__(self) -> None:
+                """Initialise a Typer-like stub with no runtime behaviour."""
+
+                self._commands: dict[str, Callable[..., None]] = {}
+
+            def register_command(self, name: str, func: Callable[..., None]) -> None:
+                """Record ``func`` under ``name`` for test visibility."""
+
+                self._commands[name] = func
+
+            def command(self, name: str) -> Callable[[Callable[..., _FactoryT]], Callable[..., _FactoryT]]:
+                """Return a decorator that records the command without executing."""
+
+                def decorator(func: Callable[..., _FactoryT]) -> Callable[..., _FactoryT]:
+                    self.register_command(name, cast(Callable[..., None], func))
+                    return func
+
+                return decorator
+
+            def __call__(self) -> None:
+                """Raise an informative error when attempting to invoke the stub."""
+
+                raise RuntimeError("Typer is unavailable in this environment") from None
 
 
 CATALOG_PLUGIN_GROUP = "pyqa.catalog.plugins"
@@ -47,7 +69,11 @@ _FactoryT = TypeVar("_FactoryT")
 
 
 def noop_plugin(invocation: Mapping[str, CatalogJSONValue] | None = None) -> None:
-    """Default plugin callable used as a placeholder."""
+    """Default plugin callable used as a placeholder.
+
+    Args:
+        invocation: Optional invocation payload supplied by the caller.
+    """
 
     del invocation
 
@@ -97,7 +123,11 @@ def _discover_entry_points(group: str, loader: Callable[[EntryPoint], _FactoryT]
 
 
 def load_catalog_plugins() -> tuple[CatalogPluginFactory, ...]:
-    """Return catalog plugin factories discovered via entry points."""
+    """Return catalog plugin factories discovered via entry points.
+
+    Returns:
+        tuple[CatalogPluginFactory, ...]: Sequence of catalog plugin factories.
+    """
 
     return _discover_entry_points(
         CATALOG_PLUGIN_GROUP,
@@ -106,7 +136,11 @@ def load_catalog_plugins() -> tuple[CatalogPluginFactory, ...]:
 
 
 def load_cli_plugins() -> tuple[CLIPluginFactory, ...]:
-    """Return CLI plugin factories discovered via entry points."""
+    """Return CLI plugin factories discovered via entry points.
+
+    Returns:
+        tuple[CLIPluginFactory, ...]: Sequence of CLI plugin factories.
+    """
 
     return _discover_entry_points(
         CLI_PLUGIN_GROUP,
@@ -119,6 +153,9 @@ def load_diagnostics_plugins() -> tuple[DiagnosticsPlugin, ...]:
 
     Diagnostics plugins may be simple descriptors or callables depending on the
     consuming subsystem, so the helper preserves their native types.
+
+    Returns:
+        tuple[DiagnosticsPlugin, ...]: Sequence of diagnostics plugins.
     """
 
     return _discover_entry_points(
@@ -128,7 +165,11 @@ def load_diagnostics_plugins() -> tuple[DiagnosticsPlugin, ...]:
 
 
 def load_all_plugins() -> SimpleNamespace:
-    """Return a namespace bundling all plugin groups for convenience."""
+    """Return a namespace bundling all plugin groups for convenience.
+
+    Returns:
+        SimpleNamespace: Namespace exposing catalog, CLI, and diagnostics plugins.
+    """
 
     return SimpleNamespace(
         catalog=load_catalog_plugins(),

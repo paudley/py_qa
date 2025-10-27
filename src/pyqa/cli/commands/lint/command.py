@@ -10,6 +10,7 @@ import typer
 from rich.progress import Progress
 
 from pyqa.interfaces.analysis import AnnotationProvider
+from pyqa.interfaces.linting import PreparedLintState as PreparedLintStateView
 from pyqa.interfaces.orchestration_selection import PhaseLiteral
 from pyqa.orchestration.selection_context import PHASE_ORDER, UnknownToolRequestedError
 from pyqa.runtime.console.manager import detect_tty
@@ -200,7 +201,10 @@ def _build_runtime_context(state: PreparedLintState) -> LintRuntimeContext:
     if pyqa_explicit and not config.execution.pyqa_rules:
         config.execution = config.execution.model_copy(update={"pyqa_rules": True})
 
-    return build_lint_runtime_context(state, config=config)
+    return build_lint_runtime_context(
+        cast(PreparedLintStateView, state),
+        config=config,
+    )
 
 
 def _run_lint_pipeline(runtime: LintRuntimeContext) -> None:

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final, Literal, TypeAlias
+from typing import TYPE_CHECKING, Final, Literal, TypeAlias, cast
 
 from rich import box
 from rich.console import Console
@@ -21,12 +21,12 @@ from rich.progress import (
 from rich.table import Table
 
 from pyqa.core.environment.tool_env.models import PreparedCommand
+from pyqa.interfaces.linting import PreparedLintState as PreparedLintStateView
 from pyqa.runtime.console.manager import detect_tty, get_console_manager
 
 from ....config import Config
 from ....tools.base import Tool
 from ....tools.registry import DEFAULT_REGISTRY
-from .preparation import PreparedLintState
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from .runtime import LintRuntimeContext
@@ -177,7 +177,7 @@ def render_fetch_all_tools(
     """
 
     config = runtime.config
-    state = runtime.state
+    state = cast(PreparedLintStateView, runtime.state)
     total_actions = sum(len(tool.actions) for tool in DEFAULT_REGISTRY.tools())
     progress_enabled = total_actions > 0 and not state.display.quiet and not config.output.quiet and detect_tty()
     console = get_console_manager().get(color=config.output.color, emoji=config.output.emoji)
@@ -213,7 +213,8 @@ def _fetch_with_progress(
         tool action.
     """
 
-    logger = runtime.state.logger
+    state = cast(PreparedLintStateView, runtime.state)
+    logger = state.logger
     progress = Progress(
         SpinnerColumn(),
         TextColumn("{task.description}"),
@@ -258,7 +259,7 @@ def _fetch_with_progress(
     with progress:
         results = runtime.orchestrator.fetch_all_tools(
             runtime.config,
-            root=runtime.state.root,
+            root=state.root,
             callback=progress_callback,
         )
     return list(results)
@@ -267,7 +268,7 @@ def _fetch_with_progress(
 def _render_fetch_summary(
     console: Console,
     config: Config,
-    state: PreparedLintState,
+    state: PreparedLintStateView,
     results: FetchResult,
     phase_order: tuple[str, ...],
 ) -> None:

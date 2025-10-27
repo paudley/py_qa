@@ -114,7 +114,15 @@ def create_stats_panel(snapshot: StatsSnapshot, cfg: OutputConfig) -> Panel:
     value_style = "orange1" if cfg.color else None
 
     def styled(value: str, style: str | None) -> Text:
-        """Return a Rich text entry styled when necessary."""
+        """Return a Rich text entry styled when necessary.
+
+        Args:
+            value: Text value destined for the output table.
+            style: Rich style string applied when colouring is enabled.
+
+        Returns:
+            Text: Rich text instance carrying the desired styling.
+        """
 
         return Text(value, style=style) if style else Text(value)
 

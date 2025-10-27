@@ -76,6 +76,9 @@ def _iter_candidates(start: Path) -> Iterable[Path]:
 
     Yields:
         Path: Candidate directories considered during root discovery.
+
+    Returns:
+        Iterable[Path]: Iterator producing candidate directories for validation.
     """
 
     seen: set[Path] = set()

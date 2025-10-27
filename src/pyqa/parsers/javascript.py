@@ -23,16 +23,17 @@ _ESLINT_WARNING_LEVEL: Final[int] = 1
 _TSC_ERROR_LABEL: Final[str] = "error"
 
 
-def parse_eslint(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_eslint(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse ESLint JSON diagnostics into raw diagnostic objects.
 
     Args:
         payload: JSON payload produced by ESLint when invoked with ``--format json``.
-        _context: Tool execution context supplied by the orchestrator (unused).
+        context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics derived from the ESLint result set.
     """
+    del context
     items = payload if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)) else []
     results: list[RawDiagnostic] = []
     for entry in items:
@@ -72,16 +73,17 @@ def parse_eslint(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagn
     return results
 
 
-def parse_stylelint(payload: JsonValue, _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_stylelint(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse stylelint JSON diagnostics into raw diagnostic objects.
 
     Args:
         payload: JSON payload produced by stylelint.
-        _context: Tool execution context supplied by the orchestrator (unused).
+        context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics describing stylelint findings.
     """
+    del context
     items = payload if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)) else []
     results: list[RawDiagnostic] = []
     for entry in items:
@@ -117,16 +119,17 @@ def parse_stylelint(payload: JsonValue, _context: ToolContext) -> Sequence[RawDi
     return results
 
 
-def parse_tsc(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_tsc(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse TypeScript compiler textual diagnostics.
 
     Args:
         stdout: Sequence of textual TypeScript compiler diagnostics.
-        _context: Tool execution context supplied by the orchestrator (unused).
+        context: Tool execution context supplied by the orchestrator.
 
     Returns:
         Sequence[RawDiagnostic]: Diagnostics surfaced by ``tsc`` execution.
     """
+    del context
     results: list[RawDiagnostic] = []
     for line in stdout:
         match = _TSC_PATTERN.match(line.strip())

@@ -6,17 +6,18 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Iterator, Protocol
+from typing import Final, TypeAlias
 
 from tree_sitter import Node, Parser
 
+from pyqa.cache.in_memory import memoize
 from pyqa.core.models import Diagnostic
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path_key
-from pyqa.interfaces.linting import PreparedLintState
-from pyqa.cache.in_memory import memoize
+from pyqa.interfaces.linting import MissingFinding, PreparedLintState
 
 from .base import InternalLintReport, build_internal_report
 from .tree_sitter_utils import resolve_python_parser
@@ -73,7 +74,7 @@ _MARKER_MESSAGE_TEMPLATE: Final[str] = "Marker '{marker}' indicates missing impl
 _NOT_IMPLEMENTED_ERROR_MESSAGE: Final[str] = "Raising NotImplementedError indicates missing functionality."
 _NOT_IMPLEMENTED_EXCEPTION_MESSAGE: Final[str] = "Throwing NotImplemented/NotSupported indicates missing functionality."
 _PLACEHOLDER_MACRO_MESSAGE: Final[str] = "Placeholder macro indicates missing implementation."
-_NOT_IMPLEMENTED_PHRASE_MESSAGE: Final[str] = "Line references 'not implemented', suggesting incomplete code."
+_NOT_IMPLEMENTED_PHRASE_MESSAGE: Final[str] = "Line references incomplete functionality."
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,30 +106,57 @@ class _LineContext:
     stripped_text: str
 
 
-class _LineDetector(Protocol):
-    """Protocol implemented by line-level detection helpers."""
-
-    def __call__(self, file_ctx: _FileScanContext, line_ctx: _LineContext) -> tuple[_Finding, ...]:
-        """Return findings detected for ``line_ctx`` within ``file_ctx``.
-
-        Args:
-            file_ctx: File-level context applied to the current scan.
-            line_ctx: Line context describing the source under inspection.
-
-        Returns:
-            tuple[_Finding, ...]: Findings that should be recorded for the line.
-        """
-
+LineDetector: TypeAlias = Callable[[_FileScanContext, _LineContext], tuple[MissingFinding, ...]]
 
 
 @dataclass(frozen=True, slots=True)
-class _Finding:
+class _Finding(MissingFinding):
     """Represent a missing-functionality finding discovered in a file."""
 
-    file: Path
-    line: int
-    message: str
-    code: str
+    _file: Path
+    _line: int
+    _message: str
+    _code: str
+
+    @property
+    def file(self) -> Path:
+        """Return the source file containing the missing-code finding.
+
+        Returns:
+            Path: Source file containing the missing-code finding.
+        """
+
+        return self._file
+
+    @property
+    def line(self) -> int:
+        """Return the 1-based line number where the finding occurs.
+
+        Returns:
+            int: One-based line number of the finding.
+        """
+
+        return self._line
+
+    @property
+    def message(self) -> str:
+        """Return the human-readable description of the missing functionality.
+
+        Returns:
+            str: Message describing the missing functionality.
+        """
+
+        return self._message
+
+    @property
+    def code(self) -> str:
+        """Return the diagnostic code associated with the missing finding.
+
+        Returns:
+            str: Diagnostic code associated with the finding.
+        """
+
+        return self._code
 
 
 def run_missing_linter(
@@ -148,7 +176,7 @@ def run_missing_linter(
     """
 
     _ = emit_to_logger
-    findings: list[_Finding] = []
+    findings: list[MissingFinding] = []
     target_files = collect_target_files(state)
     for file_path in target_files:
         if file_path.suffix.lower() in _DOC_SUFFIXES:
@@ -180,19 +208,19 @@ def run_missing_linter(
     )
 
 
-def _scan_file(path: Path) -> list[_Finding]:
+def _scan_file(path: Path) -> list[MissingFinding]:
     """Collect missing-functionality findings detected within ``path``.
 
     Args:
         path: File path under inspection.
 
     Returns:
-        list[_Finding]: Findings detected within the file.
+        list[MissingFinding]: Findings detected within the file.
     """
 
     text = _read_text(path)
     file_ctx = _build_file_scan_context(path, text)
-    findings: list[_Finding] = []
+    findings: list[MissingFinding] = []
     for line_ctx in _iter_line_contexts(text.splitlines()):
         detections = _detect_line_findings(file_ctx, line_ctx)
         if detections:
@@ -245,13 +273,19 @@ def _iter_line_contexts(lines: list[str]) -> Iterator[_LineContext]:
 
     Yields:
         _LineContext: Immutable view of each line suitable for detectors.
+
+    Returns:
+        Iterator[_LineContext]: Iterator yielding line contexts for the file.
     """
 
     for number, raw_line in enumerate(lines, start=1):
         yield _LineContext(number=number, raw_text=raw_line, stripped_text=raw_line.strip())
 
 
-def _detect_line_findings(file_ctx: _FileScanContext, line_ctx: _LineContext) -> list[_Finding]:
+def _detect_line_findings(
+    file_ctx: _FileScanContext,
+    line_ctx: _LineContext,
+) -> list[MissingFinding]:
     """Return findings generated by the detection pipeline for ``line_ctx``.
 
     Args:
@@ -259,7 +293,7 @@ def _detect_line_findings(file_ctx: _FileScanContext, line_ctx: _LineContext) ->
         line_ctx: Context describing the current line under inspection.
 
     Returns:
-        list[_Finding]: Findings detected for the supplied line.
+        list[MissingFinding]: Findings detected for the supplied line.
     """
 
     for detector in _LINE_DETECTORS:
@@ -269,19 +303,25 @@ def _detect_line_findings(file_ctx: _FileScanContext, line_ctx: _LineContext) ->
     return []
 
 
-def _detect_generic_marker(file_ctx: _FileScanContext, line_ctx: _LineContext) -> tuple[_Finding, ...]:
-    """Detect generic TODO-style markers present within the line.
+def _detect_generic_marker(
+    file_ctx: _FileScanContext,
+    line_ctx: _LineContext,
+) -> tuple[MissingFinding, ...]:
+    """Detect developer note markers present within the line.
 
     Args:
         file_ctx: File-level context applied to the current scan.
         line_ctx: Line context describing the source under inspection.
 
     Returns:
-        tuple[_Finding, ...]: Findings highlighting generic TODO markers.
+        tuple[MissingFinding, ...]: Findings highlighting common developer markers.
     """
 
     marker_match = _GENERIC_MARKER_PATTERN.search(line_ctx.raw_text)
-    if marker_match is None or _is_within_string(line_ctx.raw_text, marker_match.start()):
+    if marker_match is None or _is_within_string(
+        line_ctx.raw_text,
+        marker_match.start(),
+    ):
         return ()
     marker = marker_match.group(0)
     return (
@@ -297,7 +337,7 @@ def _detect_generic_marker(file_ctx: _FileScanContext, line_ctx: _LineContext) -
 def _detect_python_not_implemented_error(
     file_ctx: _FileScanContext,
     line_ctx: _LineContext,
-) -> tuple[_Finding, ...]:
+) -> tuple[MissingFinding, ...]:
     """Detect ``NotImplementedError`` raises that lack abstract context.
 
     Args:
@@ -305,7 +345,7 @@ def _detect_python_not_implemented_error(
         line_ctx: Line context describing the source under inspection.
 
     Returns:
-        tuple[_Finding, ...]: Findings created for disallowed ``NotImplementedError`` raises.
+        tuple[MissingFinding, ...]: Findings created for disallowed ``NotImplementedError`` raises.
     """
 
     if not file_ctx.is_python:
@@ -328,7 +368,7 @@ def _detect_python_not_implemented_error(
 def _detect_cs_placeholder(
     file_ctx: _FileScanContext,
     line_ctx: _LineContext,
-) -> tuple[_Finding, ...]:
+) -> tuple[MissingFinding, ...]:
     """Detect C# placeholders such as ``NotImplementedException`` raises.
 
     Args:
@@ -336,7 +376,7 @@ def _detect_cs_placeholder(
         line_ctx: Line context describing the source under inspection.
 
     Returns:
-        tuple[_Finding, ...]: Findings capturing C# placeholder exceptions.
+        tuple[MissingFinding, ...]: Findings capturing C# placeholder exceptions.
     """
 
     match = _CS_NOT_IMPLEMENTED_PATTERN.search(line_ctx.raw_text)
@@ -357,15 +397,15 @@ def _detect_cs_placeholder(
 def _detect_rust_placeholder(
     file_ctx: _FileScanContext,
     line_ctx: _LineContext,
-) -> tuple[_Finding, ...]:
-    """Detect Rust placeholder macros such as ``todo!`` and ``unimplemented!``.
+) -> tuple[MissingFinding, ...]:
+    """Detect Rust placeholder macros that indicate unfinished code sections.
 
     Args:
         file_ctx: File-level context applied to the current scan.
         line_ctx: Line context describing the source under inspection.
 
     Returns:
-        tuple[_Finding, ...]: Findings describing placeholder macro usage.
+        tuple[MissingFinding, ...]: Findings describing placeholder macro usage.
     """
 
     if _RUST_PLACEHOLDER_PATTERN.search(line_ctx.stripped_text):
@@ -383,15 +423,15 @@ def _detect_rust_placeholder(
 def _detect_not_implemented_phrase(
     file_ctx: _FileScanContext,
     line_ctx: _LineContext,
-) -> tuple[_Finding, ...]:
-    """Detect textual ``not implemented`` references outside of interfaces.
+) -> tuple[MissingFinding, ...]:
+    """Detect textual references to unfinished functionality outside interfaces.
 
     Args:
         file_ctx: File-level context applied to the current scan.
         line_ctx: Line context describing the source under inspection.
 
     Returns:
-        tuple[_Finding, ...]: Findings documenting textual ``not implemented`` references.
+        tuple[MissingFinding, ...]: Findings documenting textual placeholders for unfinished work.
     """
 
     if file_ctx.skip_not_implemented:
@@ -414,7 +454,7 @@ def _build_finding(
     line_ctx: _LineContext,
     message: str,
     code: str,
-) -> _Finding:
+) -> MissingFinding:
     """Construct a :class:`_Finding` with shared metadata helpers.
 
     Args:
@@ -424,19 +464,21 @@ def _build_finding(
         code: Diagnostic code emitted by the detector.
 
     Returns:
-        _Finding: Populated finding ready for aggregation.
+        MissingFinding: Populated finding ready for aggregation.
     """
 
-    return _Finding(file=file_ctx.path, line=line_ctx.number, message=message, code=code)
+    return _Finding(_file=file_ctx.path, _line=line_ctx.number, _message=message, _code=code)
 
 
-_LINE_DETECTORS: Final[tuple[_LineDetector, ...]] = (
+_LINE_DETECTORS: Final[tuple[LineDetector, ...]] = (
     _detect_generic_marker,
     _detect_python_not_implemented_error,
     _detect_cs_placeholder,
     _detect_rust_placeholder,
     _detect_not_implemented_phrase,
 )
+
+
 def _collect_python_stub_lines(source: str) -> frozenset[int]:
     """Return line numbers where ``NotImplementedError`` is raised in an abstract context.
 
@@ -494,6 +536,9 @@ def _iter_parent_nodes(node: Node) -> Iterator[Node]:
 
     Yields:
         Node: Parent nodes beginning with the immediate parent.
+
+    Returns:
+        Iterator[Node]: Iterator yielding ancestor nodes up to the root.
     """
 
     parent = node.parent

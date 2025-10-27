@@ -366,6 +366,15 @@ def _append_function_complexity_guidance(
         hotspots.append((file_path, function, size, complexity))
 
     def sort_key(item: tuple[str, str, int | None, int | None]) -> tuple[int, int, str]:
+        """Return a sort key prioritising largest functions and complexity.
+
+        Args:
+            item: Tuple describing the candidate function hotspot.
+
+        Returns:
+            tuple[int, int, str]: Sort key ordering by size, complexity, and identity.
+        """
+
         locs = item[2] if isinstance(item[2], int) else -1
         complexity = item[3] if isinstance(item[3], int) else -1
         return (-locs, -complexity, f"{item[0]}::{item[1]}")
@@ -905,6 +914,7 @@ def _summarise_paths(paths: Sequence[str], *, limit: int = 5) -> str:
 
 
 ANNOTATION_SPAN_STYLE: Final[str] = "ansi256:213"
+ANNOTATION_ARGUMENT_TOKEN: Final[str] = "argument"
 
 
 def _infer_annotation_targets(message: str, engine: AnnotationProvider) -> int:
@@ -922,8 +932,8 @@ def _infer_annotation_targets(message: str, engine: AnnotationProvider) -> int:
     highlighted = sum(1 for span in spans if span.style == ANNOTATION_SPAN_STYLE)
     if highlighted:
         return highlighted
-    if "argument" in message:
-        tail = message.split("argument", 1)[1]
+    if ANNOTATION_ARGUMENT_TOKEN in message:
+        tail = message.split(ANNOTATION_ARGUMENT_TOKEN, 1)[1]
         candidates = [token.strip(" `.,") for token in tail.split(",") if token.strip(" `.,")]
         return len(candidates)
     return 0

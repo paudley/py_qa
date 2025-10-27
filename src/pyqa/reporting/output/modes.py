@@ -20,6 +20,7 @@ def render_quiet_mode(result: RunResult, cfg: OutputConfig) -> None:
     Args:
         result: Run result produced by the orchestrator.
         cfg: Output configuration controlling colour/emoji usage.
+
     """
 
     console = get_console_manager().get(color=cfg.color, emoji=cfg.emoji)
@@ -41,6 +42,7 @@ def render_pretty_mode(result: RunResult, cfg: OutputConfig) -> None:
     Args:
         result: Run result produced by the orchestrator.
         cfg: Output configuration controlling formatting options.
+
     """
 
     root_display = colorize(str(Path(result.root).resolve()), "blue", cfg.color)
@@ -68,6 +70,7 @@ def render_raw_mode(result: RunResult) -> None:
 
     Args:
         result: Run result produced by the orchestrator.
+
     """
 
     console = get_console_manager().get(color=False, emoji=False)

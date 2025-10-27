@@ -93,7 +93,14 @@ _SENTINEL_FILES = ("REORG_PLAN.md",)
 
 
 def _has_required_entries(root: Path) -> bool:
-    """Return whether ``root`` contains sentinel files and directories."""
+    """Return whether ``root`` contains sentinel files and directories.
+
+    Args:
+        root: Candidate workspace root to evaluate.
+
+    Returns:
+        bool: ``True`` when all sentinel files and directories exist.
+    """
 
     for relative in _SENTINEL_DIRECTORIES:
         candidate = root / relative

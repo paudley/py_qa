@@ -10,11 +10,13 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from pyqa.cli.commands.lint.cli_models import LintDisplayOptions as CLIDisplayOptions
 from pyqa.cli.commands.lint.params import LintMetaParams, LintOutputArtifacts
-from pyqa.cli.core.options import ExecutionFormattingOptions, LintOptions
+from pyqa.cli.core.options import LintOptions
 from pyqa.cli.core.shared import CLILogger
 from pyqa.interfaces.discovery import DiscoveryOptions
 
-from .common import CacheControlOptions, RepositoryRootProvider
+from .common import RepositoryRootProvider
+from .tools import ExecutionOptions as ToolExecutionOptions
+from .tools import RuntimeOptions as ToolRuntimeOptions
 
 
 class SuppressionDirective(Protocol):
@@ -39,6 +41,76 @@ class SuppressionDirective(Protocol):
         """
 
         raise NotImplementedError
+
+    def lint_count(self) -> int:
+        """Return the number of lint identifiers referenced by the directive.
+
+        Returns:
+            int: Count of lint identifiers captured by the directive.
+        """
+
+        return len(self.lints)
+
+
+@runtime_checkable
+class MissingFinding(Protocol):
+    """Describe immutable attributes recorded for missing-code findings.
+
+    Attributes:
+        file: Path to the source file containing the finding.
+        line: 1-based line number where the finding occurs.
+        message: Human-readable description of the missing functionality.
+        code: Diagnostic code associated with the missing finding.
+    """
+
+    @property
+    def file(self) -> Path:
+        """Return the source file containing the missing-code finding.
+
+        Returns:
+            Path: Source file path associated with the finding.
+        """
+
+        raise NotImplementedError
+
+    @property
+    def line(self) -> int:
+        """Return the 1-based line number where the finding occurs.
+
+        Returns:
+            int: One-based line number for the finding.
+        """
+
+        raise NotImplementedError
+
+    @property
+    def message(self) -> str:
+        """Return the human-readable description of the missing functionality.
+
+        Returns:
+            str: Human-readable diagnostic message.
+        """
+
+        raise NotImplementedError
+
+    @property
+    def code(self) -> str:
+        """Return the diagnostic code associated with the missing finding.
+
+        Returns:
+            str: Diagnostic code describing the missing implementation.
+        """
+
+        raise NotImplementedError
+
+    def location(self) -> tuple[Path, int]:
+        """Return a tuple describing the file and line for the finding.
+
+        Returns:
+            tuple[Path, int]: Pair of (file path, 1-based line number).
+        """
+
+        return self.file, self.line
 
 
 if TYPE_CHECKING:
@@ -84,47 +156,58 @@ class LintTargetOptions(DiscoveryOptions, Protocol):
 
 
 @runtime_checkable
-class LintRuntimeOptions(CacheControlOptions, Protocol):
-    """Execution runtime switches relevant to internal linters."""
+class LintRuntimeOptions(ToolRuntimeOptions, Protocol):
+    """Execution runtime switches relevant to internal linters.
 
-    __slots__ = ()
+    Attributes:
+        strict_config: Flag indicating whether strict configuration validation is enabled.
+    """
+
+    def is_strict_mode(self) -> bool:
+        """Return ``True`` when strict configuration validation is active.
+
+        Returns:
+            bool: ``True`` when strict configuration validation is enabled.
+        """
+
+        return self.strict_config
 
 
 @runtime_checkable
-class LintExecutionOptions(Protocol):
-    """Execution option bundle made available to internal linters."""
+class LintExecutionOptions(ToolExecutionOptions, Protocol):
+    """Execution option bundle made available to internal linters.
 
-    @property
-    def runtime(self) -> LintRuntimeOptions:
-        """Return runtime configuration derived from CLI inputs.
+    Attributes:
+        runtime: Runtime configuration derived from CLI inputs.
+        formatting: Formatting overrides propagated to tooling.
+    """
 
-        Returns:
-            LintRuntimeOptions: Runtime configuration for the lint run.
-        """
-
-        raise NotImplementedError
-
-    @property
-    def formatting(self) -> ExecutionFormattingOptions:
-        """Return formatting overrides propagated to tooling.
+    def has_formatting_overrides(self) -> bool:
+        """Return ``True`` when formatting overrides are present.
 
         Returns:
-            ExecutionFormattingOptions: Formatting configuration compatible with lint execution.
+            bool: ``True`` if any formatting override fields are populated.
         """
 
-        raise NotImplementedError
+        fmt = self.formatting
+        return any(getattr(fmt, attr, None) for attr in ("line_length", "sql_dialect", "python_version"))
 
 
 @runtime_checkable
 class LintOptionsView(Protocol):
-    """Composite lint options envelope exposed to internal linters."""
+    """Composite lint options envelope exposed to internal linters.
+
+    Attributes:
+        target_options: Target discovery options for the active invocation.
+        execution_options: Execution configuration for the active invocation.
+    """
 
     @property
     def target_options(self) -> LintTargetOptions:
         """Return target discovery options for the active invocation.
 
         Returns:
-            LintTargetOptions: Target discovery options used by the lint run.
+            LintTargetOptions: Discovery options for the current run.
         """
 
         raise NotImplementedError
@@ -134,22 +217,31 @@ class LintOptionsView(Protocol):
         """Return execution configuration for the active invocation.
 
         Returns:
-            LintExecutionOptions: Execution configuration used by the lint run.
+            LintExecutionOptions: Execution configuration prepared for the run.
         """
 
         raise NotImplementedError
 
+    def as_tuple(self) -> tuple[LintTargetOptions, LintExecutionOptions]:
+        """Return the combined target and execution options.
+
+        Returns:
+            tuple[LintTargetOptions, LintExecutionOptions]: Paired view of options.
+        """
+
+        return (self.target_options, self.execution_options)
+
 
 @runtime_checkable
-class PreparedLintState(RepositoryRootProvider, Protocol):
-    """Minimal protocol describing the lint command state shared with linters."""
+class LintStateOptions(Protocol):
+    """Expose option-level state shared with lint execution helpers."""
 
     @property
     def options(self) -> LintOptions | LintOptionsView:
-        """Return the composed lint options prepared by the CLI layer.
+        """Return the lint option bundle prepared by the CLI layer.
 
         Returns:
-            LintOptions | LintOptionsView: Lint option bundle applied to the run.
+            LintOptions | LintOptionsView: Prepared lint option bundle.
         """
 
         raise NotImplementedError
@@ -159,60 +251,66 @@ class PreparedLintState(RepositoryRootProvider, Protocol):
         """Return meta flags controlling optional lint behaviours.
 
         Returns:
-            LintMetaParams: Meta parameters influencing lint execution.
+            LintMetaParams: Meta flags describing optional lint behaviours.
         """
 
         raise NotImplementedError
 
-    @property
-    def ignored_py_qa(self) -> Sequence[str]:
-        """Return paths that were ignored due to ``PY_QA`` directories.
+    def has_meta_flag(self, flag: str) -> bool:
+        """Return ``True`` when ``flag`` is present on the meta options.
+
+        Args:
+            flag: Name of the meta attribute to query.
 
         Returns:
-            Sequence[str]: Ignored paths referencing ``PY_QA`` directories.
+            bool: ``True`` when the corresponding meta attribute evaluates truthy.
         """
 
-        raise NotImplementedError
+        return bool(getattr(self.meta, flag, False))
 
-    @property
-    def artifacts(self) -> LintOutputArtifacts:
-        """Return filesystem artifacts requested for the lint run.
+
+@runtime_checkable
+class LintRunArtifacts(Protocol):
+    """Expose artifact-level state shared across lint reporting helpers.
+
+    Attributes:
+        ignored_py_qa: Paths skipped due to ``PY_QA`` sentinel directories.
+        artifacts: Filesystem artefacts requested for the lint run.
+        display: Display options governing console output.
+        logger: Logger instance bound to the lint run.
+        suppressions: Optional suppression registry when configured.
+    """
+
+    ignored_py_qa: Sequence[str]
+    artifacts: LintOutputArtifacts
+    display: CLIDisplayOptions
+    logger: CLILogger
+    suppressions: SuppressionRegistry | None
+
+    def iter_ignored_py_qa(self) -> Sequence[str]:
+        """Return a tuple view of ``PY_QA`` entries skipped by the run.
 
         Returns:
-            LintOutputArtifacts: Requested lint output artifacts.
+            Sequence[str]: Tuple containing ignored ``PY_QA`` directory paths.
         """
 
-        raise NotImplementedError
+        return tuple(self.ignored_py_qa)
 
-    @property
-    def display(self) -> CLIDisplayOptions:
-        """Return display options governing console output.
+    def has_suppressions(self) -> bool:
+        """Return ``True`` when a suppression registry has been configured.
 
         Returns:
-            CLIDisplayOptions: Display configuration for console output.
+            bool: ``True`` if a suppression registry instance is present.
         """
 
-        raise NotImplementedError
+        return self.suppressions is not None
 
-    @property
-    def logger(self) -> CLILogger:
-        """Return the CLI logger used to emit informational messages.
 
-        Returns:
-            CLILogger: Logger instance bound to the lint run.
-        """
+@runtime_checkable
+class PreparedLintState(RepositoryRootProvider, LintStateOptions, LintRunArtifacts, Protocol):
+    """Minimal protocol describing the lint command state shared with linters."""
 
-        raise NotImplementedError
-
-    @property
-    def suppressions(self) -> SuppressionRegistry | None:
-        """Return the suppression registry when available.
-
-        Returns:
-            SuppressionRegistry | None: Suppression registry when configured.
-        """
-
-        raise NotImplementedError
+    __slots__ = ()
 
 
 __all__ = [
@@ -220,6 +318,9 @@ __all__ = [
     "LintOptionsView",
     "LintRuntimeOptions",
     "LintTargetOptions",
+    "LintRunArtifacts",
+    "LintStateOptions",
+    "MissingFinding",
     "PreparedLintState",
     "SuppressionDirective",
     "SuppressionRegistry",

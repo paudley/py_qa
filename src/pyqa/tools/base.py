@@ -4,17 +4,24 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import Final, Literal, Protocol, TypeAlias, cast, runtime_checkable
+from typing import Final, Literal, TypeAlias, cast
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 from ..config import Config
 from ..config.types import ConfigValue
-from ..core.models import Diagnostic, OutputFilter, RawDiagnostic, ToolOutcome
+from ..core.models import OutputFilter
 from ..interfaces.tools import ToolConfiguration
+from .interfaces import (
+    CommandBuilder,
+    CommandBuilderLike,
+    InstallerCallable,
+    InternalActionRunner,
+    Parser,
+    ParserLike,
+)
 
 ConfigField: TypeAlias = Config | ToolConfiguration
 ToolSettingsMap: TypeAlias = Mapping[str, ConfigValue]
@@ -25,140 +32,7 @@ ToolContextRawMapping: TypeAlias = Mapping[str, ToolContextPayloadValue | ToolCo
 _EXTRA_KEY: Final[str] = "extra"
 
 
-@runtime_checkable
-class Parser(Protocol):
-    """Protocol implemented by output parsers."""
-
-    @abstractmethod
-    def parse(
-        self,
-        stdout: Sequence[str],
-        stderr: Sequence[str],
-        *,
-        context: ToolContext,
-    ) -> Sequence[RawDiagnostic | Diagnostic]:
-        """Parse output streams produced by an external tool.
-
-        Implementations must return diagnostics or raw diagnostic payloads derived from
-        the provided ``stdout``/``stderr`` sequences.
-
-        Args:
-            stdout: Lines emitted on standard output by the external tool.
-            stderr: Lines emitted on standard error by the external tool.
-            context: Tool execution context describing configuration and files.
-
-        Returns:
-            Sequence[RawDiagnostic | Diagnostic]: Parsed diagnostics or raw diagnostic payloads.
-
-        Raises:
-            RuntimeError: Always raised by the protocol to signal missing implementation.
-        """
-
-        raise RuntimeError("Parser.parse must be implemented by concrete parsers")
-
-    def __call__(
-        self,
-        stdout: Sequence[str],
-        stderr: Sequence[str],
-        *,
-        context: ToolContext,
-    ) -> Sequence[RawDiagnostic | Diagnostic]:
-        """Forward to :meth:`parse` to support call-style parsers.
-
-        Args:
-            stdout: Lines emitted on standard output by the external tool.
-            stderr: Lines emitted on standard error by the external tool.
-            context: Tool execution context describing configuration and files.
-
-        Returns:
-            Sequence[RawDiagnostic | Diagnostic]: Parsed diagnostics or raw diagnostic payloads.
-        """
-
-        return self.parse(stdout, stderr, context=context)
-
-
-@runtime_checkable
-class ParserLike(Protocol):
-    """Protocol describing callable objects capable of parsing diagnostics."""
-
-    def parse(
-        self,
-        stdout: Sequence[str],
-        stderr: Sequence[str],
-        *,
-        context: ToolContext,
-    ) -> Sequence[RawDiagnostic | Diagnostic]:
-        """Parse diagnostics emitted by a tool invocation."""
-
-
-class _ParserAdapter:
-    """Adapter that wraps parser-like objects with the :class:`Parser` protocol."""
-
-    __slots__ = ("_delegate",)
-
-    def __init__(self, delegate: ParserLike) -> None:
-        """Store the parser delegate used to handle diagnostic parsing."""
-
-        self._delegate = delegate
-
-    def parse(
-        self,
-        stdout: Sequence[str],
-        stderr: Sequence[str],
-        *,
-        context: ToolContext,
-    ) -> Sequence[RawDiagnostic | Diagnostic]:
-        """Delegate parsing to the wrapped object and normalise the result."""
-
-        result = self._delegate.parse(stdout, stderr, context=context)
-        return tuple(result)
-
-
-@runtime_checkable
-class CommandBuilder(Protocol):
-    """Build a command for execution based on the tool context."""
-
-    @abstractmethod
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        """Return command-line arguments for the tool invocation.
-
-        Implementations must assemble the command aligned with the supplied
-        :class:`ToolContext`.
-
-        Args:
-            ctx: Tool execution context containing configuration and file selections.
-
-        Returns:
-            Sequence[str]: Command arguments to be executed.
-
-        Raises:
-            RuntimeError: Always raised by the protocol to signal missing implementation.
-        """
-
-        raise RuntimeError("CommandBuilder.build must be implemented by concrete builders")
-
-    def __call__(self, ctx: ToolContext) -> Sequence[str]:
-        """Invoke :meth:`build` allowing builders to act as callables.
-
-        Args:
-            ctx: Tool execution context containing configuration and file selections.
-
-        Returns:
-            Sequence[str]: Command arguments to be executed.
-        """
-
-        return self.build(ctx)
-
-
-@runtime_checkable
-class CommandBuilderLike(Protocol):
-    """Protocol describing objects that can construct command arguments."""
-
-    def build(self, ctx: ToolContext) -> Sequence[str]:
-        """Return the command arguments for the provided context."""
-
-
-CommandField: TypeAlias = CommandBuilderLike
+CommandField: TypeAlias = CommandBuilder
 ParserField: TypeAlias = ParserLike | None
 
 
@@ -253,55 +127,6 @@ class ToolContext(BaseModel):
         if isinstance(value, Sequence):
             return tuple(Path(item) if not isinstance(item, Path) else item for item in value)
         raise TypeError("files must be a sequence of paths")
-
-
-@runtime_checkable
-class InstallerCallable(Protocol):
-    """Protocol implemented by installer callbacks."""
-
-    def __call__(self, ctx: ToolContext) -> None:
-        """Perform installation steps for the tool using ``ctx``.
-
-        Args:
-            ctx: Tool execution context containing configuration and file selections.
-        """
-
-        del ctx  # pragma: no cover - protocol definition
-
-    def __repr__(self) -> str:
-        """Return a debugging representation of the installer callable.
-
-        Returns:
-            str: Identifier derived from the callable metadata.
-        """
-
-        return f"InstallerCallable({self.__class__.__qualname__})"
-
-
-@runtime_checkable
-class InternalActionRunner(Protocol):
-    """Protocol implemented by internal tool action runners."""
-
-    def __call__(self, ctx: ToolContext) -> ToolOutcome:
-        """Execute the action and return a :class:`ToolOutcome`.
-
-        Args:
-            ctx: Tool execution context containing configuration and file selections.
-
-        Returns:
-            ToolOutcome: Result bundle describing the internal action execution.
-        """
-
-        raise RuntimeError("InternalActionRunner protocol requires implementation")
-
-    def __repr__(self) -> str:
-        """Return a debugging representation of the action runner.
-
-        Returns:
-            str: Identifier derived from the callable metadata.
-        """
-
-        return f"InternalActionRunner({self.__class__.__qualname__})"
 
 
 class ActionExitCodes(BaseModel):
@@ -461,21 +286,21 @@ class ToolAction(BaseModel):
 
     @field_validator("command", mode="before")
     @classmethod
-    def _coerce_command(cls, value: CommandBuilderLike) -> CommandField:
+    def _coerce_command(cls, value: CommandBuilder) -> CommandField:
         """Validate that command builders expose the required interface.
 
         Args:
             value: Candidate command builder supplied for the action.
 
         Returns:
-            CommandBuilderLike: Accepted command builder instance.
+            CommandBuilder: Accepted command builder instance.
 
         Raises:
             TypeError: If the value does not provide a ``build`` method.
         """
 
-        if isinstance(value, CommandBuilderLike):
-            return value
+        if isinstance(value, (CommandBuilder, CommandBuilderLike)):
+            return cast(CommandBuilder, value)
         if hasattr(value, "build") and callable(getattr(value, "build")):
             return cast(CommandBuilderLike, value)
         raise TypeError("command must provide a callable 'build' method")

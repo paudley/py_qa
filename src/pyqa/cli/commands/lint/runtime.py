@@ -11,6 +11,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
+from pyqa.interfaces.linting import PreparedLintState as PreparedLintStateView
+
 from ....analysis.bootstrap import register_analysis_services
 from ....catalog.model_catalog import CatalogSnapshot
 from ....config import Config
@@ -33,14 +35,13 @@ from ....orchestration.orchestrator import (
 from ....tools.builtin_registry import initialize_registry
 from ....tools.registry import DEFAULT_REGISTRY, ToolRegistry
 from ...core.runtime import ServiceContainer, ServiceResolutionError, register_default_services
-from .preparation import PreparedLintState
 
 
 @dataclass(slots=True)
 class LintRuntimeContext:
     """Bundle runtime dependencies for lint execution."""
 
-    state: PreparedLintState
+    state: PreparedLintStateView
     config: Config
     registry: ToolRegistry
     orchestrator: ExecutionPipeline
@@ -337,7 +338,7 @@ def _resolve_plugin_namespace(services: ServiceRegistryProtocol | None) -> Simpl
 
 
 def build_lint_runtime_context(
-    state: PreparedLintState,
+    state: PreparedLintStateView,
     *,
     config: Config,
     dependencies: LintRuntimeDependencies | None = None,

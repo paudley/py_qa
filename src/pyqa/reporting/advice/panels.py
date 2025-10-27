@@ -62,7 +62,14 @@ def render_advice_panel(
     console = get_console_manager().get(color=cfg.color, emoji=cfg.emoji)
 
     def stylise(entry: AdviceEntry) -> Text:
-        """Return a Rich text representation of an advice entry."""
+        """Return a Rich text representation of an advice entry.
+
+        Args:
+            entry: Advice entry scheduled for rendering.
+
+        Returns:
+            Text: Rich text object describing the advice entry.
+        """
 
         body_text = _sentence_case(entry.body)
         if not cfg.color:
