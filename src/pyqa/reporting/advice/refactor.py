@@ -14,9 +14,9 @@ from rich.table import Table
 
 from pyqa.runtime.console.manager import get_console_manager
 
-from ...config import OutputConfig
 from ...core.models import JsonValue, RunResult
 from ...core.serialization import coerce_optional_int, coerce_optional_str, safe_int
+from ...interfaces.config import OutputConfig as OutputConfigProtocol
 
 
 @dataclass(slots=True)
@@ -95,7 +95,7 @@ def _iter_refactor_payload(value: JsonValue | None) -> Iterable[Mapping[str, Jso
                 yield entry
 
 
-def render_refactor_navigator(result: RunResult, cfg: OutputConfig) -> None:
+def render_refactor_navigator(result: RunResult, cfg: OutputConfigProtocol) -> None:
     """Render the refactor navigator panel when analysis data is available.
 
     Args:

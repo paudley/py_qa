@@ -12,8 +12,8 @@ from rich.text import Text
 
 from pyqa.core.severity import Severity
 
-from ...config import OutputConfig
 from ...core.models import Diagnostic
+from ...interfaces.config import OutputConfig as OutputConfigProtocol
 from ...runtime.console.manager import get_console_manager
 from .highlighting import (
     LOCATION_SEPARATOR,
@@ -121,7 +121,7 @@ def format_diagnostic_line(
     diagnostic: Diagnostic,
     location: str,
     location_width: int,
-    cfg: OutputConfig,
+    cfg: OutputConfigProtocol,
 ) -> Text:
     """Return a formatted diagnostic line for quiet/pretty output.
 
@@ -164,7 +164,7 @@ def format_diagnostic_line(
     return line
 
 
-def dump_diagnostics(diags: Iterable[Diagnostic], cfg: OutputConfig) -> None:
+def dump_diagnostics(diags: Iterable[Diagnostic], cfg: OutputConfigProtocol) -> None:
     """Print formatted diagnostics in pretty or quiet modes.
 
     Args:

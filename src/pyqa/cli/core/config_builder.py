@@ -72,13 +72,14 @@ def build_config(options: LintOptions, *, sources: Sequence[ConfigSource] | None
         and ``_config_builder_execution``.
     """
 
-    project_root = options.root.resolve()
+    project_root = cast(Path, options.root).resolve()
     loader = (
         ConfigLoader.for_root(project_root)
         if sources is None
         else ConfigLoader(project_root=project_root, sources=list(sources))
     )
-    load_result = loader.load_with_trace(strict=options.strict_config)
+    execution_bundle = options.execution_options
+    load_result = loader.load_with_trace(strict=execution_bundle.runtime.strict_config)
     base_config = load_result.config
 
     baseline = base_config.snapshot_shared_knobs()
@@ -153,33 +154,35 @@ def _collect_severity_overrides(
         SeverityOverrides: Structured severity overrides suitable for configuration updates.
     """
 
+    severity_opts = options.override_options.severity
+
     sensitivity = None
-    if has_option(LintOptionKey.SENSITIVITY) and options.sensitivity is not None:
+    if has_option(LintOptionKey.SENSITIVITY) and severity_opts.sensitivity is not None:
         sensitivity = coerce_enum_value(
-            options.sensitivity,
+            severity_opts.sensitivity,
             SensitivityLevel,
             "--sensitivity",
         )
 
     bandit_level = None
-    if has_option(LintOptionKey.BANDIT_SEVERITY) and options.bandit_severity is not None:
+    if has_option(LintOptionKey.BANDIT_SEVERITY) and severity_opts.bandit_severity is not None:
         bandit_level = coerce_enum_value(
-            options.bandit_severity,
+            severity_opts.bandit_severity,
             BanditLevel,
             "--bandit-severity",
         )
 
     bandit_confidence = None
-    if has_option(LintOptionKey.BANDIT_CONFIDENCE) and options.bandit_confidence is not None:
+    if has_option(LintOptionKey.BANDIT_CONFIDENCE) and severity_opts.bandit_confidence is not None:
         bandit_confidence = coerce_enum_value(
-            options.bandit_confidence,
+            severity_opts.bandit_confidence,
             BanditConfidence,
             "--bandit-confidence",
         )
 
     pylint_fail_under = None
-    if has_option(LintOptionKey.PYLINT_FAIL_UNDER) and options.pylint_fail_under is not None:
-        pylint_fail_under = options.pylint_fail_under
+    if has_option(LintOptionKey.PYLINT_FAIL_UNDER) and severity_opts.pylint_fail_under is not None:
+        pylint_fail_under = severity_opts.pylint_fail_under
 
     return SeverityOverrides(
         sensitivity=sensitivity,
@@ -203,8 +206,9 @@ def _collect_complexity_overrides(
         ComplexityOverrides: Structured complexity overrides suitable for configuration updates.
     """
 
-    max_complexity = options.max_complexity if has_option(LintOptionKey.MAX_COMPLEXITY) else None
-    max_arguments = options.max_arguments if has_option(LintOptionKey.MAX_ARGUMENTS) else None
+    complexity_opts = options.override_options.complexity
+    max_complexity = complexity_opts.max_complexity if has_option(LintOptionKey.MAX_COMPLEXITY) else None
+    max_arguments = complexity_opts.max_arguments if has_option(LintOptionKey.MAX_ARGUMENTS) else None
 
     return ComplexityOverrides(
         max_complexity=max_complexity,
@@ -226,10 +230,11 @@ def _collect_strictness_overrides(
         StrictnessOverrides: Structured strictness overrides suitable for configuration updates.
     """
 
+    strictness_opts = options.override_options.strictness
     type_checking = None
-    if has_option(LintOptionKey.TYPE_CHECKING) and options.type_checking is not None:
+    if has_option(LintOptionKey.TYPE_CHECKING) and strictness_opts.type_checking is not None:
         type_checking = coerce_enum_value(
-            options.type_checking,
+            strictness_opts.type_checking,
             StrictnessLevel,
             "--type-checking",
         )

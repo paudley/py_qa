@@ -8,14 +8,17 @@ from typing import Annotated
 
 import typer
 
+from pyqa.cli.protocols import TyperAdapter
+
 from ....compliance.banned import BannedWordChecker
 from ...core.shared import Depends
 from ...core.typer_ext import TyperAppConfig, create_typer
 from .models import BannedCLIOptions, build_banned_options
 
-banned_app = create_typer(
+_BANNED_TY = create_typer(
     config=TyperAppConfig(name="check-banned-words", help_text="Check text for banned words or phrases."),
 )
+banned_app = TyperAdapter(_BANNED_TY)
 
 
 @banned_app.command()

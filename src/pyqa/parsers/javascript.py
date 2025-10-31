@@ -12,7 +12,7 @@ from pyqa.core.serialization import JsonValue, coerce_optional_int, coerce_optio
 from pyqa.core.severity import Severity
 
 from ..core.models import RawDiagnostic
-from ..tools.base import ToolContext
+from ..interfaces.tools import ToolContext
 
 _TSC_PATTERN = re.compile(
     r"^(?P<file>[^:(\n]+)\((?P<line>\d+),(?P<col>\d+)\):\s*"

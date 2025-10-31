@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typer import Typer
+from pyqa.cli.protocols import TyperLike
 
 from ...core.shared import register_command
 from .command import doctor_command
@@ -13,11 +13,11 @@ from .command import doctor_command
 __all__ = ["register"]
 
 
-def register(app: Typer) -> None:
+def register(app: TyperLike) -> None:
     """Register the doctor diagnostics command on the Typer application.
 
     Args:
-        app: Typer application receiving the doctor command.
+        app: Typer-compatible application receiving the doctor command.
     """
 
     register_command(app, doctor_command, name="doctor")

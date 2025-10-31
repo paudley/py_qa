@@ -9,7 +9,7 @@ from collections.abc import Callable, Sequence
 
 from tooling_spec.catalog import plugins as _spec_plugins
 
-from ..plugins import load_catalog_plugins
+from ..plugins import load_catalog_plugins as _discover_catalog_plugins
 
 CatalogContribution = _spec_plugins.CatalogContribution
 CatalogPluginContext = _spec_plugins.CatalogPluginContext
@@ -22,7 +22,18 @@ __all__ = (
     "CatalogContribution",
     "CatalogPluginContext",
     "load_plugin_contributions",
+    "load_catalog_plugins",
 )
+
+
+def load_catalog_plugins() -> tuple[Callable[..., CatalogContribution], ...]:
+    """Return catalog plugin factories discovered via entry points.
+
+    Returns:
+        tuple[Callable[..., CatalogContribution], ...]: Tuple containing plugin
+        factory callables discovered via entry points.
+    """
+    return _discover_catalog_plugins()
 
 
 def load_plugin_contributions(

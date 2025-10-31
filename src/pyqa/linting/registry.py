@@ -9,25 +9,20 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import cast
 
-from pyqa.config import Config
 from pyqa.core.models import ToolOutcome
+from pyqa.interfaces.config import Config as ConfigProtocol
 from pyqa.interfaces.internal_linting import INTERNAL_LINTER_TOOL_NAMES
 from pyqa.interfaces.linting import PreparedLintState
 from pyqa.platform.workspace import is_py_qa_workspace
 from pyqa.testing.suppressions import build_internal_test_suppression_pattern
-from pyqa.tools.base import (
-    DeferredCommand,
-    InternalActionRunner,
-    PhaseLiteral,
-    Tool,
-    ToolAction,
-    ToolContext,
-)
+from pyqa.tools.base import DeferredCommand, PhaseLiteral, Tool, ToolAction, ToolContext
+from pyqa.tools.interfaces import InternalActionRunner
 from pyqa.tools.registry import ToolRegistry
 
 from .base import InternalLintReport, InternalLintRunner, as_internal_runner
 from .cache_usage import run_cache_linter
 from .closures import run_closure_linter
+from .conditional_imports import run_conditional_import_linter
 from .di import run_pyqa_di_linter
 from .docstrings import run_docstring_linter
 from .generic_value_types import run_generic_value_type_linter
@@ -194,6 +189,17 @@ INTERNAL_LINTERS: tuple[InternalLinterDefinition, ...] = (
         description="Discourage ad-hoc closure factories in favour of functools.partial or itertools helpers.",
     ),
     InternalLinterDefinition(
+        name="conditional-imports",
+        meta_attribute="check_conditional_imports",
+        selection_tokens=("conditional-imports", "conditional-import"),
+        runner=run_conditional_import_linter,
+        description=(
+            "Detect conditional imports (including TYPE_CHECKING guards) and encourage interface-based abstractions."
+        ),
+        options=InternalLinterOptions(tags=("internal-linter", "internal-pyqa")),
+        pyqa_scoped=True,
+    ),
+    InternalLinterDefinition(
         name="signatures",
         meta_attribute="check_signatures",
         selection_tokens=("signatures", "parameters"),
@@ -309,7 +315,7 @@ def ensure_internal_tools_registered(
     *,
     registry: ToolRegistry,
     state: PreparedLintState,
-    config: Config,
+    config: ConfigProtocol,
 ) -> None:
     """Register internal linter tools with ``registry`` when absent.
 
@@ -336,7 +342,7 @@ def ensure_internal_tools_registered(
         _inject_internal_test_suppression(config, definition.name)
 
 
-def _inject_internal_test_suppression(config: Config, tool_name: str) -> None:
+def _inject_internal_test_suppression(config: ConfigProtocol, tool_name: str) -> None:
     """Ensure internal linters suppress diagnostics originating from tests.
 
     Args:

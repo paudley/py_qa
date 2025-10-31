@@ -10,10 +10,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Final, Literal, cast
+from typing import Final, Literal
 
-from ..core.serialization import SerializableValue
 from ..interfaces.cache import CacheProvider
+from ..protocols.serialization import SerializableValue
 from .in_memory import ttl_cache
 from .providers import DirectoryCacheProvider, InMemoryCacheProvider
 
@@ -116,12 +116,12 @@ def create_cache_provider(settings: CacheProviderSettings | None = None) -> Cach
 
     resolved = resolve_cache_provider_settings(settings)
     if resolved.kind == _MEMORY_KIND:
-        return cast(CacheProvider[SerializableValue], InMemoryCacheProvider())
+        return InMemoryCacheProvider()
 
     if resolved.directory is None:
         raise ValueError("CacheProviderSettings.directory must be set for directory-backed providers")
     provider = DirectoryCacheProvider(resolved.directory)
-    return cast(CacheProvider[SerializableValue], provider)
+    return provider
 
 
 # suppression_valid: lint=internal-cache reason=Reuse functools.lru_cache to preserve the default provider singleton.

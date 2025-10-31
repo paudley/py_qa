@@ -10,7 +10,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Final
 
-from ..tools.base import CommandBuilder, ToolContext
+from tooling_spec.catalog.errors import CatalogIntegrityError as SpecCatalogIntegrityError
+
 from ..tools.builtin_commands_python import (
     _discover_pylint_plugins,
     _python_target_version,
@@ -19,6 +20,7 @@ from ..tools.builtin_commands_python import (
     _pyupgrade_flag_from_version,
 )
 from ..tools.builtin_helpers import _as_bool, _setting
+from ..tools.interfaces import CommandBuilder, ToolContext
 from .command_option_behaviors import (
     _ArgsOptionBehavior,
     _FlagOptionBehavior,
@@ -27,7 +29,7 @@ from .command_option_behaviors import (
     _RepeatFlagBehavior,
     _ValueOptionBehavior,
 )
-from .loader import CatalogIntegrityError
+from .errors import CatalogIntegrityError
 from .types import JSONValue
 from .utils import expect_mapping, freeze_json_mapping, freeze_json_value
 
@@ -216,11 +218,7 @@ def command_option_map(config: Mapping[str, JSONValue]) -> CommandBuilder:
 
     base_args = require_string_sequence(config, "base", context="command_option_map")
     append_files = bool(config.get("appendFiles", True))
-    options_config = config.get("options")
-    mappings = compile_option_mappings(
-        options_config,
-        context="command_option_map.options",
-    )
+    mappings = compile_option_mappings(config.get("options"), context="command_option_map.options")
     return _OptionCommandStrategy(
         base=base_args,
         append_files=append_files,
@@ -250,23 +248,10 @@ def compile_option_mappings(
 
     """
 
-    if options_config is None:
-        return ()
-    if not isinstance(options_config, Sequence) or isinstance(
-        options_config,
-        (str, bytes, bytearray),
-    ):
-        raise CatalogIntegrityError(f"{context}: 'options' must be an array of objects")
-
+    option_entries = _normalise_option_entries(options_config, context=context)
     compiled: list[OptionMapping] = []
-    for index, raw_option in enumerate(options_config):
+    for index, option_mapping in enumerate(option_entries):
         option_context = f"{context}[{index}]"
-        if not isinstance(raw_option, Mapping):
-            raise CatalogIntegrityError(f"{option_context}: option must be an object")
-        option_mapping = freeze_json_mapping(
-            expect_mapping(raw_option, key="option", context=option_context),
-            context=option_context,
-        )
         parsed = _collect_option_config(option_mapping, option_context)
         behavior = _build_option_behavior(parsed, context=option_context)
         compiled.append(
@@ -277,6 +262,65 @@ def compile_option_mappings(
             ),
         )
     return tuple(compiled)
+
+
+def _normalise_option_entries(
+    options_config: JSONValue | None,
+    *,
+    context: str,
+) -> tuple[Mapping[str, JSONValue], ...]:
+    """Validate and freeze raw option entries extracted from the catalog.
+
+    Args:
+        options_config: Raw ``options`` payload extracted from the catalog.
+        context: Context string used when raising validation errors.
+
+    Returns:
+        tuple[Mapping[str, JSONValue], ...]: Immutable option mappings ready for parsing.
+
+    Raises:
+        CatalogIntegrityError: If ``options_config`` does not describe a sequence of mappings.
+    """
+
+    if options_config is None:
+        return ()
+    if not isinstance(options_config, Sequence) or isinstance(options_config, (str, bytes, bytearray)):
+        raise CatalogIntegrityError(f"{context}: 'options' must be an array of objects")
+
+    frozen_entries: list[Mapping[str, JSONValue]] = []
+    for index, raw_option in enumerate(options_config):
+        option_context = f"{context}[{index}]"
+        if not isinstance(raw_option, Mapping):
+            raise CatalogIntegrityError(f"{option_context}: option must be an object")
+        frozen_entries.append(_freeze_option_mapping(raw_option, context=option_context))
+    return tuple(frozen_entries)
+
+
+def _freeze_option_mapping(
+    raw_option: Mapping[str, JSONValue],
+    *,
+    context: str,
+) -> Mapping[str, JSONValue]:
+    """Return an immutable mapping derived from ``raw_option``.
+
+    Args:
+        raw_option: Raw option payload sourced from the catalog.
+        context: Context string used when wrapping validation errors.
+
+    Returns:
+        Mapping[str, JSONValue]: Frozen mapping describing the option configuration.
+
+    Raises:
+        CatalogIntegrityError: If ``raw_option`` cannot be converted into a mapping.
+    """
+
+    try:
+        return freeze_json_mapping(
+            expect_mapping(raw_option, key="option", context=context),
+            context=context,
+        )
+    except SpecCatalogIntegrityError as exc:  # pragma: no cover - defensive for upstream schema
+        raise CatalogIntegrityError(str(exc)) from exc
 
 
 def require_string_sequence(
@@ -859,7 +903,10 @@ def _default_strictness(ctx: ToolContext) -> JSONValue | None:
     """
 
     profile = ctx.cfg.strictness.type_checking
-    return None if profile is None else str(profile)
+    if profile is None:
+        return None
+    value = getattr(profile, "value", profile)
+    return str(value)
 
 
 def _default_sql_dialect(ctx: ToolContext) -> JSONValue | None:

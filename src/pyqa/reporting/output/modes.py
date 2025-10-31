@@ -7,14 +7,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...config import OutputConfig
 from ...core.logging import colorize
 from ...core.models import RunResult
+from ...interfaces.config import OutputConfig as OutputConfigProtocol
 from ...runtime.console.manager import get_console_manager
 from .diagnostics import dump_diagnostics, join_output
 
 
-def render_quiet_mode(result: RunResult, cfg: OutputConfig) -> None:
+def render_quiet_mode(result: RunResult, cfg: OutputConfigProtocol) -> None:
     """Render diagnostics in quiet mode.
 
     Args:
@@ -36,7 +36,7 @@ def render_quiet_mode(result: RunResult, cfg: OutputConfig) -> None:
             dump_diagnostics(outcome.diagnostics, cfg)
 
 
-def render_pretty_mode(result: RunResult, cfg: OutputConfig) -> None:
+def render_pretty_mode(result: RunResult, cfg: OutputConfigProtocol) -> None:
     """Render orchestrator results in a human-friendly pretty format.
 
     Args:

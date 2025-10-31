@@ -17,12 +17,12 @@ from typing import Final, Protocol, cast
 
 from pyqa.cache.in_memory import memoize
 from pyqa.core.severity import Severity
+from pyqa.interfaces.tools import ToolContext
 
 from ..config.types import ConfigValue
 from ..core.models import RawDiagnostic
 from ..filesystem.paths import normalize_path
 from ..utils.bool_utils import interpret_optional_bool
-from .base import ToolContext
 
 __all__ = [
     "CARGO_AVAILABLE",

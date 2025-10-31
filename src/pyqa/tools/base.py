@@ -6,24 +6,29 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import Final, Literal, TypeAlias, cast
+from typing import Final, Literal, Protocol, TypeAlias, cast, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
-from ..config import Config
+from pyqa.interfaces.config import Config as ConfigProtocol
+from tooling_spec.catalog.types import JSONValue as _CatalogJSONValue
+
 from ..config.types import ConfigValue
 from ..core.models import OutputFilter
 from ..interfaces.tools import ToolConfiguration
+from ..interfaces.tools import ToolContext as ToolContextProtocol
 from .interfaces import (
     CommandBuilder,
+    CommandBuilderContract,
     CommandBuilderLike,
     InstallerCallable,
     InternalActionRunner,
     Parser,
+    ParserContract,
     ParserLike,
 )
 
-ConfigField: TypeAlias = Config | ToolConfiguration
+ConfigField: TypeAlias = ConfigProtocol | ToolConfiguration
 ToolSettingsMap: TypeAlias = Mapping[str, ConfigValue]
 ToolContextValue: TypeAlias = ConfigValue | Sequence[Path]
 ToolContextExtras: TypeAlias = Mapping[str, ToolContextValue]
@@ -32,8 +37,31 @@ ToolContextRawMapping: TypeAlias = Mapping[str, ToolContextPayloadValue | ToolCo
 _EXTRA_KEY: Final[str] = "extra"
 
 
-CommandField: TypeAlias = CommandBuilder
-ParserField: TypeAlias = ParserLike | None
+CommandField: TypeAlias = CommandBuilder | CommandBuilderLike | CommandBuilderContract
+ParserField: TypeAlias = ParserLike | ParserContract | None
+
+
+@runtime_checkable
+class SupportsCommandBuild(Protocol):
+    """Protocol describing objects that expose a ``build`` method returning command arguments."""
+
+    def build(self, ctx: ToolContextProtocol) -> Sequence[str]:
+        """Return command arguments for the provided execution context.
+
+        Args:
+            ctx: Tool execution context describing configuration and target files.
+
+        Returns:
+            Sequence[str]: Command arguments emitted by the builder.
+        """
+
+
+@runtime_checkable
+class SupportsExecutionConfig(Protocol):
+    """Protocol describing configuration objects exposing an ``execution`` attribute."""
+
+    execution: ToolConfiguration
+    """Execution configuration bundle associated with the configuration object."""
 
 
 class ToolContext(BaseModel):
@@ -81,25 +109,27 @@ class ToolContext(BaseModel):
 
     @field_validator("cfg", mode="before")
     @classmethod
-    def _coerce_cfg(cls, value: Config | ToolConfiguration) -> ConfigField:
+    def _coerce_cfg(cls, value: ConfigField | SupportsExecutionConfig) -> ConfigField:
         """Validate that the supplied configuration satisfies the expected contract.
 
         Args:
             value: Candidate configuration object provided by the caller.
 
         Returns:
-            Config | ToolConfiguration: Configuration instance accepted by the context.
+            ConfigProtocol | ToolConfiguration: Configuration instance accepted by the context.
 
         Raises:
             TypeError: If the value does not implement the ``ToolConfiguration`` protocol.
         """
 
-        if isinstance(value, Config):
+        if isinstance(value, ConfigProtocol):
             return value
         if isinstance(value, ToolConfiguration):
             return value
+        if isinstance(value, SupportsExecutionConfig):
+            return cast(ConfigProtocol, value)
         raise TypeError(
-            "cfg must be an instance of pyqa.config.Config or implement the ToolConfiguration protocol",
+            "cfg must implement the pyqa.interfaces.config.Config protocol or ToolConfiguration",
         )
 
     @field_validator("files", mode="before")
@@ -231,7 +261,7 @@ class DeferredCommand(BaseModel):
             payload.setdefault("args", args)
         super().__init__(**payload)
 
-    def build(self, ctx: ToolContext) -> Sequence[str]:
+    def build(self, ctx: ToolContextProtocol) -> Sequence[str]:
         """Return the deferred command regardless of the provided context.
 
         Args:
@@ -253,7 +283,7 @@ class DeferredCommand(BaseModel):
 
         return "DeferredCommand"
 
-    def __call__(self, ctx: ToolContext) -> Sequence[str]:
+    def __call__(self, ctx: ToolContextProtocol) -> Sequence[str]:
         """Support call-style invocation mirroring :meth:`build`.
 
         Args:
@@ -286,7 +316,7 @@ class ToolAction(BaseModel):
 
     @field_validator("command", mode="before")
     @classmethod
-    def _coerce_command(cls, value: CommandBuilder) -> CommandField:
+    def _coerce_command(cls, value: CommandField | SupportsCommandBuild) -> CommandField:
         """Validate that command builders expose the required interface.
 
         Args:
@@ -299,15 +329,22 @@ class ToolAction(BaseModel):
             TypeError: If the value does not provide a ``build`` method.
         """
 
-        if isinstance(value, (CommandBuilder, CommandBuilderLike)):
-            return cast(CommandBuilder, value)
-        if hasattr(value, "build") and callable(getattr(value, "build")):
-            return cast(CommandBuilderLike, value)
+        if isinstance(value, CommandBuilder):
+            return value
+        if isinstance(value, CommandBuilderLike):
+            return value
+        if isinstance(value, CommandBuilderContract):
+            return value
+        if isinstance(value, SupportsCommandBuild):
+            return cast(CommandBuilderContract, value)
         raise TypeError("command must provide a callable 'build' method")
 
     @field_validator("parser", mode="before")
     @classmethod
-    def _coerce_parser(cls, value: ParserLike | None) -> ParserField:
+    def _coerce_parser(
+        cls,
+        value: Parser | ParserLike | ParserContract | None,
+    ) -> ParserField:
         """Validate parser instances supplied for tool actions.
 
         Args:
@@ -320,12 +357,14 @@ class ToolAction(BaseModel):
             TypeError: If the value does not satisfy the ``Parser`` protocol.
         """
 
-        if value is None or isinstance(value, Parser):
+        if value is None:
+            return None
+        if isinstance(value, Parser):
             return value
         if isinstance(value, ParserLike):
             return value
-        if hasattr(value, "parse") and callable(getattr(value, "parse")):
-            return cast(ParserLike, value)
+        if isinstance(value, ParserContract):
+            return value
         raise TypeError("parser must implement the Parser protocol")
 
     @field_validator("filter_patterns", mode="before")
@@ -403,7 +442,7 @@ class ToolAction(BaseModel):
             return value
         raise TypeError("internal_runner must be callable")
 
-    def build_command(self, ctx: ToolContext) -> list[str]:
+    def build_command(self, ctx: ToolContextProtocol) -> list[str]:
         """Return the command arguments for this action within ``ctx``.
 
         Args:
@@ -868,3 +907,6 @@ class Tool(BaseModel):
             if allowed and not any(path.suffix.lower() in allowed for path in files):
                 return False
         return True
+
+
+ToolContext.model_rebuild(_types_namespace={"JSONValue": _CatalogJSONValue})

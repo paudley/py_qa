@@ -6,12 +6,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 import typer
 
+from pyqa.cli.protocols import TyperAdapter
+from pyqa.config import QualityConfigSection as QualityConfigModel
+
 from ....compliance.quality import check_commit_message, ensure_branch_protection
-from ....config import QualityConfigSection
 from ...core.shared import CLIError, Depends, build_cli_logger, register_callback
 from ...core.typer_ext import TyperAppConfig, create_typer
 from .models import (
@@ -30,13 +32,14 @@ from .services import (
     run_quality_checks,
 )
 
-quality_app = create_typer(
+_QUALITY_TY = create_typer(
     config=TyperAppConfig(
         name="check-quality",
         help_text="Run repository quality checks (license headers, schema, hygiene).",
         invoke_without_command=True,
     ),
 )
+quality_app = TyperAdapter(_QUALITY_TY)
 
 
 @register_callback(quality_app, invoke_without_command=True)
@@ -62,7 +65,7 @@ def main(
         raise typer.Exit(code=exc.exit_code) from exc
     render_config_warnings(context, logger=logger)
 
-    quality_settings = QualityConfigSection.model_validate(context.config.quality)
+    quality_settings = cast(QualityConfigModel, context.config.quality)
     checks = determine_checks(
         available_checks=quality_settings.checks,
         requested_checks=context.options.requested_checks,
@@ -128,7 +131,7 @@ def branch_guard(
         context = load_quality_context(options, logger=logger)
     except CLIError as exc:
         raise typer.Exit(code=exc.exit_code) from exc
-    quality_settings = QualityConfigSection.model_validate(context.config.quality)
+    quality_settings = cast(QualityConfigModel, context.config.quality)
 
     result = ensure_branch_protection(context.root, quality_settings)
     if not result.issues:

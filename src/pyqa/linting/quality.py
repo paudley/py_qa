@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 from pyqa.compliance.quality import (
     COPYRIGHT_CATEGORY,
@@ -28,10 +28,12 @@ from pyqa.compliance.quality_components.hygiene import (
     PYTHON_HYGIENE_PRINT,
     PYTHON_HYGIENE_SYSTEM_EXIT,
 )
-from pyqa.config import Config
+from pyqa.config import LicenseConfig as LicenseConfigModel
+from pyqa.config import QualityConfigSection as QualityConfigModel
 from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path_key
+from pyqa.interfaces.config import Config as ConfigProtocol
 from pyqa.interfaces.linting import PreparedLintState
 
 from .base import InternalLintReport
@@ -43,7 +45,7 @@ class QualityCheckRequest:
     """Describe an invocation of :func:`evaluate_quality_checks`."""
 
     root: Path
-    config: Config
+    config: ConfigProtocol
     checks: tuple[str, ...]
     files: tuple[Path, ...] | None = None
     fix: bool = False
@@ -55,7 +57,7 @@ class QualitySubsetRequest:
     """Describe parameters required for an internal quality subset run."""
 
     state: PreparedLintState
-    config: Config
+    config: ConfigProtocol
     tool_name: str
     checks: tuple[str, ...]
     categories: frozenset[str]
@@ -66,7 +68,7 @@ class QualitySubsetRequest:
 _ENFORCEMENT_SENSITIVITY: Final[frozenset[str]] = frozenset({"high", "maximum"})
 
 
-def _should_enforce_quality(config: Config) -> bool:
+def _should_enforce_quality(config: ConfigProtocol) -> bool:
     """Return whether quality checks should be enforced for ``config``.
 
     Args:
@@ -96,9 +98,9 @@ def evaluate_quality_checks(request: QualityCheckRequest) -> QualityCheckResult:
 
     checker = QualityChecker(
         root=request.root,
-        quality=request.config.quality,
+        quality=cast(QualityConfigModel, request.config.quality),
         options=QualityCheckerOptions(
-            license_overrides=request.config.license,
+            license_overrides=cast(LicenseConfigModel, request.config.license),
             files=request.files,
             checks=request.checks,
             staged=request.staged,
@@ -111,7 +113,7 @@ def run_license_header_linter(
     state: PreparedLintState,
     *,
     emit_to_logger: bool,
-    config: Config,
+    config: ConfigProtocol,
 ) -> InternalLintReport:
     """Run the license header enforcement linter.
 
@@ -140,7 +142,7 @@ def run_copyright_linter(
     state: PreparedLintState,
     *,
     emit_to_logger: bool,
-    config: Config,
+    config: ConfigProtocol,
 ) -> InternalLintReport:
     """Run the copyright notice consistency linter.
 
@@ -169,7 +171,7 @@ def run_python_hygiene_linter(
     state: PreparedLintState,
     *,
     emit_to_logger: bool,
-    config: Config,
+    config: ConfigProtocol,
 ) -> InternalLintReport:
     """Run the Python hygiene linter covering debug breakpoints and bare excepts.
 
@@ -207,7 +209,7 @@ def run_file_size_linter(
     state: PreparedLintState,
     *,
     emit_to_logger: bool,
-    config: Config,
+    config: ConfigProtocol,
 ) -> InternalLintReport:
     """Run the file size threshold linter.
 
@@ -236,7 +238,7 @@ def run_pyqa_schema_sync_linter(
     state: PreparedLintState,
     *,
     emit_to_logger: bool,
-    config: Config,
+    config: ConfigProtocol,
 ) -> InternalLintReport:
     """Run the pyqa schema synchronisation linter.
 
@@ -265,7 +267,7 @@ def run_pyqa_python_hygiene_linter(
     state: PreparedLintState,
     *,
     emit_to_logger: bool,
-    config: Config,
+    config: ConfigProtocol,
 ) -> InternalLintReport:
     """Run the pyqa-specific Python hygiene checks.
 

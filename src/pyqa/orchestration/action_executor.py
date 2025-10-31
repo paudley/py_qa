@@ -22,7 +22,6 @@ from pyqa.core.severity import SeverityRuleView
 
 from ..cache.context import CacheContext
 from ..cache.result_store import CacheRequest
-from ..config import Config
 from ..core.logging import warn
 from ..core.metrics import FileMetrics, compute_file_metrics
 from ..core.models import Diagnostic, JsonValue, RawDiagnostic, ToolExitCategory, ToolOutcome
@@ -31,6 +30,7 @@ from ..diagnostics.pipeline import DiagnosticPipeline as DiagnosticPipelineImpl
 from ..filesystem.paths import normalize_path_key
 from ..interfaces.analysis import ContextResolver
 from ..interfaces.cache import ResultCacheProtocol
+from ..interfaces.config import Config as ConfigProtocol
 from ..interfaces.diagnostics import DiagnosticPipeline as DiagnosticPipelineProtocol
 from ..interfaces.diagnostics import DiagnosticPipelineRequest
 from ..parsers.base import JsonParser
@@ -139,7 +139,7 @@ _IGNORED_CHECK_RETURN_CODES: Final[frozenset[int]] = frozenset({1})
 class ExecutionEnvironment:
     """Immutable description of the execution environment for actions."""
 
-    config: Config
+    config: ConfigProtocol
     root: Path
     severity_rules: SeverityRuleView
     cache: CacheContext

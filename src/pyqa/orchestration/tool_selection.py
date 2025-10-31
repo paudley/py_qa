@@ -6,15 +6,17 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import partial
 from graphlib import CycleError, TopologicalSorter
 from importlib import import_module
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, Literal, cast
+from typing import Final, Literal, cast
 
 from pyqa.cache.in_memory import memoize
 from pyqa.platform.languages import detect_languages
 
-from ..config import Config, SensitivityLevel
+from ..interfaces.config import Config as ConfigProtocol
+from ..interfaces.config import SensitivityLevelLiteral
 from ..interfaces.orchestration_selection import (
     PhaseLiteral,
     SelectionContext,
@@ -32,10 +34,36 @@ from ..orchestration.selection_context import (
 from ..tools.base import Tool
 from ..tools.registry import ToolRegistry
 
-if TYPE_CHECKING:
-    from ..linting.registry import InternalLinterDefinition
 
-_InternalLinterResolver = Callable[[], Sequence["InternalLinterDefinition"]]
+@dataclass(frozen=True, slots=True)
+class _InternalLinterDescriptor:
+    """Lightweight view of internal linter metadata required for selection."""
+
+    name: str
+    pyqa_scoped: bool
+
+
+_InternalLinterResolver = Callable[[], Sequence[_InternalLinterDescriptor]]
+
+
+def _build_internal_descriptors(resolver: Callable[[], Sequence]) -> Sequence[_InternalLinterDescriptor]:
+    """Return descriptors derived from registry-provided internal linter definitions.
+
+    Args:
+        resolver: Callable returning raw internal linter definitions.
+
+    Returns:
+        Sequence[_InternalLinterDescriptor]: Normalised descriptor sequence.
+    """
+
+    descriptors: list[_InternalLinterDescriptor] = []
+    for definition in resolver():
+        name = getattr(definition, "name", None)
+        if not isinstance(name, str):
+            continue
+        pyqa_scoped = bool(getattr(definition, "pyqa_scoped", False))
+        descriptors.append(_InternalLinterDescriptor(name=name, pyqa_scoped=pyqa_scoped))
+    return tuple(descriptors)
 
 
 def _resolve_internal_linter_resolver() -> _InternalLinterResolver | None:
@@ -53,7 +81,9 @@ def _resolve_internal_linter_resolver() -> _InternalLinterResolver | None:
     resolver = getattr(module, "iter_internal_linters", None)
     if resolver is None:
         return None
-    return cast(_InternalLinterResolver, resolver)
+    raw_resolver = cast(Callable[[], Sequence], resolver)
+
+    return partial(_build_internal_descriptors, raw_resolver)
 
 
 _ITER_INTERNAL_LINTERS: Final[_InternalLinterResolver | None] = _resolve_internal_linter_resolver()
@@ -67,6 +97,7 @@ _ACTION_RUN: Final[Literal["run"]] = "run"
 _ACTION_SKIP: Final[Literal["skip"]] = "skip"
 _TAG_INTERNAL_PYQA: Final[str] = "internal-pyqa"
 _TAG_INTERNAL: Final[str] = "internal-linter"
+_INTERNAL_SENSITIVITY_LEVELS: Final[frozenset[SensitivityLevelLiteral]] = frozenset({"high", "maximum"})
 
 
 @dataclass(slots=True)
@@ -76,7 +107,7 @@ class ToolSelector:
     registry: ToolRegistry
     last_result: SelectionResult | None = field(default=None, init=False, repr=False)
 
-    def select_tools(self, cfg: Config, files: Sequence[Path], root: Path) -> Sequence[str]:
+    def select_tools(self, cfg: ConfigProtocol, files: Sequence[Path], root: Path) -> Sequence[str]:
         """Return tool names for the current run respecting configuration.
 
         Args:
@@ -91,7 +122,7 @@ class ToolSelector:
         result = self.plan_selection(cfg, files, root)
         return result.ordered
 
-    def plan_selection(self, cfg: Config, files: Sequence[Path], root: Path) -> SelectionResult:
+    def plan_selection(self, cfg: ConfigProtocol, files: Sequence[Path], root: Path) -> SelectionResult:
         """Return a :class:`SelectionResult` that details tool decisions.
 
         Args:
@@ -158,7 +189,7 @@ class ToolSelector:
     # ------------------------------------------------------------------
     # Context & evaluation helpers
 
-    def _build_context(self, cfg: Config, files: Sequence[Path], root: Path) -> SelectionContext:
+    def _build_context(self, cfg: ConfigProtocol, files: Sequence[Path], root: Path) -> SelectionContext:
         """Return a :class:`SelectionContext` derived from the current invocation.
 
         Args:
@@ -503,7 +534,7 @@ class ToolSelector:
         )
         return language_match, extension_match, config_match
 
-    def _sensitivity_enables_internal(self, sensitivity: SensitivityLevel) -> bool:
+    def _sensitivity_enables_internal(self, sensitivity: SensitivityLevelLiteral) -> bool:
         """Return ``True`` when ``sensitivity`` enables internal tool execution.
 
         Args:
@@ -513,7 +544,7 @@ class ToolSelector:
             bool: ``True`` when internal tooling should run.
         """
 
-        return sensitivity in (SensitivityLevel.HIGH, SensitivityLevel.MAXIMUM)
+        return sensitivity in _INTERNAL_SENSITIVITY_LEVELS
 
     def _family_for_tool(self, tool: Tool) -> ToolFamilyLiteral:
         """Return the tool family identifier for ``tool``.

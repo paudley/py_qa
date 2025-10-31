@@ -11,6 +11,8 @@ from typing import Final, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from tooling_spec.catalog.types import JSONValue as _CatalogJSONValue
+
 from ...catalog.metadata import catalog_duplicate_preference
 from ..models.sections import (
     CleanConfig,
@@ -692,6 +694,8 @@ class _MypySettingManager:
         if self.override or existing is UNSET:
             self.settings[key] = value
 
+
+Config.model_rebuild(_types_namespace={"JSONValue": _CatalogJSONValue})
 
 __all__ = [
     "Config",

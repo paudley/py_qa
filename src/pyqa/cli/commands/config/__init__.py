@@ -5,18 +5,18 @@
 
 from __future__ import annotations
 
-from typer import Typer
+from pyqa.cli.protocols import TyperLike
 
 from .command import config_app
 
 __all__ = ["register"]
 
 
-def register(app: Typer) -> None:
+def register(app: TyperLike) -> None:
     """Register configuration subcommands on the CLI application.
 
     Args:
-        app: Typer application receiving the configuration command group.
+        app: Typer-compatible application receiving the configuration command group.
     """
 
     app.add_typer(config_app, name="config")

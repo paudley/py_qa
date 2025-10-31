@@ -10,11 +10,18 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS
+from pyqa.interfaces.compliance import QualityConfigSection as QualityConfigSectionProtocol
+from pyqa.interfaces.discovery import FileDiscoveryConfig as FileDiscoveryConfigProtocol
+from pyqa.interfaces.licensing import LicensePolicy as LicensePolicyProtocol
 
-from ..config import FileDiscoveryConfig, LicenseConfig, QualityConfigSection
+from ..config import FileDiscoveryConfig as FileDiscoveryConfigModel
+from ..config import (
+    LicenseConfig,
+)
+from ..config import QualityConfigSection as QualityConfigSectionModel
 from ..config.types import ConfigFragment
 from ..core.runtime.process import CommandOptions, run_command
 from ..discovery.filesystem import FilesystemDiscovery
@@ -23,7 +30,7 @@ from ..filesystem.paths import normalize_path
 from ..tools.settings import tool_setting_schema_as_dict
 from .banned import BannedWordChecker
 from .checks.license_fixer import LicenseFixError, LicenseHeaderFixer
-from .checks.licenses import LicensePolicy, load_license_policy, normalise_notice, verify_file_license
+from .checks.licenses import load_license_policy, normalise_notice, verify_file_license
 from .quality_components import QualityCheck, QualityCheckResult, QualityContext, QualityIssue, QualityIssueLevel
 from .quality_components.hygiene import (
     PythonHygieneCheck,
@@ -91,7 +98,7 @@ class LicenseCheck:
     class EvaluationOptions:
         """Collect inputs required to evaluate a license header."""
 
-        policy: LicensePolicy
+        policy: LicensePolicyProtocol
         root: Path
         fixer: LicenseHeaderFixer | None
         current_year: int | None
@@ -352,7 +359,10 @@ class QualityFileCollector:
 
         if staged:
             git_discovery = GitDiscovery()
-            config = FileDiscoveryConfig(pre_commit=True, include_untracked=True, changed_only=True)
+            config = cast(
+                FileDiscoveryConfigProtocol,
+                FileDiscoveryConfigModel(pre_commit=True, include_untracked=True, changed_only=True),
+            )
             return [path.resolve() for path in git_discovery.discover(config, self.root) if path.exists()]
 
         tracked = list_tracked_files(self.root)
@@ -360,7 +370,7 @@ class QualityFileCollector:
             return [path for path in tracked if path.exists()]
 
         filesystem_discovery = FilesystemDiscovery()
-        config = FileDiscoveryConfig()
+        config = cast(FileDiscoveryConfigProtocol, FileDiscoveryConfigModel())
         return [path.resolve() for path in filesystem_discovery.discover(config, self.root) if path.exists()]
 
     def _resolve(self, path: Path) -> Path:
@@ -380,7 +390,7 @@ class QualityFileCollector:
 class QualityCheckerOptions:
     """Optional parameters used to configure :class:`QualityChecker`."""
 
-    license_policy: LicensePolicy | None = None
+    license_policy: LicensePolicyProtocol | None = None
     license_overrides: LicenseConfig | ConfigFragment | None = None
     files: Sequence[Path] | None = None
     checks: Iterable[str] | None = None
@@ -395,7 +405,7 @@ class QualityChecker:
         self,
         root: Path,
         *,
-        quality: QualityConfigSection,
+        quality: QualityConfigSectionModel,
         options: QualityCheckerOptions | None = None,
     ) -> None:
         """Initialise the quality checker with configuration and options.
@@ -438,7 +448,7 @@ class QualityChecker:
         context = QualityContext(
             root=self.root,
             files=files,
-            quality=self.quality,
+            quality=cast(QualityConfigSectionProtocol, self.quality),
             license_policy=self.license_policy,
             fix=fix,
         )
@@ -596,7 +606,7 @@ def check_commit_message(root: Path, message_file: Path) -> QualityCheckResult:
     return result
 
 
-def ensure_branch_protection(root: Path, quality: QualityConfigSection) -> QualityCheckResult:
+def ensure_branch_protection(root: Path, quality: QualityConfigSectionModel) -> QualityCheckResult:
     """Fail when attempting to operate on a protected branch.
 
     Args:

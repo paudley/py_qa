@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Final, cast
 
-from pyqa.config import Config
+from pyqa.interfaces.config import Config as ConfigProtocol
 from pyqa.interfaces.orchestration_selection import (
     PhaseLiteral,
     SelectionContext,
@@ -37,7 +37,7 @@ class UnknownToolRequestedError(RuntimeError):
 
 
 def build_selection_context(
-    cfg: Config,
+    cfg: ConfigProtocol,
     files: Sequence[Path],
     *,
     detected_languages: Sequence[str],

@@ -9,16 +9,15 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
-from ..config import Config
-from ..interfaces.cache import CacheContextFactory as CacheContextFactoryProtocol
 from ..interfaces.cache import CacheTokenBuilder as CacheTokenBuilderProtocol
 from ..interfaces.cache import CacheVersionStore as CacheVersionStoreProtocol
 from ..interfaces.cache import (
     ResultCacheFactory,
     ResultCacheProtocol,
 )
+from ..interfaces.config import Config as ConfigProtocol
 from .result_store import CachedEntry, CacheRequest, ResultCache
 from .tool_versions import load_versions as _load_versions
 from .tool_versions import save_versions as _save_versions
@@ -54,7 +53,7 @@ class CacheContext:
             files: Files that influence the command output.
 
         Returns:
-            CachedEntry | None: Cached response when valid, otherwise ``None``.
+            CachedEntryProtocol | None: Cached response when valid, otherwise ``None``.
         """
 
         if self.cache is None or self.token is None:
@@ -90,7 +89,7 @@ class DefaultCacheTokenBuilder(CacheTokenBuilderProtocol):
 
         return "default-cache-token"
 
-    def build_token(self, config: Config) -> str:
+    def build_token(self, config: ConfigProtocol) -> str:
         """Build the cache token representing ``config``.
 
         Args:
@@ -101,6 +100,7 @@ class DefaultCacheTokenBuilder(CacheTokenBuilderProtocol):
         """
 
         exec_cfg = config.execution
+        severity_rules = [str(rule) for rule in config.severity_rules]
         components = [
             str(exec_cfg.strict),
             str(exec_cfg.fix_only),
@@ -108,7 +108,7 @@ class DefaultCacheTokenBuilder(CacheTokenBuilderProtocol):
             str(exec_cfg.force_all),
             str(exec_cfg.respect_config),
             str(exec_cfg.line_length),
-            ",".join(sorted(config.severity_rules)),
+            ",".join(sorted(severity_rules)),
         ]
         if config.tool_settings:
             serialized = json.dumps(config.tool_settings, sort_keys=True)
@@ -116,7 +116,7 @@ class DefaultCacheTokenBuilder(CacheTokenBuilderProtocol):
             components.append(digest)
         return "|".join(components)
 
-    def __call__(self, config: Config) -> str:
+    def __call__(self, config: ConfigProtocol) -> str:
         """Return the cache token to support callable usage.
 
         Args:
@@ -156,7 +156,7 @@ class FileSystemCacheVersionStore(CacheVersionStoreProtocol):
 
 
 @dataclass(slots=True)
-class ResultCacheClassFactory(ResultCacheFactory):
+class ResultCacheClassFactory:
     """Wrap a cache class so it satisfies the factory protocol."""
 
     implementation: type[ResultCache]
@@ -170,11 +170,11 @@ class ResultCacheClassFactory(ResultCacheFactory):
     def __call__(self, directory: Path) -> ResultCacheProtocol:
         """Instantiate the wrapped cache class for ``directory``."""
 
-        return self.implementation(directory)
+        return cast(ResultCacheProtocol, self.implementation(directory))
 
 
 @dataclass(slots=True)
-class DefaultCacheContextFactory(CacheContextFactoryProtocol):
+class DefaultCacheContextFactory:
     """Create cache contexts using injectable collaborators."""
 
     result_cache_factory: ResultCacheFactory
@@ -187,7 +187,7 @@ class DefaultCacheContextFactory(CacheContextFactoryProtocol):
 
         return "default-cache-context"
 
-    def build(self, config: Config, root: Path) -> CacheContext:
+    def build(self, config: ConfigProtocol, root: Path) -> CacheContext:
         """Construct a cache context bound to ``config`` and ``root``.
 
         Args:
@@ -224,7 +224,7 @@ _DEFAULT_CONTEXT_FACTORY = DefaultCacheContextFactory(
 )
 
 
-def build_cache_context(cfg: Config, root: Path) -> CacheContext:
+def build_cache_context(cfg: ConfigProtocol, root: Path) -> CacheContext:
     """Build cache helpers for the current configuration.
 
     Args:
@@ -294,7 +294,7 @@ def load_cached_outcome(
     )
 
 
-def build_cache_token(cfg: Config) -> str:
+def build_cache_token(cfg: ConfigProtocol) -> str:
     """Generate the cache token representing the effective execution options.
 
     Args:

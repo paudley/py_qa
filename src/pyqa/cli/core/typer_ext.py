@@ -18,7 +18,7 @@ from click.formatting import HelpFormatter
 from typer.core import TyperCommand, TyperGroup
 from typer.models import OptionInfo, ParameterInfo, ParamMeta
 
-from pyqa.interfaces.cli import CliParameterValue
+from pyqa.cli.protocols import CliParameterValue
 
 from .shared import (
     CommandCallable,

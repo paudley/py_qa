@@ -14,56 +14,141 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from functools import partial
-from importlib import metadata
+from importlib import import_module, metadata
 from importlib.metadata import EntryPoint, EntryPoints
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, TypeAlias, TypeVar, cast
+from typing import TypeAlias, TypeVar, cast
 
+import typer
+
+from pyqa.protocols.cli import (
+    CommandCallable,
+    CommandDecorator,
+    CommandRegistrationOptions,
+    TyperLike,
+    TyperSubApplication,
+)
 from tooling_spec.catalog.plugins import CatalogContribution
 from tooling_spec.catalog.types import JSONValue as CatalogJSONValue
 
-if TYPE_CHECKING:
-    from typer import Typer
-else:  # pragma: no cover - typer may be unavailable in minimal environments
+
+class _FallbackTyper(TyperLike):
+    """Fallback shim used when Typer is not installed."""
+
+    def __init__(self) -> None:
+        """Initialise a Typer-like stand-in with no runtime behaviour."""
+
+        self._commands: dict[str, CommandCallable] = {}
+        self._callbacks: list[CommandCallable] = []
+
+    def register_command(self, name: str, func: CommandCallable) -> None:
+        """Record ``func`` under ``name`` for test visibility.
+
+        Args:
+            name: Command identifier registered with the CLI.
+            func: Callable executed when the command is invoked.
+        """
+
+        self._commands[name] = func
+
+    def command(
+        self,
+        name: str | None = None,
+        *,
+        options: CommandRegistrationOptions | None = None,
+    ) -> CommandDecorator:
+        """Return a decorator that records commands without execution.
+
+        Args:
+            name: Optional command identifier to associate with the decorated function.
+            options: Optional command registration parameters ignored by the fallback implementation.
+
+        Returns:
+            CommandDecorator: Decorator that stores the function and returns it unchanged.
+        """
+
+        del options
+        return cast(CommandDecorator, partial(self._record_command, name=name))
+
+    def callback(
+        self,
+        *,
+        invoke_without_command: bool = False,
+    ) -> CommandDecorator:
+        """Return a decorator that records callbacks for inspection.
+
+        Args:
+            invoke_without_command: Flag indicating whether the callback executes without a sub-command.
+
+        Returns:
+            CommandDecorator: Decorator that stores the callback and returns it unchanged.
+        """
+
+        del invoke_without_command
+        return cast(CommandDecorator, self._record_callback)
+
+    def add_typer(self, sub_command: TyperSubApplication | typer.Typer, *, name: str | None = None) -> None:
+        """Record nested Typer applications for completeness in tests.
+
+        Args:
+            sub_command: Typer-compatible application being registered as a sub-command.
+            name: Optional command name associated with ``sub_command``.
+        """
+
+        del sub_command, name
+
+    def __call__(self) -> None:
+        """Raise an informative error when attempting to invoke the fallback."""
+
+        raise RuntimeError("Typer is unavailable in this environment") from None
+
+    def _record_command(self, func: CommandCallable, *, name: str | None) -> CommandCallable:
+        """Record ``func`` under ``name`` and return the callable unchanged.
+
+        Args:
+            func: Command callable registered with the fallback Typer.
+            name: Optional command identifier used for registration.
+
+        Returns:
+            CommandCallable: The original callable provided by the caller.
+        """
+
+        command_name = name or func.__name__
+        self.register_command(command_name, func)
+        return func
+
+    def _record_callback(self, func: CommandCallable) -> CommandCallable:
+        """Record a callback to mirror Typer's application-level decorators.
+
+        Args:
+            func: Callback callable registered with the fallback Typer.
+
+        Returns:
+            CommandCallable: The original callable provided by the caller.
+        """
+
+        self._callbacks.append(func)
+        return func
+
+
+def _resolve_typer() -> type[TyperLike]:
+    """Return the Typer application class or a fallback stand-in.
+
+    Returns:
+        type[TyperLike]: Concrete Typer class or the local fallback implementation.
+    """
+
     try:
-        from typer import Typer
-    except ModuleNotFoundError:  # pragma: no cover - fallback shim for tooling tests
+        module = import_module("typer")
+    except ModuleNotFoundError:  # pragma: no cover - typer may be unavailable
+        return _FallbackTyper
+    typer_cls = getattr(module, "Typer", None)
+    if typer_cls is None:
+        return _FallbackTyper
+    return typer_cls
 
-        class Typer:
-            """Fallback shim used when Typer is not installed."""
 
-            def __init__(self) -> None:
-                """Initialise a Typer-like stand-in with no runtime behaviour."""
-
-                self._commands: dict[str, Callable[..., None]] = {}
-
-            def register_command(self, name: str, func: Callable[..., None]) -> None:
-                """Record ``func`` under ``name`` for test visibility."""
-
-                self._commands[name] = func
-
-            def command(self, name: str) -> Callable[[Callable[..., _FactoryT]], Callable[..., _FactoryT]]:
-                """Return a decorator that records the command without executing."""
-
-                return cast(
-                    Callable[[Callable[..., _FactoryT]], Callable[..., _FactoryT]],
-                    partial(self._register_command, name),
-                )
-
-            def _register_command(
-                self,
-                name: str,
-                func: Callable[..., _FactoryT],
-            ) -> Callable[..., _FactoryT]:
-                """Store ``func`` under ``name`` and return it unchanged."""
-
-                self.register_command(name, cast(Callable[..., None], func))
-                return func
-
-            def __call__(self) -> None:
-                """Raise an informative error when attempting to invoke the fallback."""
-
-                raise RuntimeError("Typer is unavailable in this environment") from None
+Typer = _resolve_typer()
 
 
 CATALOG_PLUGIN_GROUP = "pyqa.catalog.plugins"
@@ -71,7 +156,7 @@ CLI_PLUGIN_GROUP = "pyqa.cli.plugins"
 DIAGNOSTICS_PLUGIN_GROUP = "pyqa.diagnostics.plugins"
 
 CatalogPluginFactory: TypeAlias = Callable[..., CatalogContribution]
-CLIPluginFactory: TypeAlias = Callable[[Typer], None]
+CLIPluginFactory: TypeAlias = Callable[[TyperLike], None]
 DiagnosticsPlugin: TypeAlias = Callable[..., None] | str | Mapping[str, CatalogJSONValue]
 
 _EntryPointSource: TypeAlias = EntryPoints | Mapping[str, Sequence[EntryPoint]]

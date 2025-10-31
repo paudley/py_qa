@@ -11,9 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from pyqa.core.models import Diagnostic, RawDiagnostic
 from pyqa.core.severity import SeverityRuleView
-
-from ..core.models import Diagnostic, RawDiagnostic
 
 
 @dataclass(frozen=True, slots=True)

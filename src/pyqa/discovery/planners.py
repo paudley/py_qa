@@ -13,8 +13,8 @@ from typing import Final
 from ..catalog.command_options import OptionMapping, compile_option_mappings
 from ..catalog.loader import CatalogIntegrityError
 from ..catalog.types import JSONValue
-from ..tools.base import CommandBuilder, ToolContext
 from ..tools.builtin_helpers import _resolve_path, _setting, _settings_list
+from ..tools.interfaces import CommandBuilder, ToolContext
 from .rules import compile_exclude_arguments, is_under_any
 
 __all__ = ["build_project_scanner"]

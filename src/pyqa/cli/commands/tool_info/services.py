@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Final
+from typing import Final, cast
 
 from pyqa.core.config.loader import ConfigError, ConfigLoader, FieldUpdate
+from pyqa.interfaces.config import Config as ConfigProtocol
 
 from ....catalog.model_catalog import CatalogSnapshot
 from ....catalog.model_tool import ToolDefinition
@@ -50,7 +51,7 @@ def load_configuration(
         raise CLIError(message) from exc
 
     return ToolInfoConfigData(
-        config=load_result.config,
+        config=cast(ConfigProtocol, load_result.config),
         warnings=tuple(load_result.warnings),
         updates=tuple(load_result.updates),
     )

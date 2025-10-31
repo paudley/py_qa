@@ -16,7 +16,7 @@ from pyqa.interfaces.catalog import (
     StrategyRequest,
     ToolDefinition,
 )
-from pyqa.interfaces.cli import CliCommand, CliCommandFactory, CliInvocation
+from pyqa.cli.protocols import CliCommand, CliCommandFactory, CliInvocation
 from pyqa.interfaces.compliance import ComplianceCheck, PolicyEvaluator, RemediationService
 from pyqa.interfaces.config import ConfigMutator, ConfigResolver, ConfigSource
 from pyqa.interfaces.core import ConsoleFactory, LoggerFactory, Serializer

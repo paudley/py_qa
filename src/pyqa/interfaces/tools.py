@@ -9,8 +9,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Final, Literal, Protocol, TypeAlias, runtime_checkable
 
-from pyqa.config.model_defs.config_container import Config
 from pyqa.config.types import ConfigValue
+from pyqa.interfaces.config import Config as ConfigProtocol
 from pyqa.interfaces.discovery import DiscoveryOptions
 
 from .common import CacheControlOptions
@@ -25,45 +25,17 @@ SensitivityLiteral: TypeAlias = Literal["low", "medium", "high", "maximum"]
 class ToolContext(Protocol):
     """Describe the minimum surface area required from tool execution contexts."""
 
-    @property
-    def cfg(self) -> Config | ToolConfiguration:
-        """Return the configuration object bound to the tool context.
+    cfg: ConfigProtocol | ToolConfiguration
+    """Configuration object bound to the tool context."""
 
-        Returns:
-            Config | ToolConfiguration: Configuration instance associated with the context.
-        """
+    root: Path
+    """Execution root directory for the tool invocation."""
 
-        raise NotImplementedError(f"{self.__class__.__qualname__}.cfg must be implemented by runtime contexts")
+    files: tuple[Path, ...]
+    """Immutable collection of files targeted by the execution."""
 
-    @property
-    def root(self) -> Path:
-        """Return the execution root directory for the tool invocation.
-
-        Returns:
-            Path: Root directory used when resolving tool paths.
-        """
-
-        raise NotImplementedError(f"{self.__class__.__qualname__}.root must be implemented by runtime contexts")
-
-    @property
-    def files(self) -> tuple[Path, ...]:
-        """Return the immutable collection of files targeted by the execution.
-
-        Returns:
-            tuple[Path, ...]: Tuple of file paths supplied to the tool.
-        """
-
-        raise NotImplementedError(f"{self.__class__.__qualname__}.files must be implemented by runtime contexts")
-
-    @property
-    def settings(self) -> Mapping[str, ConfigValue]:
-        """Return catalog-derived settings made available to tool builders.
-
-        Returns:
-            Mapping[str, ConfigValue]: Mapping of setting names to their effective values.
-        """
-
-        raise NotImplementedError(f"{self.__class__.__qualname__}.settings must be implemented by runtime contexts")
+    settings: Mapping[str, ConfigValue]
+    """Catalog-derived settings made available to tool builders."""
 
 
 @runtime_checkable

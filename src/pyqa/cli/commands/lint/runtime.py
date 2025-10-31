@@ -11,11 +11,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
+from pyqa.interfaces.config import Config as ConfigProtocol
 from pyqa.interfaces.linting import PreparedLintState as PreparedLintStateView
 
 from ....analysis.bootstrap import register_analysis_services
 from ....catalog.model_catalog import CatalogSnapshot
-from ....config import Config
 from ....core.environment.tool_env.models import PreparedCommand
 from ....core.models import RunResult, ToolOutcome
 from ....discovery import build_default_discovery
@@ -42,7 +42,7 @@ class LintRuntimeContext:
     """Bundle runtime dependencies for lint execution."""
 
     state: PreparedLintStateView
-    config: Config
+    config: ConfigProtocol
     registry: ToolRegistry
     orchestrator: ExecutionPipeline
     hooks: OrchestratorHooks
@@ -227,7 +227,7 @@ class _OrchestratorExecutionPipeline(ExecutionPipeline):
 
         return "orchestrator"
 
-    def run(self, config: Config, *, root: Path) -> RunResult:
+    def run(self, config: ConfigProtocol, *, root: Path) -> RunResult:
         """Execute the orchestrator for ``config`` rooted at ``root``.
 
         Args:
@@ -242,7 +242,7 @@ class _OrchestratorExecutionPipeline(ExecutionPipeline):
 
     def fetch_all_tools(
         self,
-        config: Config,
+        config: ConfigProtocol,
         *,
         root: Path,
         callback: FetchCallback | None = None,
@@ -260,7 +260,7 @@ class _OrchestratorExecutionPipeline(ExecutionPipeline):
 
         return self._orchestrator.fetch_all_tools(config, root=root, callback=callback)
 
-    def plan_tools(self, config: Config, *, root: Path) -> SelectionResult:
+    def plan_tools(self, config: ConfigProtocol, *, root: Path) -> SelectionResult:
         """Return the orchestrator plan without executing actions.
 
         Args:
@@ -340,7 +340,7 @@ def _resolve_plugin_namespace(services: ServiceRegistryProtocol | None) -> Simpl
 def build_lint_runtime_context(
     state: PreparedLintStateView,
     *,
-    config: Config,
+    config: ConfigProtocol,
     dependencies: LintRuntimeDependencies | None = None,
 ) -> LintRuntimeContext:
     """Create a :class:`LintRuntimeContext` ready for lint execution.

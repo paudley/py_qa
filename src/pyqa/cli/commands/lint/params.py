@@ -26,6 +26,7 @@ from ...core.options import (
 
 RUNTIME_CORE_FLAGS: Final[tuple[str, ...]] = (
     "check_closures",
+    "check_conditional_imports",
     "check_signatures",
     "check_cache_usage",
     "check_value_types",
@@ -199,6 +200,7 @@ class RuntimeCoreChecks:
     """Toggle set for core runtime lint checks."""
 
     check_closures: bool
+    check_conditional_imports: bool
     check_signatures: bool
     check_cache_usage: bool
     check_value_types: bool
@@ -252,6 +254,7 @@ class RuntimeCoreFlagOverrides:
     """Boolean overrides for core runtime meta checks."""
 
     check_closures: bool = False
+    check_conditional_imports: bool = False
     check_signatures: bool = False
     check_cache_usage: bool = False
     check_value_types: bool = False

@@ -7,8 +7,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
-from pyqa.config import Config
 from pyqa.discovery.base import SupportsDiscovery, is_within_limits, resolve_limit_paths
+from pyqa.interfaces.config import Config as ConfigProtocol
 
 
 def prepare_runtime(root: Path | None) -> Path:
@@ -24,7 +24,7 @@ def prepare_runtime(root: Path | None) -> Path:
     return root.resolve() if root is not None else Path.cwd()
 
 
-def discover_files(discovery: SupportsDiscovery, cfg: Config, root: Path) -> list[Path]:
+def discover_files(discovery: SupportsDiscovery, cfg: ConfigProtocol, root: Path) -> list[Path]:
     """Return files discovered by ``discovery`` using the config settings.
 
     Args:

@@ -10,7 +10,7 @@ from functools import partial
 from pathlib import Path
 from typing import Protocol
 
-from pyqa.tools.base import ToolContext
+from pyqa.interfaces.tools import ToolContext
 from pyqa.tools.builtin_helpers import _as_bool, _resolve_path, _settings_list
 
 from .types import JSONValue
@@ -233,6 +233,9 @@ def _append_flagged(command: list[str], value: str, *, flag: str | None) -> None
     """
 
     if flag:
+        if flag.endswith("="):
+            command.append(f"{flag}{value}")
+            return
         command.append(flag)
     command.append(value)
 

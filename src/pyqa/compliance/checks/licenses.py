@@ -12,15 +12,19 @@ from collections.abc import Iterable, Mapping, MutableMapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from fnmatch import fnmatch
+from importlib import import_module
 from pathlib import Path
-from typing import Final, Protocol, Self, TypeAlias, cast, runtime_checkable
+from types import ModuleType
+from typing import Final, Protocol, Self, TypeAlias, TypeVar, cast, runtime_checkable
 
+from pyqa.interfaces.licensing import LicensePolicy as LicensePolicyProtocol
 from tooling_spec.catalog.types import JSONValue
 
 LicenseOverrideValue: TypeAlias = JSONValue
 LicenseOverrideMapping: TypeAlias = Mapping[str, LicenseOverrideValue]
 MutableLicenseOverrideMapping: TypeAlias = MutableMapping[str, LicenseOverrideValue]
 PyProjectTable: TypeAlias = Mapping[str, JSONValue]
+AttributeT = TypeVar("AttributeT")
 
 
 def _ensure_project_root_on_path() -> None:
@@ -32,17 +36,31 @@ def _ensure_project_root_on_path() -> None:
         sys.path.insert(0, project_str)
 
 
-try:
-    from pyqa.config import LicenseConfig as _LicenseConfig
-except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
-    _ensure_project_root_on_path()
-    from pyqa.config import LicenseConfig as _LicenseConfig
+def _import_attribute(
+    module_name: str,
+    attribute: str,
+    *,
+    expected_type: type[AttributeT] | None = None,
+) -> AttributeT:
+    """Import ``attribute`` from ``module_name`` ensuring local sources are discoverable.
 
-try:
-    from pyqa.core.config import constants as _core_constants
-except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
-    _ensure_project_root_on_path()
-    from pyqa.core.config import constants as _core_constants
+    Args:
+        module_name: Qualified module path containing ``attribute``.
+        attribute: Attribute name that should be resolved from ``module_name``.
+
+    Returns:
+        AttributeT: Resolved attribute from the imported module.
+    """
+
+    try:
+        module = import_module(module_name)
+    except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
+        _ensure_project_root_on_path()
+        module = import_module(module_name)
+    resolved = getattr(module, attribute)
+    if expected_type is not None and not isinstance(resolved, expected_type):
+        raise TypeError(f"{attribute} from {module_name} does not match expected type {expected_type!r}")
+    return cast(AttributeT, resolved)
 
 
 class LicenseConfigProtocolError(RuntimeError):
@@ -92,15 +110,24 @@ class LicenseConfigProtocol(Protocol):
         raise LicenseConfigProtocolError(msg)
 
 
-LicenseConfigRuntime = cast(type[LicenseConfigProtocol], _LicenseConfig)
-DEFAULT_EXCLUDE_DIRS: Final[frozenset[str]] = frozenset(cast(Iterable[str], _core_constants.ALWAYS_EXCLUDE_DIRS))
-
-
 KNOWN_LICENSE_SNIPPETS: Final[Mapping[str, str]] = {
     "MIT": "Permission is hereby granted, free of charge",
     "Apache-2.0": "Licensed under the Apache License, Version 2.0",
     "BSD-3-Clause": "Redistribution and use in source and binary forms",
 }
+
+_LicenseConfig: type[LicenseConfigProtocol] = cast(
+    type[LicenseConfigProtocol],
+    _import_attribute("pyqa.config", "LicenseConfig", expected_type=type),
+)
+_core_constants: ModuleType = _import_attribute(
+    "pyqa.core.config",
+    "constants",
+    expected_type=ModuleType,
+)
+
+LicenseConfigRuntime = cast(type[LicenseConfigProtocol], _LicenseConfig)
+DEFAULT_EXCLUDE_DIRS: Final[frozenset[str]] = frozenset(cast(Iterable[str], _core_constants.ALWAYS_EXCLUDE_DIRS))
 
 PYPROJECT_FILENAME: Final[str] = "pyproject.toml"
 PROJECT_TABLE_KEY: Final[str] = "project"
@@ -271,7 +298,7 @@ def _normalize_pyproject_table(value: Mapping[str, JSONValue]) -> PyProjectTable
 def load_license_policy(
     root: Path,
     overrides: LicenseConfigProtocol | LicenseOverrideMapping | None = None,
-) -> LicensePolicy:
+) -> LicensePolicyProtocol:
     """Derive a license enforcement policy from project metadata and overrides.
 
     Args:
@@ -279,7 +306,7 @@ def load_license_policy(
         overrides: Optional configuration overriding metadata-derived values.
 
     Returns:
-        LicensePolicy: Policy describing enforcement expectations.
+        LicensePolicyProtocol: Policy describing enforcement expectations.
     """
     metadata = load_project_license(root)
     if isinstance(overrides, LicenseConfigRuntime):
@@ -415,7 +442,7 @@ def _extract_license_copyright(text: str) -> str | None:
 def verify_file_license(
     path: Path,
     content: str,
-    policy: LicensePolicy,
+    policy: LicensePolicyProtocol,
     root: Path,
     *,
     current_year: int | None = None,
@@ -444,7 +471,11 @@ def verify_file_license(
     return issues
 
 
-def _collect_spdx_issues(content: str, lower_content: str, policy: LicensePolicy) -> list[str]:
+def _collect_spdx_issues(
+    content: str,
+    lower_content: str,
+    policy: LicensePolicyProtocol,
+) -> list[str]:
     """Collect SPDX-related issues for ``content`` under ``policy``.
 
     Args:
@@ -484,7 +515,11 @@ def _collect_spdx_issues(content: str, lower_content: str, policy: LicensePolicy
     return issues
 
 
-def _collect_notice_issues(content: str, policy: LicensePolicy, current_year: int) -> list[str]:
+def _collect_notice_issues(
+    content: str,
+    policy: LicensePolicyProtocol,
+    current_year: int,
+) -> list[str]:
     """Return notice-related issues for *content* under *policy*.
 
     Args:
@@ -625,7 +660,7 @@ class _NoticeParts:
 
 
 def expected_notice(
-    policy: LicensePolicy,
+    policy: LicensePolicyProtocol,
     observed_notice: str | None,
     *,
     current_year: int | None = None,

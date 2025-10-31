@@ -16,8 +16,8 @@ from ..diagnostics.json_import import JsonDiagnosticExtractor, JsonDiagnosticsCo
 from ..discovery.planners import build_project_scanner
 from ..discovery.rules import is_under_any, normalize_path_requirement, path_matches_requirements
 from ..parsers.base import JsonParser, JsonTransform, TextParser, TextTransform
-from ..tools.base import CommandBuilder, ToolContext
 from ..tools.builtin_helpers import _resolve_path, download_tool_artifact
+from ..tools.interfaces import CommandBuilder, ToolContext
 from .command_options import (
     OptionMapping,
     command_option_map,

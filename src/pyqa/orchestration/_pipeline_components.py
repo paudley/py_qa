@@ -20,8 +20,8 @@ from pyqa.core.environment.tool_env import (
 from pyqa.core.runtime.process import CommandOptions, CommandOverrideMapping
 from pyqa.interfaces.analysis import AnnotationProvider, ContextResolver, FunctionScaleEstimator
 
-from ..config import Config
 from ..discovery.base import SupportsDiscovery
+from ..interfaces.config import Config as ConfigProtocol
 from ..tools import Tool, ToolContext
 from ..tools.registry import ToolRegistry
 from .action_executor import (
@@ -105,7 +105,7 @@ class _RuntimeContext:
 class _ActionLoopContext:
     """Immutable data required to process an individual tool action."""
 
-    cfg: Config
+    cfg: ConfigProtocol
     environment: ExecutionEnvironment
     state: ExecutionState
     tool: Tool

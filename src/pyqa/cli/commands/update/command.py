@@ -13,6 +13,7 @@ from typing import Annotated, Final, Literal, cast
 import click
 import typer
 
+from pyqa.cli.protocols import TyperAdapter
 from pyqa.core.config.loader import ConfigError, ConfigLoader, ConfigLoadResult
 from pyqa.runtime.installers.update import (
     DEFAULT_STRATEGIES,
@@ -31,9 +32,10 @@ from ...core.shared import Depends
 from ...core.typer_ext import TyperAppConfig, create_typer
 from .models import UpdateOptions, build_update_options
 
-update_app = create_typer(
+_UPDATE_TY = create_typer(
     config=TyperAppConfig(name="update", help_text="Update dependencies across detected workspaces."),
 )
+update_app = TyperAdapter(_UPDATE_TY)
 
 ManagerNameLiteral = Literal["go", "rust", "yarn", "npm", "pnpm", "python"]
 

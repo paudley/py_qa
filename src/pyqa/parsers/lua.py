@@ -11,7 +11,7 @@ from typing import Final
 from pyqa.core.severity import Severity
 
 from ..core.models import RawDiagnostic
-from ..tools.base import ToolContext
+from ..interfaces.tools import ToolContext
 from .base import (
     DiagnosticDetails,
     DiagnosticLocation,

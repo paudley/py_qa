@@ -6,12 +6,10 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from pyqa.core.models import Diagnostic, RawDiagnostic, ToolOutcome
-
-if TYPE_CHECKING:  # pragma: no cover - typing only
-    from .base import ToolContext
+from pyqa.interfaces.tools import ToolContext
 
 
 @runtime_checkable
@@ -116,6 +114,51 @@ class ParserLike(Protocol):
 
 
 @runtime_checkable
+class ParserContract(Protocol):
+    """Protocol describing objects exposing a parse method."""
+
+    def parse(
+        self,
+        stdout: Sequence[str],
+        stderr: Sequence[str],
+        *,
+        context: ToolContext,
+    ) -> Sequence[RawDiagnostic | Diagnostic]:
+        """Parse diagnostics emitted by a tool invocation.
+
+        Args:
+            stdout: Lines emitted on standard output by the external tool.
+            stderr: Lines emitted on standard error by the external tool.
+            context: Tool execution context describing configuration and files.
+
+        Returns:
+            Sequence[RawDiagnostic | Diagnostic]: Parsed diagnostics derived from the tool output streams.
+        """
+
+        ...
+
+    def __call__(
+        self,
+        stdout: Sequence[str],
+        stderr: Sequence[str],
+        *,
+        context: ToolContext,
+    ) -> Sequence[RawDiagnostic | Diagnostic]:
+        """Return parsed diagnostics when invoked as a callable.
+
+        Args:
+            stdout: Lines emitted on standard output by the external tool.
+            stderr: Lines emitted on standard error by the external tool.
+            context: Tool execution context describing configuration and files.
+
+        Returns:
+            Sequence[RawDiagnostic | Diagnostic]: Parsed diagnostics produced by :meth:`parse`.
+        """
+
+        return self.parse(stdout, stderr, context=context)
+
+
+@runtime_checkable
 class CommandBuilder(Protocol):
     """Build a command for execution based on the tool context."""
 
@@ -169,6 +212,35 @@ class CommandBuilderLike(Protocol):
 
         Args:
             ctx: Tool execution context describing files and configuration.
+
+        Returns:
+            Sequence[str]: Command arguments produced by :meth:`build`.
+        """
+
+        return self.build(ctx)
+
+
+@runtime_checkable
+class CommandBuilderContract(Protocol):
+    """Protocol describing objects that expose a build method."""
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        """Return command arguments for the provided context.
+
+        Args:
+            ctx: Tool execution context containing configuration and file selections.
+
+        Returns:
+            Sequence[str]: Command arguments produced by the builder.
+        """
+
+        ...
+
+    def __call__(self, ctx: ToolContext) -> Sequence[str]:
+        """Invoke :meth:`build` allowing builders to act as callables.
+
+        Args:
+            ctx: Tool execution context containing configuration and file selections.
 
         Returns:
             Sequence[str]: Command arguments produced by :meth:`build`.
@@ -232,8 +304,11 @@ class InternalActionRunner(Protocol):
 __all__ = [
     "CommandBuilder",
     "CommandBuilderLike",
+    "CommandBuilderContract",
     "InstallerCallable",
     "InternalActionRunner",
     "Parser",
     "ParserLike",
+    "ParserContract",
+    "ToolContext",
 ]

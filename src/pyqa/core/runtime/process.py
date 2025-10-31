@@ -12,16 +12,12 @@ import subprocess  # nosec B404 suppression_valid: Shell-free subprocess wrapper
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, Literal
+from subprocess import CompletedProcess
+from typing import Final, Literal
 
 CommandOverrideValue = Path | Mapping[str, str] | bool | float | int | None
 CommandOptionKey = Literal["cwd", "env", "check", "capture_output", "text", "timeout", "discard_stdin"]
 CommandOverrideMapping = Mapping[CommandOptionKey, CommandOverrideValue]
-
-if TYPE_CHECKING:
-    # Bandit: type-only import of subprocess metadata is part of the safe wrapper.
-    # nosec B404 suppression_valid: Type-only import retains annotations for safety.
-    from subprocess import CompletedProcess as _CompletedProcess
 
 _COMMAND_KEYS: Final[frozenset[CommandOptionKey]] = frozenset(
     {"cwd", "env", "check", "capture_output", "text", "timeout", "discard_stdin"}
@@ -265,7 +261,7 @@ def run_command(
     *,
     options: CommandOptions | None = None,
     overrides: CommandOverrideMapping | None = None,
-) -> _CompletedProcess[str]:
+) -> CompletedProcess[str]:
     """Execute ``args`` after normalising the executable path.
 
     Args:
@@ -290,7 +286,7 @@ def run_command(
     try:
         # Bandit: commands originate from vetted tool configurations; we pass
         # argument lists directly without shell expansion.
-        completed: _CompletedProcess[str] = subprocess.run(  # nosec B603 - controlled arguments, not user supplied
+        completed: CompletedProcess[str] = subprocess.run(  # nosec B603 - controlled arguments, not user supplied
             normalized,
             cwd=str(resolved_options.cwd) if resolved_options.cwd is not None else None,
             env=dict(resolved_options.env) if resolved_options.env is not None else None,

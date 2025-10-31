@@ -7,14 +7,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import TYPE_CHECKING, Final, Literal
+from typing import Final, Literal
 
+from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
 from rich.text import Text
 
 from pyqa.runtime.console.manager import get_console_manager
 
-from ...core.runtime import ServiceResolutionError
+from ....core.models import RunResult, ToolOutcome
+from ....core.runtime import ServiceResolutionError
+from ....interfaces.orchestration import OrchestratorHooks
+from .runtime import LintRuntimeContext
 
 ProgressStatusLiteral = Literal[
     "waiting",
@@ -33,14 +37,6 @@ STATUS_POST_PROCESSING: Final[ProgressStatusLiteral] = "post-processing"
 STATUS_RENDERING: Final[ProgressStatusLiteral] = "rendering output"
 STATUS_DONE: Final[ProgressStatusLiteral] = "done"
 STATUS_ISSUES: Final[ProgressStatusLiteral] = "issues detected"
-
-if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from rich.console import Console
-
-    from pyqa.core.models import RunResult, ToolOutcome
-    from pyqa.interfaces.orchestration import OrchestratorHooks
-
-    from .runtime import LintRuntimeContext
 
 
 @dataclass(slots=True)

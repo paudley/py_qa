@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typer import Typer
+from pyqa.cli.protocols import TyperLike
 
 from ...core.shared import register_command
 from .command import check_banned_words
@@ -13,11 +13,11 @@ from .command import check_banned_words
 __all__ = ["register"]
 
 
-def register(app: Typer) -> None:
+def register(app: TyperLike) -> None:
     """Register the banned words command.
 
     Args:
-        app: Typer application receiving the banned words command registration.
+        app: Typer-compatible application receiving the banned words command registration.
     """
 
     register_command(app, check_banned_words, name="check-banned-words")

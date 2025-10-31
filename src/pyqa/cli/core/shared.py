@@ -8,17 +8,18 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final, Generic, TypeVar, overload
+from typing import Final, Generic, TypeVar, cast, overload
 
 import typer
 from rich.console import Console
 from rich.text import Text
 
+from pyqa.cli.protocols import TyperLike
+from pyqa.protocols.cli import CommandRegistrationOptions
+
 from ...core.logging import fail as core_fail
 from ...core.logging import ok as core_ok
 from ...core.logging import warn as core_warn
-
-# removed unused overload import
 
 
 class CLIError(RuntimeError):
@@ -144,7 +145,7 @@ CommandDecoratorCallable = Callable[[CommandCallable], CommandCallable]
 class _CommandDecorator:
     """Callable helper registering Typer commands without nested closures."""
 
-    app: typer.Typer
+    app: TyperLike
     name: str | None
     help_text: str | None
 
@@ -158,14 +159,23 @@ class _CommandDecorator:
             CommandCallable: Callback returned by Typer registration.
         """
 
-        return self.app.command(name=self.name, help=self.help_text)(func)
+        try:
+            decorator: CommandDecoratorCallable = self.app.command(
+                name=self.name,
+                help_text=self.help_text,
+            )
+        except TypeError:
+            typer_app = cast(typer.Typer, self.app)
+            command_fn = cast(Callable[..., CommandDecoratorCallable], typer_app.command)
+            decorator = command_fn(name=self.name, help=self.help_text)
+        return decorator(func)
 
 
 @dataclass(slots=True)
 class _CallbackDecorator:
     """Callable helper registering Typer callbacks with cached metadata."""
 
-    app: typer.Typer
+    app: TyperLike
     invoke_without_command: bool
 
     def __call__(self, func: CommandCallable) -> CommandCallable:
@@ -178,11 +188,14 @@ class _CallbackDecorator:
             CommandCallable: Callback returned by Typer registration.
         """
 
-        return self.app.callback(invoke_without_command=self.invoke_without_command)(func)
+        decorator: CommandDecoratorCallable = self.app.callback(
+            invoke_without_command=self.invoke_without_command,
+        )
+        return decorator(func)
 
 
 def command_decorator(
-    app: typer.Typer,
+    app: TyperLike,
     *,
     name: str | None = None,
     help_text: str | None = None,
@@ -190,7 +203,7 @@ def command_decorator(
     """Return a decorator that registers a command when applied.
 
     Args:
-        app: Typer application receiving the command registration.
+        app: Typer-compatible application receiving the command registration.
         name: Optional explicit command name to register.
         help_text: Help text displayed in CLI usage output.
 
@@ -207,38 +220,60 @@ def command_decorator(
     return helper
 
 
-if TYPE_CHECKING:
+@overload
+def register_command(
+    app: TyperLike,
+    callback: CommandCallable,
+    *,
+    name: str | None = None,
+    help_text: str | None = None,
+) -> CommandCallable:
+    """Overload enabling immediate registration.
 
-    @overload
-    def register_command(
-        app: typer.Typer,
-        callback: CommandCallable,
-        *,
-        name: str | None = None,
-        help_text: str | None = None,
-    ) -> CommandCallable: ...
+    Args:
+        app: Typer-compatible application receiving the command registration.
+        callback: Command callable registered immediately.
+        name: Optional explicit command name.
+        help_text: Optional help text displayed in CLI usage output.
 
-    @overload
-    def register_command(
-        app: typer.Typer,
-        callback: None = ...,
-        *,
-        name: str | None = None,
-        help_text: str | None = None,
-    ) -> CommandDecoratorCallable: ...
+    Returns:
+        CommandCallable: Registered command callable returned by Typer.
+    """
+    ...
+
+
+@overload
+def register_command(
+    app: TyperLike,
+    callback: None = ...,
+    *,
+    name: str | None = None,
+    help_text: str | None = None,
+) -> CommandDecoratorCallable:
+    """Overload returning a decorator for deferred registration.
+
+    Args:
+        app: Typer-compatible application receiving the command registration.
+        name: Optional explicit command name.
+        help_text: Optional help text displayed in CLI usage output.
+
+    Returns:
+        CommandDecoratorCallable: Decorator used to register the command lazily.
+    """
+    ...
 
 
 def register_command(
-    app: typer.Typer,
+    app: TyperLike,
     callback: CommandCallable | None = None,
     *,
     name: str | None = None,
     help_text: str | None = None,
 ) -> CommandDecoratorCallable | CommandCallable:
-    """Register ``callback`` on ``app`` with consistent metadata handling.
+    """Register a command on ``app`` with consistent metadata handling.
 
     Args:
-        app: Typer application receiving the command registration.
+        app: Typer-compatible application receiving the command registration.
         callback: Optional callable to register immediately.
         name: Optional explicit command name.
         help_text: Help text shown in CLI usage output.
@@ -259,14 +294,14 @@ def register_command(
 
 
 def callback_decorator(
-    app: typer.Typer,
+    app: TyperLike,
     *,
     invoke_without_command: bool = False,
 ) -> CommandDecoratorCallable:
     """Return a decorator that registers a Typer callback when applied.
 
     Args:
-        app: Typer application receiving the callback registration.
+        app: Typer-compatible application receiving the callback registration.
         invoke_without_command: Whether the callback fires without subcommands.
 
     Returns:
@@ -280,27 +315,47 @@ def callback_decorator(
     return helper
 
 
-if TYPE_CHECKING:
+@overload
+def register_callback(
+    app: TyperLike,
+    callback: CommandCallable,
+    *,
+    invoke_without_command: bool = False,
+) -> CommandCallable:
+    """Overload supporting immediate callback registration.
 
-    @overload
-    def register_callback(
-        app: typer.Typer,
-        callback: CommandCallable,
-        *,
-        invoke_without_command: bool = False,
-    ) -> CommandCallable: ...
+    Args:
+        app: Typer-compatible application receiving the callback registration.
+        callback: Callback registered immediately on the application.
+        invoke_without_command: Whether the callback should run without subcommands.
 
-    @overload
-    def register_callback(
-        app: typer.Typer,
-        callback: None = ...,
-        *,
-        invoke_without_command: bool = False,
-    ) -> CommandDecoratorCallable: ...
+    Returns:
+        CommandCallable: Registered callback returned by Typer.
+    """
+    ...
+
+
+@overload
+def register_callback(
+    app: TyperLike,
+    callback: None = ...,
+    *,
+    invoke_without_command: bool = False,
+) -> CommandDecoratorCallable:
+    """Overload returning a decorator for deferred callback registration.
+
+    Args:
+        app: Typer-compatible application receiving the callback registration.
+        invoke_without_command: Whether the callback should run without subcommands.
+
+    Returns:
+        CommandDecoratorCallable: Decorator used to register the callback lazily.
+    """
+    ...
 
 
 def register_callback(
-    app: typer.Typer,
+    app: TyperLike,
     callback: CommandCallable | None = None,
     *,
     invoke_without_command: bool = False,
@@ -308,7 +363,7 @@ def register_callback(
     """Register a Typer callback on ``app`` with consistent defaults.
 
     Args:
-        app: Typer application receiving the callback registration.
+        app: Typer-compatible application receiving the callback registration.
         callback: Optional callable to register immediately.
         invoke_without_command: Whether the callback triggers without
             subcommands.

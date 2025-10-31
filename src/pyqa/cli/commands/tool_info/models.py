@@ -11,10 +11,10 @@ from pathlib import Path
 from rich.console import Console
 
 from pyqa.core.config.loader import FieldUpdate
+from pyqa.interfaces.config import Config as ConfigProtocol
 
 from ....catalog.model_catalog import CatalogSnapshot
 from ....catalog.model_tool import ToolDefinition
-from ....config import Config
 from ....config.types import ConfigValue
 from ....tools.base import Tool
 from ...core.shared import CLIError
@@ -28,7 +28,7 @@ class ToolInfoInputs:
     tool_name: str
     root: Path
     console: Console
-    cfg: Config | None
+    cfg: ConfigProtocol | None
     catalog_snapshot: CatalogSnapshot | None
 
 
@@ -36,7 +36,7 @@ class ToolInfoInputs:
 class ToolInfoConfigData:
     """Configuration payload used during tool information rendering."""
 
-    config: Config
+    config: ConfigProtocol
     warnings: tuple[str, ...]
     updates: tuple[FieldUpdate, ...]
 

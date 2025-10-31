@@ -18,6 +18,9 @@ SUPPRESSIONS_HELP: Final[str] = "Run the internal suppression checker and exit."
 TYPING_HELP: Final[str] = "Run the strict typing checker and exit."
 MISSING_HELP: Final[str] = "Run the missing functionality detector and exit."
 CLOSURES_HELP: Final[str] = "Run the closure/partial usage checker and exit."
+CONDITIONAL_IMPORTS_HELP: Final[str] = (
+    "Run the conditional import checker and exit (imports must be hoisted and abstractions live under interfaces)."
+)
 SIGNATURES_HELP: Final[str] = "Run the function signature width checker and exit."
 CACHE_HELP: Final[str] = "Run the functools cache usage checker and exit."
 PYQA_RULES_HELP: Final[str] = "Enable pyqa-specific lint rules even when running outside the pyqa repository."
@@ -69,6 +72,7 @@ __all__ = [
     "CHECK_DI_HELP",
     "CHECK_INTERFACES_HELP",
     "CHECK_MODULE_DOCS_HELP",
+    "CONDITIONAL_IMPORTS_HELP",
     "CLOSURES_HELP",
     "COPYRIGHT_HELP",
     "DOCSTRINGS_HELP",

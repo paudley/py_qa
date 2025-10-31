@@ -12,8 +12,9 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
+from pyqa.interfaces.config import Config as ConfigProtocol
+
 from ....catalog.model_catalog import CatalogSnapshot
-from ....config import Config
 from ...core.shared import CLIError, build_cli_logger
 from .models import ToolInfoInputs
 from .rendering import (
@@ -31,7 +32,7 @@ def run_tool_info(
     tool_name: str,
     root: Path,
     *,
-    cfg: Config | None = None,
+    cfg: ConfigProtocol | None = None,
     console: Console | None = None,
     catalog_snapshot: CatalogSnapshot | None = None,
 ) -> int:

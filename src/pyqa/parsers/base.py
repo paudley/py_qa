@@ -14,7 +14,7 @@ from pyqa.core.serialization import JsonValue
 from pyqa.core.severity import Severity
 
 from ..core.models import RawDiagnostic
-from ..tools.base import Parser, ToolContext
+from ..tools.interfaces import Parser, ToolContext
 
 JsonTransform = Callable[[JsonValue, ToolContext], Sequence[RawDiagnostic]]
 TextTransform = Callable[[Sequence[str], ToolContext], Sequence[RawDiagnostic]]

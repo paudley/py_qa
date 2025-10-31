@@ -6,9 +6,11 @@
 from __future__ import annotations
 
 from pyqa.core.models import RunResult
+from pyqa.interfaces.config import Config as ConfigProtocol
+from pyqa.interfaces.linting import CLILogger as CLILoggerView
+from pyqa.interfaces.linting import LintOutputArtifacts
 
 from ....analysis.providers import NullAnnotationProvider
-from ....config import Config
 from ....interfaces.analysis import AnnotationProvider
 from ....reporting import render
 from ....reporting.output.highlighting import set_annotation_provider as set_highlighting_annotation_provider
@@ -21,16 +23,14 @@ from ....reporting.presenters.emitters import (
     write_pr_summary,
     write_sarif_report,
 )
-from ...core.shared import CLILogger
-from .params import LintOutputArtifacts
 
 
 def handle_reporting(
     result: RunResult,
-    config: Config,
+    config: ConfigProtocol,
     artifacts: LintOutputArtifacts,
     *,
-    logger: CLILogger | None = None,
+    logger: CLILoggerView | None = None,
     annotation_provider: AnnotationProvider | None = None,
 ) -> None:
     """Render console output and emit optional artifacts for ``pyqa lint``.

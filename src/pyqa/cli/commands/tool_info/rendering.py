@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import cast
 
 from rich import box
 from rich.console import Console
@@ -15,11 +16,13 @@ from rich.pretty import Pretty
 from rich.table import Table
 
 from pyqa.core.config.loader import FieldUpdate
+from pyqa.interfaces.config import Config as ConfigProtocol
+from pyqa.interfaces.tools import ToolContext as ToolContextView
 
 from ....catalog.model_tool import ToolDefinition
-from ....config import Config
 from ....config.types import ConfigValue
-from ....tools.base import Tool, ToolContext
+from ....tools.base import Tool
+from ....tools.base import ToolContext as ToolContextModel
 from ...core.utils import ToolStatus
 
 
@@ -67,7 +70,7 @@ def build_metadata_table(
 
 def build_actions_table(
     tool: Tool,
-    cfg: Config,
+    cfg: ConfigProtocol,
     root: Path,
     overrides: dict[str, ConfigValue],
 ) -> Table:
@@ -93,13 +96,13 @@ def build_actions_table(
         action_type = "fix" if action.is_fix else "check"
         if action.ignore_exit:
             action_type += " (ignore-exit)"
-        context = ToolContext(
+        context = ToolContextModel(
             cfg=cfg,
             root=root,
             files=tuple(),
             settings=dict(overrides) if overrides else {},
         )
-        command = action.build_command(context)
+        command = action.build_command(cast(ToolContextView, context))
         command_str = " ".join(str(part) for part in command) if command else "-"
         table.add_row(action.name, action_type, command_str, action.description or "-")
     return table

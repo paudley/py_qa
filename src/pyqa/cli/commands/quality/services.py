@@ -7,9 +7,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 from pyqa.core.config.constants import PY_QA_DIR_NAME
+from pyqa.interfaces.config import Config as ConfigProtocol
 from pyqa.platform.workspace import is_py_qa_workspace
 
 from ....compliance.quality import QualityCheckResult
@@ -44,9 +45,10 @@ def load_quality_context(
 
     load_result = load_config_result(options.root, logger=logger)
 
+    config_view = cast(ConfigProtocol, load_result.config)
     context = QualityConfigContext(
         root=options.root,
-        config=load_result.config,
+        config=config_view,
         options=options,
         warnings=tuple(load_result.warnings),
     )
@@ -164,7 +166,9 @@ def _apply_workspace_protections(context: QualityConfigContext) -> None:
     license_config = context.config.license
 
     if extra_skip not in quality_config.skip_globs:
-        quality_config.skip_globs.append(extra_skip)
+        updated_skip_globs = list(quality_config.skip_globs)
+        updated_skip_globs.append(extra_skip)
+        quality_config.skip_globs = updated_skip_globs
     if extra_skip not in license_config.exceptions:
         license_config.exceptions.append(extra_skip)
 

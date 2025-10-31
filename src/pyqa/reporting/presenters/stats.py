@@ -14,11 +14,11 @@ from rich.text import Text
 
 from pyqa.runtime.console.manager import get_console_manager
 
-from ...config import OutputConfig
 from ...core.metrics import SUPPRESSION_LABELS, FileMetrics, compute_file_metrics
 from ...core.models import RunResult
 from ...core.serialization import safe_int
 from ...filesystem.paths import normalize_path_key
+from ...interfaces.config import OutputConfig as OutputConfigProtocol
 
 
 @dataclass(slots=True)
@@ -42,7 +42,7 @@ class StatsSnapshot:
     actions: ActionSummary
 
 
-def emit_stats_panel(result: RunResult, cfg: OutputConfig, diagnostics_count: int) -> None:
+def emit_stats_panel(result: RunResult, cfg: OutputConfigProtocol, diagnostics_count: int) -> None:
     """Render the statistics panel when stats output is enabled.
 
     Args:
@@ -93,7 +93,7 @@ def compute_stats_snapshot(result: RunResult, diagnostics_count: int) -> StatsSn
     )
 
 
-def create_stats_panel(snapshot: StatsSnapshot, cfg: OutputConfig) -> Panel:
+def create_stats_panel(snapshot: StatsSnapshot, cfg: OutputConfigProtocol) -> Panel:
     """Create a Rich panel displaying lint statistics.
 
     Args:

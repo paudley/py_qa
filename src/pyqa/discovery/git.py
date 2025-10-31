@@ -7,8 +7,8 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
 
-from ..config import FileDiscoveryConfig
 from ..core.runtime.process import CommandOptions, run_command
+from ..interfaces.discovery import FileDiscoveryConfig
 from .base import DiscoveryStrategy, is_within_limits, resolve_limit_paths
 
 GitRunner = Callable[[Sequence[str], Path], list[str]]

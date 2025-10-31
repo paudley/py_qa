@@ -6,18 +6,18 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, Protocol, TypeVar, runtime_checkable
 
-ValueT = TypeVar("ValueT")
+from pyqa.cache.result_store import CachedEntry, CacheRequest
+from pyqa.core.metrics import FileMetrics
+from pyqa.core.models import ToolOutcome
 
 if TYPE_CHECKING:
-    from pyqa.cache.context import CacheContext
-    from pyqa.cache.result_store import CachedEntry, CacheRequest
-    from pyqa.config.models import Config
-    from pyqa.core.metrics import FileMetrics
-    from pyqa.core.models import ToolOutcome
+    from .config import Config
+
+ValueT = TypeVar("ValueT")
 
 
 class CacheProvider(Protocol, Generic[ValueT]):
@@ -128,6 +128,31 @@ class ResultCacheFactory(Protocol):
         raise NotImplementedError
 
 
+@runtime_checkable
+class CacheContextProtocol(Protocol):
+    """Represent cache configuration and helpers for a single run."""
+
+    cache_dir: Path
+    token: str | None
+
+    @property
+    def cache(self) -> ResultCacheProtocol | None:
+        """Return the result cache bound to the current context."""
+
+        ...
+
+    def load_cached_outcome(
+        self,
+        *,
+        tool_name: str,
+        action_name: str,
+        cmd: Sequence[str],
+        files: Sequence[Path],
+    ) -> CachedEntry | None:
+        """Return a cached entry associated with the provided invocation."""
+        ...
+
+
 class CacheVersionStore(Protocol):
     """Provide persistence for cache-aware tool version metadata."""
 
@@ -194,7 +219,7 @@ class CacheContextFactory(Protocol):
         raise NotImplementedError
 
     @abstractmethod
-    def build(self, config: Config, root: Path) -> CacheContext:
+    def build(self, config: Config, root: Path) -> CacheContextProtocol:
         """Return the cache context bound to ``config`` and ``root``.
 
         Args:
@@ -202,12 +227,13 @@ class CacheContextFactory(Protocol):
             root: Repository root used for cache derivation.
 
         Returns:
-            CacheContext: Cache context configured for the execution.
+            CacheContextProtocol: Cache context configured for the execution.
         """
         raise NotImplementedError
 
 
 __all__ = [
+    "CacheContextProtocol",
     "CacheContextFactory",
     "CacheProvider",
     "CacheTokenBuilder",

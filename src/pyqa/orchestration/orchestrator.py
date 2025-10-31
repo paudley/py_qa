@@ -23,12 +23,12 @@ from ..analysis.services import (
 )
 from ..analysis.suppression import apply_suppression_hints
 from ..cache.context import CacheContext, build_cache_context
-from ..config import Config
 from ..core.logging import warn
 from ..core.models import RunResult
 from ..core.runtime import ServiceContainer, ServiceResolutionError, register_default_services
 from ..diagnostics import build_severity_rules, dedupe_outcomes
 from ..discovery.base import SupportsDiscovery
+from ..interfaces.config import Config as ConfigProtocol
 from ..interfaces.orchestration import OrchestratorHooks
 from ..interfaces.runtime import ServiceRegistryProtocol
 from ..tools.registry import ToolRegistry
@@ -75,7 +75,7 @@ def _noop_debug(message: str) -> None:
 
 def _resolve_cache_builder(
     services: ServiceRegistryProtocol | None,
-) -> Callable[[Config, Path], CacheContext]:
+) -> Callable[[ConfigProtocol, Path], CacheContext]:
     """Return the cache context builder available from ``services``.
 
     Args:
@@ -94,7 +94,7 @@ def _resolve_cache_builder(
         return build_cache_context
     if not callable(builder_candidate):
         return build_cache_context
-    return cast(Callable[[Config, Path], CacheContext], builder_candidate)
+    return cast(Callable[[ConfigProtocol, Path], CacheContext], builder_candidate)
 
 
 @dataclass(frozen=True)
@@ -248,7 +248,7 @@ class Orchestrator(_OrchestratorActionMixin):
 
         return self._analysis.annotation
 
-    def run(self, cfg: Config, *, root: Path | None = None) -> RunResult:
+    def run(self, cfg: ConfigProtocol, *, root: Path | None = None) -> RunResult:
         """Execute configured tools and aggregate their outcomes.
 
         Args:
@@ -308,7 +308,7 @@ class Orchestrator(_OrchestratorActionMixin):
 
     def plan_tools(
         self,
-        cfg: Config,
+        cfg: ConfigProtocol,
         *,
         root: Path | None = None,
     ) -> SelectionResult:
@@ -328,7 +328,7 @@ class Orchestrator(_OrchestratorActionMixin):
 
     def fetch_all_tools(
         self,
-        cfg: Config,
+        cfg: ConfigProtocol,
         *,
         root: Path | None = None,
         callback: FetchCallback | None = None,
@@ -370,7 +370,7 @@ class Orchestrator(_OrchestratorActionMixin):
 
     def _build_environment(
         self,
-        cfg: Config,
+        cfg: ConfigProtocol,
         root: Path | None,
     ) -> tuple[ExecutionEnvironment, list[Path]]:
         """Return the execution environment and discovered files for ``cfg``.
@@ -399,7 +399,7 @@ class Orchestrator(_OrchestratorActionMixin):
 
     def _plan_from_environment(
         self,
-        cfg: Config,
+        cfg: ConfigProtocol,
         environment: ExecutionEnvironment,
         matched_files: Sequence[Path],
     ) -> SelectionResult:
@@ -422,7 +422,7 @@ class Orchestrator(_OrchestratorActionMixin):
         self._debug_selection(selection, cfg)
         return selection
 
-    def _debug_selection(self, selection: SelectionResult, cfg: Config) -> None:
+    def _debug_selection(self, selection: SelectionResult, cfg: ConfigProtocol) -> None:
         """Emit debug information for tool decisions when debugging is enabled.
 
         Args:
@@ -494,7 +494,7 @@ class Orchestrator(_OrchestratorActionMixin):
         if self._hooks.after_discovery:
             self._hooks.after_discovery(file_count)
 
-    def _notify_plan(self, tool_names: Sequence[str], cfg: Config) -> None:
+    def _notify_plan(self, tool_names: Sequence[str], cfg: ConfigProtocol) -> None:
         """Emit plan statistics via hook when available.
 
         Args:

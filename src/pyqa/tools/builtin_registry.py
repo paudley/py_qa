@@ -22,23 +22,14 @@ from ..catalog.model_references import StrategyReference
 from ..catalog.model_runtime import SUPPORTED_RUNTIME_TYPES, RuntimeInstallDefinition, RuntimeType
 from ..catalog.model_strategy import StrategyCallable, StrategyDefinition
 from ..catalog.model_tool import ToolDefinition
-from .base import (
-    CommandBuilder,
-    DeferredCommand,
-    InstallerCallable,
-    Parser,
-    PhaseLiteral,
-    Tool,
-    ToolAction,
-    ToolDocumentation,
-    ToolDocumentationEntry,
-)
+from .base import DeferredCommand, PhaseLiteral, Tool, ToolAction, ToolDocumentation, ToolDocumentationEntry
 from .builtin_helpers import (
     CARGO_AVAILABLE,
     CPANM_AVAILABLE,
     LUA_AVAILABLE,
     LUAROCKS_AVAILABLE,
 )
+from .interfaces import CommandBuilder, InstallerCallable, Parser
 from .registry import DEFAULT_REGISTRY, ToolRegistry
 
 ToolRuntimeKind = Literal["python", "npm", "binary", "go", "lua", "perl", "rust"]
@@ -475,7 +466,7 @@ def _ensure_command_builder(instance: StrategyResult, *, context: str) -> Comman
         return instance
     if isinstance(instance, Sequence) and not isinstance(instance, (str, bytes, bytearray)):
         deferred = DeferredCommand(tuple(str(part) for part in instance))
-        return deferred
+        return cast(CommandBuilder, deferred)
     raise CatalogIntegrityError(
         f"{context}: command strategy did not return a valid command builder",
     )

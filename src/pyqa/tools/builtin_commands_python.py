@@ -11,7 +11,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from .base import ToolContext
+from pyqa.interfaces.tools import ToolContext
 
 
 def _is_plugin_available(module: str) -> bool:

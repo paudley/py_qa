@@ -9,8 +9,10 @@ from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from ..config import FileDiscoveryConfig
 from ..interfaces.discovery import DiscoveryStrategy as DiscoveryStrategyProtocol
+from ..interfaces.discovery import (
+    FileDiscoveryConfig,
+)
 
 
 @runtime_checkable

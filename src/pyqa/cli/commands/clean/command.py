@@ -9,6 +9,8 @@ from typing import Annotated
 
 import typer
 
+from pyqa.cli.protocols import TyperAdapter
+
 from ....clean import sparkly_clean
 from ...core.shared import CLIError, Depends, build_cli_logger, register_callback
 from ...core.typer_ext import TyperAppConfig, create_typer
@@ -19,13 +21,14 @@ from .services import (
     load_clean_config,
 )
 
-clean_app = create_typer(
+_CLEAN_TY = create_typer(
     config=TyperAppConfig(
         name="sparkly-clean",
         help_text="Remove temporary build/cache artefacts.",
         invoke_without_command=True,
     ),
 )
+clean_app = TyperAdapter(_CLEAN_TY)
 
 
 @register_callback(clean_app, invoke_without_command=True)

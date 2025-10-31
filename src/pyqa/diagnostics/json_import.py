@@ -11,9 +11,9 @@ from enum import StrEnum
 from typing import Final, TypeAlias
 
 from pyqa.cache.in_memory import memoize
+from pyqa.interfaces.tools import ToolContext
 
 from ..core.models import RawDiagnostic
-from ..tools.base import ToolContext
 
 __all__ = ["JsonDiagnosticExtractor", "JsonDiagnosticsConfigError"]
 

@@ -5,9 +5,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict
 
 from ...config import FileDiscoveryConfig
 from ...config.utils import _existing_unique_paths as shared_existing_unique_paths
@@ -23,18 +23,13 @@ from ._config_builder_shared import (
 from .options import LintGitOptions, LintOptions, LintTargetOptions
 
 
-class FileDiscoveryOverrides(TypedDict):
-    """Mapping of file discovery override fields."""
+@dataclass(frozen=True, slots=True)
+class FileDiscoveryOverrides:
+    """Immutable container describing CLI-derived discovery overrides."""
 
-    roots: tuple[Path, ...]
-    excludes: tuple[Path, ...]
-    explicit_files: tuple[Path, ...]
-    boundaries: tuple[Path, ...]
-    paths_from_stdin: bool
-    changed_only: bool
-    diff_ref: str | None
-    include_untracked: bool
-    base_branch: str | None
+    paths: Mapping[str, tuple[Path, ...]]
+    flags: Mapping[str, bool]
+    scalars: Mapping[str, str | None]
 
 
 def apply_file_discovery_overrides(
@@ -52,15 +47,15 @@ def apply_file_discovery_overrides(
     """
 
     updates = {
-        "roots": list(overrides["roots"]),
-        "excludes": list(overrides["excludes"]),
-        "explicit_files": list(overrides["explicit_files"]),
-        "limit_to": list(overrides["boundaries"]),
-        "paths_from_stdin": overrides["paths_from_stdin"],
-        "changed_only": overrides["changed_only"],
-        "diff_ref": overrides["diff_ref"],
-        "include_untracked": overrides["include_untracked"],
-        "base_branch": overrides["base_branch"],
+        "roots": list(overrides.paths["roots"]),
+        "excludes": list(overrides.paths["excludes"]),
+        "explicit_files": list(overrides.paths["explicit_files"]),
+        "limit_to": list(overrides.paths["boundaries"]),
+        "paths_from_stdin": overrides.flags["paths_from_stdin"],
+        "changed_only": overrides.flags["changed_only"],
+        "diff_ref": overrides.scalars["diff_ref"],
+        "include_untracked": overrides.flags["include_untracked"],
+        "base_branch": overrides.scalars["base_branch"],
     }
     return model_clone(current, updates=updates)
 
@@ -78,8 +73,8 @@ def collect_file_discovery_overrides(
         project_root: Resolved project root used for relative path handling.
 
     Returns:
-        FileDiscoveryOverrides: Mapping of normalized overrides covering roots,
-        explicit paths, and git-discovery toggles.
+        FileDiscoveryOverrides: Immutable bundle of normalized overrides covering
+        roots, explicit paths, and git-discovery toggles.
     """
 
     provided = options.provided
@@ -107,11 +102,13 @@ def collect_file_discovery_overrides(
         provided,
     )
 
-    overrides: FileDiscoveryOverrides = {
+    paths_payload: dict[str, tuple[Path, ...]] = {
         "roots": tuple(shared_unique_paths(roots)),
         "excludes": tuple(shared_unique_paths(excludes)),
         "explicit_files": tuple(shared_existing_unique_paths(explicit_files)),
         "boundaries": tuple(shared_unique_paths(boundaries)),
+    }
+    flags_payload: dict[str, bool] = {
         "paths_from_stdin": select_flag(
             target_options.paths_from_stdin,
             current.paths_from_stdin,
@@ -124,16 +121,18 @@ def collect_file_discovery_overrides(
             LintOptionKey.CHANGED_ONLY,
             provided,
         ),
-        "diff_ref": select_value(
-            git_options.diff_ref,
-            current.diff_ref,
-            LintOptionKey.DIFF_REF,
-            provided,
-        ),
         "include_untracked": select_flag(
             git_options.include_untracked,
             current.include_untracked,
             LintOptionKey.INCLUDE_UNTRACKED,
+            provided,
+        ),
+    }
+    scalars_payload: dict[str, str | None] = {
+        "diff_ref": select_value(
+            git_options.diff_ref,
+            current.diff_ref,
+            LintOptionKey.DIFF_REF,
             provided,
         ),
         "base_branch": select_value(
@@ -143,7 +142,7 @@ def collect_file_discovery_overrides(
             provided,
         ),
     }
-    return overrides
+    return FileDiscoveryOverrides(paths=paths_payload, flags=flags_payload, scalars=scalars_payload)
 
 
 def resolve_roots(

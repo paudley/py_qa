@@ -9,9 +9,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from pyqa.interfaces.compliance import QualityConfigSection
+from pyqa.interfaces.licensing import LicensePolicy
 
 
 class QualityIssueLevel(str, Enum):
@@ -157,11 +160,6 @@ class QualityCheck(Protocol):
 
         msg = "QualityCheck implementations must override supports_fix() to report fix capability."
         raise QualityCheckProtocolError(msg)
-
-
-if TYPE_CHECKING:  # pragma: no cover - import cycle guard for typing only
-    from pyqa.compliance.checks.licenses import LicensePolicy
-    from pyqa.config.models.sections.quality import QualityConfigSection
 
 
 __all__ = [

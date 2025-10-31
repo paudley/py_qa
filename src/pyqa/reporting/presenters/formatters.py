@@ -15,11 +15,11 @@ from rich.style import Style
 from rich.text import Text
 
 from ...analysis.providers import NullAnnotationProvider
-from ...config import OutputConfig
 from ...core.logging import emoji
 from ...core.models import Diagnostic, RunResult
 from ...filesystem.paths import normalize_path
 from ...interfaces.analysis import AnnotationProvider
+from ...interfaces.config import OutputConfig as OutputConfigProtocol
 from ...runtime.console.manager import get_console_manager
 from ..advice.panels import render_advice_panel
 from ..advice.refactor import render_refactor_navigator
@@ -133,7 +133,7 @@ _MERGEABLE_MESSAGE = re.compile(r"^(?P<prefix>.*?)(`(?P<detail>[^`]+)`)(?P<suffi
 
 def render(
     result: RunResult,
-    cfg: OutputConfig,
+    cfg: OutputConfigProtocol,
     *,
     annotation_provider: AnnotationProvider | None = None,
 ) -> None:
@@ -169,7 +169,7 @@ def render(
 
 def _render_concise(
     result: RunResult,
-    cfg: OutputConfig,
+    cfg: OutputConfigProtocol,
     *,
     annotation_provider: AnnotationProvider,
 ) -> None:
@@ -207,7 +207,7 @@ def _render_concise(
 
 def _render_concise_summary(
     result: RunResult,
-    cfg: OutputConfig,
+    cfg: OutputConfigProtocol,
     total_actions: int,
     failed_actions: int,
     diagnostics_count: int,
@@ -240,7 +240,7 @@ def _render_concise_summary(
 
 def _build_concise_summary_context(
     result: RunResult,
-    cfg: OutputConfig,
+    cfg: OutputConfigProtocol,
     *,
     total_actions: int,
     failed_actions: int,
@@ -283,7 +283,7 @@ def _format_summary_line(
     summary_label: str,
     summary_color: str,
     stats_body: str,
-    cfg: OutputConfig,
+    cfg: OutputConfigProtocol,
 ) -> Text:
     """Return summary output styled appropriately for concise mode.
 
@@ -488,7 +488,7 @@ class _GroupBucket:
 def _print_concise_entries(
     entries: Sequence[ConciseDiagnostic],
     result: RunResult,
-    cfg: OutputConfig,
+    cfg: OutputConfigProtocol,
 ) -> None:
     """Emit concise diagnostics to stdout.
 
@@ -528,7 +528,7 @@ def _render_concise_entry(
     entry: ConciseDiagnostic,
     tool_width: int,
     tint_tool: Callable[[str], Text],
-    cfg: OutputConfig,
+    cfg: OutputConfigProtocol,
 ) -> Text:
     """Return a Rich text line representing a concise diagnostic.
 
@@ -602,7 +602,7 @@ class _ToolTinter:
         return text
 
 
-def _tool_tinter(result: RunResult, cfg: OutputConfig) -> Callable[[str], Text]:
+def _tool_tinter(result: RunResult, cfg: OutputConfigProtocol) -> Callable[[str], Text]:
     """Return a function that colourises tool names when colour is enabled.
 
     Args:

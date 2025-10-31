@@ -18,6 +18,9 @@ class LicensePolicy(Protocol):
     allow_alternate_spdx: tuple[str, ...]
     require_spdx: bool
     require_notice: bool
+    canonical_notice: str | None
+    license_snippet: str | None
+    skip_globs: tuple[str, ...]
 
     @abstractmethod
     def match_notice(self, content: str) -> str | None:

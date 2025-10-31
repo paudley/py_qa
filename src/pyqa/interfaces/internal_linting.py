@@ -16,6 +16,7 @@ INTERNAL_LINTER_TOOL_NAMES: Final[tuple[str, ...]] = (
     "types",
     "missing",
     "closures",
+    "conditional-imports",
     "signatures",
     "cache",
     "pyqa-value-types",

@@ -5,18 +5,18 @@
 
 from __future__ import annotations
 
-from typer import Typer
+from pyqa.cli.protocols import TyperLike
 
 from .command import quality_app
 
 __all__ = ["register"]
 
 
-def register(app: Typer) -> None:
+def register(app: TyperLike) -> None:
     """Attach quality sub-commands to the CLI application.
 
     Args:
-        app: Typer application receiving the quality command group.
+        app: Typer-compatible application receiving the quality command group.
     """
 
     app.add_typer(quality_app, name="check-quality")

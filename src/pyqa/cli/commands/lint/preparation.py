@@ -14,6 +14,7 @@ from typing import Final
 import typer
 
 from pyqa.core.config.constants import PY_QA_DIR_NAME
+from pyqa.interfaces.linting import CLILogger as CLILoggerView
 from pyqa.linting.suppressions import SuppressionRegistry
 from pyqa.platform.workspace import is_py_qa_workspace
 
@@ -38,7 +39,6 @@ from ...core.options import (
     LintSummaryOptions,
     LintTargetOptions,
 )
-from ...core.shared import CLILogger
 from ...core.utils import filter_py_qa_paths
 from .cli_models import LintDisplayOptions as CLIDisplayOptions
 from .literals import OUTPUT_MODE_CONCISE
@@ -81,7 +81,7 @@ class PreparedLintStateParams:
     ignored_py_qa: Sequence[str]
     artifacts: LintOutputArtifacts
     suppressions: SuppressionRegistry | None
-    presentation: tuple[CLIDisplayOptions, CLILogger]
+    presentation: tuple[CLIDisplayOptions, CLILoggerView]
 
 
 @dataclass(slots=True, init=False)
@@ -94,7 +94,7 @@ class PreparedLintState:
     ignored_py_qa: tuple[str, ...]
     artifacts: LintOutputArtifacts
     suppressions: SuppressionRegistry | None
-    _presentation: tuple[CLIDisplayOptions, CLILogger]
+    _presentation: tuple[CLIDisplayOptions, CLILoggerView]
 
     def __init__(self, params: PreparedLintStateParams) -> None:
         """Initialize the prepared lint state container.
@@ -152,11 +152,11 @@ class PreparedLintState:
         return self._presentation[0]
 
     @property
-    def logger(self) -> CLILogger:
+    def logger(self) -> CLILoggerView:
         """Return the logger instance bound to the lint run.
 
         Returns:
-            CLILogger: Logger instance recording lint messages.
+            CLILoggerView: Logger instance recording lint messages.
         """
 
         return self._presentation[1]
@@ -248,7 +248,7 @@ def prepare_lint_state(
     ctx: typer.Context,
     inputs: LintCLIInputs,
     *,
-    logger: CLILogger,
+    logger: CLILoggerView,
 ) -> PreparedLintState:
     """Normalise CLI inputs and construct the options dataclass.
 
@@ -536,7 +536,7 @@ def _normalize_targets(
     params: LintPathParams,
     *,
     invocation_cwd: Path,
-    logger: CLILogger,
+    logger: CLILoggerView,
 ) -> NormalizedTargets:
     """Return normalised filesystem targets extracted from CLI inputs.
 
@@ -645,7 +645,7 @@ def _select_root(
 def _apply_py_qa_filter(
     paths: list[Path],
     root: Path,
-    logger: CLILogger,
+    logger: CLILoggerView,
 ) -> tuple[list[Path], list[str]]:
     """Return filtered paths and ignored py_qa entries when required.
 

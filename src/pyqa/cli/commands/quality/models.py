@@ -11,7 +11,8 @@ from typing import Annotated
 
 import typer
 
-from ....config import Config
+from pyqa.interfaces.config import Config as ConfigProtocol
+
 from ...core.shared import Depends
 
 ROOT_OPTION = Annotated[
@@ -231,7 +232,7 @@ class QualityConfigContext:
     """Configuration and warnings used by quality CLI workflows."""
 
     root: Path
-    config: Config
+    config: ConfigProtocol
     options: QualityCLIOptions
     warnings: tuple[str, ...]
 

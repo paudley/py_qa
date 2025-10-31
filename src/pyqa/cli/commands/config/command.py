@@ -12,6 +12,7 @@ from pathlib import Path
 import typer
 from pydantic import BaseModel, ConfigDict
 
+from pyqa.cli.protocols import TyperAdapter
 from pyqa.core.config.loader import ConfigLoadResult, FieldUpdate
 from pyqa.core.serialization import JsonValue
 
@@ -34,7 +35,8 @@ from .services import (
     write_output,
 )
 
-config_app = create_typer(config=TyperAppConfig(help_text="Inspect, validate, and document configuration layers."))
+_CONFIG_TY = create_typer(config=TyperAppConfig(help_text="Inspect, validate, and document configuration layers."))
+config_app = TyperAdapter(_CONFIG_TY)
 
 
 @register_command(

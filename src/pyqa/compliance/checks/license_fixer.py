@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -18,8 +19,6 @@ from pyqa.interfaces.licensing import ExpectedNotice, ExtractSpdx, LicensePolicy
 try:
     _licenses_module = import_module("pyqa.compliance.checks.licenses")
 except ModuleNotFoundError:  # pragma: no cover - fallback for direct invocation
-    import sys
-
     project_root = Path(__file__).resolve().parents[2]
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))

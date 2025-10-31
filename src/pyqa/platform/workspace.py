@@ -6,15 +6,28 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from functools import cache
+from importlib import import_module
 from pathlib import Path
+from types import ModuleType
 from typing import TypeAlias, cast
 
 from pyqa.core.config.constants import PY_QA_DIR_NAME
 
-try:  # Python 3.11+ includes tomllib in the stdlib; fallback unsupported.
-    import tomllib
-except ModuleNotFoundError as exc:  # pragma: no cover - environment invariant
-    raise RuntimeError("tomllib is required to inspect project metadata") from exc
+
+def _import_tomllib() -> ModuleType:
+    """Return the stdlib ``tomllib`` module or raise a descriptive error.
+
+    Returns:
+        ModuleType: Imported ``tomllib`` module provided by the standard library.
+    """
+
+    try:
+        return import_module("tomllib")
+    except ModuleNotFoundError as exc:  # pragma: no cover - environment invariant
+        raise RuntimeError("tomllib is required to inspect project metadata") from exc
+
+
+tomllib = _import_tomllib()
 
 
 def is_py_qa_workspace(root: Path) -> bool:

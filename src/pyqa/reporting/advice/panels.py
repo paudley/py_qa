@@ -12,8 +12,8 @@ from rich.text import Text
 
 from pyqa.runtime.console.manager import get_console_manager
 
-from ...config import OutputConfig
 from ...interfaces.analysis import AnnotationProvider
+from ...interfaces.config import OutputConfig as OutputConfigProtocol
 from .builder import AdviceEntry, generate_advice
 
 
@@ -37,7 +37,7 @@ def _sentence_case(text: str) -> str:
 
 def render_advice_panel(
     entries: Iterable[tuple[str, int, str, str, str, str]],
-    cfg: OutputConfig,
+    cfg: OutputConfigProtocol,
     *,
     annotation_engine: AnnotationProvider,
     highlight: Callable[[str], Text],

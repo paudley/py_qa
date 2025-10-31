@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typer import Typer
+from pyqa.cli.protocols import TyperLike
 
 from ...core.shared import register_command
 from .command import security_scan_command
@@ -13,11 +13,11 @@ from .command import security_scan_command
 __all__ = ["register"]
 
 
-def register(app: Typer) -> None:
+def register(app: TyperLike) -> None:
     """Register the security scan command with ``app``.
 
     Args:
-        app: Typer application receiving the security command registration.
+        app: Typer-compatible application receiving the security command registration.
     """
 
     register_command(app, security_scan_command, name="security-scan")

@@ -14,11 +14,12 @@ from typing import Final, Literal, TypeAlias, TypedDict, cast
 from pydantic import BaseModel, ConfigDict
 
 from ..core.metrics import FileMetrics
-from ..core.metrics import JSONValue as MetricsJSONValue
-from ..core.models import JsonValue, ToolOutcome
+from ..core.models import ToolOutcome
 from ..core.serialization import deserialize_outcome, safe_int, serialize_outcome
+from ..protocols.serialization import JsonValue
 
 JSONValue = JsonValue
+
 
 COMMAND_DELIMITER: Final[bytes] = b"::"
 FILES_FIELD: Final[Literal["files"]] = "files"
@@ -61,7 +62,7 @@ class CacheRequest:
 
 @dataclass(frozen=True, slots=True)
 class CachedEntry:
-    """Use this payload to represent cached outcomes and metrics."""
+    """Represent cached tool outcomes along with computed metrics."""
 
     outcome: ToolOutcome
     file_metrics: dict[str, FileMetrics]
@@ -223,7 +224,9 @@ class ResultCache:
         if not _files_available(request.files, states):
             return
 
-        payload = _outcome_to_payload(outcome, states, file_metrics or {})
+        metrics_mapping = dict(file_metrics) if file_metrics is not None else {}
+
+        payload = _outcome_to_payload(outcome, states, metrics_mapping)
         try:
             entry_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         except OSError:
@@ -416,13 +419,13 @@ def _coerce_metrics_payload(value: CacheJsonValue | None) -> dict[str, FileMetri
         path_value = item.get(PATH_FIELD)
         if not isinstance(path_value, str):
             continue
-        metric_payload: dict[str, MetricsJSONValue] = {}
+        metric_payload: dict[str, JsonValue] = {}
         line_count_value = item.get("line_count")
         if isinstance(line_count_value, (int, float, str)):
             metric_payload["line_count"] = line_count_value
         suppressions_value = item.get("suppressions")
         if isinstance(suppressions_value, Mapping):
-            clean_suppressions: dict[str, MetricsJSONValue] = {}
+            clean_suppressions: dict[str, JsonValue] = {}
             for label, count in suppressions_value.items():
                 if isinstance(label, str) and isinstance(count, (int, float, str)):
                     clean_suppressions[label] = count

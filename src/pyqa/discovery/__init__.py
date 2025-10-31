@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..config import FileDiscoveryConfig
+from ..interfaces.discovery import FileDiscoveryConfig
 from .base import DiscoveryService, DiscoveryStrategy
 from .filesystem import FilesystemDiscovery
 from .git import GitDiscovery

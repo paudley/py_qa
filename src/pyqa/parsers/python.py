@@ -11,7 +11,7 @@ from pyqa.core.severity import Severity, severity_from_code
 
 from ..core.models import RawDiagnostic
 from ..core.serialization import JsonValue, coerce_optional_int, coerce_optional_str
-from ..tools.base import ToolContext
+from ..interfaces.tools import ToolContext
 from .base import (
     DiagnosticDetails,
     DiagnosticLocation,

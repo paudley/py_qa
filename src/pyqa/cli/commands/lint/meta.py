@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from pyqa.interfaces.orchestration_selection import SelectionResult
 from pyqa.orchestration.selection_context import UnknownToolRequestedError
@@ -18,10 +17,8 @@ from ..doctor.command import run_doctor
 from ..tool_info.command import run_tool_info
 from .explain import render_explain_tools
 from .fetch import render_fetch_all_tools
-
-if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from .preparation import PreparedLintState
-    from .runtime import LintRuntimeContext
+from .preparation import PreparedLintState
+from .runtime import LintRuntimeContext
 
 
 @dataclass(slots=True)

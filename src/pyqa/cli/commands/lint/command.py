@@ -10,6 +10,8 @@ import typer
 from rich.progress import Progress
 
 from pyqa.interfaces.analysis import AnnotationProvider
+from pyqa.interfaces.config import Config as ConfigProtocol
+from pyqa.interfaces.linting import CLILogger as CLILoggerView
 from pyqa.interfaces.linting import PreparedLintState as PreparedLintStateView
 from pyqa.interfaces.orchestration_selection import PhaseLiteral
 from pyqa.orchestration.selection_context import PHASE_ORDER, UnknownToolRequestedError
@@ -20,7 +22,7 @@ from ....linting.registry import iter_internal_linters
 from ....platform.workspace import is_py_qa_workspace
 from ...core.config_builder import build_config
 from ...core.runtime import ServiceResolutionError
-from ...core.shared import CLILogger, Depends, build_cli_logger
+from ...core.shared import Depends, build_cli_logger
 from .cli_models import _build_lint_cli_inputs
 from .meta import (
     MetaActionOutcome,
@@ -60,7 +62,7 @@ def _execute_lint(
     ctx: typer.Context,
     inputs: LintCLIInputs,
     *,
-    logger: CLILogger,
+    logger: CLILoggerView,
 ) -> None:
     """Resolve CLI arguments into structured inputs and run the pipeline.
 
@@ -199,11 +201,11 @@ def _build_runtime_context(state: PreparedLintState) -> LintRuntimeContext:
 
     pyqa_explicit = meta_flags.runtime.additional.pyqa_rules or meta_flags.actions.normal
     if pyqa_explicit and not config.execution.pyqa_rules:
-        config.execution = config.execution.model_copy(update={"pyqa_rules": True})
+        config.execution.pyqa_rules = True
 
     return build_lint_runtime_context(
         cast(PreparedLintStateView, state),
-        config=config,
+        config=cast(ConfigProtocol, config),
     )
 
 
@@ -259,7 +261,7 @@ def _run_lint_pipeline(runtime: LintRuntimeContext) -> None:
     raise typer.Exit(code=1 if issues_present else 0)
 
 
-def _handle_unknown_only_error(logger: CLILogger, exc: UnknownToolRequestedError) -> None:
+def _handle_unknown_only_error(logger: CLILoggerView, exc: UnknownToolRequestedError) -> None:
     """Log a fatal error when ``--only`` references unknown tools.
 
     Args:

@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typer import Typer
+from pyqa.cli.protocols import TyperLike
 
 from ...core.shared import register_command
 from .command import install_command
@@ -13,11 +13,11 @@ from .command import install_command
 __all__ = ["register"]
 
 
-def register(app: Typer) -> None:
+def register(app: TyperLike) -> None:
     """Register the install command with ``app``.
 
     Args:
-        app: Typer application receiving the install command registration.
+        app: Typer-compatible application receiving the install command registration.
     """
 
     register_command(app, install_command, name="install")

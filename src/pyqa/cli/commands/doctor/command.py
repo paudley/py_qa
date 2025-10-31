@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 from types import ModuleType
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
 import typer
 from rich import box
@@ -22,9 +22,10 @@ from rich.rule import Rule
 from rich.table import Table
 
 from pyqa.core.config.loader import ConfigLoader, ConfigLoadResult
+from pyqa.interfaces.config import Config as ConfigProtocol
 
 from ....analysis.treesitter import TreeSitterContextResolver
-from ....config import Config, ConfigError
+from ....config import ConfigError
 from ....core.runtime.process import CommandOptions, run_command
 from ....tools.builtins import initialize_registry
 from ....tools.registry import DEFAULT_REGISTRY
@@ -83,7 +84,8 @@ def run_doctor(root: Path, *, console: Console | None = None) -> int:
     _render_environment_section(console)
     _render_grammar_section(console)
     _render_configuration_section(console, load_result)
-    unhealthy = _render_tooling_section(console, load_result.config)
+    config_view = cast(ConfigProtocol, load_result.config)
+    unhealthy = _render_tooling_section(console, config_view)
     _render_summary(console, unhealthy)
     return 1 if unhealthy else 0
 
@@ -232,7 +234,7 @@ TOOL_STATUS_STYLE: Final[dict[ToolAvailability, str]] = {
 }
 
 
-def _render_tooling_section(console: Console, config: Config) -> bool:
+def _render_tooling_section(console: Console, config: ConfigProtocol) -> bool:
     """Render tooling availability and return ``True`` when issues are detected.
 
     Args:
@@ -362,7 +364,7 @@ def _probe_module(module: str, optional: bool) -> EnvironmentCheck:
     return EnvironmentCheck(name=module, status=STATUS_OK, ok=True, detail="Import successful")
 
 
-def _collect_tool_summaries(config: Config) -> list[ToolSummary]:
+def _collect_tool_summaries(config: ConfigProtocol) -> list[ToolSummary]:
     """Collect tooling availability summaries for doctor output.
 
     Args:

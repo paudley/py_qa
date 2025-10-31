@@ -4,10 +4,12 @@
 
 from __future__ import annotations
 
+from pyqa.cli.protocols import TyperAdapter
+
 from .commands import register_commands
 from .core.typer_ext import TyperAppConfig, create_typer
 
 app = create_typer(config=TyperAppConfig(help_text="Polyglot lint orchestrator."))
-register_commands(app)
+register_commands(TyperAdapter(app))
 
 __all__ = ["app"]

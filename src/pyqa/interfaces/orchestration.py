@@ -9,14 +9,12 @@ from abc import abstractmethod
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
-if TYPE_CHECKING:
-    from pyqa.core.environment.tool_env.models import PreparedCommand
-
-    from ..config import Config
-    from ..core.models import RunResult, ToolOutcome
-    from .orchestration_selection import SelectionResult
+from pyqa.core.environment.tool_env.models import PreparedCommand
+from pyqa.core.models import RunResult, ToolOutcome
+from pyqa.interfaces.config import Config
+from pyqa.interfaces.orchestration_selection import SelectionResult
 
 
 @runtime_checkable
@@ -104,7 +102,12 @@ class ExecutionPipeline(Protocol):
         raise NotImplementedError
 
     @abstractmethod
-    def plan_tools(self, config: Config, *, root: Path) -> SelectionResult:
+    def plan_tools(
+        self,
+        config: Config,
+        *,
+        root: Path,
+    ) -> SelectionResult:
         """Return the planned tool execution order without running them.
 
         Args:

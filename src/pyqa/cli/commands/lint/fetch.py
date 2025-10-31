@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final, Literal, TypeAlias, cast
+from typing import Final, Literal, TypeAlias
 
 from rich import box
 from rich.console import Console
@@ -21,15 +21,13 @@ from rich.progress import (
 from rich.table import Table
 
 from pyqa.core.environment.tool_env.models import PreparedCommand
+from pyqa.interfaces.config import Config as ConfigProtocol
 from pyqa.interfaces.linting import PreparedLintState as PreparedLintStateView
 from pyqa.runtime.console.manager import detect_tty, get_console_manager
 
-from ....config import Config
 from ....tools.base import Tool
 from ....tools.registry import DEFAULT_REGISTRY
-
-if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from .runtime import LintRuntimeContext
+from .runtime import LintRuntimeContext
 
 FetchResult = list[tuple[str, str, PreparedCommand | None, str | None]]
 ProgressEventLiteral = Literal["start", "completed", "error"]
@@ -177,7 +175,7 @@ def render_fetch_all_tools(
     """
 
     config = runtime.config
-    state = cast(PreparedLintStateView, runtime.state)
+    state = runtime.state
     total_actions = sum(len(tool.actions) for tool in DEFAULT_REGISTRY.tools())
     progress_enabled = total_actions > 0 and not state.display.quiet and not config.output.quiet and detect_tty()
     console = get_console_manager().get(color=config.output.color, emoji=config.output.emoji)
@@ -213,7 +211,7 @@ def _fetch_with_progress(
         tool action.
     """
 
-    state = cast(PreparedLintStateView, runtime.state)
+    state = runtime.state
     logger = state.logger
     progress = Progress(
         SpinnerColumn(),
@@ -267,7 +265,7 @@ def _fetch_with_progress(
 
 def _render_fetch_summary(
     console: Console,
-    config: Config,
+    config: ConfigProtocol,
     state: PreparedLintStateView,
     results: FetchResult,
     phase_order: tuple[str, ...],

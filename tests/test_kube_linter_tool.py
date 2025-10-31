@@ -6,10 +6,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import Mock
-
 from pyqa.catalog import ToolCatalogLoader
 from pyqa.catalog.strategies import command_option_map
+from pyqa.config import Config
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PYQA_ROOT = Path(__file__).resolve().parents[1]
@@ -30,7 +29,7 @@ def _kube_linter_command_config() -> dict[str, object]:
 
 
 def test_kube_linter_command_build(tmp_path: Path) -> None:
-    cfg = Mock()
+    cfg = Config()
     cfg.execution.line_length = 120
 
     ctx = ToolContext(

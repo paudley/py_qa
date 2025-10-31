@@ -31,6 +31,7 @@ from pyqa.config.utils import (
 )
 from pyqa.interfaces.config import ConfigSource
 from pyqa.tools.settings import TOOL_SETTING_SCHEMA
+from tooling_spec.catalog.types import JSONValue as _CatalogJSONValue
 
 
 @dataclass(slots=True, frozen=True)
@@ -541,6 +542,9 @@ AUTO_TOOL_CONFIG_FILES: dict[str, list[str]] = {
     ],
 }
 
+
+FieldUpdate.model_rebuild(_types_namespace={"JSONValue": _CatalogJSONValue})
+ConfigLoadResult.model_rebuild(_types_namespace={"JSONValue": _CatalogJSONValue})
 
 __all__ = [
     "ConfigLoadResult",

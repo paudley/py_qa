@@ -11,7 +11,7 @@ from types import MappingProxyType
 from pyqa.core.environment.tool_env import CommandPreparationRequest, PreparedCommand
 
 from ..cache.context import update_tool_version
-from ..config import Config
+from ..interfaces.config import Config as ConfigProtocol
 from ..tools import Tool, ToolAction, ToolContext
 from ._pipeline_components import (
     _DECISION_BAIL,
@@ -125,7 +125,7 @@ class _OrchestratorActionMixin:
         self._debug(f'queued {loop_context.tool.name}:{action.name} command="{queued_cmd}"')
         return _ActionPlanOutcome.CONTINUE
 
-    def _format_skip_reason(self, tool_name: str, action: ToolAction, cfg: Config) -> str:
+    def _format_skip_reason(self, tool_name: str, action: ToolAction, cfg: ConfigProtocol) -> str:
         """Return a formatted skip reason for debug logging.
 
         Args:
@@ -145,7 +145,7 @@ class _OrchestratorActionMixin:
         reason_text = ", ".join(reasons) or "action filtered"
         return f"skipping {tool_name}:{action.name} ({reason_text})"
 
-    def _should_run_action(self, cfg: Config, action: ToolAction) -> bool:
+    def _should_run_action(self, cfg: ConfigProtocol, action: ToolAction) -> bool:
         """Return whether ``action`` should be executed under the current mode.
 
         Args:
@@ -164,7 +164,7 @@ class _OrchestratorActionMixin:
 
     def _build_tool_context(
         self,
-        cfg: Config,
+        cfg: ConfigProtocol,
         environment: ExecutionEnvironment,
         tool: Tool,
         matched_files: Sequence[Path],
@@ -192,7 +192,7 @@ class _OrchestratorActionMixin:
 
     def _build_preparation_inputs(
         self,
-        cfg: Config,
+        cfg: ConfigProtocol,
         *,
         root: Path,
         cache_dir: Path | None = None,
@@ -218,7 +218,7 @@ class _OrchestratorActionMixin:
 
     def _handle_cached_outcome(
         self,
-        cfg: Config,
+        cfg: ConfigProtocol,
         *,
         environment: ExecutionEnvironment,
         state: ExecutionState,
@@ -274,7 +274,7 @@ class _OrchestratorActionMixin:
         return _DECISION_SKIP
 
     @staticmethod
-    def _requires_immediate_execution(cfg: Config, action: ToolAction) -> bool:
+    def _requires_immediate_execution(cfg: ConfigProtocol, action: ToolAction) -> bool:
         """Return whether ``action`` should execute synchronously.
 
         Args:
@@ -345,7 +345,7 @@ class _OrchestratorActionMixin:
         state.order += 1
 
     @staticmethod
-    def _resolve_cache_dir(cfg: Config, root: Path) -> Path:
+    def _resolve_cache_dir(cfg: ConfigProtocol, root: Path) -> Path:
         """Return the cache directory path for ``cfg`` relative to ``root``.
 
         Args:
@@ -361,7 +361,7 @@ class _OrchestratorActionMixin:
             return cache_dir
         return root / cache_dir
 
-    def _build_dry_run_context(self, cfg: Config, root: Path, tool: Tool) -> ToolContext:
+    def _build_dry_run_context(self, cfg: ConfigProtocol, root: Path, tool: Tool) -> ToolContext:
         """Return a tool context suitable for preparation without file inputs.
 
         Args:
@@ -378,7 +378,7 @@ class _OrchestratorActionMixin:
 
     def _iter_fetch_entries(
         self,
-        cfg: Config,
+        cfg: ConfigProtocol,
         *,
         root: Path,
         inputs: PreparationInputs,

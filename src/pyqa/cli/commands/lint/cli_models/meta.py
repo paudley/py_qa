@@ -26,6 +26,7 @@ from .constants import (
     CHECK_INTERFACES_HELP,
     CHECK_MODULE_DOCS_HELP,
     CLOSURES_HELP,
+    CONDITIONAL_IMPORTS_HELP,
     COPYRIGHT_HELP,
     DOCSTRINGS_HELP,
     EXPLAIN_TOOLS_HELP,
@@ -144,14 +145,13 @@ def _meta_analysis_checks_dependency(
     )
 
 
-def _runtime_core_checks_dependency(
-    check_closures: Annotated[bool, typer.Option(False, "--check-closures", help=CLOSURES_HELP)],
-    check_signatures: Annotated[bool, typer.Option(False, "--check-signatures", help=SIGNATURES_HELP)],
-    check_cache_usage: Annotated[bool, typer.Option(False, "--check-cache-usage", help=CACHE_HELP)],
+def _runtime_value_type_checks_dependency(
     check_value_types: Annotated[
         bool,
         typer.Option(
-            False, "--check-value-types", help="Verify pyqa value-type helpers expose ergonomic dunder methods."
+            False,
+            "--check-value-types",
+            help="Verify pyqa value-type helpers expose ergonomic dunder methods.",
         ),
     ],
     check_value_types_general: Annotated[
@@ -159,14 +159,44 @@ def _runtime_core_checks_dependency(
         typer.Option(False, "--check-value-types-general", help=VALUE_TYPES_GENERAL_HELP),
     ],
 ) -> dict[str, bool]:
+    """Return value-type-specific runtime toggles.
+
+    Args:
+        check_value_types: Flag checking value-type ergonomics.
+        check_value_types_general: Flag checking general value-type usage.
+
+    Returns:
+        dict[str, bool]: Structured value-type runtime toggles.
+    """
+
+    return {
+        "check_value_types": check_value_types,
+        "check_value_types_general": check_value_types_general,
+    }
+
+
+def _runtime_core_checks_dependency(
+    check_closures: Annotated[bool, typer.Option(False, "--check-closures", help=CLOSURES_HELP)],
+    check_conditional_imports: Annotated[
+        bool,
+        typer.Option(
+            False,
+            "--check-conditional-imports",
+            help=CONDITIONAL_IMPORTS_HELP,
+        ),
+    ],
+    check_signatures: Annotated[bool, typer.Option(False, "--check-signatures", help=SIGNATURES_HELP)],
+    check_cache_usage: Annotated[bool, typer.Option(False, "--check-cache-usage", help=CACHE_HELP)],
+    value_types: Annotated[dict[str, bool], Depends(_runtime_value_type_checks_dependency)],
+) -> dict[str, bool]:
     """Return the runtime core check toggles.
 
     Args:
         check_closures: Flag validating closure usage.
+        check_conditional_imports: Flag detecting conditional import usage.
         check_signatures: Flag validating function signatures.
         check_cache_usage: Flag ensuring cache helpers are used correctly.
-        check_value_types: Flag checking value-type ergonomics.
-        check_value_types_general: Flag checking general value-type usage.
+        value_types: Structured value-type runtime toggles.
 
     Returns:
         dict[str, bool]: Structured runtime core check toggles.
@@ -174,10 +204,10 @@ def _runtime_core_checks_dependency(
 
     return {
         "check_closures": check_closures,
+        "check_conditional_imports": check_conditional_imports,
         "check_signatures": check_signatures,
         "check_cache_usage": check_cache_usage,
-        "check_value_types": check_value_types,
-        "check_value_types_general": check_value_types_general,
+        **value_types,
     }
 
 
@@ -314,6 +344,7 @@ def _meta_params_dependency(
         runtime_overrides = RuntimeGroupOverrides(
             core=RuntimeCoreChecks(
                 check_closures=True,
+                check_conditional_imports=True,
                 check_signatures=True,
                 check_cache_usage=True,
                 check_value_types=True,

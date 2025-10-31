@@ -15,7 +15,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import Final
 
 from pyqa.cache.in_memory import memoize
 
@@ -24,9 +24,6 @@ from ...analysis.services import resolve_function_scale_estimator
 from ...catalog.metadata import catalog_duplicate_hint_codes
 from ...filesystem.paths import normalize_path
 from ...interfaces.analysis import AnnotationProvider, FunctionScaleEstimator
-
-if TYPE_CHECKING:  # pragma: no cover - types only
-    pass
 
 
 class AdviceCategory(str, Enum):
@@ -548,7 +545,7 @@ def _append_signature_alignment_guidance(
     if type_definition_files and override_targets:
         accumulator.add(
             AdviceCategory.TYPING,
-            "Align .pyi definitions with implementations to keep signatures in sync as upstream changes land.",
+            "align stubs with implementations to keep signatures in sync as upstream changes land.",
         )
 
 

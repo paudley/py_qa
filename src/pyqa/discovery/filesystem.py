@@ -13,7 +13,7 @@ from pathlib import Path
 from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS, PY_QA_DIR_NAME
 from pyqa.platform.workspace import is_py_qa_workspace
 
-from ..config import FileDiscoveryConfig
+from ..interfaces.discovery import FileDiscoveryConfig
 from .base import DiscoveryStrategy, is_within_limits, resolve_limit_paths
 
 

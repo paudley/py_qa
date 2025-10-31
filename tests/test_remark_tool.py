@@ -10,7 +10,6 @@ import subprocess
 import sys
 import types
 from pathlib import Path
-from unittest.mock import Mock
 
 _stub_spacy = types.ModuleType("spacy")
 _stub_spacy.__version__ = "0.0.0"
@@ -54,7 +53,7 @@ def _remark_config(action: str) -> dict[str, object]:
 
 
 def test_remark_lint_command_build(tmp_path: Path) -> None:
-    cfg = Mock()
+    cfg = Config()
     cfg.execution.line_length = 120
     ctx = ToolContext(
         cfg=cfg,
@@ -79,7 +78,7 @@ def test_remark_lint_command_build(tmp_path: Path) -> None:
 
 
 def test_remark_fix_command_build(tmp_path: Path) -> None:
-    cfg = Mock()
+    cfg = Config()
     cfg.execution.line_length = 120
     ctx = ToolContext(
         cfg=cfg,

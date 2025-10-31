@@ -62,6 +62,7 @@ def _meta_flags(
     check_types_strict: bool = False,
     check_missing: bool = False,
     check_closures: bool = False,
+    check_conditional_imports: bool = False,
     check_signatures: bool = False,
     check_cache_usage: bool = False,
     check_value_types: bool = False,
@@ -99,6 +100,7 @@ def _meta_flags(
             flags=RuntimeFlagOverrides(
                 core=RuntimeCoreFlagOverrides(
                     check_closures=check_closures,
+                    check_conditional_imports=check_conditional_imports,
                     check_signatures=check_signatures,
                     check_cache_usage=check_cache_usage,
                     check_value_types=check_value_types,

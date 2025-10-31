@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import http.client
+import importlib
 import logging
 import os
 import platform
@@ -20,11 +21,11 @@ import stat
 import subprocess
 import sys
 import tarfile
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from contextlib import closing
 from enum import StrEnum
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 from urllib.parse import urljoin, urlparse
 
 PYQA_ROOT: Final[Path] = Path(__file__).resolve().parents[4]
@@ -308,6 +309,20 @@ def _read_python_version_info(python_path: Path) -> tuple[int, int]:
     return major, minor
 
 
+def _load_cli_app() -> Callable[[], None]:
+    """Return the Typer application entry point for in-process execution.
+
+    Returns:
+        Callable[[], None]: Typer-compatible callable that drives the CLI.
+    """
+
+    module = importlib.import_module("pyqa.cli.app")
+    app_callable = getattr(module, "app", None)
+    if not callable(app_callable):
+        raise TypeError("pyqa.cli.app.app must be a callable that accepts no arguments")
+    return cast(Callable[[], None], app_callable)
+
+
 def _run_with_python(
     python_path: Path,
     command: str,
@@ -333,10 +348,7 @@ def _run_with_python(
         _debug("Using current interpreter for in-process execution")
         _debug("Running with local interpreter")
         try:
-            # Import lazily so optional CLI extras are only required when the
-            # current interpreter actually hosts the application; this allows us
-            # to fall back to ``uv`` gracefully when dependencies are absent.
-            from pyqa.cli.app import app  # pylint: disable=import-outside-toplevel  # lint: allow-cli-import
+            app = _load_cli_app()
         except ModuleNotFoundError as exc:
             _debug(f"Local interpreter missing dependencies; falling back to uv: {exc.__class__.__name__}: {exc}")
             uv_path = _ensure_uv()

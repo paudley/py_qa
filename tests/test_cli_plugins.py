@@ -10,6 +10,7 @@ import typer
 from typer.testing import CliRunner
 
 from pyqa.cli.commands import register_commands
+from pyqa.cli.protocols import TyperLike
 
 
 def test_register_commands_invokes_cli_plugins(monkeypatch) -> None:
@@ -19,7 +20,7 @@ def test_register_commands_invokes_cli_plugins(monkeypatch) -> None:
     runner = CliRunner()
     calls: list[str] = []
 
-    def plugin_factory(cli_app: typer.Typer) -> None:
+    def plugin_factory(cli_app: TyperLike) -> None:
         @cli_app.command("custom")
         def _custom() -> None:  # pragma: no cover - CLI side effect
             calls.append("invoked")
@@ -40,7 +41,7 @@ def test_app_loads_entry_point_plugins(monkeypatch) -> None:
 
     app_invocations: list[str] = []
 
-    def plugin_factory(cli_app: typer.Typer) -> None:
+    def plugin_factory(cli_app: TyperLike) -> None:
         @cli_app.command("ep")
         def _entry_point() -> None:  # pragma: no cover - CLI side effect
             app_invocations.append("ep")

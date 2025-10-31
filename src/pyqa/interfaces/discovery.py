@@ -6,14 +6,54 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import Protocol, Self, TypeAlias, cast, runtime_checkable
 
 from .common import PathSelectionOptions
 
-if TYPE_CHECKING:  # pragma: no cover - imported for type checking clarity
-    from ..config import FileDiscoveryConfig
+DiscoveryConfigValue: TypeAlias = Path | Sequence[Path] | bool | str | None
+
+
+@runtime_checkable
+class FileDiscoveryConfig(Protocol):
+    """Discovery configuration supplied by CLI and configuration layers."""
+
+    roots: list[Path]
+    excludes: list[Path]
+    explicit_files: list[Path]
+    limit_to: list[Path]
+    paths_from_stdin: bool
+    changed_only: bool
+    diff_ref: str | None
+    include_untracked: bool
+    base_branch: str | None
+    pre_commit: bool
+
+    def model_copy(
+        self,
+        *,
+        update: Mapping[str, DiscoveryConfigValue] | None = None,
+        deep: bool = False,
+    ) -> Self:
+        """Return a mutated copy of the discovery configuration.
+
+        Args:
+            update: Optional mapping of field updates to apply.
+            deep: When ``True`` perform a deep copy instead of a shallow copy.
+
+        Returns:
+            Self: Updated discovery configuration copy.
+        """
+        raise NotImplementedError
+
+    def model_dump(self) -> Mapping[str, DiscoveryConfigValue]:
+        """Return a mapping representation of the discovery configuration.
+
+        Returns:
+            Mapping[str, DiscoveryConfigValue]: Mapping of discovery fields to values.
+        """
+        return cast(Mapping[str, DiscoveryConfigValue], NotImplemented)
 
 
 @runtime_checkable
@@ -29,7 +69,7 @@ class ExcludePolicy(Protocol):
             str: Identifier describing the exclusion policy.
         """
 
-        raise NotImplementedError
+        ...
 
     @abstractmethod
     def exclusions(self) -> Sequence[str]:
@@ -39,7 +79,7 @@ class ExcludePolicy(Protocol):
             Sequence[str]: Exclusion patterns or filesystem paths.
         """
 
-        raise NotImplementedError
+        ...
 
 
 @runtime_checkable
@@ -55,7 +95,7 @@ class TargetPlanner(Protocol):
             str: Identifier describing the planner implementation.
         """
 
-        raise NotImplementedError
+        ...
 
     @abstractmethod
     def plan(self) -> Iterable[str]:
@@ -65,7 +105,7 @@ class TargetPlanner(Protocol):
             Iterable[str]: Ordered collection of planned target identifiers.
         """
 
-        raise NotImplementedError
+        ...
 
 
 @runtime_checkable
@@ -81,7 +121,7 @@ class DiscoveryStrategy(Protocol):
             str: Identifier describing the discovery strategy implementation.
         """
 
-        raise NotImplementedError
+        ...
 
     @abstractmethod
     def discover(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
@@ -95,7 +135,7 @@ class DiscoveryStrategy(Protocol):
             Iterable[Path]: Resolved filesystem paths respecting discovery rules.
         """
 
-        raise NotImplementedError
+        ...
 
     def __call__(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
         """Return discovery results while complying with callable expectations.
@@ -108,7 +148,7 @@ class DiscoveryStrategy(Protocol):
             Iterable[Path]: Resolved filesystem paths respecting discovery rules.
         """
 
-        raise NotImplementedError
+        ...
 
 
 @runtime_checkable
@@ -119,6 +159,7 @@ class DiscoveryOptions(PathSelectionOptions, Protocol):
 __all__ = [
     "DiscoveryStrategy",
     "ExcludePolicy",
+    "FileDiscoveryConfig",
     "TargetPlanner",
     "DiscoveryOptions",
 ]

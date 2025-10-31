@@ -30,7 +30,8 @@ specification as a standalone project.
 * Try to use the strictest types possible and avoid Any, object and optional None if possible.
 * For functions that have more than 5 args or use kwargs, prefer using a paramater dataclass instead.
 * Use typing.Literal, typing.Final, abc.\* and enum where possible to improve code.
-* Consider adding dunder methods to classes where it makes them more useful to callers.i
+* Consider adding dunder methods to classes where it makes them more useful to callers.
+* Hoist imports to module scope—conditional imports (including TYPE\_CHECKING guards) are forbidden; define abstractions under `src/pyqa/interfaces` and inject implementations instead.
 * Lint suppressions are discouraged; only the documented set (dynamic cache helpers, subprocess hardening, protocol annotations, controlled CLI imports, and download safety checks) remain approved. Any new suppression must include an inline justification and prior review.
 * Prefer `functools.partial` (or companion helpers), the relevant utilities from `itertools` (including `starproduct` on Python ≥3.13), and high-level helpers from `operator`/`contextlib` before rolling custom closures or resource wrappers.
 

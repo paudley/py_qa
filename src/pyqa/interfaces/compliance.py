@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Sequence
-from typing import Protocol, runtime_checkable
+from pathlib import Path
+from typing import Protocol, cast, runtime_checkable
 
 from pyqa.core.serialization import JsonValue
 
@@ -22,7 +23,7 @@ class ComplianceCheck(Protocol):
         """Return the unique identifier for the compliance check.
 
         Returns:
-            str: Unique identifier describing the compliance check.
+            str: Unique compliance check identifier.
         """
         raise NotImplementedError
 
@@ -31,7 +32,7 @@ class ComplianceCheck(Protocol):
         """Execute the compliance check and return human-readable issues.
 
         Returns:
-            Sequence[str]: Collection of human-readable issues uncovered by the check.
+            Sequence[str]: Human-readable issues uncovered by the check.
         """
         raise NotImplementedError
 
@@ -46,7 +47,7 @@ class PolicyEvaluator(Protocol):
         """Return the policy name evaluated by the service.
 
         Returns:
-            str: Name of the policy handled by the evaluator.
+            str: Policy name handled by the evaluator.
         """
         raise NotImplementedError
 
@@ -57,7 +58,7 @@ class PolicyEvaluator(Protocol):
         Args:
             payload: JSON payload subjected to policy evaluation.
         """
-        raise NotImplementedError
+        ...
 
 
 @runtime_checkable
@@ -70,7 +71,7 @@ class RemediationService(Protocol):
         """Return the issue identifiers supported by the service.
 
         Returns:
-            Sequence[str]: Collection of issue identifiers eligible for remediation.
+            Sequence[str]: Issue identifiers eligible for remediation.
         """
         raise NotImplementedError
 
@@ -84,4 +85,149 @@ class RemediationService(Protocol):
         Returns:
             bool: ``True`` when remediation succeeds; otherwise ``False``.
         """
-        raise NotImplementedError
+        ...
+
+
+@runtime_checkable
+class QualityConfigSection(Protocol):
+    """Expose quality enforcement configuration consumed by quality checks."""
+
+    @property
+    def checks(self) -> list[str]:
+        """Return the quality checks selected for execution.
+
+        Returns:
+            list[str]: the quality checks selected for execution.
+        """
+        return cast(list[str], NotImplemented)
+
+    @property
+    def skip_globs(self) -> list[str]:
+        """Return glob patterns ignored by quality checks.
+
+        Returns:
+            list[str]: glob patterns ignored by quality checks.
+        """
+        return cast(list[str], NotImplemented)
+
+    @property
+    def schema_targets(self) -> list[Path]:
+        """Return schema targets requiring validation.
+
+        Returns:
+            list[Path]: schema targets requiring validation.
+        """
+        return cast(list[Path], NotImplemented)
+
+    @property
+    def warn_file_size(self) -> int:
+        """Return the file size threshold that emits warnings.
+
+        Returns:
+            int: the file size threshold that emits warnings.
+        """
+        return cast(int, NotImplemented)
+
+    @property
+    def max_file_size(self) -> int:
+        """Return the maximum permitted file size.
+
+        Returns:
+            int: the maximum permitted file size.
+        """
+        return cast(int, NotImplemented)
+
+    @property
+    def protected_branches(self) -> list[str]:
+        """Return branches protected by quality enforcement.
+
+        Returns:
+            list[str]: branches protected by quality enforcement.
+        """
+        return cast(list[str], NotImplemented)
+
+    @property
+    def enforce_in_lint(self) -> bool:
+        """Return whether quality checks run during lint commands.
+
+        Returns:
+            bool: whether quality checks run during lint commands.
+        """
+        return cast(bool, NotImplemented)
+
+
+@runtime_checkable
+class LicenseConfig(Protocol):
+    """Expose licensing configuration toggles used by compliance checks."""
+
+    @property
+    def spdx(self) -> str | None:
+        """Return the primary SPDX identifier.
+
+        Returns:
+            str | None: the primary SPDX identifier.
+        """
+        return cast(str | None, NotImplemented)
+
+    @property
+    def notice(self) -> str | None:
+        """Return the copyright notice text.
+
+        Returns:
+            str | None: the copyright notice text.
+        """
+        return cast(str | None, NotImplemented)
+
+    @property
+    def copyright(self) -> str | None:
+        """Return the copyright holder string.
+
+        Returns:
+            str | None: the copyright holder string.
+        """
+        return cast(str | None, NotImplemented)
+
+    @property
+    def year(self) -> str | None:
+        """Return the copyright year range.
+
+        Returns:
+            str | None: the copyright year range.
+        """
+        return cast(str | None, NotImplemented)
+
+    @property
+    def require_spdx(self) -> bool:
+        """Return whether SPDX identifiers are mandatory.
+
+        Returns:
+            bool: whether SPDX identifiers are mandatory.
+        """
+        return cast(bool, NotImplemented)
+
+    @property
+    def require_notice(self) -> bool:
+        """Return whether notices are required.
+
+        Returns:
+            bool: whether notices are required.
+        """
+        return cast(bool, NotImplemented)
+
+    @property
+    def allow_alternate_spdx(self) -> list[str]:
+        """Return alternate SPDX identifiers permitted by policy.
+
+        Returns:
+            list[str]: alternate SPDX identifiers permitted by policy.
+        """
+        return cast(list[str], NotImplemented)
+
+    @property
+    def exceptions(self) -> list[str]:
+        """Return file-level exceptions to licensing rules.
+
+        Returns:
+            list[str]: file-level exceptions to licensing rules.
+        """
+        return cast(list[str], NotImplemented)

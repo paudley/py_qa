@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal
 
-from pyqa.config import Config, SensitivityLevel
+from pyqa.interfaces.config import Config as ConfigProtocol
+from pyqa.interfaces.config import SensitivityLevelLiteral
 from pyqa.tools.base import PhaseLiteral
 
 ToolFamilyLiteral = Literal["external", "internal", "internal-pyqa", "unknown"]
@@ -24,14 +25,14 @@ RUN_ACTION: Final[str] = "run"
 class SelectionContext:
     """Provide derived inputs used to evaluate tool eligibility."""
 
-    config: Config
+    config: ConfigProtocol
     root: Path
     files: tuple[Path, ...]
     requested_only: tuple[str, ...]
     requested_languages: tuple[str, ...]
     detected_languages: tuple[str, ...]
     file_extensions: frozenset[str]
-    sensitivity: SensitivityLevel
+    sensitivity: SensitivityLevelLiteral
     pyqa_workspace: bool
     pyqa_rules: bool
 

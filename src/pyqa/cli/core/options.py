@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, TypeAlias, cast
+from typing import Final, TypeAlias, cast
 
 from .lint_literals import (
     BanditLevelLiteral,
@@ -341,52 +341,6 @@ class LintOptions:
         "_overrides",
         "_provided",
     )
-
-    if TYPE_CHECKING:
-        root: Path
-        cache_dir: Path
-        paths: list[Path]
-        dirs: list[Path]
-        exclude: list[Path]
-        paths_from_stdin: bool
-        include_dotfiles: bool
-        changed_only: bool
-        diff_ref: str
-        include_untracked: bool
-        base_branch: str | None
-        no_lint_tests: bool
-        filters: list[str]
-        only: list[str]
-        language: list[str]
-        fix_only: bool
-        check_only: bool
-        verbose: bool
-        quiet: bool
-        no_color: bool
-        no_emoji: bool
-        output_mode: OutputModeLiteral
-        advice: bool
-        show_passing: bool
-        no_stats: bool
-        pr_summary_out: Path | None
-        pr_summary_limit: int
-        pr_summary_min_severity: PRSummarySeverityLiteral
-        pr_summary_template: str
-        jobs: int | None
-        bail: bool
-        no_cache: bool
-        use_local_linters: bool
-        strict_config: bool
-        line_length: int
-        sql_dialect: str
-        python_version: str | None
-        max_complexity: int | None
-        max_arguments: int | None
-        type_checking: StrictnessLiteral | None
-        bandit_severity: BanditLevelLiteral | None
-        bandit_confidence: BanditLevelLiteral | None
-        pylint_fail_under: float | None
-        sensitivity: SensitivityLiteral | None
 
     def __init__(
         self,
