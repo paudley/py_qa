@@ -107,6 +107,9 @@ pyqa_builtin_diagnostics = "pyqa.plugins:noop_plugin"
 [project.optional-dependencies]
 dev = []
 
+[dependency-groups]
+dev = []
+
 [tool.bandit]
 exclude_dirs = ["tests"]
 
