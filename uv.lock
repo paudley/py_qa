@@ -1460,6 +1460,7 @@ requires-dist = [
     { name = "vulture", specifier = ">=2.14" },
     { name = "yamllint", specifier = ">=1.37.1" },
 ]
+provides-extras = ["dev"]
 
 [[package]]
 name = "pyright"

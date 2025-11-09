@@ -102,7 +102,7 @@ def _extract_project_name(payload: PyProjectPayload) -> str | None:
 
 _PY_QA_NAME_VARIANTS = {PY_QA_DIR_NAME, PY_QA_DIR_NAME.replace("_", "")}
 _SENTINEL_DIRECTORIES = ("src/pyqa", "docs", "tooling")
-_SENTINEL_FILES = ("REORG_PLAN.md",)
+_SENTINEL_FILES = ("docs/ARCHITECTURE.md",)
 
 
 def _has_required_entries(root: Path) -> bool:

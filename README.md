@@ -47,6 +47,18 @@ hosts must provide build prerequisites for native extensions. The orchestrator
 will refuse to start when either spaCy or tree-sitter is unavailable so issues
 surface immediately instead of falling back to degraded behaviour.
 
+## 🧱 Architecture Overview
+
+PyQA groups runtime code by responsibility—`pyqa.cache` owns persistence,
+`pyqa.analysis` wraps spaCy/tree-sitter integrations, `pyqa.reporting` focuses on
+presentation, and `pyqa.interfaces` holds the Protocols that the rest of the
+code imports. The CLI registers commands via entry points
+(`pyqa.cli.plugins`, `pyqa.catalog.plugins`, `pyqa.diagnostics.plugins`) so
+extensions stay decoupled. Every package follows the guardrails captured in
+`docs/ARCHITECTURE.md` (interface-first design, strict typing, no conditional
+imports, limited lint suppressions). Refer to that document whenever you need to
+understand the module layout or add a new subsystem.
+
 ## Scripts Overview
 
 ### Core Quality & CI Scripts

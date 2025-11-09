@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pyqa"
-version = "0.2.0"
+version = "0.3.0"
 description = "Polyglot lint orchestration toolkit"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -103,6 +103,9 @@ pyqa_builtin_cli = "pyqa.plugins:noop_plugin"
 
 [project.entry-points."pyqa.diagnostics.plugins"]
 pyqa_builtin_diagnostics = "pyqa.plugins:noop_plugin"
+
+[project.optional-dependencies]
+dev = []
 
 [tool.bandit]
 exclude_dirs = ["tests"]
