@@ -13,8 +13,8 @@ from pyqa.interfaces.tools import ToolContext
 
 
 @runtime_checkable
-class Parser(Protocol):
-    """Protocol implemented by output parsers."""
+class ParserImplementation(Protocol):
+    """Protocol describing the minimal parse surface accepted by tool actions."""
 
     @abstractmethod
     def parse(
@@ -42,6 +42,11 @@ class Parser(Protocol):
         """
 
         raise NotImplementedError("Parser.parse must be implemented")
+
+
+@runtime_checkable
+class Parser(ParserImplementation, Protocol):
+    """Protocol implemented by output parsers."""
 
     def __call__(
         self,
@@ -116,6 +121,16 @@ class ParserLike(Protocol):
 @runtime_checkable
 class ParserContract(Protocol):
     """Protocol describing objects exposing a parse method."""
+
+    def __call__(
+        self,
+        stdout: Sequence[str],
+        stderr: Sequence[str],
+        *,
+        context: ToolContext,
+    ) -> Sequence[RawDiagnostic | Diagnostic]:
+        """Return parsed diagnostics when invoked as a callable."""
+        ...
 
     def parse(
         self,
@@ -308,6 +323,7 @@ __all__ = [
     "InstallerCallable",
     "InternalActionRunner",
     "Parser",
+    "ParserImplementation",
     "ParserLike",
     "ParserContract",
     "ToolContext",

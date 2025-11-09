@@ -21,9 +21,13 @@ from typing import TypeAlias, TypeVar, cast
 
 import typer
 
-from pyqa.cli.protocols import CommandCallable, CommandDecorator, TyperLike, TyperSubApplication
+from pyqa.interfaces.cli import TyperLike, TyperSubApplication
 from tooling_spec.catalog.plugins import CatalogContribution
 from tooling_spec.catalog.types import JSONValue as CatalogJSONValue
+
+CommandResult = int | None
+CommandCallable: TypeAlias = Callable[..., CommandResult]
+CommandDecorator: TypeAlias = Callable[[CommandCallable], CommandCallable]
 
 
 class _FallbackTyper(TyperLike):

@@ -24,6 +24,7 @@ from .interfaces import (
     InstallerCallable,
     InternalActionRunner,
     Parser,
+    ParserImplementation,
     ParserContract,
     ParserLike,
 )
@@ -37,8 +38,7 @@ ToolContextRawMapping: TypeAlias = Mapping[str, ToolContextPayloadValue | ToolCo
 _EXTRA_KEY: Final[str] = "extra"
 
 
-CommandField: TypeAlias = CommandBuilder | CommandBuilderLike | CommandBuilderContract
-ParserField: TypeAlias = Parser | ParserLike | ParserContract | None
+ParserField: TypeAlias = Parser | ParserLike | ParserContract | ParserImplementation | None
 
 
 @runtime_checkable
@@ -56,6 +56,9 @@ class SupportsCommandBuild(Protocol):
         """
 
         raise NotImplementedError
+
+
+CommandField: TypeAlias = CommandBuilder | CommandBuilderLike | CommandBuilderContract | SupportsCommandBuild
 
 
 @runtime_checkable
@@ -345,7 +348,7 @@ class ToolAction(BaseModel):
     @classmethod
     def _coerce_parser(
         cls,
-        value: Parser | ParserLike | ParserContract | None,
+        value: Parser | ParserLike | ParserContract | ParserImplementation | None,
     ) -> ParserField:
         """Validate parser instances supplied for tool actions.
 
@@ -361,7 +364,9 @@ class ToolAction(BaseModel):
 
         if value is None:
             return None
-        if isinstance(value, (Parser, ParserLike, ParserContract)):
+        if isinstance(value, (Parser, ParserLike, ParserContract, ParserImplementation)):
+            return cast(ParserField, value)
+        if _supports_parser_interface(value):
             return cast(ParserField, value)
         raise TypeError("parser must implement the Parser protocol")
 
@@ -908,3 +913,8 @@ class Tool(BaseModel):
 
 
 ToolContext.model_rebuild(_types_namespace={"JSONValue": _CatalogJSONValue})
+def _supports_parser_interface(candidate: object) -> bool:
+    """Return ``True`` when ``candidate`` exposes a ``parse`` method."""
+
+    parse = getattr(candidate, "parse", None)
+    return callable(parse)
