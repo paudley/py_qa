@@ -54,5 +54,5 @@ def load_plugin_contributions(
         plugin factories.
     """
 
-    factories = tuple(plugin_factories) if plugin_factories is not None else load_catalog_plugins()
+    factories = plugin_factories if plugin_factories is not None else load_catalog_plugins()
     return _spec_plugins.load_plugin_contributions(context, plugin_factories=factories)
