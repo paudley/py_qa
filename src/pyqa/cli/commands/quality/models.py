@@ -40,6 +40,7 @@ FIX_OPTION = Annotated[
     typer.Option(
         False,
         "--fix/--no-fix",
+        is_flag=True,
         help="Attempt to repair license notices and SPDX tags before re-running checks.",
     ),
 ]
