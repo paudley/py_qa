@@ -166,9 +166,7 @@ def _apply_workspace_protections(context: QualityConfigContext) -> None:
     license_config = context.config.license
 
     if extra_skip not in quality_config.skip_globs:
-        updated_skip_globs = list(quality_config.skip_globs)
-        updated_skip_globs.append(extra_skip)
-        quality_config.skip_globs = updated_skip_globs
+        quality_config.skip_globs = [*quality_config.skip_globs, extra_skip]
     if extra_skip not in license_config.exceptions:
         license_config.exceptions.append(extra_skip)
 
