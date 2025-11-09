@@ -26,8 +26,8 @@ class Parser(Protocol):
     ) -> Sequence[RawDiagnostic | Diagnostic]:
         """Parse output streams produced by an external tool.
 
-        Implementations must return diagnostics or raw diagnostic payloads derived from
-        the provided ``stdout``/``stderr`` sequences.
+        Implementations must convert the provided ``stdout``/``stderr`` sequences
+        into diagnostics suitable for downstream processing.
 
         Args:
             stdout: Lines emitted on standard output by the external tool.
@@ -35,7 +35,7 @@ class Parser(Protocol):
             context: Tool execution context describing configuration and files.
 
         Returns:
-            Sequence[RawDiagnostic | Diagnostic]: Parsed diagnostics produced by the implementation.
+            Sequence[RawDiagnostic | Diagnostic]: Parsed diagnostics derived from the tool output streams.
 
         Raises:
             NotImplementedError: When the parser has not been implemented.
@@ -84,7 +84,7 @@ class ParserLike(Protocol):
             context: Execution context passed to the parser.
 
         Returns:
-            Sequence[RawDiagnostic | Diagnostic]: Parsed diagnostics produced by the implementation.
+            Sequence[RawDiagnostic | Diagnostic]: Parsed diagnostics derived from the tool output streams.
 
         Raises:
             NotImplementedError: When the parser-like object fails to implement parsing.
@@ -135,7 +135,7 @@ class ParserContract(Protocol):
             Sequence[RawDiagnostic | Diagnostic]: Parsed diagnostics derived from the tool output streams.
         """
 
-        ...
+        raise NotImplementedError("ParserContract.parse must be implemented")
 
     def __call__(
         self,
@@ -170,7 +170,7 @@ class CommandBuilder(Protocol):
             ctx: Tool execution context containing configuration and file selections.
 
         Returns:
-            Sequence[str]: Command arguments to be executed.
+            Sequence[str]: Command arguments produced by the builder.
 
         Raises:
             NotImplementedError: When the builder has not been implemented.
@@ -234,7 +234,7 @@ class CommandBuilderContract(Protocol):
             Sequence[str]: Command arguments produced by the builder.
         """
 
-        ...
+        raise NotImplementedError("CommandBuilderContract.build must be implemented")
 
     def __call__(self, ctx: ToolContext) -> Sequence[str]:
         """Invoke :meth:`build` allowing builders to act as callables.
@@ -260,7 +260,7 @@ class InstallerCallable(Protocol):
             ctx: Tool execution context made available to the installer.
 
         Returns:
-            None
+            None: Installers do not return a value.
         """
 
         raise NotImplementedError("InstallerCallable.__call__ must be implemented")
@@ -286,7 +286,7 @@ class InternalActionRunner(Protocol):
             ctx: Tool execution context describing configuration and target files.
 
         Returns:
-            ToolOutcome: Result bundle describing the internal action.
+            ToolOutcome: Result bundle describing the internal action run.
         """
 
         raise NotImplementedError("InternalActionRunner.__call__ must be implemented")

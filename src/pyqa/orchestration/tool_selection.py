@@ -10,7 +10,7 @@ from functools import partial
 from graphlib import CycleError, TopologicalSorter
 from importlib import import_module
 from pathlib import Path
-from typing import Final, Literal, cast
+from typing import Final, Literal, Protocol, cast
 
 from pyqa.cache.in_memory import memoize
 from pyqa.platform.languages import detect_languages
@@ -43,10 +43,19 @@ class _InternalLinterDescriptor:
     pyqa_scoped: bool
 
 
+class _InternalLinterDefinition(Protocol):
+    """Protocol describing the subset of fields exposed by linter registry items."""
+
+    name: str
+    pyqa_scoped: bool
+
+
 _InternalLinterResolver = Callable[[], Sequence[_InternalLinterDescriptor]]
 
 
-def _build_internal_descriptors(resolver: Callable[[], Sequence]) -> Sequence[_InternalLinterDescriptor]:
+def _build_internal_descriptors(
+    resolver: Callable[[], Sequence[_InternalLinterDefinition]],
+) -> Sequence[_InternalLinterDescriptor]:
     """Return descriptors derived from registry-provided internal linter definitions.
 
     Args:
@@ -79,9 +88,9 @@ def _resolve_internal_linter_resolver() -> _InternalLinterResolver | None:
     except ImportError:  # pragma: no cover - feature optional during bootstrap
         return None
     resolver = getattr(module, "iter_internal_linters", None)
-    if resolver is None:
+    if resolver is None or not callable(resolver):
         return None
-    raw_resolver = cast(Callable[[], Sequence], resolver)
+    raw_resolver = cast(Callable[[], Sequence[_InternalLinterDefinition]], resolver)
 
     return partial(_build_internal_descriptors, raw_resolver)
 

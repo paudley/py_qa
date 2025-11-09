@@ -215,7 +215,8 @@
     "general": [
       "^pylint, .*:.*consider-using-assignment-expr.*$",
       "(?i)^pylint, .*:.*consider-using-assignment-expr.*$",
-      "^pylint, .*:.*unnecessary-ellipsis.*$"
+      "^pylint, .*:.*unnecessary-ellipsis.*$",
+      "^pylint, .*:.*too-few-public-methods.*$"
     ],
     "tests": [
       "^pylint, (?:.+/)?tests?/.*:.*W0212.*Access to a protected member .*$",

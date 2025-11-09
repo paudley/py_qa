@@ -4,22 +4,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import cast
 
 import typer
 
-from pyqa.protocols.cli import (
-    CliCommand,
-    CliCommandFactory,
-    CliInvocation,
-    CliParameterValue,
-    CommandCallable,
-    CommandDecorator,
-    CommandRegistrationOptions,
-    CommandResult,
-    TyperLike,
-    TyperSubApplication,
-)
+from pyqa.interfaces.cli import CliCommand, CliCommandFactory, CliInvocation, TyperLike, TyperSubApplication
+
+CliParameterValue = str | int | float | bool | None
+CommandResult = int | None
+CommandCallable = Callable[..., CommandResult]
+CommandDecorator = Callable[[CommandCallable], CommandCallable]
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,12 +44,13 @@ class TyperAdapter(TyperLike):
             CommandDecorator: Decorator returned by the underlying Typer app.
         """
 
-        return self.app.command(
+        decorator = self.app.command(
             name=name,
             help=help_text,
             add_help_option=add_help_option,
             hidden=hidden,
         )
+        return cast(CommandDecorator, decorator)
 
     def callback(
         self,
@@ -69,7 +66,8 @@ class TyperAdapter(TyperLike):
             CommandDecorator: Decorator returned by the underlying Typer app.
         """
 
-        return self.app.callback(invoke_without_command=invoke_without_command)
+        decorator = self.app.callback(invoke_without_command=invoke_without_command)
+        return cast(CommandDecorator, decorator)
 
     def add_typer(self, sub_command: TyperSubApplication | typer.Typer, *, name: str | None = None) -> None:
         """Attach a nested Typer application to the current application.
@@ -108,7 +106,6 @@ __all__ = [
     "CliCommand",
     "CliCommandFactory",
     "CliInvocation",
-    "CommandRegistrationOptions",
     "CliParameterValue",
     "CommandCallable",
     "CommandDecorator",

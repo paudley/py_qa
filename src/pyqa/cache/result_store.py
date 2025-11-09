@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict
 from ..core.metrics import FileMetrics
 from ..core.models import ToolOutcome
 from ..core.serialization import deserialize_outcome, safe_int, serialize_outcome
-from ..protocols.serialization import JsonValue
+from ..interfaces.core import JsonValue
 
 JSONValue = JsonValue
 

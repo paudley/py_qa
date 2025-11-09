@@ -126,7 +126,7 @@ _core_constants: ModuleType = _import_attribute(
     expected_type=ModuleType,
 )
 
-LicenseConfigRuntime = cast(type[LicenseConfigProtocol], _LicenseConfig)
+LicenseConfigRuntime = _LicenseConfig
 DEFAULT_EXCLUDE_DIRS: Final[frozenset[str]] = frozenset(cast(Iterable[str], _core_constants.ALWAYS_EXCLUDE_DIRS))
 
 PYPROJECT_FILENAME: Final[str] = "pyproject.toml"

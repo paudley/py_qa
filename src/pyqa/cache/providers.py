@@ -13,7 +13,7 @@ from threading import RLock
 from typing import Generic, TypeVar, cast
 
 from pyqa.core.serialization import serialize_outcome
-from pyqa.protocols.serialization import SerializableValue
+from pyqa.interfaces.serialization import SerializableValue
 
 from ..interfaces.cache import CacheProvider
 

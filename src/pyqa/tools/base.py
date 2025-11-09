@@ -38,7 +38,7 @@ _EXTRA_KEY: Final[str] = "extra"
 
 
 CommandField: TypeAlias = CommandBuilder | CommandBuilderLike | CommandBuilderContract
-ParserField: TypeAlias = ParserLike | ParserContract | None
+ParserField: TypeAlias = Parser | ParserLike | ParserContract | None
 
 
 @runtime_checkable
@@ -54,6 +54,8 @@ class SupportsCommandBuild(Protocol):
         Returns:
             Sequence[str]: Command arguments emitted by the builder.
         """
+
+        raise NotImplementedError
 
 
 @runtime_checkable
@@ -359,12 +361,8 @@ class ToolAction(BaseModel):
 
         if value is None:
             return None
-        if isinstance(value, Parser):
-            return value
-        if isinstance(value, ParserLike):
-            return value
-        if isinstance(value, ParserContract):
-            return value
+        if isinstance(value, (Parser, ParserLike, ParserContract)):
+            return cast(ParserField, value)
         raise TypeError("parser must implement the Parser protocol")
 
     @field_validator("filter_patterns", mode="before")

@@ -9,6 +9,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Final
 
+from pyqa.interfaces.core import JsonValue
 from pyqa.interfaces.linting import PreparedLintState
 
 from ._ast_visitors import BaseAstLintVisitor, VisitorMetadata, run_ast_linter
@@ -18,6 +19,8 @@ DEFAULT_INTERFACES_ROOT: Final[str] = "src/pyqa/interfaces"
 _MODULE_SCOPE_DEPTH: Final[int] = 2
 _TYPE_CHECKING_SENTINEL: Final[str] = "TYPE_CHECKING"
 _RELATIVE_PREFIX_SENTINEL: Final[str] = "."
+PYTHON_FILE_SUFFIXES: Final[tuple[str, ...]] = (".py", ".pyi")
+PYTHON_FILE_SUFFIX_SET: Final[frozenset[str]] = frozenset(PYTHON_FILE_SUFFIXES)
 
 
 class ImportKind(str, Enum):
@@ -88,21 +91,52 @@ def _collect_base_roots(base_root: Path) -> set[Path]:
     roots: set[Path] = set()
     if not base_root.exists():
         return roots
-    try:
-        resolved_root = base_root.resolve()
-    except OSError:
+    resolved_root = _safe_resolve(base_root)
+    if resolved_root is None:
         return roots
     roots.add(resolved_root)
-    try:
-        for entry in resolved_root.iterdir():
-            if entry.is_dir():
-                try:
-                    roots.add(entry.resolve())
-                except OSError:
-                    continue
-    except OSError:
-        return roots
+    roots.update(_collect_child_directories(resolved_root))
     return roots
+
+
+def _safe_resolve(path: Path) -> Path | None:
+    """Return ``path.resolve()`` while tolerating platform-specific failures.
+
+    Args:
+        path: Path instance being resolved.
+
+    Returns:
+        Path | None: Resolved path or ``None`` when the resolution fails.
+    """
+
+    try:
+        return path.resolve()
+    except OSError:
+        return None
+
+
+def _collect_child_directories(root: Path) -> set[Path]:
+    """Return resolved directories directly beneath ``root``.
+
+    Args:
+        root: Directory whose immediate children should be resolved.
+
+    Returns:
+        set[Path]: Child directories that resolved successfully.
+    """
+
+    try:
+        entries = tuple(root.iterdir())
+    except OSError:
+        return set()
+    resolved_children: set[Path] = set()
+    for entry in entries:
+        if not entry.is_dir():
+            continue
+        resolved = _safe_resolve(entry)
+        if resolved is not None:
+            resolved_children.add(resolved)
+    return resolved_children
 
 
 def _collect_target_roots(state: PreparedLintState) -> set[Path]:
@@ -134,7 +168,7 @@ def _collect_target_roots(state: PreparedLintState) -> set[Path]:
     return roots
 
 
-def _resolve_existing_path(value: object, *, treat_file_parent: bool) -> Path | None:
+def _resolve_existing_path(value: Path | str | None, *, treat_file_parent: bool) -> Path | None:
     """Return a resolved path for ``value`` when an existing directory is found.
 
     Args:
@@ -145,15 +179,15 @@ def _resolve_existing_path(value: object, *, treat_file_parent: bool) -> Path | 
         Path | None: Resolved directory path or ``None`` when the candidate does not exist.
     """
 
-    if not isinstance(value, Path):
+    if value is None:
         return None
-    candidate = value if value.is_dir() or not treat_file_parent else value.parent
+    candidate_path = value if isinstance(value, Path) else Path(value)
+    if not candidate_path.exists():
+        return None
+    candidate = candidate_path if candidate_path.is_dir() or not treat_file_parent else candidate_path.parent
     if not candidate.exists():
         return None
-    try:
-        return candidate.resolve()
-    except OSError:
-        return None
+    return _safe_resolve(candidate)
 
 
 def run_conditional_import_linter(
@@ -280,17 +314,14 @@ class _ConditionalImportVisitor(BaseAstLintVisitor):
         if isinstance(parent, ast.If) and _uses_type_checking_guard(parent):
             hints.append("TYPE_CHECKING guards are banned; rely on interfaces rather than conditional imports.")
 
-        self.record_issue(
-            node,
-            message,
-            hints=hints,
-            meta={
-                "violation": "conditional-import",
-                "context": context,
-                "import_kind": import_kind.value,
-                "targets": list(modules),
-            },
-        )
+        targets_list: list[JsonValue] = [str(module) for module in modules]
+        meta_payload: dict[str, JsonValue] = {
+            "violation": "conditional-import",
+            "context": context,
+            "import_kind": import_kind.value,
+            "targets": targets_list,
+        }
+        self.record_issue(node, message, hints=hints, meta=meta_payload)
 
     def _extract_import_targets(self, node: ast.AST) -> tuple[list[str], str]:
         """Return module targets referenced by ``node`` alongside a display label.
@@ -334,7 +365,7 @@ class _ConditionalImportVisitor(BaseAstLintVisitor):
         """
 
         if not modules:
-            if isinstance(node, ast.ImportFrom) and getattr(node, "level", 0):
+            if isinstance(node, ast.ImportFrom) and node.level:
                 return ImportKind.INTERNAL
             return ImportKind.EXTERNAL
         statuses = [self._is_internal_module(module) for module in modules]
@@ -399,23 +430,23 @@ def _package_contains_python(directory: Path) -> bool:
     if init_file.is_file():
         return True
     try:
-        return any(entry.is_file() and entry.suffix in (".py", ".pyi") for entry in directory.iterdir())
+        return any(entry.is_file() and entry.suffix in PYTHON_FILE_SUFFIX_SET for entry in directory.iterdir())
     except OSError:
         return False
 
 
 def _module_file_exists(parent: Path, module_name: str) -> bool:
-    """Return whether ``parent`` contains a module or stub file named ``module_name``.
+    """Return whether ``parent`` contains a module implementation or type-hint file.
 
     Args:
         parent: Directory inspected for module files.
         module_name: Module name extracted from the import statement.
 
     Returns:
-        bool: ``True`` when a Python source or stub file exists for the module.
+        bool: ``True`` when a Python source or type-hint file exists for the module.
     """
 
-    for suffix in (".py", ".pyi"):
+    for suffix in PYTHON_FILE_SUFFIXES:
         candidate = parent / f"{module_name}{suffix}"
         if candidate.is_file():
             return True

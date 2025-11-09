@@ -8,14 +8,13 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Final, Generic, TypeVar, cast, overload
+from typing import Final, Generic, TypeVar, overload
 
 import typer
 from rich.console import Console
 from rich.text import Text
 
 from pyqa.cli.protocols import TyperLike
-from pyqa.protocols.cli import CommandRegistrationOptions
 
 from ...core.logging import fail as core_fail
 from ...core.logging import ok as core_ok
@@ -159,15 +158,10 @@ class _CommandDecorator:
             CommandCallable: Callback returned by Typer registration.
         """
 
-        try:
-            decorator: CommandDecoratorCallable = self.app.command(
-                name=self.name,
-                help_text=self.help_text,
-            )
-        except TypeError:
-            typer_app = cast(typer.Typer, self.app)
-            command_fn = cast(Callable[..., CommandDecoratorCallable], typer_app.command)
-            decorator = command_fn(name=self.name, help=self.help_text)
+        decorator: CommandDecoratorCallable = self.app.command(
+            name=self.name,
+            help_text=self.help_text,
+        )
         return decorator(func)
 
 

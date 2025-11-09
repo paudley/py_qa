@@ -16,18 +16,12 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from functools import partial
 from importlib import import_module, metadata
 from importlib.metadata import EntryPoint, EntryPoints
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import TypeAlias, TypeVar, cast
 
 import typer
 
-from pyqa.protocols.cli import (
-    CommandCallable,
-    CommandDecorator,
-    CommandRegistrationOptions,
-    TyperLike,
-    TyperSubApplication,
-)
+from pyqa.cli.protocols import CommandCallable, CommandDecorator, TyperLike, TyperSubApplication
 from tooling_spec.catalog.plugins import CatalogContribution
 from tooling_spec.catalog.types import JSONValue as CatalogJSONValue
 
@@ -55,19 +49,23 @@ class _FallbackTyper(TyperLike):
         self,
         name: str | None = None,
         *,
-        options: CommandRegistrationOptions | None = None,
+        help_text: str | None = None,
+        add_help_option: bool = True,
+        hidden: bool = False,
     ) -> CommandDecorator:
         """Return a decorator that records commands without execution.
 
         Args:
             name: Optional command identifier to associate with the decorated function.
-            options: Optional command registration parameters ignored by the fallback implementation.
+            help_text: Ignored help text maintained for signature compatibility.
+            add_help_option: Ignored flag maintained for signature compatibility.
+            hidden: Ignored flag maintained for signature compatibility.
 
         Returns:
             CommandDecorator: Decorator that stores the function and returns it unchanged.
         """
 
-        del options
+        del help_text, add_help_option, hidden
         return cast(CommandDecorator, partial(self._record_command, name=name))
 
     def callback(
@@ -139,13 +137,13 @@ def _resolve_typer() -> type[TyperLike]:
     """
 
     try:
-        module = import_module("typer")
+        module: ModuleType = import_module("typer")
     except ModuleNotFoundError:  # pragma: no cover - typer may be unavailable
         return _FallbackTyper
     typer_cls = getattr(module, "Typer", None)
-    if typer_cls is None:
+    if not isinstance(typer_cls, type):
         return _FallbackTyper
-    return typer_cls
+    return cast(type[TyperLike], typer_cls)
 
 
 Typer = _resolve_typer()

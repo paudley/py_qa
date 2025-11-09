@@ -24,6 +24,7 @@ from ...analysis.services import resolve_function_scale_estimator
 from ...catalog.metadata import catalog_duplicate_hint_codes
 from ...filesystem.paths import normalize_path
 from ...interfaces.analysis import AnnotationProvider, FunctionScaleEstimator
+from ...interfaces.reporting import DiagnosticRecord
 
 
 class AdviceCategory(str, Enum):
@@ -152,18 +153,6 @@ PYTHON_HYGIENE_PRINT_SUFFIX: Final[str] = "PYTHON-HYGIENE:PRINT"
 PYTHON_HYGIENE_SYSTEM_EXIT_SUFFIX: Final[str] = "PYTHON-HYGIENE:SYSTEM-EXIT"
 PYQA_INTERFACES_TOOL: Final[str] = "pyqa-interfaces"
 PYQA_INTERFACES_CODE: Final[str] = "PYQA:INTERFACES"
-
-
-@dataclass(frozen=True)
-class DiagnosticRecord:
-    """Normalised diagnostic fields used for advice synthesis."""
-
-    file_path: str | None
-    line: int | None
-    function: str | None
-    tool: str
-    code: str
-    message: str
 
 
 class _AdviceAccumulator:

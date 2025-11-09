@@ -8,19 +8,13 @@ import json
 from collections.abc import Callable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from pathlib import Path
-from typing import TypeAlias
-
-from pydantic import BaseModel
+from typing import TypeAlias, cast
 
 from pyqa.core.models import Diagnostic, ToolExitCategory, ToolOutcome, coerce_output_sequence
 from pyqa.core.severity import Severity
-from pyqa.protocols.models import DiagnosticView, ToolOutcomeView
-from pyqa.protocols.serialization import (
-    JsonValue,
-    SerializableMapping,
-    SerializableValue,
-    SupportsToDict,
-)
+from pyqa.interfaces.core import JsonValue
+from pyqa.interfaces.reporting import DiagnosticView, ToolOutcomeView
+from pyqa.interfaces.serialization import SerializableMapping, SerializableValue, SupportsModelDump, SupportsToDict
 
 DiagnosticLike: TypeAlias = Diagnostic | DiagnosticView
 OutcomeLike: TypeAlias = ToolOutcome | ToolOutcomeView
@@ -61,13 +55,19 @@ def serialize_outcome(outcome: OutcomeLike) -> dict[str, JsonValue]:
         dict[str, JsonValue]: JSON-compatible representation of ``outcome``.
     """
 
+    stdout_payload: list[JsonValue] = [str(line) for line in outcome.stdout]
+    stderr_payload: list[JsonValue] = [str(line) for line in outcome.stderr]
+    diagnostics_payload: list[JsonValue] = [
+        cast(JsonValue, dict(serialize_diagnostic(diag))) for diag in outcome.diagnostics
+    ]
+
     return {
         "tool": outcome.tool,
         "action": outcome.action,
         "returncode": outcome.returncode,
-        "stdout": list(outcome.stdout),
-        "stderr": list(outcome.stderr),
-        "diagnostics": [serialize_diagnostic(diag) for diag in outcome.diagnostics],
+        "stdout": stdout_payload,
+        "stderr": stderr_payload,
+        "diagnostics": diagnostics_payload,
         "cached": outcome.cached,
         "exit_category": outcome.exit_category.value,
     }
@@ -252,7 +252,7 @@ def jsonify(value: SerializableValue) -> JsonValue:
 
     if isinstance(value, Path):
         result: JsonValue = value.as_posix()
-    elif isinstance(value, BaseModel):
+    elif isinstance(value, SupportsModelDump):
         result = jsonify(value.model_dump(mode="python", by_alias=True))
     elif isinstance(value, SupportsToDict):
         result = jsonify(value.to_dict())

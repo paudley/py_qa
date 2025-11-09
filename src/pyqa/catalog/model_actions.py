@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from pyqa.protocols.serialization import JsonValue
+from pyqa.interfaces.core import JsonValue
 from tooling_spec.catalog.errors import CatalogIntegrityError as SpecCatalogIntegrityError
 from tooling_spec.catalog.model_actions import ActionDefinition, ActionExecution
 from tooling_spec.catalog.model_actions import actions_array as _spec_actions_array

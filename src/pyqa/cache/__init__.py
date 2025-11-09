@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Final, Literal
 
 from ..interfaces.cache import CacheProvider
-from ..protocols.serialization import SerializableValue
+from ..interfaces.serialization import SerializableValue
 from .in_memory import ttl_cache
 from .providers import DirectoryCacheProvider, InMemoryCacheProvider
 

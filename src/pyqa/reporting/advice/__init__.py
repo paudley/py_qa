@@ -3,13 +3,9 @@
 
 """SOLID advice builders and panels."""
 
-from .builder import (
-    AdviceBuilder,
-    AdviceCategory,
-    AdviceEntry,
-    DiagnosticRecord,
-    generate_advice,
-)
+from pyqa.interfaces.reporting import DiagnosticRecord
+
+from .builder import AdviceBuilder, AdviceCategory, AdviceEntry, generate_advice
 from .panels import render_advice_panel
 from .refactor import render_refactor_navigator
 
