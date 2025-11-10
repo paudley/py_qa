@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, TypeAlias, cast
 
-from pyqa.cache import CacheProviderSettings, create_cache_provider
+from pyqa.cache import CacheProviderSettings, create_cache_provider, memoize
 from pyqa.interfaces.cache import CacheProvider
 from pyqa.platform.paths import get_pyqa_root
 
@@ -42,6 +42,20 @@ _CATALOG_CACHE: CacheProvider[CatalogCacheValue] = cast(
     CacheProvider[CatalogCacheValue],
     create_cache_provider(CacheProviderSettings(kind="memory")),
 )
+
+
+@memoize(maxsize=1)
+def _catalog_paths() -> tuple[Path, Path]:
+    """Return catalog and schema roots relative to the project layout.
+
+    Returns:
+        tuple[Path, Path]: Paths to the catalog and schema directories.
+    """
+
+    project_root = get_pyqa_root()
+    catalog_root = project_root / "tooling" / "catalog"
+    schema_root = project_root / "tooling" / "schema"
+    return catalog_root, schema_root
 
 
 def _cached_tool_options() -> CatalogToolOptionsCache:
@@ -244,19 +258,6 @@ def _snapshot_or_error() -> CatalogSnapshot:
     if snapshot is None:
         raise RuntimeError("Catalog metadata is unavailable; ensure tooling/catalog exists.")
     return snapshot
-
-
-def _catalog_paths() -> tuple[Path, Path]:
-    """Return catalog and schema roots relative to the project layout.
-
-    Returns:
-        tuple[Path, Path]: Paths to the catalog and schema directories.
-
-    """
-    project_root = get_pyqa_root()
-    catalog_root = project_root / "tooling" / "catalog"
-    schema_root = project_root / "tooling" / "schema"
-    return catalog_root, schema_root
 
 
 def _build_tool_options(snapshot: CatalogSnapshot) -> CatalogToolOptionsCache:

@@ -284,7 +284,7 @@ def _discover_py_qa_directories(root: Path) -> list[Path]:
     return [candidate for candidate in candidates if candidate.is_dir() and candidate.is_relative_to(root)]
 
 
-def _remove_path(path: Path) -> None:
+def remove_path(path: Path) -> None:
     """Remove ``path`` from the filesystem, tolerating permission errors.
 
     Args:
@@ -308,5 +308,5 @@ __all__ = [
     "_collect_matches_from_directory",
     "_discover_py_qa_directories",
     "_dedupe_paths",
-    "_remove_path",
+    "remove_path",
 ]

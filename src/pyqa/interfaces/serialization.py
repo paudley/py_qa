@@ -22,7 +22,7 @@ class SupportsToDict(Protocol):
         """Return a JSON-compatible representation of the object.
 
         Returns:
-            SerializableMapping: JSON-safe payload describing the object.
+            SerializableMapping: Mapping suitable for downstream serialisation.
         """
         ...
 
@@ -47,7 +47,7 @@ class SupportsModelDump(Protocol):
             by_alias: Flag indicating whether alias names should be used.
 
         Returns:
-            SerializableMapping: Serialized payload emitted by the model.
+            SerializableMapping: Mapping produced by the model dump routine.
         """
         ...
 

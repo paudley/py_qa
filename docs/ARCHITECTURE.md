@@ -1,5 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 
+<!-- Copyright (c) 2025 Blackcat Informatics® Inc. -->
+
 # Architecture & Module Layout
 
 The REORG initiative is complete and the repository now reflects the final,

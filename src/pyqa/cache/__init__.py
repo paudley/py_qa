@@ -14,7 +14,7 @@ from typing import Final, Literal
 
 from ..interfaces.cache import CacheProvider
 from ..interfaces.serialization import SerializableValue
-from .in_memory import ttl_cache
+from .in_memory import memoize, ttl_cache
 from .providers import DirectoryCacheProvider, InMemoryCacheProvider
 
 ProviderKind = Literal["memory", "directory"]
@@ -152,4 +152,5 @@ __all__ = [
     "default_cache_provider",
     "resolve_cache_provider_settings",
     "ttl_cache",
+    "memoize",
 ]

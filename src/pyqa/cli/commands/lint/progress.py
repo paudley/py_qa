@@ -15,6 +15,7 @@ from rich.text import Text
 
 from pyqa.runtime.console.manager import get_console_manager
 
+from ....cli.core.lint_literals import OUTPUT_MODE_CONCISE
 from ....core.models import RunResult, ToolOutcome
 from ....core.runtime import ServiceResolutionError
 from ....interfaces.orchestration import OrchestratorHooks
@@ -75,7 +76,11 @@ class ExecutionProgressController:
 
         config = self.runtime.config
         state = self.runtime.state
-        self.enabled = self.is_terminal and not state.display.quiet and not config.output.quiet
+        output_mode = getattr(config.output, "output", OUTPUT_MODE_CONCISE)
+        color_allowed = self.is_terminal and config.output.color
+        self.enabled = (
+            color_allowed and not state.display.quiet and not config.output.quiet and output_mode == OUTPUT_MODE_CONCISE
+        )
         if not self.enabled:
             return
 
@@ -86,7 +91,7 @@ class ExecutionProgressController:
                 console_factory = services.resolve("console_factory")
             except ServiceResolutionError:
                 console_factory = get_console_manager().get
-        color_enabled = config.output.color and self.is_terminal
+        color_enabled = color_allowed
         console = console_factory(color=color_enabled, emoji=config.output.emoji)
         progress = self.progress_factory(
             SpinnerColumn(),
@@ -301,7 +306,7 @@ class _ProgressCallbacks:
                 of diagnostics processed during post-run reporting.
         """
 
-        diagnostic_total = sum(len(outcome.diagnostics) for outcome in result.outcomes)
+        diagnostic_total = result.diagnostic_count()
         with self.lock:
             self._ensure_started()
             self.controller.advance(1)

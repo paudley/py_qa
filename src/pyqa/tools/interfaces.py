@@ -122,16 +122,6 @@ class ParserLike(Protocol):
 class ParserContract(Protocol):
     """Protocol describing objects exposing a parse method."""
 
-    def __call__(
-        self,
-        stdout: Sequence[str],
-        stderr: Sequence[str],
-        *,
-        context: ToolContext,
-    ) -> Sequence[RawDiagnostic | Diagnostic]:
-        """Return parsed diagnostics when invoked as a callable."""
-        ...
-
     def parse(
         self,
         stdout: Sequence[str],

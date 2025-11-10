@@ -304,28 +304,6 @@ def prepare_lint_state(
             effective_jobs=effective_jobs,
         ),
     )
-
-    pyqa_rules_enabled = is_py_qa_workspace(normalized_targets.root)
-
-    # If options/meta construction needs pyqa_rules_enabled, pass it here.
-    # For example, if meta has a constructor or method to set this flag, use it.
-    # If not, you may need to create a new meta object with the updated value.
-    # Example (pseudo-code, adjust to your actual meta/options API):
-    # updated_meta = replace(inputs.advanced.meta, runtime=replace(inputs.advanced.meta.runtime, additional=replace(inputs.advanced.meta.runtime.additional, pyqa_rules=pyqa_rules_enabled)))
-    # If using dataclasses, you can use dataclasses.replace. Otherwise, construct a new meta object as needed.
-    # For now, let's assume you can set it when constructing options:
-    options = _build_lint_options(
-        context=_LintOptionBuildContext(
-            inputs=inputs,
-            normalized_targets=normalized_targets,
-            preset=preset,
-            display=display,
-            artifacts=artifacts,
-            cache_dir=cache_dir,
-            effective_jobs=effective_jobs,
-            pyqa_rules_enabled=pyqa_rules_enabled,  # Pass the flag to the context/options
-        ),
-    )
     params = PreparedLintStateParams(
         options=options,
         meta=inputs.advanced.meta,

@@ -299,15 +299,11 @@ def diff_snapshots(
             diff.update(nested)
             continue
         if isinstance(left, Mapping) or isinstance(right, Mapping):
-            left_mapping: Mapping[str, JsonValue] = (
-                cast(Mapping[str, JsonValue], left) if isinstance(left, Mapping) else cast(Mapping[str, JsonValue], {})
+            nested = diff_snapshots(
+                _mapping_or_empty(left),
+                _mapping_or_empty(right),
+                prefix=key_path,
             )
-            right_mapping: Mapping[str, JsonValue] = (
-                cast(Mapping[str, JsonValue], right)
-                if isinstance(right, Mapping)
-                else cast(Mapping[str, JsonValue], {})
-            )
-            nested = diff_snapshots(left_mapping, right_mapping, prefix=key_path)
             if nested:
                 diff.update(nested)
             diff[key_path] = cast(
@@ -326,6 +322,22 @@ def diff_snapshots(
             },
         )
     return diff
+
+
+def _mapping_or_empty(value: JsonValue | None) -> Mapping[str, JsonValue]:
+    """Return ``value`` when it is a mapping, otherwise an empty mapping.
+
+    Args:
+        value: Candidate JSON value that may represent a mapping.
+
+    Returns:
+        Mapping[str, JsonValue]: Mapping derived from ``value`` or an empty mapping
+        when ``value`` is not a mapping.
+    """
+
+    if isinstance(value, Mapping):
+        return cast(Mapping[str, JsonValue], value)
+    return {}
 
 
 @dataclass(slots=True)

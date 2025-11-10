@@ -14,7 +14,7 @@ from pyqa.interfaces.config import Config as ConfigProtocol
 from tooling_spec.catalog.types import JSONValue as _CatalogJSONValue
 
 from ..config.types import ConfigValue
-from ..core.models import OutputFilter
+from ..core.models import Diagnostic, OutputFilter, RawDiagnostic
 from ..interfaces.tools import ToolConfiguration
 from ..interfaces.tools import ToolContext as ToolContextProtocol
 from .interfaces import (
@@ -24,8 +24,8 @@ from .interfaces import (
     InstallerCallable,
     InternalActionRunner,
     Parser,
-    ParserImplementation,
     ParserContract,
+    ParserImplementation,
     ParserLike,
 )
 
@@ -38,7 +38,31 @@ ToolContextRawMapping: TypeAlias = Mapping[str, ToolContextPayloadValue | ToolCo
 _EXTRA_KEY: Final[str] = "extra"
 
 
-ParserField: TypeAlias = Parser | ParserLike | ParserContract | ParserImplementation | None
+@runtime_checkable
+class SupportsParserDuck(Protocol):
+    """Protocol describing objects that expose a ``parse`` method."""
+
+    def parse(
+        self,
+        stdout: Sequence[str],
+        stderr: Sequence[str],
+        *,
+        context: ToolContextProtocol,
+    ) -> Sequence[RawDiagnostic | Diagnostic]:
+        """Return parsed diagnostics for the supplied context.
+
+        Args:
+            stdout: Lines emitted on standard output by the external tool.
+            stderr: Lines emitted on standard error by the external tool.
+            context: Tool execution context describing configuration and files.
+
+        Returns:
+            Sequence[RawDiagnostic | Diagnostic]: Parsed diagnostics emitted by the parser.
+        """
+        ...
+
+
+ParserField: TypeAlias = Parser | ParserLike | ParserContract | ParserImplementation | SupportsParserDuck | None
 
 
 @runtime_checkable
@@ -348,7 +372,7 @@ class ToolAction(BaseModel):
     @classmethod
     def _coerce_parser(
         cls,
-        value: Parser | ParserLike | ParserContract | ParserImplementation | None,
+        value: Parser | ParserLike | ParserContract | ParserImplementation | SupportsParserDuck | None,
     ) -> ParserField:
         """Validate parser instances supplied for tool actions.
 
@@ -913,8 +937,17 @@ class Tool(BaseModel):
 
 
 ToolContext.model_rebuild(_types_namespace={"JSONValue": _CatalogJSONValue})
-def _supports_parser_interface(candidate: object) -> bool:
-    """Return ``True`` when ``candidate`` exposes a ``parse`` method."""
+
+
+def _supports_parser_interface(candidate: SupportsParserDuck | None) -> bool:
+    """Return whether ``candidate`` exposes a callable ``parse`` attribute.
+
+    Args:
+        candidate: Object supplied as a parser implementation.
+
+    Returns:
+        bool: ``True`` when ``candidate`` provides a callable ``parse`` method.
+    """
 
     parse = getattr(candidate, "parse", None)
     return callable(parse)

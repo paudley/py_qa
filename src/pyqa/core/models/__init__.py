@@ -246,6 +246,15 @@ class RunResult(BaseModel):
 
         return any(outcome.diagnostics for outcome in self.outcomes)
 
+    def diagnostic_count(self) -> int:
+        """Return the total number of diagnostics emitted across all outcomes.
+
+        Returns:
+            int: Aggregate diagnostic count.
+        """
+
+        return sum(len(outcome.diagnostics) for outcome in self.outcomes)
+
     @property
     def failed(self) -> bool:
         """Expose :meth:`has_failures` as an attribute-style accessor.

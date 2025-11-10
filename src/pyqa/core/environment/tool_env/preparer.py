@@ -8,6 +8,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from pyqa.cache.in_memory import memoize
 from pyqa.platform.paths import get_pyqa_root
 from pyqa.tools.base import Tool
 
@@ -50,6 +51,17 @@ class CommandPreparationRequest:
     use_local_override: bool
 
 
+@memoize(maxsize=1)
+def _resolved_pyqa_root() -> Path:
+    """Return the cached pyqa root to avoid repeated workspace detection.
+
+    Returns:
+        Path: Resolved pyqa project root discovered via :func:`get_pyqa_root`.
+    """
+
+    return get_pyqa_root()
+
+
 class CommandPreparer:
     """Decide whether to use system, project, or vendored tooling."""
 
@@ -67,7 +79,7 @@ class CommandPreparer:
             "binary": BinaryRuntime(self._versions),
         }
         self._ensured_roots: set[Path] = set()
-        self._pyqa_root: Path = get_pyqa_root()
+        self._pyqa_root: Path = _resolved_pyqa_root()
 
     @property
     def available_runtimes(self) -> tuple[str, ...]:

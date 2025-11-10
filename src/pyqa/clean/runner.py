@@ -11,7 +11,7 @@ from pathlib import Path
 from pyqa.config import CleanConfig
 from pyqa.core.logging import ok
 
-from .plan import CleanPlan, CleanPlanner, _remove_path
+from .plan import CleanPlan, CleanPlanner, remove_path
 
 
 @dataclass(slots=True)
@@ -83,7 +83,7 @@ def sparkly_clean(
         if dry_run:
             result.register_skipped(path)
             continue
-        _remove_path(path)
+        remove_path(path)
         result.register_removed(path)
 
     if dry_run:
