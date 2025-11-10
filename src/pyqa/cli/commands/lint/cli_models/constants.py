@@ -13,6 +13,7 @@ NORMAL_PRESET_HELP: Final[str] = (
     "Apply the built-in 'normal' lint preset (concise output, advice, no tests, local linters)."
 )
 EXPLAIN_TOOLS_HELP: Final[str] = "Show the tool selection plan with reasons and exit."
+EXPLAIN_TOOLS_JSON_HELP: Final[str] = "Write explain-tools data to PATH as JSON (use '-' for stdout)."
 DOCSTRINGS_HELP: Final[str] = "Run the internal docstring quality linter and exit."
 SUPPRESSIONS_HELP: Final[str] = "Run the internal suppression checker and exit."
 TYPING_HELP: Final[str] = "Run the strict typing checker and exit."
@@ -77,6 +78,7 @@ __all__ = [
     "COPYRIGHT_HELP",
     "DOCSTRINGS_HELP",
     "EXPLAIN_TOOLS_HELP",
+    "EXPLAIN_TOOLS_JSON_HELP",
     "FETCH_ALL_TOOLS_HELP",
     "FILE_SIZE_HELP",
     "FILTER_HELP",

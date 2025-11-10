@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from pyqa.interfaces.orchestration_selection import SelectionResult
 from pyqa.orchestration.selection_context import UnknownToolRequestedError
@@ -15,7 +16,7 @@ from ....tools.builtin_registry import initialize_registry
 from ....tools.registry import DEFAULT_REGISTRY
 from ..doctor.command import run_doctor
 from ..tool_info.command import run_tool_info
-from .explain import render_explain_tools
+from .explain import render_explain_tools, write_explain_tools_json
 from .fetch import render_fetch_all_tools
 from .preparation import PreparedLintState
 from .runtime import LintRuntimeContext
@@ -101,7 +102,10 @@ def _handle_explain_tools_action(runtime: LintRuntimeContext) -> MetaActionOutco
     except UnknownToolRequestedError as exc:
         runtime.state.logger.fail(str(exc))
         return MetaActionOutcome(exit_code=1, handled=True)
-    render_explain_tools(runtime, selection)
+    rows = render_explain_tools(runtime, selection)
+    json_target = meta.actions.explain_tools_json
+    if json_target:
+        write_explain_tools_json(Path(json_target), rows, runtime.state.logger.console)
     return MetaActionOutcome(exit_code=0, handled=True)
 
 

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from dataclasses import replace
 from io import StringIO
@@ -57,6 +58,7 @@ def _meta_flags(
     *,
     normal: bool = False,
     explain_tools: bool = False,
+    explain_tools_json: str | None = None,
     check_docstrings: bool = False,
     check_suppressions: bool = False,
     check_types_strict: bool = False,
@@ -89,6 +91,7 @@ def _meta_flags(
             validate_schema=False,
             normal=normal,
             explain_tools=explain_tools,
+            explain_tools_json=explain_tools_json,
         ),
         analysis=MetaAnalysisChecks(
             check_docstrings=check_docstrings,
@@ -408,12 +411,15 @@ def test_explain_tools_outputs_table(tmp_path: Path, monkeypatch) -> None:
     target.write_text("print('hi')\n", encoding="utf-8")
 
     monkeypatch.chdir(tmp_path)
+    json_path = tmp_path / "explain.json"
 
     result = runner.invoke(
         app,
         [
             "lint",
             "--explain-tools",
+            "--explain-tools-json",
+            str(json_path),
             "--root",
             str(tmp_path),
             "--no-color",
@@ -424,9 +430,10 @@ def test_explain_tools_outputs_table(tmp_path: Path, monkeypatch) -> None:
     assert result.exit_code == 0
     assert "Tool Selection Plan" in result.stdout
     assert "Planned" in result.stdout
-    assert "pyqa-interfaces" in result.stdout
-    assert "pyqa-di" in result.stdout
-    assert "pyqa-module-docs" in result.stdout
+    assert json_path.is_file()
+    payload = json.loads(json_path.read_text())
+    names = {row["tool"] for row in payload}
+    assert {"pyqa-interfaces", "pyqa-di", "pyqa-module-docs"}.issubset(names)
 
 
 def test_explain_tools_conflicts_with_tool_info(tmp_path: Path) -> None:
@@ -886,11 +893,11 @@ def test_render_explain_tools_includes_order_and_description() -> None:
         context=SimpleNamespace(),
     )
 
-    render_explain_tools(runtime, selection)
+    rows = render_explain_tools(runtime, selection)
     output = console_stream.getvalue()
     assert "Order" in output and "Description" in output
-    assert "Alpha internal linter" in output
-    assert "1" in output
+    assert any(row.description == "Alpha internal linter" for row in rows)
+    assert any(row.order == 1 for row in rows if row.tool == "alpha")
 
 
 def _build_stub_state(

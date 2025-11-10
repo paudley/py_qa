@@ -113,10 +113,11 @@ def test_render_explain_tools_shows_order_and_description() -> None:
     )
 
     runtime = SimpleNamespace(state=SimpleNamespace(logger=_ExplainLogger()), registry=_Registry())
-    render_explain_tools(runtime, selection)
+    rows = render_explain_tools(runtime, selection)
 
     output = console_stream.getvalue()
     assert "Order" in output
     assert "Description" in output
-    assert "Alpha internal linter" in output
-    assert output.index("alpha") < output.index("beta") < output.index("gamma")
+    assert any(row.description == "Alpha internal linter" for row in rows)
+    row_map = {row.tool: row for row in rows}
+    assert row_map["gamma"].order == 1

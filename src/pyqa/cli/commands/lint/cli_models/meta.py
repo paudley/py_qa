@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -30,6 +31,7 @@ from .constants import (
     COPYRIGHT_HELP,
     DOCSTRINGS_HELP,
     EXPLAIN_TOOLS_HELP,
+    EXPLAIN_TOOLS_JSON_HELP,
     FETCH_ALL_TOOLS_HELP,
     FILE_SIZE_HELP,
     LICENSE_HEADER_HELP,
@@ -77,6 +79,7 @@ def _meta_action_toggle_dependency(
         validate_schema=validate_schema,
         normal=normal,
         explain_tools=explain_tools,
+        explain_tools_json=None,
     )
 
 
@@ -95,9 +98,23 @@ def _meta_action_info_dependency(
     return tool_info
 
 
+def _meta_action_explain_json_dependency(
+    explain_tools_json: str | None = typer.Option(
+        None,
+        "--explain-tools-json",
+        metavar="PATH",
+        help=EXPLAIN_TOOLS_JSON_HELP,
+    ),
+) -> str | None:
+    """Return optional path for explain-tools JSON output."""
+
+    return explain_tools_json
+
+
 def _meta_action_dependency(
     toggles: Annotated[MetaActionParams, Depends(_meta_action_toggle_dependency)],
     tool_info: Annotated[str | None, Depends(_meta_action_info_dependency)],
+    explain_tools_json: Annotated[str | None, Depends(_meta_action_explain_json_dependency)],
 ) -> MetaActionParams:
     """Return meta-action toggles captured from CLI options.
 
@@ -116,6 +133,7 @@ def _meta_action_dependency(
         validate_schema=toggles.validate_schema,
         normal=toggles.normal,
         explain_tools=toggles.explain_tools,
+        explain_tools_json=explain_tools_json,
     )
 
 

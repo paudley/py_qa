@@ -4,8 +4,12 @@
 
 from __future__ import annotations
 
-from typing import Final
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Final, Sequence
 
+from rich.console import Console
 from rich.table import Table
 
 from pyqa.interfaces.orchestration_selection import SelectionResult, ToolDecision
@@ -19,12 +23,28 @@ _CROSS = "✗"
 _SKIP_ACTION: Final[str] = "skip"
 
 
-def render_explain_tools(runtime: LintRuntimeContext, selection: SelectionResult) -> None:
+@dataclass(frozen=True, slots=True)
+class ExplainToolRow:
+    """Row data describing a tool-selection decision."""
+
+    order: int | None
+    tool: str
+    family: str
+    action: str
+    reasons: tuple[str, ...]
+    indicators: tuple[str, ...]
+    description: str
+
+
+def render_explain_tools(runtime: LintRuntimeContext, selection: SelectionResult) -> list[ExplainToolRow]:
     """Render a summary table describing tool-selection decisions.
 
     Args:
         runtime: Execution runtime supplying registry and logging services.
         selection: Planned tool selection emitted by the orchestration layer.
+
+    Returns:
+        list[ExplainToolRow]: Row data describing the rendered table.
     """
 
     logger = runtime.state.logger
@@ -35,16 +55,18 @@ def render_explain_tools(runtime: LintRuntimeContext, selection: SelectionResult
     table.add_column("Action", style="bold")
     table.add_column("Reasons", overflow="fold")
     table.add_column("Indicators", overflow="fold", style="dim")
-    table.add_column("Description", overflow="fold", no_wrap=True)
+    table.add_column("Description", overflow="fold", no_wrap=False)
 
     run_index = {name: index + 1 for index, name in enumerate(selection.run_names)}
     registry = runtime.registry
 
     sorted_decisions = sorted(selection.decisions, key=lambda decision: decision.name.lower())
+    rows: list[ExplainToolRow] = []
 
     for decision in sorted_decisions:
-        reasons = ", ".join(decision.reasons) if decision.reasons else ""
-        indicators = _format_indicators(decision)
+        reason_text = ", ".join(decision.reasons) if decision.reasons else ""
+        indicator_tokens = _indicator_tokens(decision)
+        indicator_text = " ".join(indicator_tokens)
         order_value = run_index.get(decision.name)
         order_display = str(order_value) if order_value is not None else "—"
         description = _lookup_description(registry, decision.name)
@@ -53,25 +75,40 @@ def render_explain_tools(runtime: LintRuntimeContext, selection: SelectionResult
             decision.name,
             decision.family,
             decision.action,
-            reasons,
-            indicators,
+            reason_text,
+            indicator_text,
             description,
+        )
+        rows.append(
+            ExplainToolRow(
+                order=order_value,
+                tool=decision.name,
+                family=decision.family,
+                action=decision.action,
+                reasons=decision.reasons,
+                indicators=tuple(indicator_tokens),
+                description=description,
+            ),
         )
 
     logger.console.print(table)
     run_count = len(selection.run_names)
     skip_count = sum(1 for decision in selection.decisions if decision.action == _SKIP_ACTION)
     logger.ok(f"Planned {run_count} tool(s); skipped {skip_count} tool(s).")
+    considered = ", ".join(sorted(decision.name for decision in selection.decisions))
+    if considered:
+        logger.ok(f"Tools considered: {considered}")
+    return rows
 
 
-def _format_indicators(decision: ToolDecision) -> str:
-    """Return a compact indicator string for ``decision``.
+def _indicator_tokens(decision: ToolDecision) -> tuple[str, ...]:
+    """Return indicator tokens for ``decision``.
 
     Args:
         decision: Tool selection decision whose metadata should be summarised.
 
     Returns:
-        str: Space-separated indicator tokens describing decision metadata.
+        tuple[str, ...]: Indicator tokens describing decision metadata.
     """
 
     eligibility = decision.eligibility
@@ -92,7 +129,7 @@ def _format_indicators(decision: ToolDecision) -> str:
         parts.append("default")
     if not eligibility.available:
         parts.append("missing")
-    return " ".join(parts)
+    return tuple(parts)
 
 
 def _format_toggle(label: str, value: bool) -> str:
@@ -126,4 +163,27 @@ def _lookup_description(registry: ToolRegistry, tool_name: str) -> str:
     return tool.description or ""
 
 
-__all__ = ["render_explain_tools"]
+def write_explain_tools_json(target: Path, rows: Sequence[ExplainToolRow], console: Console) -> None:
+    """Serialize explain-tools rows to ``target`` as JSON (``-`` for stdout)."""
+
+    payload = [
+        {
+            "order": row.order,
+            "tool": row.tool,
+            "family": row.family,
+            "action": row.action,
+            "reasons": list(row.reasons),
+            "indicators": list(row.indicators),
+            "description": row.description,
+        }
+        for row in rows
+    ]
+    serialized = json.dumps(payload, indent=2)
+    if str(target) == "-":
+        console.print(serialized)
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(serialized + "\n", encoding="utf-8")
+
+
+__all__ = ["ExplainToolRow", "render_explain_tools", "write_explain_tools_json"]

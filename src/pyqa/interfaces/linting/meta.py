@@ -68,6 +68,11 @@ class MetaActionParamsView(Protocol):
             bool: ``True`` when tool explanations should be rendered.
         """
 
+    @property
+    @abstractmethod
+    def explain_tools_json(self) -> str | None:
+        """Return the JSON output path requested for explain-tools data."""
+
 
 @runtime_checkable
 class MetaAnalysisChecksView(Protocol):

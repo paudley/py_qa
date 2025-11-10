@@ -183,6 +183,7 @@ class MetaActionParams:
     validate_schema: bool
     normal: bool
     explain_tools: bool
+    explain_tools_json: str | None = None
 
 
 @dataclass(slots=True)
