@@ -30,12 +30,12 @@ def render_explain_tools(runtime: LintRuntimeContext, selection: SelectionResult
     logger = runtime.state.logger
     table = Table(title="Tool Selection Plan", show_lines=False, box=None)
     table.add_column("Order", justify="right", style="bold")
-    table.add_column("Tool", style="bold")
+    table.add_column("Tool", style="bold", no_wrap=True)
     table.add_column("Family", style="dim")
     table.add_column("Action", style="bold")
     table.add_column("Reasons", overflow="fold")
     table.add_column("Indicators", overflow="fold", style="dim")
-    table.add_column("Description", overflow="fold")
+    table.add_column("Description", overflow="fold", no_wrap=True)
 
     run_index = {name: index + 1 for index, name in enumerate(selection.run_names)}
     registry = runtime.registry

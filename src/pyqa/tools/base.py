@@ -388,6 +388,8 @@ class ToolAction(BaseModel):
 
         if value is None:
             return None
+        if value is None:
+            return None
         if isinstance(value, (Parser, ParserLike, ParserContract, ParserImplementation)):
             return cast(ParserField, value)
         if _supports_parser_interface(value):
