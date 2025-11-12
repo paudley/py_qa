@@ -13,10 +13,10 @@ from typing import Final
 
 import typer
 
-from pyqa.core.config.constants import PY_QA_DIR_NAME
+from pyqa.core.config.constants import PYQA_LINT_DIR_NAME
 from pyqa.interfaces.linting import CLILogger as CLILoggerView
 from pyqa.linting.suppressions import SuppressionRegistry
-from pyqa.platform.workspace import is_py_qa_workspace
+from pyqa.platform.workspace import is_pyqa_lint_workspace
 
 from ....config import default_parallel_jobs
 from ....filesystem.paths import normalize_path
@@ -39,7 +39,7 @@ from ...core.options import (
     LintSummaryOptions,
     LintTargetOptions,
 )
-from ...core.utils import filter_py_qa_paths
+from ...core.utils import filter_pyqa_lint_paths
 from .cli_models import LintDisplayOptions as CLIDisplayOptions
 from .literals import OUTPUT_MODE_CONCISE
 from .params import (
@@ -78,7 +78,7 @@ class PreparedLintStateParams:
     options: LintOptions
     meta: LintMetaParams
     root: Path
-    ignored_py_qa: Sequence[str]
+    ignored_pyqa_lint: Sequence[str]
     artifacts: LintOutputArtifacts
     suppressions: SuppressionRegistry | None
     presentation: tuple[CLIDisplayOptions, CLILoggerView]
@@ -91,7 +91,7 @@ class PreparedLintState:
     options: LintOptions
     meta: LintMetaParams
     root: Path
-    ignored_py_qa: tuple[str, ...]
+    ignored_pyqa_lint: tuple[str, ...]
     artifacts: LintOutputArtifacts
     suppressions: SuppressionRegistry | None
     _presentation: tuple[CLIDisplayOptions, CLILoggerView]
@@ -106,7 +106,7 @@ class PreparedLintState:
         self.options = params.options
         self.meta = params.meta
         self.root = params.root
-        self.ignored_py_qa = tuple(params.ignored_py_qa)
+        self.ignored_pyqa_lint = tuple(params.ignored_pyqa_lint)
         self.artifacts = params.artifacts
         self.suppressions = params.suppressions
         self._presentation = params.presentation
@@ -123,14 +123,14 @@ class PreparedLintState:
 
         return bool(getattr(self.meta, flag, False))
 
-    def iter_ignored_py_qa(self) -> tuple[str, ...]:
+    def iter_ignored_pyqa_lint(self) -> tuple[str, ...]:
         """Return immutable view of ``PY_QA`` discovery exclusions.
 
         Returns:
             tuple[str, ...]: Tuple containing ignored ``PY_QA`` directories.
         """
 
-        return self.ignored_py_qa
+        return self.ignored_pyqa_lint
 
     def has_suppressions(self) -> bool:
         """Return ``True`` when a suppression registry has been configured.
@@ -170,7 +170,7 @@ class NormalizedTargets:
     paths: list[Path]
     dirs: list[Path]
     exclude: list[Path]
-    ignored_py_qa: list[str]
+    ignored_pyqa_lint: list[str]
 
 
 @dataclass(slots=True)
@@ -308,7 +308,7 @@ def prepare_lint_state(
         options=options,
         meta=inputs.advanced.meta,
         root=normalized_targets.root,
-        ignored_py_qa=tuple(normalized_targets.ignored_py_qa),
+        ignored_pyqa_lint=tuple(normalized_targets.ignored_pyqa_lint),
         artifacts=artifacts,
         suppressions=SuppressionRegistry(normalized_targets.root),
         presentation=(display, logger),
@@ -544,7 +544,7 @@ def _normalize_targets(
 
     Returns:
         NormalizedTargets: Structured paths, directories, exclusions, and
-        ignored py_qa entries.
+        ignored pyqa_lint entries.
     """
 
     paths = _normalize_path_iter(params.paths, invocation_cwd)
@@ -558,14 +558,14 @@ def _normalize_targets(
         invocation_cwd=invocation_cwd,
     )
 
-    paths, ignored_py_qa = _apply_py_qa_filter(paths, root, logger)
+    paths, ignored_pyqa_lint = _apply_pyqa_lint_filter(paths, root, logger)
 
     return NormalizedTargets(
         root=root,
         paths=paths,
         dirs=dirs,
         exclude=exclude,
-        ignored_py_qa=ignored_py_qa,
+        ignored_pyqa_lint=ignored_pyqa_lint,
     )
 
 
@@ -633,17 +633,17 @@ def _select_root(
     derived_root = _derive_default_root(paths)
     if derived_root is None:
         return root
-    if is_py_qa_workspace(derived_root) or not is_py_qa_workspace(root):
+    if is_pyqa_lint_workspace(derived_root) or not is_pyqa_lint_workspace(root):
         return derived_root
     return root
 
 
-def _apply_py_qa_filter(
+def _apply_pyqa_lint_filter(
     paths: list[Path],
     root: Path,
     logger: CLILoggerView,
 ) -> tuple[list[Path], list[str]]:
-    """Return filtered paths and ignored py_qa entries when required.
+    """Return filtered paths and ignored pyqa_lint entries when required.
 
     Args:
         paths: Candidate filesystem paths supplied by the user.
@@ -652,18 +652,18 @@ def _apply_py_qa_filter(
 
     Returns:
         tuple[list[Path], list[str]]: Tuple containing filtered paths and the ignored
-        entries referencing ``PY_QA_DIR_NAME`` directories.
+        entries referencing ``PYQA_LINT_DIR_NAME`` directories.
     """
 
-    if is_py_qa_workspace(root) or not paths:
+    if is_pyqa_lint_workspace(root) or not paths:
         return paths, []
 
-    filtered, ignored = filter_py_qa_paths(paths, root)
+    filtered, ignored = filter_pyqa_lint_paths(paths, root)
     if ignored:
         unique = ", ".join(dict.fromkeys(ignored))
         message = (
-            f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
-            "unless lint runs inside the py_qa workspace."
+            f"Ignoring path(s) {unique}: '{PYQA_LINT_DIR_NAME}' directories are skipped "
+            "unless lint runs inside the pyqa_lint workspace."
         )
         logger.warn(message)
     return filtered, ignored

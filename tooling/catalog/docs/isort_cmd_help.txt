@@ -1,4 +1,4 @@
-uv --project /home/paudley/Active/py_qa/src run --with isort==6.0.1 isort --line-length 120 --help
+uv --project src run --with isort==6.0.1 isort --line-length 120 --help
 
 usage: isort [-h] [-V] [--vn] [-v] [--only-modified] [--dedup-headings] [-q] [-d] [--overwrite-in-place] [--show-config] [--show-files] [--df] [-c] [--ws] [--sp SETTINGS_PATH] [--cr CONFIG_ROOT] [--resolve-all-configs] [--profile PROFILE] [--old-finders] [-j [JOBS]] [--ac] [--interactive] [--format-error FORMAT_ERROR] [--format-success FORMAT_SUCCESS] [--srx] [--filter-files] [-s SKIP] [--extend-skip EXTEND_SKIP] [--sg SKIP_GLOB] [--extend-skip-glob EXTEND_SKIP_GLOB] [--gitignore]
              [--ext SUPPORTED_EXTENSIONS] [--blocked-extension BLOCKED_EXTENSIONS] [--dont-follow-links] [--filename FILENAME] [--allow-root] [-a ADD_IMPORTS] [--append] [--af] [--rm REMOVE_IMPORTS] [--float-to-top] [--dont-float-to-top] [--ca] [--cs] [-e] [--ff] [--fgw [FORCE_GRID_WRAP]] [-i INDENT] [--lbi LINES_BEFORE_IMPORTS] [--lai LINES_AFTER_IMPORTS] [--lbt LINES_BETWEEN_TYPES] [--le LINE_ENDING] [--ls] [--lss]

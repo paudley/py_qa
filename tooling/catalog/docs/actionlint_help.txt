@@ -1,4 +1,4 @@
-/home/paudley/Active/py_qa/.lint-cache/actionlint/1.7.1/actionlint --help
+.lint-cache/actionlint/1.7.1/actionlint --help
 
 
 Usage: actionlint [FLAGS] [FILES...] [-]

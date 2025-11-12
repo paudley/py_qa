@@ -28,7 +28,7 @@ Commands:
 
 Cache options:
   -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation [env: UV_NO_CACHE=]
-      --cache-dir <CACHE_DIR>  Path to the cache directory [env: UV_CACHE_DIR=/home/paudley/Active/py_qa/src/.lint-cache/tools/uv]
+      --cache-dir <CACHE_DIR>  Path to the cache directory [env: UV_CACHE_DIR=src/.lint-cache/tools/uv]
 
 Python options:
       --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
@@ -44,7 +44,7 @@ Global options:
       --allow-insecure-host <ALLOW_INSECURE_HOST>  Allow insecure connections to a host [env: UV_INSECURE_HOST=]
       --no-progress                                Hide all progress outputs [env: UV_NO_PROGRESS=]
       --directory <DIRECTORY>                      Change to the given directory prior to running the command
-      --project <PROJECT>                          Run the command within the given project directory [env: UV_PROJECT=/home/paudley/Active/py_qa/src]
+      --project <PROJECT>                          Run the command within the given project directory [env: UV_PROJECT=src]
       --config-file <CONFIG_FILE>                  The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
       --no-config                                  Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
   -h, --help                                       Display the concise help for this command

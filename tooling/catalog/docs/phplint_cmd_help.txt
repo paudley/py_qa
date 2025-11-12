@@ -1,14 +1,14 @@
-/home/paudley/Active/py_qa/src/.lint-cache/tools/node/phplint-2.0.5/node_modules/.bin/phplint --no-ansi --no-progress --help
+src/.lint-cache/tools/node/phplint-2.0.5/node_modules/.bin/phplint --no-ansi --no-progress --help
 
 
-/home/paudley/Active/py_qa/src/.lint-cache/tools/node/phplint-2.0.5/node_modules/phplint/cli.js:33
+src/.lint-cache/tools/node/phplint-2.0.5/node_modules/phplint/cli.js:33
   if (err) throw new Error(err);
            ^
 
 Error: Error: Command failed: php -v
 /bin/sh: line 1: php: command not found
 
-    at /home/paudley/Active/py_qa/src/.lint-cache/tools/node/phplint-2.0.5/node_modules/phplint/cli.js:33:18
+    at src/.lint-cache/tools/node/phplint-2.0.5/node_modules/phplint/cli.js:33:18
     at ChildProcess.exithandler (node:child_process:422:5)
     at ChildProcess.emit (node:events:507:28)
     at maybeClose (node:internal/child_process:1101:16)

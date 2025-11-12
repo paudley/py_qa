@@ -17,7 +17,7 @@ from ...core.typer_ext import TyperAppConfig, create_typer
 from .models import CleanCLIOptions, build_clean_options
 from .services import (
     emit_dry_run_summary,
-    emit_py_qa_warning,
+    emit_pyqa_lint_warning,
     load_clean_config,
 )
 
@@ -58,7 +58,7 @@ def main(
         dry_run=options.dry_run,
     )
 
-    emit_py_qa_warning(result, options.root, logger=logger)
+    emit_pyqa_lint_warning(result, options.root, logger=logger)
     if options.dry_run:
         emit_dry_run_summary(result, logger=logger)
     raise typer.Exit(code=0)

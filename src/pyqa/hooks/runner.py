@@ -96,7 +96,7 @@ def _prepare_directories(root: Path, hooks_dir: Path | None) -> HookDirectories:
     target_dir = hooks_dir or git_dir / "hooks"
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    template_dir = project_root / "py-qa" / "hooks"
+    template_dir = project_root / "pyqa-lint" / "hooks"
     if not template_dir.exists():
         raise FileNotFoundError(f"Hook templates not found: {template_dir}")
 

@@ -71,8 +71,8 @@ done
 
 # If we have commit messages, check them for banned words
 if [ -s "$COMMIT_MSGS_FILE" ]; then
-    if [ -f "$PYQA_ROOT/py-qa/check-banned-words" ]; then
-        if ! "$PYQA_ROOT/py-qa/check-banned-words" "$COMMIT_MSGS_FILE"; then
+    if [ -f "$PYQA_ROOT/pyqa-lint/check-banned-words" ]; then
+        if ! "$PYQA_ROOT/pyqa-lint/check-banned-words" "$COMMIT_MSGS_FILE"; then
             echo ""
             echo "❌ Push aborted due to banned words in commit messages!"
             echo "Please amend your commit messages before pushing."
@@ -93,8 +93,8 @@ echo ""
 # Run comprehensive security scan on all Python files
 echo "🔒 Running comprehensive security scan..."
 ALL_PY_FILES=$(find "$PYQA_ROOT/src" "$PYQA_ROOT/tests" -name "*.py" -type f 2>/dev/null | head -100)
-if [ -f "$PYQA_ROOT/py-qa/security-scan" ]; then
-    if ! "$PYQA_ROOT/py-qa/security-scan" $ALL_PY_FILES; then
+if [ -f "$PYQA_ROOT/pyqa-lint/security-scan" ]; then
+    if ! "$PYQA_ROOT/pyqa-lint/security-scan" $ALL_PY_FILES; then
         echo ""
         echo "❌ Security vulnerabilities detected!"
         echo "Please fix security issues before pushing."
@@ -105,9 +105,9 @@ echo ""
 
 # Run quality checks for the entire codebase
 echo "📋 Running comprehensive quality validation..."
-if [ -f "$PYQA_ROOT/py-qa/check-quality" ]; then
+if [ -f "$PYQA_ROOT/pyqa-lint/check-quality" ]; then
     # Check branch protection
-    if ! "$PYQA_ROOT/py-qa/check-quality" branch --root "$PYQA_ROOT"; then
+    if ! "$PYQA_ROOT/pyqa-lint/check-quality" branch --root "$PYQA_ROOT"; then
         echo ""
         echo "❌ Cannot push directly to protected branch!"
         echo "Please create a feature branch and use pull requests."
@@ -115,7 +115,7 @@ if [ -f "$PYQA_ROOT/py-qa/check-quality" ]; then
     fi
     
     # Check all source files for quality issues
-    if ! "$PYQA_ROOT/py-qa/check-quality" --root "$PYQA_ROOT"; then
+    if ! "$PYQA_ROOT/pyqa-lint/check-quality" --root "$PYQA_ROOT"; then
         echo ""
         echo "⚠️  Quality warnings detected. Consider fixing before push."
         # Don't fail on warnings for push, just inform
@@ -125,11 +125,11 @@ echo ""
 
 # Run the full lint check
 echo "🔧 Running comprehensive lint check..."
-if ! ./py-qa/lint; then
+if ! ./pyqa-lint/lint; then
     echo ""
     echo "❌ Lint check failed!"
     echo "Please fix all lint issues before pushing."
-    echo "Run './py-qa/lint' to see all issues."
+    echo "Run './pyqa-lint/lint' to see all issues."
     exit 1
 fi
 echo "✅ All lint checks passed (10.00/10 score maintained)"

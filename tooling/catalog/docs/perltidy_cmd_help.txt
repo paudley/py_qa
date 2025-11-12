@@ -1,4 +1,4 @@
-/home/paudley/Active/py_qa/src/.lint-cache/tools/perl/bin/perltidy -b -bext="" -q --help
+src/.lint-cache/tools/perl/bin/perltidy -b -bext="" -q --help
 
 This is perltidy version 20250912, a perl script indenter.  Usage:
 

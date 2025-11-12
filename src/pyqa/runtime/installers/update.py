@@ -12,10 +12,10 @@ from pathlib import Path
 from subprocess import CompletedProcess
 from typing import Final, cast
 
-from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS, PY_QA_DIR_NAME
+from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS, PYQA_LINT_DIR_NAME
 from pyqa.core.logging import fail, info, ok, warn
 from pyqa.core.runtime.process import CommandOptions, run_command
-from pyqa.platform.workspace import is_py_qa_workspace
+from pyqa.platform.workspace import is_pyqa_lint_workspace
 
 from .update_models import (
     SKIPPED_STATUS,
@@ -331,7 +331,7 @@ class WorkspaceDiscovery:
 
         self._strategies = list(strategies)
         self._skip_patterns = set(skip_patterns or [])
-        self._skip_py_qa_dirs = False
+        self._skip_pyqa_lint_dirs = False
 
     def available_kinds(self) -> tuple[WorkspaceKind, ...]:
         """Return the set of workspace kinds handled by this discovery.
@@ -355,7 +355,7 @@ class WorkspaceDiscovery:
         """
 
         root = root.resolve()
-        self._skip_py_qa_dirs = not is_py_qa_workspace(root)
+        self._skip_pyqa_lint_dirs = not is_pyqa_lint_workspace(root)
         workspaces: list[Workspace] = []
         for dirpath, dirnames, filenames in os.walk(root):
             directory = Path(dirpath)
@@ -391,7 +391,7 @@ class WorkspaceDiscovery:
             return True
         if any(part in ALWAYS_EXCLUDE_DIRS for part in relative.parts):
             return True
-        if self._skip_py_qa_dirs and PY_QA_DIR_NAME in relative.parts:
+        if self._skip_pyqa_lint_dirs and PYQA_LINT_DIR_NAME in relative.parts:
             return True
         rel_str = str(relative)
         return any(pattern in rel_str for pattern in self._skip_patterns)
@@ -622,23 +622,23 @@ def ensure_lint_install(root: Path, runner: CommandRunner, *, dry_run: bool) -> 
     """Ensure the mono-repo lint shim installs its managed dependencies.
 
     Args:
-        root: Repository root containing the ``py-qa`` lint shim.
+        root: Repository root containing the ``pyqa-lint`` lint shim.
         runner: Callable used to execute subprocess commands.
         dry_run: ``True`` to log actions without invoking the shim.
     """
 
-    lint_shim = root / "py-qa" / "lint"
+    lint_shim = root / "pyqa-lint" / "lint"
     if not lint_shim.exists():
         return
     command = (str(lint_shim), "install")
-    info("Ensuring py-qa lint dependencies are installed", use_emoji=True)
+    info("Ensuring pyqa-lint lint dependencies are installed", use_emoji=True)
     if dry_run:
         info(f"DRY RUN: {' '.join(command)}", use_emoji=True)
         return
     cp = runner(command, root)
     if cp.returncode != 0:
         warn(
-            f"py-qa lint install failed with exit code {cp.returncode}",
+            f"pyqa-lint lint install failed with exit code {cp.returncode}",
             use_emoji=True,
         )
 

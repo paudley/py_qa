@@ -13,7 +13,7 @@ from pyqa.core.models import ToolOutcome
 from pyqa.interfaces.config import Config as ConfigProtocol
 from pyqa.interfaces.internal_linting import INTERNAL_LINTER_TOOL_NAMES
 from pyqa.interfaces.linting import PreparedLintState
-from pyqa.platform.workspace import is_py_qa_workspace
+from pyqa.platform.workspace import is_pyqa_lint_workspace
 from pyqa.testing.suppressions import build_internal_test_suppression_pattern
 from pyqa.tools.base import DeferredCommand, PhaseLiteral, Tool, ToolAction, ToolContext
 from pyqa.tools.interfaces import InternalActionRunner
@@ -407,7 +407,7 @@ def configure_internal_tool_defaults(*, registry: ToolRegistry, state: PreparedL
         state: Prepared lint state containing CLI runtime metadata.
     """
 
-    pyqa_scope_active = is_py_qa_workspace(state.root)
+    pyqa_scope_active = is_pyqa_lint_workspace(state.root)
     meta_runtime = getattr(state.meta, "runtime", None)
     if meta_runtime is not None and getattr(meta_runtime, "pyqa_rules", False):
         pyqa_scope_active = True

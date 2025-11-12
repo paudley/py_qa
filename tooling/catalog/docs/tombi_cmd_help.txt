@@ -1,4 +1,4 @@
-uv --project /home/paudley/Active/py_qa/src run --with tombi==0.6.12 tombi lint --help
+uv --project src run --with tombi==0.6.12 tombi lint --help
 
 Lint TOML files
 

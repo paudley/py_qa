@@ -9,15 +9,15 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Final, cast
 
-from pyqa.core.config.constants import PY_QA_DIR_NAME
+from pyqa.core.config.constants import PYQA_LINT_DIR_NAME
 from pyqa.interfaces.config import Config as ConfigProtocol
-from pyqa.platform.workspace import is_py_qa_workspace
+from pyqa.platform.workspace import is_pyqa_lint_workspace
 
 from ....compliance.quality import QualityCheckResult
 from ....linting.quality import QualityCheckRequest, evaluate_quality_checks
 from ...core._config_loading import load_config_result
 from ...core.shared import CLILogger
-from ...core.utils import filter_py_qa_paths
+from ...core.utils import filter_pyqa_lint_paths
 from .models import (
     QualityCLIOptions,
     QualityConfigContext,
@@ -97,7 +97,7 @@ def resolve_target_files(
     *,
     logger: CLILogger,
 ) -> QualityTargetResolution:
-    """Return filtered target files and ignored py-qa paths.
+    """Return filtered target files and ignored pyqa-lint paths.
 
     Args:
         context: Loaded configuration context containing CLI options.
@@ -106,18 +106,18 @@ def resolve_target_files(
 
     Returns:
         QualityTargetResolution: Files that should be checked and a record of
-        ignored py-qa paths for reporting.
+        ignored pyqa-lint paths for reporting.
     """
 
     provided = list(context.options.raw_paths)
     resolved = [path if path.is_absolute() else (context.root / path) for path in provided]
-    kept, ignored = filter_py_qa_paths(resolved, context.root)
+    kept, ignored = filter_pyqa_lint_paths(resolved, context.root)
     files = kept or None
     if provided and not kept:
         logger.ok("No files to check.")
     return QualityTargetResolution(
         files=files,
-        ignored_py_qa=tuple(dict.fromkeys(ignored)),
+        ignored_pyqa_lint=tuple(dict.fromkeys(ignored)),
         had_explicit_paths=bool(provided),
     )
 
@@ -151,17 +151,17 @@ def run_quality_checks(
 
 
 def _apply_workspace_protections(context: QualityConfigContext) -> None:
-    """Ensure py-qa paths are skipped outside the workspace.
+    """Ensure pyqa-lint paths are skipped outside the workspace.
 
     Args:
         context: Loaded configuration context whose quality and license
             sections will be mutated in place when outside the workspace.
     """
 
-    if is_py_qa_workspace(context.root):
+    if is_pyqa_lint_workspace(context.root):
         return
 
-    extra_skip = f"{PY_QA_DIR_NAME}/**"
+    extra_skip = f"{PYQA_LINT_DIR_NAME}/**"
     quality_config = context.config.quality
     license_config = context.config.license
 

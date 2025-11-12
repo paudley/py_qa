@@ -14,7 +14,7 @@ Please review the [Code of Conduct](CODE_OF_CONDUCT.md). We expect courteous, pr
 
 ### Reporting Bugs
 
-Before filing an issue, search [existing reports](https://github.com/paudley/py_qa/issues). Include:
+Before filing an issue, search [existing reports](https://github.com/paudley/pyqa_lint/issues). Include:
 
 * **Use a clear and descriptive title**
 * **Describe the exact steps to reproduce the problem**
@@ -25,7 +25,7 @@ Before filing an issue, search [existing reports](https://github.com/paudley/py_
 
 ### Suggesting Enhancements
 
-Enhancement ideas are also tracked via [issues](https://github.com/paudley/py_qa/issues). When proposing a feature:
+Enhancement ideas are also tracked via [issues](https://github.com/paudley/pyqa_lint/issues). When proposing a feature:
 
 * **Use a clear and descriptive title**
 * **Provide a detailed description of the suggested enhancement**
@@ -55,8 +55,8 @@ Enhancement ideas are also tracked via [issues](https://github.com/paudley/py_qa
 
 ```bash
 # Clone your fork
-git clone https://github.com/<your-username>/py_qa.git
-cd py_qa
+git clone https://github.com/<your-username>/pyqa_lint.git
+cd pyqa_lint
 uv sync --group dev
 ```
 

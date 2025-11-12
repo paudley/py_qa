@@ -17,7 +17,7 @@ def _make_repo(root: Path) -> Path:
     git_dir = root / ".git"
     hooks_dir = git_dir / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
-    template_dir = root / "py-qa" / "hooks"
+    template_dir = root / "pyqa-lint" / "hooks"
     template_dir.mkdir(parents=True, exist_ok=True)
     for name in HOOK_NAMES:
         template = template_dir / name
@@ -32,7 +32,7 @@ def test_install_hooks_creates_symlinks(tmp_path: Path) -> None:
     for name in HOOK_NAMES:
         destination = hooks_dir / name
         assert destination.is_symlink()
-        assert destination.resolve() == (tmp_path / "py-qa" / "hooks" / name).resolve()
+        assert destination.resolve() == (tmp_path / "pyqa-lint" / "hooks" / name).resolve()
 
 
 def test_cli_dry_run(tmp_path: Path) -> None:

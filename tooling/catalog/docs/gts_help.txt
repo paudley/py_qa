@@ -1,4 +1,4 @@
-/home/paudley/Active/py_qa/src/.lint-cache/tools/node/gts-5.3.1/node_modules/.bin/gts --help
+src/.lint-cache/tools/node/gts-5.3.1/node_modules/.bin/gts --help
 
 
   Google TypeScript Style

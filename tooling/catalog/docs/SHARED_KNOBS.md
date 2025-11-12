@@ -14,7 +14,7 @@ shared settings introduced in `Config`:
 | Strictness (`[strictness]`)           | mypy, pyright, tsc                                          | Drives mypy strict bundle (`show-error-codes`, etc.) and TypeScript `--strict`; pyright honours the config layer.    |
 | Severity (`[severity]`)               | bandit, pylint                                              | Sets Bandit `--severity-level` & `--confidence-level`, and pylint `--fail-under`.                                    |
 
-To override per project, add the corresponding sections to `.py_qa.toml` or
+To override per project, add the corresponding sections to `.pyqa_lint.toml` or
 `pyproject.toml`:
 
 ```toml

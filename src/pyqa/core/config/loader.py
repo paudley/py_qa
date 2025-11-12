@@ -142,8 +142,8 @@ class ConfigLoader:
         """
 
         root = project_root.resolve()
-        home_config = user_config if user_config is not None else Path.home() / ".py_qa.toml"
-        project_file = project_config if project_config is not None else root / ".py_qa.toml"
+        home_config = user_config if user_config is not None else Path.home() / ".pyqa_lint.toml"
+        project_file = project_config if project_config is not None else root / ".pyqa_lint.toml"
         pyproject = root / "pyproject.toml"
         sources: list[ConfigSource] = [
             DefaultConfigSource(),

@@ -19,7 +19,7 @@ from pyqa.runtime.console.manager import detect_tty
 
 from ....config import ConfigError
 from ....linting.registry import iter_internal_linters
-from ....platform.workspace import is_py_qa_workspace
+from ....platform.workspace import is_pyqa_lint_workspace
 from ...core.config_builder import build_config
 from ...core.runtime import ServiceResolutionError
 from ...core.shared import Depends, build_cli_logger
@@ -308,7 +308,7 @@ def _activate_internal_linters(state: PreparedLintState) -> None:
 
     existing = {name.lower() for name in selection.only}
     added = False
-    pyqa_enabled = meta.runtime.additional.pyqa_rules or is_py_qa_workspace(state.root)
+    pyqa_enabled = meta.runtime.additional.pyqa_rules or is_pyqa_lint_workspace(state.root)
     for definition in iter_internal_linters():
         if definition.pyqa_scoped and not pyqa_enabled:
             continue

@@ -19,7 +19,7 @@ from .services import emit_hooks_summary, perform_installation
 _HOOKS_TY = create_typer(
     config=TyperAppConfig(
         name="install-hooks",
-        help_text="Install py-qa git hooks (pre-commit, pre-push, commit-msg).",
+        help_text="Install pyqa-lint git hooks (pre-commit, pre-push, commit-msg).",
         invoke_without_command=True,
     ),
 )
@@ -30,7 +30,7 @@ hooks_app = TyperAdapter(_HOOKS_TY)
 def main(
     options: Annotated[HookCLIOptions, Depends(build_hook_options)],
 ) -> None:
-    """Install py-qa git hooks for the current repository.
+    """Install pyqa-lint git hooks for the current repository.
 
     Args:
         options: Normalized CLI options containing installer directives.

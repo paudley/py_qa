@@ -1,4 +1,4 @@
-/home/paudley/Active/py_qa/src/.lint-cache/tools/node/eslint-9.13.0/node_modules/.bin/eslint --format json --help
+src/.lint-cache/tools/node/eslint-9.13.0/node_modules/.bin/eslint --format json --help
 
 eslint [options] file.js [file.js] [dir]
 

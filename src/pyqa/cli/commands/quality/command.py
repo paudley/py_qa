@@ -23,7 +23,7 @@ from .models import (
     QualityCLIOptions,
     build_quality_options,
 )
-from .rendering import render_py_qa_skip_warning, render_quality_result
+from .rendering import render_pyqa_lint_skip_warning, render_quality_result
 from .services import (
     determine_checks,
     load_quality_context,
@@ -73,7 +73,7 @@ def main(
     )
 
     targets = resolve_target_files(context, logger=logger)
-    render_py_qa_skip_warning(targets.ignored_py_qa, logger=logger)
+    render_pyqa_lint_skip_warning(targets.ignored_pyqa_lint, logger=logger)
     if targets.had_explicit_paths and targets.files is None:
         raise typer.Exit(code=0)
 

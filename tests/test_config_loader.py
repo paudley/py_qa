@@ -50,7 +50,7 @@ pr_summary_out = "reports/user.md"
         encoding="utf-8",
     )
 
-    project_config = project_root / ".py_qa.toml"
+    project_config = project_root / ".pyqa_lint.toml"
     project_config.write_text(
         """
 [file_discovery]
@@ -90,7 +90,7 @@ def test_config_loader_invalid_severity(tmp_path: Path) -> None:
     project_root = tmp_path / "workspace"
     project_root.mkdir()
 
-    project_config = project_root / ".py_qa.toml"
+    project_config = project_root / ".pyqa_lint.toml"
     project_config.write_text(
         """
 severity_rules = "oops"
@@ -122,7 +122,7 @@ cache_enabled = false
         encoding="utf-8",
     )
 
-    project_config = project_root / ".py_qa.toml"
+    project_config = project_root / ".pyqa_lint.toml"
     project_config.write_text(
         f"""
 include = ["{inner.name}"]
@@ -151,7 +151,7 @@ def test_config_loader_expands_environment(tmp_path: Path, monkeypatch: pytest.M
 
     monkeypatch.setenv("REPORT_DIR", str(project_root / "artifacts"))
 
-    project_config = project_root / ".py_qa.toml"
+    project_config = project_root / ".pyqa_lint.toml"
     project_config.write_text(
         """
 [output]
@@ -169,7 +169,7 @@ def test_output_section_rejects_non_string_pretty_format(tmp_path: Path) -> None
     project_root = tmp_path / "workspace"
     project_root.mkdir()
 
-    project_config = project_root / ".py_qa.toml"
+    project_config = project_root / ".pyqa_lint.toml"
     project_config.write_text(
         """
 [output]
@@ -188,7 +188,7 @@ def test_execution_section_rejects_invalid_cache_dir(tmp_path: Path) -> None:
     project_root = tmp_path / "workspace"
     project_root.mkdir()
 
-    project_config = project_root / ".py_qa.toml"
+    project_config = project_root / ".pyqa_lint.toml"
     project_config.write_text(
         """
 [execution]
@@ -251,7 +251,7 @@ def test_load_with_trace_reports_sources(tmp_path: Path) -> None:
     project_root = tmp_path / "workspace"
     project_root.mkdir()
 
-    project_config = project_root / ".py_qa.toml"
+    project_config = project_root / ".pyqa_lint.toml"
     project_config.write_text(
         """
 [execution]
@@ -300,7 +300,7 @@ def test_tool_settings_warnings(tmp_path: Path) -> None:
     project_root = tmp_path / "workspace"
     project_root.mkdir()
 
-    config_file = project_root / ".py_qa.toml"
+    config_file = project_root / ".pyqa_lint.toml"
     config_file.write_text(
         """
 [tools.black]
@@ -345,7 +345,7 @@ ignore = ["S101"]
         encoding="utf-8",
     )
 
-    project_config = project_root / ".py_qa.toml"
+    project_config = project_root / ".pyqa_lint.toml"
     project_config.write_text(
         """
 [ruff]

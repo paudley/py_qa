@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Final
 
-PY_QA_DIR_NAME: Final[str] = "py_qa"
+PYQA_LINT_DIR_NAME: Final[str] = "pyqa_lint"
 
 ALWAYS_EXCLUDE_DIRS: Final[set[str]] = {
     ".git",
@@ -22,7 +22,7 @@ ALWAYS_EXCLUDE_DIRS: Final[set[str]] = {
     "coverage",
     ".lint-cache",
     ".cache",
-    PY_QA_DIR_NAME,
+    PYQA_LINT_DIR_NAME,
 }
 
-__all__ = ["ALWAYS_EXCLUDE_DIRS", "PY_QA_DIR_NAME"]
+__all__ = ["ALWAYS_EXCLUDE_DIRS", "PYQA_LINT_DIR_NAME"]

@@ -1,4 +1,4 @@
-/home/paudley/Active/py_qa/src/.lint-cache/tools/go/bin/kube-linter lint --format json --help
+src/.lint-cache/tools/go/bin/kube-linter lint --format json --help
 
 Lint Kubernetes YAML files and Helm charts
 

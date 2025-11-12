@@ -1,4 +1,4 @@
-uv --project /home/paudley/Active/py_qa/src run --with pyupgrade==3.19.1 pyupgrade --py313-plus --help
+uv --project src run --with pyupgrade==3.19.1 pyupgrade --py313-plus --help
 
 usage: pyupgrade [-h] [--exit-zero-even-if-changed] [--keep-percent-format] [--keep-mock] [--keep-runtime-typing] [--py3-plus] [--py36-plus] [--py37-plus] [--py38-plus] [--py39-plus] [--py310-plus] [--py311-plus] [--py312-plus] [--py313-plus] [filenames ...]
 

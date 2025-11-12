@@ -6,7 +6,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pyqa"
+name = "pyqa_lint"
 version = "0.3.0"
 description = "Polyglot lint orchestration toolkit"
 readme = "README.md"
@@ -125,7 +125,7 @@ pythonpath = ["src"]
 [tool.pyqa.quality]
 skip_globs = [
     #"ref_docs/**",
-    #"py_qa/**",
+    #"pyqa_lint/**",
 ]
 
 [tool.hatch.metadata]

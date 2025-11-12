@@ -35,7 +35,7 @@ SKIP_LINT_OPTION = Annotated[
     typer.Option(
         False,
         "--skip-lint-install",
-        help="Skip running the py-qa lint install bootstrap step.",
+        help="Skip running the pyqa-lint lint install bootstrap step.",
     ),
 ]
 DRY_RUN_OPTION = Annotated[

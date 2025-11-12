@@ -1,4 +1,4 @@
-/home/paudley/Active/py_qa/src/.lint-cache/tools/node/prettier-3.3.3/node_modules/.bin/prettier --help
+src/.lint-cache/tools/node/prettier-3.3.3/node_modules/.bin/prettier --help
 
 Usage: prettier [options] [file/dir/glob ...]
 

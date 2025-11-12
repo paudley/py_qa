@@ -204,20 +204,20 @@ class LintStateOptions(Protocol):
 class LintRunArtifacts(Protocol):
     """Expose artifact-level state shared across lint reporting helpers."""
 
-    ignored_py_qa: Sequence[str]
+    ignored_pyqa_lint: Sequence[str]
     artifacts: LintOutputArtifacts
     display: CLIDisplayOptions
     logger: CLILogger
     suppressions: SuppressionRegistry | None
 
-    def iter_ignored_py_qa(self) -> Sequence[str]:
-        """Return a tuple view of ``PY_QA`` entries skipped by the run.
+    def iter_ignored_pyqa_lint(self) -> Sequence[str]:
+        """Return a tuple view of ``pyqa_lint`` entries skipped by the run.
 
         Returns:
-            Sequence[str]: Tuple containing ignored ``PY_QA`` directory paths.
+            Sequence[str]: Tuple containing ignored ``pyqa_lint`` directory paths.
         """
 
-        return tuple(self.ignored_py_qa)
+        return tuple(self.ignored_pyqa_lint)
 
     def has_suppressions(self) -> bool:
         """Return ``True`` when a suppression registry has been configured.

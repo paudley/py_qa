@@ -1,4 +1,4 @@
-uv --project /home/paudley/Active/py_qa/src run --with cpplint==2.0.2 cpplint --output=emacs --linelength=120 --help
+uv --project src run --with cpplint==2.0.2 cpplint --output=emacs --linelength=120 --help
 
 
 

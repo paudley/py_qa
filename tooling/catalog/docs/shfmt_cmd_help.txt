@@ -1,4 +1,4 @@
-/home/paudley/Active/py_qa/src/.lint-cache/tools/go/bin/shfmt -w --help
+src/.lint-cache/tools/go/bin/shfmt -w --help
 
 
 usage: shfmt [flags] [path ...]

@@ -20,7 +20,7 @@ def test_config_show_outputs_json(tmp_path: Path, monkeypatch) -> None:
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
-    (project_root / ".py_qa.toml").write_text(
+    (project_root / ".pyqa_lint.toml").write_text(
         """
 [execution]
 jobs = 3
@@ -50,7 +50,7 @@ def test_config_validate_failure(tmp_path: Path, monkeypatch) -> None:
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
-    (project_root / ".py_qa.toml").write_text(
+    (project_root / ".pyqa_lint.toml").write_text(
         """
 severity_rules = 42
 """.strip(),
@@ -120,7 +120,7 @@ def test_config_show_trace_includes_descriptions(tmp_path: Path, monkeypatch) ->
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
-    (project_root / ".py_qa.toml").write_text(
+    (project_root / ".pyqa_lint.toml").write_text(
         """
 [tools.black]
 line-length = 90
@@ -144,7 +144,7 @@ def test_config_show_warns_on_unknown_setting(tmp_path: Path, monkeypatch) -> No
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
-    (project_root / ".py_qa.toml").write_text(
+    (project_root / ".pyqa_lint.toml").write_text(
         """
 [tools.black]
 unknown = true
@@ -167,7 +167,7 @@ def test_config_show_strict_errors_on_unknown(tmp_path: Path, monkeypatch) -> No
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
-    (project_root / ".py_qa.toml").write_text(
+    (project_root / ".pyqa_lint.toml").write_text(
         """
 [tools.black]
 unknown = true
@@ -187,7 +187,7 @@ def test_config_diff_defaults_to_final(tmp_path: Path, monkeypatch) -> None:
     project_root.mkdir()
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
-    (project_root / ".py_qa.toml").write_text(
+    (project_root / ".pyqa_lint.toml").write_text(
         """
 [execution]
 jobs = 8
@@ -207,7 +207,7 @@ def test_config_diff_to_file(tmp_path: Path, monkeypatch) -> None:
     project_root.mkdir()
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
-    (project_root / ".py_qa.toml").write_text(
+    (project_root / ".pyqa_lint.toml").write_text(
         """
 [tools.black]
 line-length = 99
