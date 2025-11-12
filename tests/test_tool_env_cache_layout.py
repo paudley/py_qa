@@ -27,10 +27,10 @@ def workspace_state(tmp_path: Path) -> dict[str, object]:
     return {"tmp_root": tmp_path}
 
 
-@given("a simulated py_qa repository root", target_fixture="workspace_state")
+@given("a simulated pyqa_lint repository root", target_fixture="workspace_state")
 def given_pyqa_repo(workspace_state: dict[str, object]) -> dict[str, object]:
     tmp_root = workspace_state["tmp_root"]
-    repo_root = Path(tmp_root) / "py_qa_repo"
+    repo_root = Path(tmp_root) / "pyqa_lint_repo"
     (repo_root / "src" / "pyqa").mkdir(parents=True)
     workspace_state.update(
         {
@@ -47,7 +47,7 @@ def given_pyqa_repo(workspace_state: dict[str, object]) -> dict[str, object]:
 def given_external_project(workspace_state: dict[str, object]) -> dict[str, object]:
     tmp_root = workspace_state["tmp_root"]
     project_root = Path(tmp_root) / "host_project"
-    submodule = project_root / "submodules" / "py_qa" / "src" / "pyqa"
+    submodule = project_root / "submodules" / "pyqa_lint" / "src" / "pyqa"
     submodule.mkdir(parents=True)
     workspace_state.update(
         {

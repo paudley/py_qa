@@ -1,18 +1,19 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 
-"""Helpers for resolving py_qa project paths."""
+"""Helpers for resolving pyqa_lint project paths."""
 
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Iterable
 from functools import cache
 from itertools import chain
 from pathlib import Path
 
 from pyqa.core.logging import warn
-from pyqa.platform.workspace import is_py_qa_workspace
+from pyqa.platform.workspace import is_pyqa_lint_workspace
 
 _PYQA_ROOT_ENV = "PYQA_ROOT"
 _REQUIRED_ENTRIES: tuple[str, ...] = ("src/pyqa", "tooling")
@@ -20,14 +21,14 @@ _REQUIRED_ENTRIES: tuple[str, ...] = ("src/pyqa", "tooling")
 
 @cache
 def get_pyqa_root() -> Path:
-    """Return the resolved py_qa project root directory.
+    """Return the resolved pyqa_lint project root directory.
 
     The root may be supplied via ``PYQA_ROOT`` or auto-detected by searching
-    upwards from the current module location until a valid py_qa workspace is
+    upwards from the current module location until a valid pyqa_lint workspace is
     located.
 
     Returns:
-        Path: Directory representing the py_qa project root.
+        Path: Directory representing the pyqa_lint project root.
 
     Raises:
         RuntimeError: If no suitable project root can be located.
@@ -44,7 +45,7 @@ def get_pyqa_root() -> Path:
     detected = _auto_detect_pyqa_root()
     if detected is None:
         message_parts = [
-            "Unable to locate the py_qa project root; set PYQA_ROOT to the",
+            "Unable to locate the pyqa_lint project root; set PYQA_ROOT to the",
             "directory containing pyproject.toml.",
         ]
         raise RuntimeError(" ".join(message_parts))
@@ -53,7 +54,7 @@ def get_pyqa_root() -> Path:
 
 
 def _auto_detect_pyqa_root() -> Path | None:
-    """Return an auto-detected py_qa project root when available.
+    """Return an auto-detected pyqa_lint project root when available.
 
     Returns:
         Path | None: Resolved project root or ``None`` when detection fails.
@@ -91,7 +92,7 @@ def _iter_candidates(start: Path) -> Iterable[Path]:
 
 
 def _validate_candidate(path: Path) -> Path:
-    """Return ``path`` when it satisfies py_qa root constraints.
+    """Return ``path`` when it satisfies pyqa_lint root constraints.
 
     Args:
         path: Candidate directory to evaluate.
@@ -108,8 +109,8 @@ def _validate_candidate(path: Path) -> Path:
         raise ValueError(f"{resolved} is not a directory")
     if not (resolved / "pyproject.toml").is_file():
         raise ValueError(f"pyproject.toml not found under {resolved}")
-    if not is_py_qa_workspace(resolved):
-        raise ValueError(f"pyproject.toml at {resolved} does not describe py_qa")
+    if not is_pyqa_lint_workspace(resolved):
+        raise ValueError(f"pyproject.toml at {resolved} does not describe pyqa_lint")
     return resolved
 
 
@@ -126,11 +127,42 @@ def _warn_on_suspicious_layout(root: Path, *, source: str) -> None:
         joined = ", ".join(missing)
         warn(
             (
-                f"{source}: py_qa root '{root}' is missing expected entries: {joined}. "
+                f"{source}: pyqa_lint root '{root}' is missing expected entries: {joined}. "
                 "The directory will be treated as read-only; ensure the path is correct."
             ),
             use_emoji=False,
         )
 
 
-__all__ = ["get_pyqa_root"]
+def strip_repo_root_from_text(content: str, *, replacement: str = ".") -> str:
+    """Remove repository-absolute prefixes from ``content``.
+
+    Args:
+        content: Text that may include absolute paths rooted at the pyqa_lint
+            repository.
+        replacement: Token inserted when the repository root itself appears
+            without a trailing path separator. Defaults to ``"."``.
+
+    Returns:
+        str: Sanitised text with repository-prefixed paths converted to
+        repository-relative representations.
+    """
+
+    try:
+        root = get_pyqa_root().resolve()
+    except RuntimeError:  # pragma: no cover - helper may execute pre-discovery
+        return content
+
+    variants = {str(root), root.as_posix()}
+    sanitised = content
+    for variant in variants:
+        pattern = re.compile(rf"{re.escape(variant)}(?P<sep>[\\/])?")
+
+        def _replacement(match: re.Match[str]) -> str:
+            return "" if match.group("sep") else replacement
+
+        sanitised = pattern.sub(_replacement, sanitised)
+    return sanitised
+
+
+__all__ = ["get_pyqa_root", "strip_repo_root_from_text"]

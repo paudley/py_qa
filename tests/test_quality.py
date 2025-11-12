@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from typer.testing import CliRunner
 
 from pyqa.cli.app import app
-from pyqa.cli.core.utils import filter_py_qa_paths
+from pyqa.cli.core.utils import filter_pyqa_lint_paths
 from pyqa.compliance.quality import (
     QualityChecker,
     QualityCheckerOptions,
@@ -508,14 +508,14 @@ def test_license_check_skips_json_and_txt(tmp_path: Path) -> None:
     assert not result.issues
 
 
-def test_check_quality_ignores_py_qa_directory(tmp_path: Path) -> None:
+def test_check_quality_ignores_pyqa_lint_directory(tmp_path: Path) -> None:
     _write_repo_layout(tmp_path)
-    py_qa_dir = tmp_path / "py_qa"
-    py_qa_dir.mkdir()
-    (py_qa_dir / "sample.py").write_text("print('hi')\n", encoding="utf-8")
+    pyqa_lint_dir = tmp_path / "pyqa_lint"
+    pyqa_lint_dir.mkdir()
+    (pyqa_lint_dir / "sample.py").write_text("print('hi')\n", encoding="utf-8")
 
     runner = CliRunner()
-    kept, ignored = filter_py_qa_paths([py_qa_dir / "sample.py"], tmp_path)
+    kept, ignored = filter_pyqa_lint_paths([pyqa_lint_dir / "sample.py"], tmp_path)
     assert not kept
     assert ignored
     result = runner.invoke(
@@ -526,12 +526,12 @@ def test_check_quality_ignores_py_qa_directory(tmp_path: Path) -> None:
             str(tmp_path),
             "--no-schema",
             "--no-emoji",
-            str(py_qa_dir / "sample.py"),
+            str(pyqa_lint_dir / "sample.py"),
         ],
     )
 
     output = result.stdout + result.stderr
     assert result.exit_code == 0
-    assert "'py_qa' directories are skipped" in output
+    assert "'pyqa_lint' directories are skipped" in output
     assert "No files to check." in output
     assert "Missing SPDX" not in output

@@ -1,7 +1,7 @@
 Feature: Tool cache respects project roots
 
-  Scenario: Working inside the py_qa repository root
-    Given a simulated py_qa repository root
+  Scenario: Working inside the pyqa_lint repository root
+    Given a simulated pyqa_lint repository root
     When command preparation runs with the repository root
     Then tool caches are created underneath the expected root
     And no tool cache directories exist under the forbidden paths
@@ -18,8 +18,8 @@ Feature: Tool cache respects project roots
     Then tool caches are created underneath the expected root
     And no tool cache directories exist under the forbidden paths
 
-  Scenario: Running from inside the py_qa src tree
-    Given a simulated py_qa repository root
+  Scenario: Running from inside the pyqa_lint src tree
+    Given a simulated pyqa_lint repository root
     When command preparation runs from a repository subdirectory but with the repository root
     Then tool caches are created underneath the expected root
     And no tool cache directories exist under the forbidden paths

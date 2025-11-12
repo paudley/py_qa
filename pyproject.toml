@@ -125,7 +125,7 @@ pythonpath = ["src"]
 [tool.pyqa.quality]
 skip_globs = [
     #"ref_docs/**",
-    #"py_qa/**",
+    #"pyqa_lint/**",
 ]
 
 [tool.hatch.metadata]

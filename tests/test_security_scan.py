@@ -74,13 +74,13 @@ def test_security_scan_handles_no_files(tmp_path: Path) -> None:
     assert "No files to scan" in result.stdout
 
 
-def test_security_scan_ignores_py_qa_directory(tmp_path: Path) -> None:
+def test_security_scan_ignores_pyqa_lint_directory(tmp_path: Path) -> None:
     runner = CliRunner()
     project_root = tmp_path / "project"
     project_root.mkdir()
-    py_qa_dir = project_root / "py_qa"
-    py_qa_dir.mkdir()
-    candidate = py_qa_dir / "secret.py"
+    pyqa_lint_dir = project_root / "pyqa_lint"
+    pyqa_lint_dir.mkdir()
+    candidate = pyqa_lint_dir / "secret.py"
     candidate.write_text('api_key = "SHOULD_NOT_SCAN"\n', encoding="utf-8")
 
     result = runner.invoke(
@@ -97,5 +97,5 @@ def test_security_scan_ignores_py_qa_directory(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0
-    assert "'py_qa' directories are skipped" in result.stdout
+    assert "'pyqa_lint' directories are skipped" in result.stdout
     assert "No files to scan" in result.stdout

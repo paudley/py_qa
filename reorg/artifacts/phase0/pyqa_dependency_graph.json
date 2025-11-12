@@ -821,5 +821,5 @@
     "pyqa.workspace": ["pyqa.constants"]
   },
   "module_count": 174,
-  "package_root": "/home/paudley/Active/py_qa/src/pyqa"
+  "package_root": "src/pyqa"
 }

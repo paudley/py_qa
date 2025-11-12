@@ -1,4 +1,4 @@
-/home/paudley/Active/py_qa/src/.lint-cache/tools/go/bin/kube-linter --help
+src/.lint-cache/tools/go/bin/kube-linter --help
 
 Usage:
   kube-linter [command]

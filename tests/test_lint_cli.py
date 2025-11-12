@@ -153,12 +153,12 @@ class _CapturingLogger:
         self.echo_messages.append(message)
 
 
-def test_lint_warns_when_py_qa_path_outside_workspace(tmp_path: Path, monkeypatch) -> None:
+def test_lint_warns_when_pyqa_lint_path_outside_workspace(tmp_path: Path, monkeypatch) -> None:
     runner = CliRunner()
 
     project_root = tmp_path / "project"
     project_root.mkdir()
-    (project_root / "py_qa").mkdir()
+    (project_root / "pyqa_lint").mkdir()
 
     monkeypatch.chdir(project_root)
 
@@ -172,7 +172,7 @@ def test_lint_warns_when_py_qa_path_outside_workspace(tmp_path: Path, monkeypatc
         app,
         [
             "lint",
-            "py_qa",
+            "pyqa_lint",
             "--root",
             str(project_root),
             "--tool-info",
@@ -182,7 +182,7 @@ def test_lint_warns_when_py_qa_path_outside_workspace(tmp_path: Path, monkeypatc
     )
 
     assert result.exit_code == 0
-    assert "'py_qa' directories are skipped" in result.stdout
+    assert "'pyqa_lint' directories are skipped" in result.stdout
 
 
 def test_lint_fetch_all_tools_flag(monkeypatch, tmp_path: Path) -> None:

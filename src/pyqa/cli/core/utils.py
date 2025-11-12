@@ -11,9 +11,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Final
 
-from pyqa.core.config.constants import PY_QA_DIR_NAME
+from pyqa.core.config.constants import PYQA_LINT_DIR_NAME
 from pyqa.core.environment.tool_env import VersionResolver
-from pyqa.platform.workspace import is_py_qa_workspace
+from pyqa.platform.workspace import is_pyqa_lint_workspace
 
 from ...core.runtime.process import CommandOptions, run_command
 from ...filesystem.paths import display_relative_path, ensure_absolute_path
@@ -147,8 +147,8 @@ def check_tool_status(tool: Tool) -> ToolStatus:
     )
 
 
-def filter_py_qa_paths(paths: Iterable[Path], root: Path) -> tuple[list[Path], list[str]]:
-    """Drop py_qa paths when operating outside the py_qa workspace.
+def filter_pyqa_lint_paths(paths: Iterable[Path], root: Path) -> tuple[list[Path], list[str]]:
+    """Drop pyqa_lint paths when operating outside the pyqa_lint workspace.
 
     Args:
         paths: Iterable of filesystem paths provided by the caller.
@@ -160,7 +160,7 @@ def filter_py_qa_paths(paths: Iterable[Path], root: Path) -> tuple[list[Path], l
 
     """
     root_resolved = root.resolve()
-    if is_py_qa_workspace(root_resolved):
+    if is_pyqa_lint_workspace(root_resolved):
         resolved_paths = [resolved for resolved in (_maybe_resolve(path) for path in paths) if resolved]
         return resolved_paths, []
 
@@ -170,7 +170,7 @@ def filter_py_qa_paths(paths: Iterable[Path], root: Path) -> tuple[list[Path], l
         resolved = _maybe_resolve(original, root_resolved)
         if resolved is None:
             continue
-        if PY_QA_DIR_NAME in resolved.parts:
+        if PYQA_LINT_DIR_NAME in resolved.parts:
             ignored_display.append(display_relative_path(resolved, root_resolved))
             continue
         kept.append(resolved)

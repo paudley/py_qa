@@ -10,12 +10,12 @@ from typing import Annotated
 
 import typer
 
-from pyqa.core.config.constants import PY_QA_DIR_NAME
+from pyqa.core.config.constants import PYQA_LINT_DIR_NAME
 
 from ....compliance.security import SecurityScanner, SecurityScanResult, get_staged_files
 from ....core.logging import emoji, warn
 from ...core.shared import Depends
-from ...core.utils import filter_py_qa_paths
+from ...core.utils import filter_pyqa_lint_paths
 from .models import SecurityCLIOptions, build_security_options
 
 
@@ -32,14 +32,14 @@ def security_scan_command(
     """
     root_path = options.root
     target_candidates = list(_resolve_security_targets(options.files, root_path, options.staged))
-    target_files, ignored_py_qa = filter_py_qa_paths(target_candidates, root_path)
+    target_files, ignored_pyqa_lint = filter_pyqa_lint_paths(target_candidates, root_path)
     use_emoji = options.use_emoji
-    if ignored_py_qa:
-        unique = ", ".join(dict.fromkeys(ignored_py_qa))
+    if ignored_pyqa_lint:
+        unique = ", ".join(dict.fromkeys(ignored_pyqa_lint))
         warn(
             (
-                f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
-                "unless security-scan runs inside the py_qa workspace."
+                f"Ignoring path(s) {unique}: '{PYQA_LINT_DIR_NAME}' directories are skipped "
+                "unless security-scan runs inside the pyqa_lint workspace."
             ),
             use_emoji=use_emoji,
         )

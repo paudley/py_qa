@@ -5,7 +5,7 @@
 # PyQA Lint Orchestrator (`pyqa_lint`)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://github.com/paudley/py_qa/actions/workflows/release.yml/badge.svg)](.github/workflows/release.yml)
+[![Tests](https://github.com/paudley/pyqa_lint/actions/workflows/release.yml/badge.svg)](.github/workflows/release.yml)
 
 PyQA is Blackcat Informatics Inc.'s opinionated quality-assurance harness. It ships as the `pyqa_lint` package (install via `pip install pyqa_lint`) and can also be vendored as a git submodule so teams can run the Typer-based CLI (`pyqa`) with zero external dependencies.
 
@@ -72,7 +72,7 @@ pip install pyqa_lint
 ### Git Submodule
 
 ```bash
-git submodule add https://github.com/paudley/py_qa.git py-qa
+git submodule add https://github.com/paudley/pyqa_lint.git pyqa-lint
 ```
 
 This layout keeps the managed scripts (`lint`, `check-quality`, `security-scan`, `install`, `install-hooks`, etc.) inside your repository without publishing a wheel.
@@ -89,8 +89,8 @@ The shims in the repo root (`./lint`, `./check-quality`, `./install`, `./securit
 
 ## Getting Started
 
-1. `git submodule add https://github.com/paudley/py_qa.git py-qa`
-2. `cd py-qa && uv sync --group dev`
+1. `git submodule add https://github.com/paudley/pyqa_lint.git pyqa-lint`
+2. `cd pyqa-lint && uv sync --group dev`
 3. `./install-hooks` to wire `pre-commit`, `pre-push`, and `commit-msg`
 4. `./lint` (or `pyqa lint`) to run the curated pipeline
 
@@ -152,12 +152,12 @@ Key takeaways:
 
 ## Configuration & Tooling Schema
 
-- **Layered configuration**: defaults → `~/.py_qa.toml` → `[tool.pyqa]` in `pyproject.toml` → `<project>/.py_qa.toml`. Inspect with `pyqa config show --root <path> --trace` or compare layers via `pyqa config diff`.
+- **Layered configuration**: defaults → `~/.pyqa_lint.toml` → `[tool.pyqa]` in `pyproject.toml` → `<project>/.pyqa_lint.toml`. Inspect with `pyqa config show --root <path> --trace` or compare layers via `pyqa config diff`.
 - **Strict validation**: pass `--strict-config` (or `pyqa config validate --strict`) to fail on unknown keys.
 - **License policy**: `[tool.pyqa.license]` declares SPDX identifiers, notices, year ranges, and exceptions enforced by `pyqa check-quality`.
 - **Quality defaults**: `[tool.pyqa.quality]` centralizes enabled checks, schema targets, skip globs, and protected branches for hooks/CI.
 - **Shared knobs**: `[complexity]` and `[strictness]` propagate limits to ruff, pylint, luacheck, mypy, pyright, tsc, etc. Sensitivity presets (`--sensitivity low|medium|high|maximum`) shift multiple thresholds together.
-- **Tool overrides**: configure `[tool.pyqa.<tool>]` (or `.py_qa.toml`'s `[tools.<tool>]`) to customize args/env per tool; CLI flags still win for ad-hoc overrides.
+- **Tool overrides**: configure `[tool.pyqa.<tool>]` (or `.pyqa_lint.toml`'s `[tools.<tool>]`) to customize args/env per tool; CLI flags still win for ad-hoc overrides.
 - **Schema exports**: `pyqa config schema --format markdown` documents every option; `pyqa config schema --format json-tools --out ref_docs/tool-schema.json` and `pyqa config export-tools` keep the checked-in schema current.
 
 ## Advanced Capabilities

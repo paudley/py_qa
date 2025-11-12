@@ -127,7 +127,7 @@ def _run_update(options: UpdateOptions) -> None:
 
 
 def _load_update_configuration(root: Path, use_emoji: bool) -> ConfigLoadResult:
-    """Load the py-qa configuration for the update workflow.
+    """Load the pyqa-lint configuration for the update workflow.
 
     Args:
         root: Project root containing the configuration files.

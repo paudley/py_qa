@@ -36,7 +36,7 @@ def _build_state(root: Path, targets: list[Path]) -> SimpleNamespace:
         logger=logger,
         artifacts=None,
         display=None,
-        ignored_py_qa=[],
+        ignored_pyqa_lint=[],
     )
 
 

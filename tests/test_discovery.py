@@ -37,15 +37,15 @@ def test_filesystem_discovery_respects_excludes(tmp_path: Path) -> None:
     assert not any(path.name == "machine.py" for path in files)
 
 
-def test_filesystem_discovery_skips_embedded_py_qa(tmp_path: Path) -> None:
+def test_filesystem_discovery_skips_embedded_pyqa_lint(tmp_path: Path) -> None:
     project_root = tmp_path
     (project_root / "app").mkdir()
     keep = project_root / "app" / "keep.py"
     keep.write_text("print('keep')\n", encoding="utf-8")
 
-    vendor_py_qa = project_root / "vendor" / "py_qa"
-    vendor_py_qa.mkdir(parents=True)
-    ignored = vendor_py_qa / "ignored.py"
+    vendor_pyqa_lint = project_root / "vendor" / "pyqa_lint"
+    vendor_pyqa_lint.mkdir(parents=True)
+    ignored = vendor_pyqa_lint / "ignored.py"
     ignored.write_text("print('ignore')\n", encoding="utf-8")
 
     cfg = FileDiscoveryConfig(roots=[Path()])
@@ -56,10 +56,10 @@ def test_filesystem_discovery_skips_embedded_py_qa(tmp_path: Path) -> None:
     assert ignored.resolve() not in files
 
 
-def test_filesystem_discovery_includes_py_qa_workspace(tmp_path: Path) -> None:
-    workspace = tmp_path / "py_qa"
+def test_filesystem_discovery_includes_pyqa_lint_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "pyqa_lint"
     workspace.mkdir()
-    (workspace / "pyproject.toml").write_text('[project]\nname = "py_qa"\n', encoding="utf-8")
+    (workspace / "pyproject.toml").write_text('[project]\nname = "pyqa_lint"\n', encoding="utf-8")
     tracked = workspace / "tracked.py"
     tracked.write_text("print('tracked')\n", encoding="utf-8")
 

@@ -1,4 +1,4 @@
-/home/paudley/Active/py_qa/src/.lint-cache/tools/rust/dotenv-linter-3.3.0/bin/dotenv-linter --no-color --quiet --help
+src/.lint-cache/tools/rust/dotenv-linter-3.3.0/bin/dotenv-linter --no-color --quiet --help
 
 dotenv-linter 3.3.0
 Mikhail Grachev <work@mgrachev.com>
@@ -8,7 +8,7 @@ USAGE:
     dotenv-linter [OPTIONS] [input]... [SUBCOMMAND]
 
 ARGS:
-    <input>...    files or paths [default: /home/paudley/Active/py_qa]
+    <input>...    files or paths [default: .]
 
 OPTIONS:
     -e, --exclude <FILE_NAME>...    Excludes files from check

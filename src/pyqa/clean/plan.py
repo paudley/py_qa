@@ -11,10 +11,10 @@ from pathlib import Path
 from typing import Final
 
 from pyqa.config import CleanConfig
-from pyqa.core.config.constants import PY_QA_DIR_NAME
+from pyqa.core.config.constants import PYQA_LINT_DIR_NAME
 from pyqa.core.logging import info, warn
 from pyqa.discovery.utils import iter_paths
-from pyqa.platform.workspace import is_py_qa_workspace
+from pyqa.platform.workspace import is_pyqa_lint_workspace
 
 PROTECTED_DIRECTORIES: Final[set[str]] = {".git", ".hg", ".svn"}
 
@@ -31,7 +31,7 @@ class CleanPlan:
     """Represent cleanup targets and ignored project directories."""
 
     items: list[CleanPlanItem] = field(default_factory=list)
-    ignored_py_qa: list[Path] = field(default_factory=list)
+    ignored_pyqa_lint: list[Path] = field(default_factory=list)
 
     @property
     def paths(self) -> list[Path]:
@@ -85,20 +85,20 @@ class CleanPlanner:
 
         Returns:
             CleanPlan: Plan describing discovered cleanup items and ignored
-            ``py_qa`` directories.
+            ``pyqa_lint`` directories.
         """
 
         root = root.resolve()
         patterns = _merge_unique(config.patterns, self._extra_patterns)
         trees = _merge_unique(config.trees, self._extra_trees)
-        skip_py_qa = not is_py_qa_workspace(root)
+        skip_pyqa_lint = not is_pyqa_lint_workspace(root)
 
         info("✨ Cleaning repository temporary files...", use_emoji=True)
-        collected, ignored_py_qa = _collect_matches_from_directory(
+        collected, ignored_pyqa_lint = _collect_matches_from_directory(
             root,
             patterns,
             root=root,
-            skip_py_qa=skip_py_qa,
+            skip_pyqa_lint=skip_pyqa_lint,
         )
 
         for tree in trees:
@@ -110,16 +110,16 @@ class CleanPlanner:
                 base_dir,
                 patterns,
                 root=root,
-                skip_py_qa=skip_py_qa,
+                skip_pyqa_lint=skip_pyqa_lint,
             )
             collected.update(tree_items)
-            ignored_py_qa.extend(tree_ignored)
+            ignored_pyqa_lint.extend(tree_ignored)
 
-        if skip_py_qa:
-            ignored_py_qa.extend(_discover_py_qa_directories(root))
+        if skip_pyqa_lint:
+            ignored_pyqa_lint.extend(_discover_pyqa_lint_directories(root))
 
         items = sorted(collected.values(), key=lambda item: item.path)
-        return CleanPlan(items=items, ignored_py_qa=_dedupe_paths(ignored_py_qa))
+        return CleanPlan(items=items, ignored_pyqa_lint=_dedupe_paths(ignored_pyqa_lint))
 
 
 def _collect_matches_from_directory(
@@ -127,7 +127,7 @@ def _collect_matches_from_directory(
     patterns: Sequence[str],
     *,
     root: Path,
-    skip_py_qa: bool,
+    skip_pyqa_lint: bool,
 ) -> tuple[dict[Path, CleanPlanItem], list[Path]]:
     """Collect filesystem matches within ``base`` using ``patterns``.
 
@@ -135,18 +135,18 @@ def _collect_matches_from_directory(
         base: Directory scanned for pattern matches.
         patterns: Glob patterns evaluated relative to ``base``.
         root: Repository root used when evaluating protected directories.
-        skip_py_qa: When ``True`` ignore matches inside py_qa directories.
+        skip_pyqa_lint: When ``True`` ignore matches inside pyqa_lint directories.
 
     Returns:
         tuple[dict[Path, CleanPlanItem], list[Path]]: Mapping of matched paths
-        to plan items alongside skipped py_qa directories.
+        to plan items alongside skipped pyqa_lint directories.
     """
 
     collected: dict[Path, CleanPlanItem] = {}
     ignored: list[Path] = []
     for directory, _subdirs, _files in iter_paths(base):
         for match in _match_patterns(directory, patterns):
-            if _should_skip_py_qa(match, root, skip_py_qa):
+            if _should_skip_pyqa_lint(match, root, skip_pyqa_lint):
                 ignored.append(match)
                 continue
             collected[match] = CleanPlanItem(path=match)
@@ -218,19 +218,19 @@ def _match_patterns(base: Path, patterns: Iterable[str]) -> set[Path]:
     return matches
 
 
-def _should_skip_py_qa(path: Path, root: Path, skip_py_qa: bool) -> bool:
-    """Determine whether ``path`` should be skipped due to py_qa rules.
+def _should_skip_pyqa_lint(path: Path, root: Path, skip_pyqa_lint: bool) -> bool:
+    """Determine whether ``path`` should be skipped due to pyqa_lint rules.
 
     Args:
         path: Candidate filesystem path.
-        root: Repository root that anchors py_qa detection.
-        skip_py_qa: When ``True`` skip paths inside py_qa directories.
+        root: Repository root that anchors pyqa_lint detection.
+        skip_pyqa_lint: When ``True`` skip paths inside pyqa_lint directories.
 
     Returns:
         bool: ``True`` if the path should be skipped, ``False`` otherwise.
     """
 
-    if not skip_py_qa:
+    if not skip_pyqa_lint:
         return False
     try:
         relative = path.resolve().relative_to(root)
@@ -239,7 +239,7 @@ def _should_skip_py_qa(path: Path, root: Path, skip_py_qa: bool) -> bool:
             relative = path.resolve()
         except OSError:
             relative = path
-    return PY_QA_DIR_NAME in relative.parts
+    return PYQA_LINT_DIR_NAME in relative.parts
 
 
 def _dedupe_paths(paths: Iterable[Path]) -> list[Path]:
@@ -266,19 +266,19 @@ def _dedupe_paths(paths: Iterable[Path]) -> list[Path]:
     return ordered
 
 
-def _discover_py_qa_directories(root: Path) -> list[Path]:
-    """Identify py_qa directories under ``root`` for reporting purposes.
+def _discover_pyqa_lint_directories(root: Path) -> list[Path]:
+    """Identify pyqa_lint directories under ``root`` for reporting purposes.
 
     Args:
-        root: Repository root scanned for py_qa directories.
+        root: Repository root scanned for pyqa_lint directories.
 
     Returns:
-        list[Path]: Directories named ``PY_QA_DIR_NAME`` that reside under
+        list[Path]: Directories named ``PYQA_LINT_DIR_NAME`` that reside under
         ``root``.
     """
 
     try:
-        candidates = list(root.rglob(PY_QA_DIR_NAME))
+        candidates = list(root.rglob(PYQA_LINT_DIR_NAME))
     except OSError:
         return []
     return [candidate for candidate in candidates if candidate.is_dir() and candidate.is_relative_to(root)]
@@ -306,7 +306,7 @@ __all__ = [
     "CleanPlanner",
     "PROTECTED_DIRECTORIES",
     "_collect_matches_from_directory",
-    "_discover_py_qa_directories",
+    "_discover_pyqa_lint_directories",
     "_dedupe_paths",
     "remove_path",
 ]

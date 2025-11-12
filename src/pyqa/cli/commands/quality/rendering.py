@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pyqa.core.config.constants import PY_QA_DIR_NAME
+from pyqa.core.config.constants import PYQA_LINT_DIR_NAME
 
 from ....compliance.quality import QualityCheckResult, QualityIssueLevel
 from ...core.shared import CLILogger
@@ -52,12 +52,12 @@ def render_quality_result(
         logger.warn(summary)
 
 
-def render_py_qa_skip_warning(
+def render_pyqa_lint_skip_warning(
     ignored: tuple[str, ...],
     *,
     logger: CLILogger,
 ) -> None:
-    """Render a warning describing py_qa directories skipped during execution.
+    """Render a warning describing pyqa_lint directories skipped during execution.
 
     Args:
         ignored: Tuple of directory names filtered during processing.
@@ -70,8 +70,8 @@ def render_py_qa_skip_warning(
         return
     unique = ", ".join(ignored)
     logger.warn(
-        f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
-        "unless check-quality runs inside the py_qa workspace."
+        f"Ignoring path(s) {unique}: '{PYQA_LINT_DIR_NAME}' directories are skipped "
+        "unless check-quality runs inside the pyqa_lint workspace."
     )
 
 
@@ -130,4 +130,4 @@ def _relative_path_or_original(path: Path, root: Path) -> str:
         return str(path)
 
 
-__all__ = ["render_py_qa_skip_warning", "render_quality_result"]
+__all__ = ["render_pyqa_lint_skip_warning", "render_quality_result"]

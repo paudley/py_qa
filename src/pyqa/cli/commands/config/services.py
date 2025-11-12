@@ -20,6 +20,7 @@ from pyqa.core.config.loader import (
     generate_config_schema,
 )
 from pyqa.core.serialization import JsonValue, SerializableValue, jsonify
+from pyqa.platform.paths import strip_repo_root_from_text
 
 from ....tools.settings import TOOL_SETTING_SCHEMA, SettingField, tool_setting_schema_as_dict
 from ...core.shared import CLIError, CLILogger
@@ -226,6 +227,7 @@ def write_output(content: str, *, out: Path | None, logger: CLILogger) -> None:
     out_path = out.resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     text = content if content.endswith("\n") else f"{content}\n"
+    text = strip_repo_root_from_text(text)
     out_path.write_text(text, encoding="utf-8")
     logger.echo(str(out_path))
 

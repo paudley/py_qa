@@ -10,8 +10,8 @@ from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS, PY_QA_DIR_NAME
-from pyqa.platform.workspace import is_py_qa_workspace
+from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS, PYQA_LINT_DIR_NAME
+from pyqa.platform.workspace import is_pyqa_lint_workspace
 
 from ..interfaces.discovery import FileDiscoveryConfig
 from .base import DiscoveryStrategy, is_within_limits, resolve_limit_paths
@@ -25,7 +25,7 @@ class WalkContext:
     excludes: frozenset[Path]
     limits: tuple[Path, ...]
     root: Path
-    allow_root_py_qa: bool
+    allow_root_pyqa_lint: bool
     follow_symlinks: bool
 
 
@@ -74,7 +74,7 @@ class FilesystemDiscovery(DiscoveryStrategy):
 
         results: list[Path] = []
         excludes = frozenset(root.joinpath(path).resolve() for path in config.excludes)
-        allow_root_py_qa = is_py_qa_workspace(root) or root.resolve().name == PY_QA_DIR_NAME
+        allow_root_pyqa_lint = is_pyqa_lint_workspace(root) or root.resolve().name == PYQA_LINT_DIR_NAME
         for base in self._iter_root_candidates(config, root, limits):
             if base.is_file():
                 resolved = base.resolve()
@@ -86,7 +86,7 @@ class FilesystemDiscovery(DiscoveryStrategy):
                 excludes=excludes,
                 limits=limits,
                 root=root,
-                allow_root_py_qa=allow_root_py_qa,
+                allow_root_pyqa_lint=allow_root_pyqa_lint,
                 follow_symlinks=self.follow_symlinks,
             )
             results.extend(self._walk(context))
@@ -241,11 +241,11 @@ class FilesystemDiscovery(DiscoveryStrategy):
             return True
         if path.name not in ALWAYS_EXCLUDE_DIRS:
             return False
-        return not _should_include_py_qa(
+        return not _should_include_pyqa_lint(
             path,
             context.base,
             context.root,
-            allow_root_py_qa=context.allow_root_py_qa,
+            allow_root_pyqa_lint=context.allow_root_pyqa_lint,
         )
 
     def _is_excluded(self, candidate: Path, context: WalkContext) -> bool:
@@ -262,26 +262,26 @@ class FilesystemDiscovery(DiscoveryStrategy):
         return any(candidate.is_relative_to(ex) for ex in context.excludes)
 
 
-def _should_include_py_qa(
+def _should_include_pyqa_lint(
     current: Path,
     base: Path,
     root: Path,
     *,
-    allow_root_py_qa: bool,
+    allow_root_pyqa_lint: bool,
 ) -> bool:
-    """Return whether the py_qa directory should be retained during walk.
+    """Return whether the pyqa_lint directory should be retained during walk.
 
     Args:
         current: Directory currently under consideration.
         base: Base directory from which the walk originated.
         root: Repository root directory.
-        allow_root_py_qa: Flag indicating whether py_qa root should be kept.
+        allow_root_pyqa_lint: Flag indicating whether pyqa_lint root should be kept.
 
     Returns:
-        bool: ``True`` when the py_qa workspace directory should be included.
+        bool: ``True`` when the pyqa_lint workspace directory should be included.
     """
 
-    if not allow_root_py_qa or current.name != PY_QA_DIR_NAME:
+    if not allow_root_pyqa_lint or current.name != PYQA_LINT_DIR_NAME:
         return False
     try:
         return current.resolve() == root.resolve() and base.resolve() == root.resolve()

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pyqa.core.config.constants import PY_QA_DIR_NAME
+from pyqa.core.config.constants import PYQA_LINT_DIR_NAME
 
 from ....clean import CleanResult
 from ....config import CleanConfig
@@ -25,14 +25,14 @@ def load_clean_config(root: Path, *, logger: CLILogger) -> CleanConfig:
             occur during configuration loading.
 
     Returns:
-        CleanConfig: Configuration payload extracted from ``.py_qa`` files.
+        CleanConfig: Configuration payload extracted from ``.pyqa_lint`` files.
     """
 
     return load_config_result(root, logger=logger).config.clean
 
 
-def emit_py_qa_warning(result: CleanResult, root: Path, *, logger: CLILogger) -> None:
-    """Emit a warning for py-qa protected paths.
+def emit_pyqa_lint_warning(result: CleanResult, root: Path, *, logger: CLILogger) -> None:
+    """Emit a warning for pyqa-lint protected paths.
 
     Args:
         result: The clean execution result produced by ``sparkly_clean``.
@@ -40,13 +40,13 @@ def emit_py_qa_warning(result: CleanResult, root: Path, *, logger: CLILogger) ->
         logger: Logger used to emit the warning.
     """
 
-    if not result.ignored_py_qa:
+    if not result.ignored_pyqa_lint:
         return
-    ignored = [display_relative_path(path, root) for path in result.ignored_py_qa]
+    ignored = [display_relative_path(path, root) for path in result.ignored_pyqa_lint]
     unique = ", ".join(dict.fromkeys(ignored))
     logger.warn(
-        f"Ignoring path(s) {unique}: '{PY_QA_DIR_NAME}' directories are skipped "
-        "unless sparkly-clean runs inside the py_qa workspace."
+        f"Ignoring path(s) {unique}: '{PYQA_LINT_DIR_NAME}' directories are skipped "
+        "unless sparkly-clean runs inside the pyqa_lint workspace."
     )
 
 
@@ -64,6 +64,6 @@ def emit_dry_run_summary(result: CleanResult, *, logger: CLILogger) -> None:
 
 __all__ = [
     "load_clean_config",
-    "emit_py_qa_warning",
+    "emit_pyqa_lint_warning",
     "emit_dry_run_summary",
 ]

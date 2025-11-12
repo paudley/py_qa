@@ -1,4 +1,4 @@
-/home/paudley/Active/py_qa/src/.lint-cache/tools/node/gts-5.3.1/node_modules/.bin/gts lint -- --format json --help
+src/.lint-cache/tools/node/gts-5.3.1/node_modules/.bin/gts lint -- --format json --help
 
 version: 24
 eslint [options] file.js [file.js] [dir]

@@ -13,7 +13,7 @@ from pyqa.interfaces.orchestration_selection import (
     PhaseLiteral,
     SelectionContext,
 )
-from pyqa.platform.workspace import is_py_qa_workspace
+from pyqa.platform.workspace import is_pyqa_lint_workspace
 from pyqa.tools.base import PHASE_NAMES
 
 DEFAULT_PHASE: Final[PhaseLiteral] = "lint"
@@ -66,7 +66,7 @@ def build_selection_context(
         detected_languages=tuple(sorted(detected_languages)),
         file_extensions=extensions,
         sensitivity=cfg.severity.sensitivity,
-        pyqa_workspace=is_py_qa_workspace(root),
+        pyqa_workspace=is_pyqa_lint_workspace(root),
         pyqa_rules=cfg.execution.pyqa_rules,
     )
 

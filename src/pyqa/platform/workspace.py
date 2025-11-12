@@ -11,7 +11,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import TypeAlias, cast
 
-from pyqa.core.config.constants import PY_QA_DIR_NAME
+from pyqa.core.config.constants import PYQA_LINT_DIR_NAME
 
 
 def _import_tomllib() -> ModuleType:
@@ -30,31 +30,31 @@ def _import_tomllib() -> ModuleType:
 tomllib = _import_tomllib()
 
 
-def is_py_qa_workspace(root: Path) -> bool:
-    """Return whether ``root`` appears to be the py_qa project itself.
+def is_pyqa_lint_workspace(root: Path) -> bool:
+    """Return whether ``root`` appears to be the pyqa_lint project itself.
 
     Args:
         root: Candidate project root directory.
 
     Returns:
-        bool: ``True`` when the directory matches the py_qa workspace layout.
+        bool: ``True`` when the directory matches the pyqa_lint workspace layout.
     """
     try:
         resolved = root.resolve()
     except OSError:
         return False
-    return _is_py_qa_workspace_cached(str(resolved))
+    return _is_pyqa_lint_workspace_cached(str(resolved))
 
 
 @cache
-def _is_py_qa_workspace_cached(root_str: str) -> bool:
-    """Cached helper implementing :func:`is_py_qa_workspace` resolution.
+def _is_pyqa_lint_workspace_cached(root_str: str) -> bool:
+    """Cached helper implementing :func:`is_pyqa_lint_workspace` resolution.
 
     Args:
         root_str: String representation of the candidate root directory.
 
     Returns:
-        bool: ``True`` when the directory satisfies py_qa workspace checks.
+        bool: ``True`` when the directory satisfies pyqa_lint workspace checks.
     """
 
     root = Path(root_str)
@@ -100,7 +100,7 @@ def _extract_project_name(payload: PyProjectPayload) -> str | None:
     return None
 
 
-_PY_QA_NAME_VARIANTS = {PY_QA_DIR_NAME, PY_QA_DIR_NAME.replace("_", "")}
+_PY_QA_NAME_VARIANTS = {PYQA_LINT_DIR_NAME, PYQA_LINT_DIR_NAME.replace("_", "")}
 _SENTINEL_DIRECTORIES = ("src/pyqa", "docs", "tooling")
 _SENTINEL_FILES = ("docs/ARCHITECTURE.md",)
 
@@ -127,4 +127,4 @@ def _has_required_entries(root: Path) -> bool:
     return init_file.is_file()
 
 
-__all__ = ["is_py_qa_workspace"]
+__all__ = ["is_pyqa_lint_workspace"]

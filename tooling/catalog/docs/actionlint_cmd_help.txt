@@ -1,4 +1,4 @@
-/home/paudley/Active/py_qa/.lint-cache/actionlint/1.7.1/actionlint -format {{json .}} -no-color /home/paudley/Active/py_qa/.github/workflows --help
+.lint-cache/actionlint/1.7.1/actionlint -format {{json .}} -no-color .github/workflows --help
 
 
 could not read "--help": open --help: no such file or directory

@@ -33,7 +33,7 @@ def install_command(
     use_emoji = options.use_emoji
 
     info(
-        f"Installing py-qa development dependencies in {resolved_root}",
+        f"Installing pyqa-lint development dependencies in {resolved_root}",
         use_emoji=use_emoji,
     )
 

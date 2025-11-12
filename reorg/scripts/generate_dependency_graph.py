@@ -24,7 +24,8 @@ from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-PACKAGE_ROOT = Path("src/pyqa").resolve()
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PACKAGE_ROOT = (REPO_ROOT / "src/pyqa").resolve()
 PACKAGE_PREFIX = "pyqa"
 _INIT_FILENAME = "__init__"
 
@@ -130,6 +131,15 @@ def _dependency_histogram(graph: Mapping[str, Sequence[str]]) -> dict[str, int]:
     return {module: len(deps) for module, deps in graph.items()}
 
 
+def _relative_to_repo(path: Path) -> str:
+    """Return ``path`` relative to the repository root when possible."""
+
+    try:
+        return str(path.resolve().relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
 def main(arguments: Sequence[str] | None = None) -> None:
     """Generate the dependency graph JSON artefact.
 
@@ -153,7 +163,7 @@ def main(arguments: Sequence[str] | None = None) -> None:
     output_path = args.output
     output_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "package_root": str(PACKAGE_ROOT),
+        "package_root": _relative_to_repo(PACKAGE_ROOT),
         "module_count": len(graph),
         "graph": graph,
         "dependency_histogram": histogram,

@@ -244,12 +244,12 @@ class QualityTargetResolution:
 
     Attributes:
         files: Optional explicit path list to hand over to the checker.
-        ignored_py_qa: Ordered tuple of ignored paths residing under ``py_qa``.
+        ignored_pyqa_lint: Ordered tuple of ignored paths residing under ``pyqa_lint``.
         had_explicit_paths: Indicates whether the user provided explicit paths.
     """
 
     files: list[Path] | None
-    ignored_py_qa: tuple[str, ...]
+    ignored_pyqa_lint: tuple[str, ...]
     had_explicit_paths: bool
 
 

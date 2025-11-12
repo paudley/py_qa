@@ -20,7 +20,7 @@ class CleanResult:
 
     removed: list[Path] = field(default_factory=list)
     skipped: list[Path] = field(default_factory=list)
-    ignored_py_qa: list[Path] = field(default_factory=list)
+    ignored_pyqa_lint: list[Path] = field(default_factory=list)
 
     def register_removed(self, path: Path) -> None:
         """Record that ``path`` was removed during cleaning.
@@ -77,7 +77,7 @@ def sparkly_clean(
     )
     plan: CleanPlan = planner.plan(root, config)
 
-    result = CleanResult(ignored_py_qa=list(plan.ignored_py_qa))
+    result = CleanResult(ignored_pyqa_lint=list(plan.ignored_pyqa_lint))
     for item in plan.items:
         path = item.path
         if dry_run:

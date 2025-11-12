@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict
 from pyqa.cli.protocols import TyperAdapter
 from pyqa.core.config.loader import ConfigLoadResult, FieldUpdate
 from pyqa.core.serialization import JsonValue
+from pyqa.platform.paths import strip_repo_root_from_text
 
 from ...core.shared import CLIError, build_cli_logger, register_command
 from ...core.typer_ext import TyperAppConfig, create_typer
@@ -233,6 +234,7 @@ def config_export_tools(
     out_path = out.resolve()
     payload = build_tool_schema_payload()
     text = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    text = strip_repo_root_from_text(text)
     if check:
         if not out_path.exists():
             logger.fail(f"{out_path} is missing")

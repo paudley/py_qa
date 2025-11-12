@@ -1,4 +1,4 @@
-/home/paudley/Active/py_qa/src/.lint-cache/tools/node/dockerfilelint-1.8.0/node_modules/.bin/dockerfilelint --help
+src/.lint-cache/tools/node/dockerfilelint-1.8.0/node_modules/.bin/dockerfilelint --help
 
 Usage: dockerfilelint [files | content..] [options]
 
