@@ -9,7 +9,6 @@ import sys
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from importlib import import_module
-from shutil import which
 from threading import Lock
 from types import ModuleType
 from typing import Final, Protocol, cast, runtime_checkable
@@ -208,7 +207,7 @@ def load_language(model_name: str) -> SpacyLanguage | None:
 
 
 def _download_spacy_model(model_name: str) -> bool:
-    """Retrieve the specified spaCy model using the most reliable command available.
+    """Retrieve the specified spaCy model using the current Python interpreter.
 
     Args:
         model_name: Fully qualified spaCy model identifier.
@@ -217,28 +216,14 @@ def _download_spacy_model(model_name: str) -> bool:
         bool: ``True`` when the download completes successfully.
     """
 
-    uv_path = which("uv")
-    python_executable = sys.executable or "python"
-    commands: list[list[str]] = []
+    if not sys.executable:
+        log_warn("Cannot determine Python executable path for spaCy model download", use_emoji=True)
+        return False
 
-    if uv_path:
-        commands.append([uv_path, "run", "python", "-m", "spacy", "download", model_name])
-        commands.append([uv_path, "pip", "install", model_name])
-
-    commands.append([python_executable, "-m", "spacy", "download", model_name])
-    commands.append([python_executable, "-m", "pip", "install", model_name])
-    commands.append(["python", "-m", "spacy", "download", model_name])
-    commands.append(["python", "-m", "pip", "install", model_name])
-
-    seen: set[tuple[str, ...]] = set()
-    for command in commands:
-        key = tuple(command)
-        if key in seen:
-            continue
-        seen.add(key)
-        if _run_subprocess(command):
-            return True
-    return False
+    # Use the current Python interpreter to run spaCy's download command
+    # This is the official way to install spaCy models and works in venvs
+    command = [sys.executable, "-m", "spacy", "download", model_name]
+    return _run_subprocess(command)
 
 
 def _resolve_loader(force: bool = False) -> Callable[[str], SpacyLanguage] | None:
