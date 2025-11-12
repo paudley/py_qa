@@ -34,6 +34,19 @@ jobs:
       - name: Run tests
         run: uv run pytest
 
+      - name: Build wheel
+        run: uv build
+
+      - name: Test installed wheel
+        run: |
+          set -euo pipefail
+          WHEEL=$(ls dist/pyqa_lint-*.whl | head -n 1)
+          TEST_ENV=$(mktemp -d)
+          uv venv "$TEST_ENV"
+          source "$TEST_ENV/bin/activate"
+          uv pip install "$WHEEL"
+          pytest -q
+
       - name: Run quality checks
         run: uv run pyqa check-quality
 
