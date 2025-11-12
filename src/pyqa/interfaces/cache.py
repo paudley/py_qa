@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Generic, Protocol, TypeVar, runtime_checkable
 
 from pyqa.cache.result_store import CachedEntry, CacheRequest
-from pyqa.core.metrics import FileMetrics
 from pyqa.core.models import ToolOutcome
+from pyqa.interfaces.metrics import FileMetricsProtocol
 
 if TYPE_CHECKING:
     from .config import Config
@@ -90,7 +90,7 @@ class ResultCacheProtocol(Protocol):
         request: CacheRequest,
         *,
         outcome: ToolOutcome,
-        file_metrics: Mapping[str, FileMetrics] | None = None,
+        file_metrics: Mapping[str, FileMetricsProtocol] | None = None,
     ) -> None:
         """Persist ``outcome`` for ``request`` alongside optional metrics.
 

@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -106,7 +105,14 @@ def _meta_action_explain_json_dependency(
         help=EXPLAIN_TOOLS_JSON_HELP,
     ),
 ) -> str | None:
-    """Return optional path for explain-tools JSON output."""
+    """Return optional path for explain-tools JSON output.
+
+    Args:
+        explain_tools_json: Optional filesystem path supplied via the CLI flag.
+
+    Returns:
+        str | None: Provided explain-tools JSON path when the flag is used.
+    """
 
     return explain_tools_json
 

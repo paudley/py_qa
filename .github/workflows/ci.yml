@@ -40,7 +40,11 @@ jobs:
       - name: Test installed wheel
         run: |
           set -euo pipefail
-          WHEEL=$(ls dist/pyqa_lint-*.whl | head -n 1)
+          WHEEL=$(find dist -maxdepth 1 -type f -name 'pyqa_lint-*.whl' -print -quit)
+          if [[ -z "$WHEEL" ]]; then
+            echo "Unable to locate built wheel in dist/" >&2
+            exit 1
+          fi
           TEST_ENV=$(mktemp -d)
           uv venv "$TEST_ENV"
           source "$TEST_ENV/bin/activate"

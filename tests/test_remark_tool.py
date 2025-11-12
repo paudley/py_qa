@@ -7,26 +7,14 @@
 from __future__ import annotations
 
 import subprocess
-import sys
-import types
+from collections.abc import Iterable
 from pathlib import Path
 
-_stub_spacy = types.ModuleType("spacy")
-_stub_spacy.__version__ = "0.0.0"
-
-
-def _stub_load(name: str):  # pragma: no cover - helper for stub module
-    raise OSError(f"spaCy model '{name}' unavailable in tests")
-
-
-_stub_spacy.load = _stub_load  # type: ignore[attr-defined]
-sys.modules.setdefault("spacy", _stub_spacy)
-
-from pyqa.analysis.providers import NullContextResolver
 from pyqa.cache.context import CacheContext
 from pyqa.catalog import ToolCatalogLoader
 from pyqa.catalog.strategies import command_option_map
 from pyqa.config import Config
+from pyqa.interfaces.analysis import ContextResolver, Diagnostic
 from pyqa.orchestration.action_executor import (
     ActionExecutor,
     ActionInvocation,
@@ -36,6 +24,21 @@ from pyqa.tools.base import ToolAction, ToolContext
 
 _PYQA_ROOT = Path(__file__).resolve().parents[1]
 _CATALOG_ROOT = _PYQA_ROOT / "tooling" / "catalog"
+
+
+class _TestContextResolver(ContextResolver):
+    def annotate(self, diagnostics: Iterable[Diagnostic], *, root: Path) -> None:
+        del diagnostics, root
+
+    def resolve_context_for_lines(
+        self,
+        file_path: str,
+        *,
+        root: Path,
+        lines: Iterable[int],
+    ) -> dict[int, str]:
+        del file_path, root, lines
+        return {}
 
 
 def _remark_config(action: str) -> dict[str, object]:
@@ -143,7 +146,7 @@ def test_remark_fix_rewrites_file_in_place(tmp_path: Path) -> None:
 
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
 
-    executor = ActionExecutor(runner=fake_runner, after_tool_hook=None, context_resolver=NullContextResolver())
+    executor = ActionExecutor(runner=fake_runner, after_tool_hook=None, context_resolver=_TestContextResolver())
     outcome = executor.run_action(invocation, environment)
 
     assert outcome.returncode == 0

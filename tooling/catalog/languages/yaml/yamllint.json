@@ -51,7 +51,7 @@
         }
       },
       "parser": {
-        "strategy": "parser_json",
+        "strategy": "parser_text",
         "config": {
           "transform": "pyqa.parsers.config.parse_yamllint"
         }

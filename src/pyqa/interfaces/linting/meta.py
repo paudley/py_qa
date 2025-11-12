@@ -71,7 +71,11 @@ class MetaActionParamsView(Protocol):
     @property
     @abstractmethod
     def explain_tools_json(self) -> str | None:
-        """Return the JSON output path requested for explain-tools data."""
+        """Return the JSON output path requested for explain-tools data.
+
+        Returns:
+            str | None: Destination path for explain-tools JSON output.
+        """
 
 
 @runtime_checkable

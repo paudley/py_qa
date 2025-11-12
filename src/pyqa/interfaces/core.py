@@ -11,8 +11,8 @@ from typing import Protocol, runtime_checkable
 
 from rich.console import Console
 
-type _JsonScalar = str | int | float | bool | None
-type JsonValue = _JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
+type JsonScalar = str | int | float | bool | None
+type JsonValue = JsonScalar | list[JsonValue] | dict[str, JsonValue]
 
 
 @runtime_checkable

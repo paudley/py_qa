@@ -12,12 +12,10 @@ from re import Pattern
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
-from pyqa.core.metrics import FileMetrics
 from pyqa.core.severity import Severity
 from pyqa.filesystem.paths import normalize_path
-
-type JsonScalar = str | int | float | bool | None
-type JsonValue = JsonScalar | list[JsonValue] | dict[str, JsonValue]
+from pyqa.interfaces.core import JsonValue
+from pyqa.interfaces.metrics import FileMetricsProtocol
 
 
 class OutputFilter(BaseModel):
@@ -220,13 +218,13 @@ class ToolOutcome(BaseModel):
 class RunResult(BaseModel):
     """Aggregate results for a full orchestrator run."""
 
-    model_config = ConfigDict(validate_assignment=True)
+    model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True)
 
     root: Path
     files: list[Path]
     outcomes: list[ToolOutcome]
     tool_versions: dict[str, str] = Field(default_factory=dict)
-    file_metrics: dict[str, FileMetrics] = Field(default_factory=dict)
+    file_metrics: dict[str, FileMetricsProtocol] = Field(default_factory=dict)
     analysis: dict[str, JsonValue] = Field(default_factory=dict)
 
     def has_failures(self) -> bool:
