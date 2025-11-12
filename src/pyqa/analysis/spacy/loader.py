@@ -272,7 +272,7 @@ def _run_subprocess(command: list[str]) -> bool:
             text=True,
         )
     except OSError as exc:  # pragma: no cover - environment-specific failure
-        log_warn(f"Command {command[0]} failed with OSError: {exc}")
+        log_warn(f"Command {command[0]} failed with OSError: {exc}", use_emoji=True)
         return False
 
     if completed.returncode != 0:
@@ -282,7 +282,8 @@ def _run_subprocess(command: list[str]) -> bool:
         log_warn(
             f"Command failed (exit {completed.returncode}): {' '.join(command)}\n"
             f"stdout: {stdout[:200] if stdout else '(empty)'}\n"
-            f"stderr: {stderr[:200] if stderr else '(empty)'}"
+            f"stderr: {stderr[:200] if stderr else '(empty)'}",
+            use_emoji=True,
         )
         return False
 
