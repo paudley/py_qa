@@ -30,6 +30,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
 
+      - name: Install build
+        run: uv run pip install build
       - name: Build artifacts
         run: uv run python -m build
 
