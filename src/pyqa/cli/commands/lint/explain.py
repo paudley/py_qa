@@ -5,9 +5,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Sequence
+from typing import Final
 
 from rich.console import Console
 from rich.table import Table
@@ -164,7 +165,13 @@ def _lookup_description(registry: ToolRegistry, tool_name: str) -> str:
 
 
 def write_explain_tools_json(target: Path, rows: Sequence[ExplainToolRow], console: Console) -> None:
-    """Serialize explain-tools rows to ``target`` as JSON (``-`` for stdout)."""
+    """Serialise explain-tools rows to ``target`` as JSON.
+
+    Args:
+        target: Destination path, or ``-`` to emit directly to stdout.
+        rows: Materialised rows returned by ``render_explain_tools``.
+        console: Rich console used when printing to stdout.
+    """
 
     payload = [
         {

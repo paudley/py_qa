@@ -10,23 +10,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from pyqa.filesystem.paths import normalise_path_key, normalize_path_key
-
-JSONPrimitive = str | int | float | bool | None
-JSONValue = JSONPrimitive | list["JSONValue"] | dict[str, "JSONValue"]
+from pyqa.interfaces.core import JsonValue
+from pyqa.interfaces.metrics import FileMetricsProtocol
 
 
 @dataclass(slots=True)
-class FileMetrics:
+class FileMetrics(FileMetricsProtocol):
     """Maintain line counts and suppression totals for a source file."""
 
     line_count: int = 0
     suppressions: dict[str, int] = field(default_factory=dict)
 
-    def to_payload(self) -> dict[str, JSONValue]:
+    def to_payload(self) -> dict[str, JsonValue]:
         """Serialise the metrics into a JSON-compatible mapping.
 
         Returns:
-            dict[str, JSONValue]: Mapping containing line counts and suppression tallies.
+            dict[str, JsonValue]: Mapping containing line counts and suppression tallies.
         """
 
         return {
@@ -35,7 +34,7 @@ class FileMetrics:
         }
 
     @classmethod
-    def from_payload(cls, payload: Mapping[str, JSONValue] | None) -> FileMetrics:
+    def from_payload(cls, payload: Mapping[str, JsonValue] | None) -> FileMetrics:
         """Create :class:`FileMetrics` from a payload produced by :meth:`to_payload`.
 
         Args:
@@ -118,5 +117,4 @@ __all__ = [
     "compute_file_metrics",
     "normalise_path_key",
     "normalize_path_key",
-    "JSONValue",
 ]

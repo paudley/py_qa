@@ -10,7 +10,7 @@
     "install": {
       "strategy": "installer_download_artifact",
       "config": {
-        "version": "1.7.1",
+        "version": "1.7.7",
         "contextLabel": "install_actionlint.download",
         "download": {
           "name": "actionlint",
@@ -71,7 +71,7 @@
       "command": {
         "strategy": "command_download_binary",
         "config": {
-          "version": "1.7.1",
+          "version": "1.7.7",
           "download": {
             "name": "actionlint",
             "cacheSubdir": "actionlint",

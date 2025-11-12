@@ -17,6 +17,7 @@ from ..core.metrics import FileMetrics
 from ..core.models import ToolOutcome
 from ..core.serialization import deserialize_outcome, safe_int, serialize_outcome
 from ..interfaces.core import JsonValue
+from ..interfaces.metrics import FileMetricsProtocol
 
 JSONValue = JsonValue
 
@@ -65,7 +66,7 @@ class CachedEntry:
     """Represent cached tool outcomes along with computed metrics."""
 
     outcome: ToolOutcome
-    file_metrics: dict[str, FileMetrics]
+    file_metrics: dict[str, FileMetricsProtocol]
 
 
 class _CacheMiss(Exception):
@@ -208,7 +209,7 @@ class ResultCache:
         request: CacheRequest,
         *,
         outcome: ToolOutcome,
-        file_metrics: Mapping[str, FileMetrics] | None = None,
+        file_metrics: Mapping[str, FileMetricsProtocol] | None = None,
     ) -> None:
         """Persist the outcome for the provided request, ignoring disk errors.
 
@@ -224,7 +225,7 @@ class ResultCache:
         if not _files_available(request.files, states):
             return
 
-        metrics_mapping = dict(file_metrics) if file_metrics is not None else {}
+        metrics_mapping = _normalize_metrics_map(file_metrics) if file_metrics else {}
 
         payload = _outcome_to_payload(outcome, states, metrics_mapping)
         try:
@@ -322,6 +323,29 @@ def _states_match(
         if stored_size is None or safe_int(stored_size) != state.size:
             return False
     return True
+
+
+def _normalize_metrics_map(metrics: Mapping[str, FileMetricsProtocol]) -> dict[str, FileMetrics]:
+    """Return a mapping backed by concrete :class:`FileMetrics` instances."""
+
+    normalized: dict[str, FileMetrics] = {}
+    for path_key, metric in metrics.items():
+        normalized[path_key] = _coerce_metric(metric)
+    return normalized
+
+
+def _coerce_metric(metric: FileMetricsProtocol) -> FileMetrics:
+    """Return a concrete :class:`FileMetrics` instance for ``metric``."""
+
+    if isinstance(metric, FileMetrics):
+        canonical = metric
+    else:
+        canonical = FileMetrics(
+            line_count=metric.line_count,
+            suppressions=dict(metric.suppressions),
+        )
+    canonical.ensure_labels()
+    return canonical
 
 
 def _outcome_to_payload(

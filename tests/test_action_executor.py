@@ -5,29 +5,16 @@
 
 from __future__ import annotations
 
-import sys
-import types
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from subprocess import CompletedProcess
 
 import pytest
 
-_stub_spacy = types.ModuleType("spacy")
-_stub_spacy.__version__ = "0.0.0"
-
-
-def _stub_load(name: str):  # pragma: no cover - helper for stub module
-    raise OSError(f"spaCy model '{name}' unavailable in tests")
-
-
-_stub_spacy.load = _stub_load  # type: ignore[attr-defined]
-sys.modules.setdefault("spacy", _stub_spacy)
-
-from pyqa.analysis.providers import NullContextResolver
 from pyqa.cache.context import CacheContext
 from pyqa.config import Config
 from pyqa.core.models import RawDiagnostic, ToolExitCategory, ToolOutcome
+from pyqa.interfaces.analysis import ContextResolver, Diagnostic
 from pyqa.orchestration.action_executor import (
     ActionExecutor,
     ActionInvocation,
@@ -36,6 +23,21 @@ from pyqa.orchestration.action_executor import (
     OutcomeRecord,
 )
 from pyqa.tools.base import ActionExitCodes, DeferredCommand, ToolAction, ToolContext
+
+
+class _NullContextResolver(ContextResolver):
+    def annotate(self, diagnostics: Iterable[Diagnostic], *, root: Path) -> None:
+        del diagnostics, root
+
+    def resolve_context_for_lines(
+        self,
+        file_path: str,
+        *,
+        root: Path,
+        lines: Iterable[int],
+    ) -> dict[int, str]:
+        del file_path, root, lines
+        return {}
 
 
 def _build_environment(tmp_path: Path) -> tuple[Config, ExecutionEnvironment]:
@@ -76,7 +78,7 @@ def _failing_runner(cmd: Sequence[str], *, options=None, **_kwargs) -> Completed
 def test_run_action_logs_warning_without_diagnostics(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     cfg, environment = _build_environment(tmp_path)
     invocation = _make_invocation(cfg, tmp_path)
-    executor = ActionExecutor(runner=_failing_runner, after_tool_hook=None, context_resolver=NullContextResolver())
+    executor = ActionExecutor(runner=_failing_runner, after_tool_hook=None, context_resolver=_NullContextResolver())
 
     warnings: list[str] = []
 
@@ -130,7 +132,7 @@ def test_run_action_does_not_log_warning_when_diagnostics_present(
         del options
         return CompletedProcess(cmd, returncode=1, stdout="", stderr="")
 
-    executor = ActionExecutor(runner=runner, after_tool_hook=None, context_resolver=NullContextResolver())
+    executor = ActionExecutor(runner=runner, after_tool_hook=None, context_resolver=_NullContextResolver())
 
     warnings: list[str] = []
 
@@ -166,7 +168,7 @@ def test_record_outcome_logs_cached_failure(monkeypatch: pytest.MonkeyPatch, tmp
         file_metrics=None,
         from_cache=True,
     )
-    executor = ActionExecutor(runner=_failing_runner, after_tool_hook=None, context_resolver=NullContextResolver())
+    executor = ActionExecutor(runner=_failing_runner, after_tool_hook=None, context_resolver=_NullContextResolver())
     warnings: list[str] = []
 
     def capture_warn(msg: str, *, use_emoji: bool, use_color=None) -> None:  # type: ignore[override]
@@ -194,7 +196,7 @@ def test_tombi_adjusts_exit_without_diagnostics(tmp_path: Path) -> None:
         env_overrides=invocation.env_overrides,
     )
 
-    executor = ActionExecutor(runner=_failing_runner, after_tool_hook=None, context_resolver=NullContextResolver())
+    executor = ActionExecutor(runner=_failing_runner, after_tool_hook=None, context_resolver=_NullContextResolver())
     outcome = executor.run_action(invocation, environment)
 
     assert outcome.returncode == 0
@@ -222,7 +224,7 @@ def test_fix_action_exit_one_treated_as_success(tmp_path: Path) -> None:
         del options
         return CompletedProcess(cmd, returncode=1, stdout="", stderr="")
 
-    executor = ActionExecutor(runner=runner, after_tool_hook=None, context_resolver=NullContextResolver())
+    executor = ActionExecutor(runner=runner, after_tool_hook=None, context_resolver=_NullContextResolver())
     outcome = executor.run_action(invocation, environment)
 
     assert outcome.returncode == 0
@@ -252,7 +254,7 @@ def test_tool_failure_category_overrides_diagnostics(tmp_path: Path) -> None:
         del options
         return CompletedProcess(cmd, returncode=2, stdout="", stderr="")
 
-    executor = ActionExecutor(runner=runner, after_tool_hook=None, context_resolver=NullContextResolver())
+    executor = ActionExecutor(runner=runner, after_tool_hook=None, context_resolver=_NullContextResolver())
     outcome = executor.run_action(invocation, environment)
 
     assert outcome.returncode == 2

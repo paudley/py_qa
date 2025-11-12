@@ -31,7 +31,17 @@ _EXPORT_MAP: dict[str, tuple[str, str]] = {
 
 
 def __getattr__(name: str) -> Any:
-    """Lazily import heavy analysis modules on demand."""
+    """Lazily import heavy analysis modules on demand.
+
+    Args:
+        name: Symbol requested from the `pyqa.analysis` package.
+
+    Returns:
+        Any: Attribute retrieved from the target analysis module.
+
+    Raises:
+        AttributeError: Raised when ``name`` is not exported by this package.
+    """
 
     try:
         module_name, attribute = _EXPORT_MAP[name]

@@ -269,7 +269,15 @@ def _resolve_loader(force: bool = False) -> Callable[[str], SpacyLanguage] | Non
 
 
 def _run_subprocess(command: list[str]) -> bool:
-    """Execute ``command`` returning ``True`` when it succeeds."""
+    """Execute ``command`` returning ``True`` when it succeeds.
+
+    Args:
+        command: Sequence of shell-safe arguments passed directly to
+            ``subprocess.run``.
+
+    Returns:
+        bool: ``True`` when the subprocess exits with status ``0``.
+    """
 
     try:
         completed = subprocess.run(
@@ -287,7 +295,17 @@ def _attempt_load(
     loader: Callable[[str], SpacyLanguage],
     model_name: str,
 ) -> tuple[SpacyLanguage | None, BaseException | None]:
-    """Invoke ``loader`` catching ``OSError`` when the model is missing."""
+    """Invoke ``loader`` catching ``OSError`` when the model is missing.
+
+    Args:
+        loader: spaCy-provided callable used to load models.
+        model_name: Fully qualified spaCy model identifier.
+
+    Returns:
+        tuple[SpacyLanguage | None, BaseException | None]: Pair containing the
+        loaded language pipeline (when successful) and the raised exception (when
+        loading fails). One side of the tuple is always ``None``.
+    """
 
     try:
         return loader(model_name), None
@@ -296,7 +314,14 @@ def _attempt_load(
 
 
 def _format_error(error: BaseException | None) -> str:
-    """Return a concise error description for warning messages."""
+    """Return a concise error description for warning messages.
+
+    Args:
+        error: Exception captured while attempting to load spaCy.
+
+    Returns:
+        str: Trimmed error message or the exception class name.
+    """
 
     if error is None:
         return ""
@@ -305,7 +330,12 @@ def _format_error(error: BaseException | None) -> str:
 
 
 def _warn_spacy_unavailable(model_name: str, detail: str) -> None:
-    """Emit a loud warning describing how to resolve missing spaCy support."""
+    """Emit a loud warning describing how to resolve missing spaCy support.
+
+    Args:
+        model_name: spaCy model that failed to load.
+        detail: Additional context explaining why the model is unavailable.
+    """
 
     log_warn(
         (
