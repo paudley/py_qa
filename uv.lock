@@ -407,14 +407,6 @@ wheels = [
 ]
 
 [[package]]
-name = "en-core-web-sm"
-version = "3.8.0"
-source = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
-wheels = [
-    { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl", hash = "sha256:1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85" },
-]
-
-[[package]]
 name = "gherkin-official"
 version = "29.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1279,7 +1271,6 @@ dependencies = [
     { name = "botocore-stubs" },
     { name = "bs4" },
     { name = "cython" },
-    { name = "en-core-web-sm" },
     { name = "isort" },
     { name = "jsonschema" },
     { name = "markdown" },
@@ -1360,7 +1351,6 @@ requires-dist = [
     { name = "botocore-stubs", specifier = ">=1.40.32" },
     { name = "bs4", specifier = ">=0.0.2" },
     { name = "cython", specifier = ">=3.1.4" },
-    { name = "en-core-web-sm", url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" },
     { name = "isort", specifier = ">=6.0.1" },
     { name = "jsonschema", specifier = ">=4.23.0" },
     { name = "markdown", specifier = ">=3.9" },

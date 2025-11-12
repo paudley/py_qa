@@ -56,6 +56,7 @@ _ATTRIBUTE_STYLE: Final[str] = "ansi256:208"
 _FUNCTION_STYLE: Final[str] = "ansi256:208"
 _MIN_CAMEL_LENGTH: Final[int] = 2
 _UNDERSCORE_CHAR: Final[str] = "_"
+_SPACY_INSTALL_HINT: Final[str] = "Run `uv run python -m spacy download {model}` to restore full functionality."
 
 
 @dataclass(frozen=True)
@@ -122,7 +123,11 @@ class AnnotationEngine(AnnotationProvider):
                     message_spans=analysis.spans,
                 )
         if self._nlp_missing:
-            message = f"spaCy model '{self._model_name}' unavailable; docstring and annotation features are degraded."
+            message = (
+                "spaCy isn't fully installed; docstring and annotation features are disabled "
+                f"until '{self._model_name}' is available. "
+                f"{_SPACY_INSTALL_HINT.format(model=self._model_name)}"
+            )
             warn(message, use_emoji=True)
             record_tool_warning(result, message)
         return annotations

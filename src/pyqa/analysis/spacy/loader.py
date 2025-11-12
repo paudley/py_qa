@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from importlib import import_module
@@ -12,6 +13,8 @@ from shutil import which
 from threading import Lock
 from types import ModuleType
 from typing import Final, Protocol, cast, runtime_checkable
+
+from pyqa.core.logging.public import warn as log_warn
 
 
 @runtime_checkable
@@ -154,12 +157,12 @@ class _LoaderState:
     """Maintain cached spaCy loader and version metadata."""
 
     loader: Callable[[str], SpacyLanguage] | None | _UnsetSentinel = _SENTINEL
-    version: str | None | _UnsetSentinel = _SENTINEL
     language_cache: dict[str, SpacyLanguage] = field(default_factory=dict)
     language_lock: Lock = field(default_factory=Lock)
 
 
 _STATE = _LoaderState()
+_INSTALL_HINT = "Run `uv run python -m spacy download {model}` to install the missing model."
 
 
 def load_language(model_name: str) -> SpacyLanguage | None:
@@ -178,19 +181,23 @@ def load_language(model_name: str) -> SpacyLanguage | None:
             return _STATE.language_cache[model_name]
     loader = _resolve_loader()
     if loader is None:
+        _warn_spacy_unavailable(model_name, "spaCy is not installed in the current environment")
         return None
-    language: SpacyLanguage
-    try:
-        language = loader(model_name)
-    except OSError:  # pragma: no cover - spaCy optional
+
+    language, error = _attempt_load(loader, model_name)
+    if language is None:
         if not _download_spacy_model(model_name):
+            detail = _format_error(error) or "automatic download failed"
+            _warn_spacy_unavailable(model_name, detail)
             return None
         loader = _resolve_loader(force=True)
         if loader is None:
+            _warn_spacy_unavailable(model_name, "spaCy could not be re-imported after downloading the model")
             return None
-        try:
-            language = loader(model_name)
-        except OSError:  # pragma: no cover - spaCy optional
+        language, error = _attempt_load(loader, model_name)
+        if language is None:
+            detail = _format_error(error) or "spaCy still cannot load the requested model"
+            _warn_spacy_unavailable(model_name, detail)
             return None
     with _STATE.language_lock:
         cached = _STATE.language_cache.get(model_name)
@@ -201,7 +208,7 @@ def load_language(model_name: str) -> SpacyLanguage | None:
 
 
 def _download_spacy_model(model_name: str) -> bool:
-    """Retrieve the specified spaCy model via uv when available.
+    """Retrieve the specified spaCy model using the most reliable command available.
 
     Args:
         model_name: Fully qualified spaCy model identifier.
@@ -211,29 +218,27 @@ def _download_spacy_model(model_name: str) -> bool:
     """
 
     uv_path = which("uv")
-    if not uv_path:
-        return False
+    python_executable = sys.executable or "python"
+    commands: list[list[str]] = []
 
-    version = _resolve_version()
-    if not version:
-        return False
+    if uv_path:
+        commands.append([uv_path, "run", "python", "-m", "spacy", "download", model_name])
+        commands.append([uv_path, "pip", "install", model_name])
 
-    url = (
-        "https://github.com/explosion/spacy-models/releases/download/"
-        f"{model_name}-{version}/{model_name}-{version}-py3-none-any.whl"
-    )
+    commands.append([python_executable, "-m", "spacy", "download", model_name])
+    commands.append([python_executable, "-m", "pip", "install", model_name])
+    commands.append(["python", "-m", "spacy", "download", model_name])
+    commands.append(["python", "-m", "pip", "install", model_name])
 
-    try:
-        completed = subprocess.run(
-            [uv_path, "pip", "install", url],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
-        return False
-
-    return completed.returncode == 0
+    seen: set[tuple[str, ...]] = set()
+    for command in commands:
+        key = tuple(command)
+        if key in seen:
+            continue
+        seen.add(key)
+        if _run_subprocess(command):
+            return True
+    return False
 
 
 def _resolve_loader(force: bool = False) -> Callable[[str], SpacyLanguage] | None:
@@ -263,27 +268,53 @@ def _resolve_loader(force: bool = False) -> Callable[[str], SpacyLanguage] | Non
     return loader
 
 
-def _resolve_version(force: bool = False) -> str | None:
-    """Return the spaCy version string when available.
+def _run_subprocess(command: list[str]) -> bool:
+    """Execute ``command`` returning ``True`` when it succeeds."""
 
-    Args:
-        force: When ``True`` the version information is re-imported.
-
-    Returns:
-        str | None: Resolved spaCy version or ``None`` if unavailable.
-    """
-
-    if not force and _STATE.version is not _SENTINEL:
-        return cast(str | None, _STATE.version)
     try:
-        module: ModuleType = import_module("spacy")
-    except ModuleNotFoundError:  # pragma: no cover - optional dependency
-        _STATE.version = None
-        return None
-    version = getattr(module, "__version__", None)
-    resolved = version if isinstance(version, str) else None
-    _STATE.version = resolved
-    return resolved
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:  # pragma: no cover - environment-specific failure
+        return False
+    return completed.returncode == 0
+
+
+def _attempt_load(
+    loader: Callable[[str], SpacyLanguage],
+    model_name: str,
+) -> tuple[SpacyLanguage | None, BaseException | None]:
+    """Invoke ``loader`` catching ``OSError`` when the model is missing."""
+
+    try:
+        return loader(model_name), None
+    except OSError as exc:  # pragma: no cover - depends on optional spaCy model
+        return None, exc
+
+
+def _format_error(error: BaseException | None) -> str:
+    """Return a concise error description for warning messages."""
+
+    if error is None:
+        return ""
+    message = str(error).strip()
+    return message or error.__class__.__name__
+
+
+def _warn_spacy_unavailable(model_name: str, detail: str) -> None:
+    """Emit a loud warning describing how to resolve missing spaCy support."""
+
+    log_warn(
+        (
+            f"spaCy isn't fully installed ({detail}). Key docstring and annotation features "
+            f"are disabled until the '{model_name}' model is available. "
+            f"{_INSTALL_HINT.format(model=model_name)}"
+        ),
+        use_emoji=True,
+    )
 
 
 __all__ = [
