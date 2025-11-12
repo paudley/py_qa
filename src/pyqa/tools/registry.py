@@ -22,12 +22,21 @@ class ToolRegistry(Mapping[str, Tool]):
     _PHASE_ORDER: tuple[str, ...] = PHASE_NAMES
 
     def __init__(self) -> None:
+        """Initialise an empty tool registry."""
+
         self._tools: dict[str, Tool] = {}
         self._by_language: dict[str, list[str]] = defaultdict(list)
         self._ordered: tuple[str, ...] = ()
 
     def register(self, tool: Tool) -> None:
-        """Register *tool* with the registry enforcing uniqueness by name."""
+        """Register ``tool`` with the registry enforcing uniqueness by name.
+
+        Args:
+            tool: Tool definition to insert into the registry.
+
+        Raises:
+            ValueError: If a tool with the same name is already registered.
+        """
 
         if tool.name in self._tools:
             raise ValueError(f"Tool '{tool.name}' already registered")
@@ -41,32 +50,75 @@ class ToolRegistry(Mapping[str, Tool]):
         self._ordered = ()
 
     def try_get(self, name: str) -> Tool | None:
-        """Return the tool named *name* when registered, otherwise ``None``."""
+        """Return the tool named ``name`` when registered, otherwise ``None``.
+
+        Args:
+            name: Tool name to retrieve.
+
+        Returns:
+            Tool | None: Registered tool or ``None`` when not found.
+        """
 
         return self._tools.get(name)
 
     def tools(self) -> Iterable[Tool]:
-        """Return an iterable of all registered tools."""
+        """Return an iterable of all registered tools.
+
+        Returns:
+            Iterable[Tool]: Iterable yielding tools in execution order.
+        """
+
         return tuple(self._tools[name] for name in self._ordered)
 
     def tools_for_language(self, language: str) -> Iterable[Tool]:
-        """Yield tools associated with *language*."""
+        """Return tools associated with ``language``.
+
+        Args:
+            language: Language identifier used to filter tools.
+
+        Returns:
+            Iterable[Tool]: Iterable of tools targeting the supplied language.
+        """
+
         names = self._by_language.get(language, [])
         return tuple(self._tools[name] for name in names if name in self._tools)
 
-    def __contains__(self, name: object) -> bool:
-        return isinstance(name, str) and name in self._tools
-
     def __len__(self) -> int:
+        """Return the number of registered tools.
+
+        Returns:
+            int: Count of registered tools.
+        """
+
         return len(self._tools)
 
     def __iter__(self) -> Iterator[str]:
+        """Iterate over tool names in execution order.
+
+        Returns:
+            Iterator[str]: Iterator yielding tool names.
+        """
+
         return iter(self._ordered)
 
     def __getitem__(self, name: str) -> Tool:
+        """Return the tool identified by ``name``.
+
+        Args:
+            name: Tool name to retrieve.
+
+        Returns:
+            Tool: Registered tool associated with ``name``.
+
+        Raises:
+            KeyError: If ``name`` does not refer to a registered tool.
+        """
+
         return self._tools[name]
 
     def _recompute_order(self) -> None:
+        """Rebuild the execution order and language index for registered tools."""
+
         phase_priority = {phase: index for index, phase in enumerate(self._PHASE_ORDER)}
         grouped: dict[str, list[Tool]] = defaultdict(list)
         for tool in self._tools.values():
@@ -82,6 +134,15 @@ class ToolRegistry(Mapping[str, Tool]):
         self._rebuild_language_index()
 
     def _order_phase(self, tools: Sequence[Tool]) -> list[str]:
+        """Return tool names ordered according to ``before``/``after`` constraints.
+
+        Args:
+            tools: Tools sharing the same phase.
+
+        Returns:
+            list[str]: Tool names ordered within the phase.
+        """
+
         adjacency, indegree = self._build_phase_graph(tools)
         ordered: list[str] = []
         iteration_count = len(indegree)
@@ -107,6 +168,15 @@ class ToolRegistry(Mapping[str, Tool]):
         self,
         tools: Sequence[Tool],
     ) -> tuple[dict[str, set[str]], dict[str, int]]:
+        """Return adjacency and indegree structures for ``tools``.
+
+        Args:
+            tools: Tools sharing the same phase.
+
+        Returns:
+            tuple[dict[str, set[str]], dict[str, int]]: Adjacency list and indegree map.
+        """
+
         names_in_phase = {tool.name for tool in tools}
         adjacency: dict[str, set[str]] = {tool.name: set() for tool in tools}
         indegree: dict[str, int] = {tool.name: 0 for tool in tools}
@@ -126,6 +196,8 @@ class ToolRegistry(Mapping[str, Tool]):
         return adjacency, indegree
 
     def _rebuild_language_index(self) -> None:
+        """Rebuild the language-to-tool index based on the current registry order."""
+
         language_map: dict[str, list[str]] = defaultdict(list)
         for name in self._ordered:
             tool = self._tools[name]
@@ -140,5 +212,9 @@ DEFAULT_REGISTRY = ToolRegistry()
 
 
 def register_tool(tool: Tool) -> None:
-    """Convenience helper mirroring the legacy global registration."""
+    """Register ``tool`` using the shared global registry.
+
+    Args:
+        tool: Tool definition to register with :data:`DEFAULT_REGISTRY`.
+    """
     DEFAULT_REGISTRY.register(tool)

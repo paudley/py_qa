@@ -6,11 +6,15 @@ import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
+import pytest
+
 from pyqa.config import Config
-from pyqa.execution.orchestrator import Orchestrator, OrchestratorOverrides
-from pyqa.models import RawDiagnostic
+from pyqa.core.environment.tool_env.models import PreparedCommand
+from pyqa.core.models import RawDiagnostic
+from pyqa.orchestration.orchestrator import Orchestrator, OrchestratorOverrides
+from pyqa.orchestration.selection_context import UnknownToolRequestedError
+from pyqa.orchestration.tool_selection import ToolSelector
 from pyqa.testing import flatten_test_suppressions
-from pyqa.tool_env.models import PreparedCommand
 from pyqa.tools.base import DeferredCommand, Tool, ToolAction, ToolContext
 from pyqa.tools.registry import ToolRegistry
 
@@ -451,6 +455,20 @@ def test_fetch_all_tools_respects_phase_order(tmp_path: Path) -> None:
         "lint-tool",
         "analysis-tool",
     ]
+
+
+def test_tool_selector_unknown_only_raises(tmp_path: Path) -> None:
+    """Ensure ``ToolSelector`` fails fast when ``--only`` cites unknown tools."""
+
+    registry = ToolRegistry()
+    selector = ToolSelector(registry)
+    cfg = Config()
+    cfg.execution.only = ["missing-tool"]
+
+    with pytest.raises(UnknownToolRequestedError) as excinfo:
+        selector.plan_selection(cfg, (), tmp_path)
+
+    assert excinfo.value.tool_names == ("missing-tool",)
 
 
 def test_installers_run_once(tmp_path: Path) -> None:

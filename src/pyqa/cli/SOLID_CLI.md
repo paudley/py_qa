@@ -6,7 +6,7 @@
 
 ## Phase 1: Shared Infrastructure
 
-* \[x] Introduce `cli/shared.py` with:
+* \[x] Introduce `cli/core/shared.py` with:
   * \[x] Common CLI error class (`CLIError`) encapsulating exit codes/messages.
   * \[x] Logging adapters honoring emoji/no-color preferences.
   * \[x] Helper for registering Typer commands with consistent metadata.
@@ -49,7 +49,7 @@
 
 ## Phase 7: Wrapper Assurance *(in progress)*
 
-* \[x] Migrate every wrapper script to the shared `pyqa.cli._cli_launcher.launch` helper.
+* \[x] Migrate every wrapper script to the shared `pyqa.cli.launcher.launch` helper.
 * \[x] Prefer the repository virtual environment when probing interpreters before falling back to `uv`.
 * \[ ] Capture representative CLI invocations in automated checks once test execution constraints lift.
 * \[x] Extend `cli/CLI_MODULE.md` and developer docs with wrapper troubleshooting guidance.

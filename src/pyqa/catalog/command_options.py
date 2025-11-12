@@ -1,0 +1,957 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
+"""Command option mapping helpers used by tooling strategies."""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from enum import Enum
+from typing import Final
+
+from tooling_spec.catalog.errors import CatalogIntegrityError as SpecCatalogIntegrityError
+
+from ..tools.builtin_commands_python import (
+    _discover_pylint_plugins,
+    _python_target_version,
+    _python_version_number,
+    _python_version_tag,
+    _pyupgrade_flag_from_version,
+)
+from ..tools.builtin_helpers import _as_bool, _setting
+from ..tools.interfaces import CommandBuilder, ToolContext
+from .command_option_behaviors import (
+    _ArgsOptionBehavior,
+    _FlagOptionBehavior,
+    _OptionBehavior,
+    _PathOptionBehavior,
+    _RepeatFlagBehavior,
+    _ValueOptionBehavior,
+)
+from .errors import CatalogIntegrityError
+from .types import JSONValue
+from .utils import expect_mapping, freeze_json_mapping, freeze_json_value
+
+__all__ = (
+    "command_option_map",
+    "compile_option_mappings",
+    "OptionMapping",
+    "require_str",
+    "require_string_sequence",
+)
+
+
+_STRICT_PROFILE_LABEL: Final[str] = "strict"
+_LENIENT_PROFILE_LABEL: Final[str] = "lenient"
+_OUTPUT_FLAG: Final[str] = "--output"
+
+
+class OptionKind(str, Enum):
+    """Describe the supported command option mapping behaviours."""
+
+    VALUE = "value"
+    PATH = "path"
+    ARGS = "args"
+    FLAG = "flag"
+    REPEAT_FLAG = "repeatFlag"
+
+
+class TransformName(str, Enum):
+    """Describe the transforms available to option mappings."""
+
+    PYTHON_VERSION_TAG = "python_version_tag"
+    PYTHON_VERSION_NUMBER = "python_version_number"
+    PYUPGRADE_FLAG = "pyupgrade_flag"
+    STRICTNESS_IS_STRICT = "strictness_is_strict"
+    STRICTNESS_IS_LENIENT = "strictness_is_lenient"
+    BOOL_TO_YN = "bool_to_yn"
+    BOOL_TO_STR = "bool_to_str"
+
+
+@dataclass(slots=True, frozen=True)
+class _ParsedOptionConfig:
+    """Store intermediate representation of option configuration values."""
+
+    names: tuple[str, ...]
+    kind: OptionKind
+    flags: _OptionFlags
+    defaults: _OptionDefaults
+
+
+@dataclass(slots=True, frozen=True)
+class _OptionFlags:
+    """Describe CLI flag metadata associated with an option."""
+
+    flag: str | None
+    join_with: str | None
+    negate_flag: str | None
+    literal_values: tuple[str, ...]
+
+
+@dataclass(slots=True, frozen=True)
+class _OptionDefaults:
+    """Describe default behaviour metadata for an option."""
+
+    value: JSONValue | None
+    reference: str | None
+    transform: TransformName | None
+
+
+@dataclass(slots=True)
+class OptionMapping:
+    """Define the declarative mapping between tool settings and CLI arguments."""
+
+    settings: tuple[str, ...]
+    behavior: _OptionBehavior
+    defaults: _OptionDefaults
+
+    def apply(self, ctx: ToolContext, command: list[str]) -> None:
+        """Append CLI fragments derived from the configured option.
+
+        Args:
+            ctx: Execution context providing catalog settings and defaults.
+            command: Mutable sequence representing the command under
+                construction.
+        """
+
+        value = self._resolve_value(ctx)
+        if value is None:
+            return
+        adjusted = self._apply_transform(value, ctx) if self.defaults.transform else value
+        self.behavior(ctx, command, adjusted)
+
+    def _resolve_value(self, ctx: ToolContext) -> JSONValue | None:
+        """Resolve the value backing this option, honouring defaults.
+
+        Args:
+            ctx: Execution context supplying tool settings from the catalog.
+
+        Returns:
+            JSONValue | None: Explicit configuration value, derived default, or
+            ``None`` when nothing applies.
+
+        """
+
+        value: JSONValue | None = None
+        for name in self.settings:
+            candidate = _setting(ctx.settings, name)
+            if candidate is not None:
+                value = candidate
+                break
+        if value is None and self.defaults.value is not None:
+            value = self.defaults.value
+        if value is None and self.defaults.reference is not None:
+            value = _resolve_default_reference(self.defaults.reference, ctx)
+        return value
+
+    def _apply_transform(self, value: JSONValue, ctx: ToolContext) -> JSONValue:
+        """Apply the configured transform to ``value`` in ``ctx``.
+
+        Args:
+            value: Raw option value resolved from settings.
+            ctx: Execution context providing additional metadata for transforms.
+
+        Returns:
+            JSONValue: Transformed value ready for command emission.
+
+        """
+
+        assert self.defaults.transform is not None
+        transformer = _TRANSFORM_HANDLERS[self.defaults.transform]
+        return transformer(value, ctx)
+
+
+@dataclass(slots=True)
+class _OptionCommandStrategy(CommandBuilder):
+    """Implement the command builder driven by declarative option mappings."""
+
+    base: tuple[str, ...]
+    append_files: bool
+    options: tuple[OptionMapping, ...]
+
+    def build(self, ctx: ToolContext) -> Sequence[str]:
+        """Return the fully rendered CLI command for the current context.
+
+        Args:
+            ctx: Tool execution context containing settings, files, and
+                configuration defaults.
+
+        Returns:
+            Sequence[str]: Final immutable command arguments ready for
+            execution.
+
+        """
+
+        command = list(self.base)
+        for option in self.options:
+            option.apply(ctx, command)
+        if self.append_files and ctx.files:
+            files = [str(path) for path in ctx.files]
+            command.extend(files)
+            if _OUTPUT_FLAG in command:
+                index = command.index(_OUTPUT_FLAG)
+                # Relocate the output flag after appended files so remark-style
+                # fixers receive their inputs before the flag.
+                command.pop(index)
+                command.append(_OUTPUT_FLAG)
+        return tuple(command)
+
+
+def command_option_map(config: Mapping[str, JSONValue]) -> CommandBuilder:
+    """Return a command builder that maps catalog options onto CLI arguments.
+
+    Args:
+        config: Catalog configuration describing ``base`` arguments, whether to
+            ``appendFiles``, and an ``options`` array containing option
+            definitions.
+
+    Returns:
+        CommandBuilder: Strategy that renders CLI arguments according to the
+        catalog definition.
+
+    Raises:
+        CatalogIntegrityError: If required configuration keys are missing or
+            contain invalid values.
+
+    """
+
+    base_args = require_string_sequence(config, "base", context="command_option_map")
+    append_files = bool(config.get("appendFiles", True))
+    mappings = compile_option_mappings(config.get("options"), context="command_option_map.options")
+    return _OptionCommandStrategy(
+        base=base_args,
+        append_files=append_files,
+        options=mappings,
+    )
+
+
+def compile_option_mappings(
+    options_config: JSONValue | None,
+    *,
+    context: str,
+) -> tuple[OptionMapping, ...]:
+    """Translate a catalog ``options`` array into ``OptionMapping`` instances.
+
+    Args:
+        options_config: Raw JSON value extracted from catalog configuration.
+        context: Human-friendly context string used when raising validation
+            errors.
+
+    Returns:
+        tuple[OptionMapping, ...]: Sequence of compiled option mappings ready for
+        command composition.
+
+    Raises:
+        CatalogIntegrityError: If ``options_config`` is not an array of mapping
+            objects with the expected fields.
+
+    """
+
+    option_entries = _normalise_option_entries(options_config, context=context)
+    compiled: list[OptionMapping] = []
+    for index, option_mapping in enumerate(option_entries):
+        option_context = f"{context}[{index}]"
+        parsed = _collect_option_config(option_mapping, option_context)
+        behavior = _build_option_behavior(parsed, context=option_context)
+        compiled.append(
+            OptionMapping(
+                settings=parsed.names,
+                behavior=behavior,
+                defaults=parsed.defaults,
+            ),
+        )
+    return tuple(compiled)
+
+
+def _normalise_option_entries(
+    options_config: JSONValue | None,
+    *,
+    context: str,
+) -> tuple[Mapping[str, JSONValue], ...]:
+    """Validate and freeze raw option entries extracted from the catalog.
+
+    Args:
+        options_config: Raw ``options`` payload extracted from the catalog.
+        context: Context string used when raising validation errors.
+
+    Returns:
+        tuple[Mapping[str, JSONValue], ...]: Immutable option mappings ready for parsing.
+
+    Raises:
+        CatalogIntegrityError: If ``options_config`` does not describe a sequence of mappings.
+    """
+
+    if options_config is None:
+        return ()
+    if not isinstance(options_config, Sequence) or isinstance(options_config, (str, bytes, bytearray)):
+        raise CatalogIntegrityError(f"{context}: 'options' must be an array of objects")
+
+    frozen_entries: list[Mapping[str, JSONValue]] = []
+    for index, raw_option in enumerate(options_config):
+        option_context = f"{context}[{index}]"
+        if not isinstance(raw_option, Mapping):
+            raise CatalogIntegrityError(f"{option_context}: option must be an object")
+        frozen_entries.append(_freeze_option_mapping(raw_option, context=option_context))
+    return tuple(frozen_entries)
+
+
+def _freeze_option_mapping(
+    raw_option: Mapping[str, JSONValue],
+    *,
+    context: str,
+) -> Mapping[str, JSONValue]:
+    """Return an immutable mapping derived from ``raw_option``.
+
+    Args:
+        raw_option: Raw option payload sourced from the catalog.
+        context: Context string used when wrapping validation errors.
+
+    Returns:
+        Mapping[str, JSONValue]: Frozen mapping describing the option configuration.
+
+    Raises:
+        CatalogIntegrityError: If ``raw_option`` cannot be converted into a mapping.
+    """
+
+    try:
+        return freeze_json_mapping(
+            expect_mapping(raw_option, key="option", context=context),
+            context=context,
+        )
+    except SpecCatalogIntegrityError as exc:  # pragma: no cover - defensive for upstream schema
+        raise CatalogIntegrityError(str(exc)) from exc
+
+
+def require_string_sequence(
+    config: Mapping[str, JSONValue],
+    key: str,
+    *,
+    context: str,
+) -> tuple[str, ...]:
+    """Return the required sequence of strings for ``key`` in ``config``.
+
+    Args:
+        config: Mapping containing raw JSON configuration values.
+        key: Configuration key whose value must be a sequence of strings.
+        context: Context string used for error reporting.
+
+    Returns:
+        tuple[str, ...]: Sequence of string values extracted from the mapping.
+    """
+
+    value = config.get(key)
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        raise CatalogIntegrityError(f"{context}: expected '{key}' to be an array of arguments")
+    result = tuple(str(item) for item in value)
+    if not result:
+        raise CatalogIntegrityError(f"{context}: '{key}' must contain at least one argument")
+    return result
+
+
+def require_str(config: Mapping[str, JSONValue], key: str, *, context: str) -> str:
+    """Return the required string value for ``key`` in ``config``.
+
+    Args:
+        config: Mapping containing raw JSON configuration values.
+        key: Configuration key whose value must be a string.
+        context: Context string used for error reporting.
+
+    Returns:
+        str: String value extracted from the mapping.
+    """
+
+    value = config.get(key)
+    if not isinstance(value, str):
+        raise CatalogIntegrityError(f"{context}: expected '{key}' to be a string")
+    return value
+
+
+def _collect_option_config(entry: Mapping[str, JSONValue], context: str) -> _ParsedOptionConfig:
+    """Convert an option configuration mapping into a typed structure.
+
+    Args:
+        entry: Raw option configuration extracted from the catalog.
+        context: Context string for error reporting.
+
+    Returns:
+        _ParsedOptionConfig: Structured representation of the option config.
+
+    Raises:
+        CatalogIntegrityError: If any required field is missing or invalid.
+
+    """
+
+    names = _parse_option_names(entry.get("setting"), context)
+    kind = _parse_option_kind(entry.get("type", "value"), context)
+    flag = _parse_optional_string(entry.get("flag"), "flag", context)
+    join_with = _parse_optional_string(entry.get("joinWith"), "joinWith", context)
+    negate_flag = _parse_optional_string(entry.get("negateFlag"), "negateFlag", context)
+    literal_values = _parse_literal_values(entry.get("literalValues", ()), context)
+    default_raw = entry.get("default")
+    default_value = freeze_json_value(default_raw, context=f"{context}.default") if default_raw is not None else None
+    default_from = _parse_optional_string(entry.get("defaultFrom"), "defaultFrom", context)
+    transform = _parse_transform(entry.get("transform"), context)
+
+    flags = _OptionFlags(
+        flag=flag,
+        join_with=join_with,
+        negate_flag=negate_flag,
+        literal_values=literal_values,
+    )
+    defaults = _OptionDefaults(
+        value=default_value,
+        reference=default_from,
+        transform=transform,
+    )
+
+    return _ParsedOptionConfig(
+        names=names,
+        kind=kind,
+        flags=flags,
+        defaults=defaults,
+    )
+
+
+def _parse_option_names(raw: JSONValue, context: str) -> tuple[str, ...]:
+    """Normalize the ``setting`` field into a tuple of option names.
+
+    Args:
+        raw: Raw value supplied for the ``setting`` key.
+        context: Context string for error messages.
+
+    Returns:
+        tuple[str, ...]: Non-empty tuple of setting names.
+
+    Raises:
+        CatalogIntegrityError: If ``raw`` is neither a string nor an array of
+            strings.
+
+    """
+
+    names: tuple[str, ...]
+    if isinstance(raw, str):
+        names = (raw,)
+    elif isinstance(raw, Sequence) and not isinstance(raw, (str, bytes, bytearray)):
+        names = tuple(str(name) for name in raw if name is not None)
+    else:
+        raise CatalogIntegrityError(f"{context}: 'setting' must be a string or array of strings")
+    if not names:
+        raise CatalogIntegrityError(f"{context}: 'setting' must provide at least one entry")
+    return names
+
+
+def _parse_option_kind(raw: JSONValue, context: str) -> OptionKind:
+    """Return the :class:`OptionKind` member associated with ``raw``.
+
+    Args:
+        raw: Raw value describing the option kind.
+        context: Context string for error reporting.
+
+    Returns:
+        OptionKind: Enum value describing how the option behaves.
+
+    Raises:
+        CatalogIntegrityError: If ``raw`` is not a recognised kind.
+
+    """
+
+    if not isinstance(raw, str):
+        raise CatalogIntegrityError(f"{context}: 'type' must be a string")
+    normalized = raw.strip().lower()
+    mapping: dict[str, OptionKind] = {
+        "value": OptionKind.VALUE,
+        "path": OptionKind.PATH,
+        "args": OptionKind.ARGS,
+        "flag": OptionKind.FLAG,
+        "repeatflag": OptionKind.REPEAT_FLAG,
+    }
+    try:
+        return mapping[normalized]
+    except KeyError as exc:
+        raise CatalogIntegrityError(f"{context}: unsupported option type '{raw}'") from exc
+
+
+def _parse_optional_string(raw: JSONValue, field_name: str, context: str) -> str | None:
+    """Return a cleaned optional string value when provided.
+
+    Args:
+        raw: Raw value to validate.
+        field_name: Name of the field being processed.
+        context: Context string for error reporting.
+
+    Returns:
+        str | None: Cleaned string or ``None`` when absent.
+
+    Raises:
+        CatalogIntegrityError: If ``raw`` is not a string when provided.
+
+    """
+
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        cleaned = raw.strip()
+        return cleaned if cleaned else None
+    raise CatalogIntegrityError(f"{context}: '{field_name}' must be a string when provided")
+
+
+def _parse_literal_values(raw: JSONValue, context: str) -> tuple[str, ...]:
+    """Return literal values that bypass path resolution.
+
+    Args:
+        raw: Raw configuration entry for ``literalValues``.
+        context: Context string for error reporting.
+
+    Returns:
+        tuple[str, ...]: Tuple of literal string values.
+
+    Raises:
+        CatalogIntegrityError: If ``raw`` is neither a string nor an array of
+            strings.
+
+    """
+
+    if raw is None:
+        return ()
+    if isinstance(raw, str):
+        return (raw,)
+    if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes, bytearray)):
+        return tuple(str(item) for item in raw if item is not None)
+    raise CatalogIntegrityError(f"{context}: 'literalValues' must be a string or array of strings")
+
+
+def _parse_transform(raw: JSONValue, context: str) -> TransformName | None:
+    """Return the optional transform name associated with ``raw``.
+
+    Args:
+        raw: Raw ``transform`` value from configuration.
+        context: Context string for error reporting.
+
+    Returns:
+        TransformName | None: Transform enum member or ``None``.
+
+    Raises:
+        CatalogIntegrityError: If ``raw`` is not a recognised transform name.
+
+    """
+
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise CatalogIntegrityError(f"{context}: 'transform' must be a string when provided")
+    normalized = raw.strip()
+    try:
+        return TransformName(normalized)
+    except ValueError as exc:
+        raise CatalogIntegrityError(f"{context}: unsupported transform '{raw}'") from exc
+
+
+def _build_option_behavior(config: _ParsedOptionConfig, *, context: str) -> _OptionBehavior:
+    """Build behaviour strategy for a parsed option.
+
+    Args:
+        config: Parsed option configuration.
+        context: Context string used when raising validation errors.
+
+    Returns:
+        _OptionBehavior: Behaviour responsible for emitting CLI fragments.
+
+    Raises:
+        CatalogIntegrityError: If the option kind is unsupported or missing
+            required fields.
+
+    """
+
+    flags = config.flags
+    if config.kind is OptionKind.ARGS:
+        return _ArgsOptionBehavior(flag=flags.flag, join_separator=flags.join_with)
+    if config.kind is OptionKind.PATH:
+        return _PathOptionBehavior(flag=flags.flag, literal_values=flags.literal_values)
+    if config.kind is OptionKind.VALUE:
+        return _ValueOptionBehavior(flag=flags.flag)
+    if config.kind is OptionKind.FLAG:
+        return _FlagOptionBehavior(flag=flags.flag, negate_flag=flags.negate_flag)
+    if config.kind is OptionKind.REPEAT_FLAG:
+        if flags.flag is None:
+            raise CatalogIntegrityError(f"{context}: repeatFlag requires a 'flag' entry")
+        return _RepeatFlagBehavior(flag=flags.flag, negate_flag=flags.negate_flag)
+    raise CatalogIntegrityError(f"{context}: unsupported option kind '{config.kind.value}'")
+
+
+def _transform_python_version_tag(value: JSONValue, ctx: ToolContext) -> JSONValue:
+    """Compute the Python version tag derived from ``value`` or context.
+
+    Args:
+        value: Raw version value configured for the option.
+        ctx: Tool execution context providing fallback version information.
+
+    Returns:
+        JSONValue: Version tag string representing the target version.
+
+    """
+    return _python_version_tag(_coerce_version_string(value, ctx))
+
+
+def _transform_python_version_number(value: JSONValue, ctx: ToolContext) -> JSONValue:
+    """Return Python version number derived from ``value`` or context.
+
+    Args:
+        value: Raw version value configured for the option.
+        ctx: Tool execution context providing fallback version information.
+
+    Returns:
+        JSONValue: Version number string or tuple accepted by downstream tools.
+
+    """
+    return _python_version_number(_coerce_version_string(value, ctx))
+
+
+def _transform_pyupgrade_flag(value: JSONValue, ctx: ToolContext) -> JSONValue:
+    """Return ``pyupgrade`` flag corresponding to the configured version.
+
+    Args:
+        value: Raw version value configured for the option.
+        ctx: Tool execution context providing fallback version information.
+
+    Returns:
+        JSONValue: `pyupgrade` flag string.
+
+    """
+    return _pyupgrade_flag_from_version(_coerce_version_string(value, ctx))
+
+
+def _transform_strictness_is_strict(value: JSONValue, ctx: ToolContext) -> JSONValue:
+    """Return ``True`` when strictness represents a strict profile.
+
+    Args:
+        value: Raw strictness value from configuration.
+        ctx: Tool execution context (unused).
+
+    Returns:
+        JSONValue: Boolean indicating whether the strict profile is active.
+
+    """
+    del ctx
+    if isinstance(value, str):
+        return value.strip().lower() == _STRICT_PROFILE_LABEL
+    if isinstance(value, bool):
+        return value
+    return bool(value)
+
+
+def _transform_strictness_is_lenient(value: JSONValue, ctx: ToolContext) -> JSONValue:
+    """Return ``True`` when strictness represents a lenient profile.
+
+    Args:
+        value: Raw strictness value from configuration.
+        ctx: Tool execution context (unused).
+
+    Returns:
+        JSONValue: Boolean indicating whether the lenient profile is active.
+
+    """
+    del ctx
+    if isinstance(value, str):
+        return value.strip().lower() == _LENIENT_PROFILE_LABEL
+    return False
+
+
+def _transform_bool_to_yn(value: JSONValue, ctx: ToolContext) -> JSONValue:
+    """Transform booleans into ``y``/``n`` strings.
+
+    Args:
+        value: Raw boolean-like value from configuration.
+        ctx: Tool execution context (unused).
+
+    Returns:
+        JSONValue: ``"y"`` when truthy, otherwise ``"n"``.
+
+    """
+    del ctx
+    bool_value = _as_bool(value)
+    if bool_value is None:
+        bool_value = bool(value)
+    return "y" if bool_value else "n"
+
+
+def _transform_bool_to_str(value: JSONValue, ctx: ToolContext) -> JSONValue:
+    """Transform booleans into ``true``/``false`` strings.
+
+    Args:
+        value: Raw boolean-like value from configuration.
+        ctx: Tool execution context (unused).
+
+    Returns:
+        JSONValue: Literal string ``"true"`` or ``"false"``.
+
+    """
+    del ctx
+    bool_value = _as_bool(value)
+    if bool_value is None:
+        bool_value = bool(value)
+    return "true" if bool_value else "false"
+
+
+def _append_flagged(command: list[str], value: str, flag: str | None) -> None:
+    """Append ``value`` to ``command`` accounting for an optional ``flag``.
+
+    Args:
+        command: Mutable command list to extend.
+        value: Argument value to append.
+        flag: Optional flag to prefix before ``value``.
+
+    Returns:
+        None: The command list is mutated in place.
+
+    """
+    if flag is None:
+        command.append(value)
+        return
+    if flag.endswith("="):
+        command.append(f"{flag}{value}")
+    else:
+        command.extend([flag, value])
+
+
+def _coerce_repeat_count(value: JSONValue) -> int:
+    """Coerce arbitrary values into a non-negative repeat count.
+
+    Args:
+        value: Raw configuration value specifying repetitions.
+
+    Returns:
+        int: Non-negative repeat count derived from ``value``.
+
+    """
+    if isinstance(value, bool):
+        return 1 if value else 0
+    if isinstance(value, (int, float)):
+        return max(int(value), 0)
+    try:
+        return max(int(str(value)), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _coerce_version_string(value: JSONValue, ctx: ToolContext) -> str:
+    """Return version string derived from ``value`` or context defaults.
+
+    Args:
+        value: Raw version input from the catalog.
+        ctx: Tool execution context used to infer defaults.
+
+    Returns:
+        str: Resolved version string.
+
+    """
+    if value is None:
+        return _python_target_version(ctx)
+    return str(value)
+
+
+def _resolve_default_reference(token: str, ctx: ToolContext) -> JSONValue | None:
+    """Resolve default reference token against the execution context.
+
+    Args:
+        token: Reference key describing which default to resolve.
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: Resolved default or ``None`` when unavailable.
+
+    """
+    if token in _DEFAULT_REFERENCE_LOOKUP:
+        return _DEFAULT_REFERENCE_LOOKUP[token](ctx)
+    if token in _DYNAMIC_REFERENCE_LOOKUP:
+        return _DYNAMIC_REFERENCE_LOOKUP[token](ctx)
+    if token.startswith("tool_setting."):
+        setting_name = token.split(".", 1)[1]
+        return _setting(ctx.settings, setting_name)
+    return None
+
+
+_TransformFunc = Callable[[JSONValue, ToolContext], JSONValue]
+_TRANSFORM_HANDLERS: Mapping[TransformName, _TransformFunc] = {
+    TransformName.PYTHON_VERSION_TAG: _transform_python_version_tag,
+    TransformName.PYTHON_VERSION_NUMBER: _transform_python_version_number,
+    TransformName.PYUPGRADE_FLAG: _transform_pyupgrade_flag,
+    TransformName.STRICTNESS_IS_STRICT: _transform_strictness_is_strict,
+    TransformName.STRICTNESS_IS_LENIENT: _transform_strictness_is_lenient,
+    TransformName.BOOL_TO_YN: _transform_bool_to_yn,
+    TransformName.BOOL_TO_STR: _transform_bool_to_str,
+}
+
+
+def _enum_to_string(value: str | Enum | None) -> str | None:
+    """Return a string representation for enum-like configuration values.
+
+    Args:
+        value: Enum or string value describing a configuration option.
+
+    Returns:
+        str | None: Normalised string representation of ``value``.
+    """
+
+    if value is None:
+        return None
+    if isinstance(value, Enum):
+        raw_value = getattr(value, "value", value.name)
+        return str(raw_value)
+    return str(value)
+
+
+def _default_execution_line_length(ctx: ToolContext) -> JSONValue | None:
+    """Return the configured execution line length.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: Execution line length value.
+    """
+
+    return ctx.cfg.execution.line_length
+
+
+def _default_complexity_max(ctx: ToolContext) -> JSONValue | None:
+    """Return the maximum cyclomatic complexity threshold.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: Maximum cyclomatic complexity threshold.
+    """
+
+    return ctx.cfg.complexity.max_complexity
+
+
+def _default_complexity_arguments(ctx: ToolContext) -> JSONValue | None:
+    """Return the maximum function argument threshold.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: Maximum function argument threshold.
+    """
+
+    return ctx.cfg.complexity.max_arguments
+
+
+def _default_bandit_level(ctx: ToolContext) -> JSONValue | None:
+    """Return the Bandit severity level as a string.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: Bandit severity level expressed as a string.
+    """
+
+    return _enum_to_string(ctx.cfg.severity.bandit_level)
+
+
+def _default_bandit_confidence(ctx: ToolContext) -> JSONValue | None:
+    """Return the Bandit confidence level as a string.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: Bandit confidence level expressed as a string.
+    """
+
+    return _enum_to_string(ctx.cfg.severity.bandit_confidence)
+
+
+def _default_pylint_threshold(ctx: ToolContext) -> JSONValue | None:
+    """Return the pylint fail-under threshold.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: pylint fail-under threshold.
+    """
+
+    return ctx.cfg.severity.pylint_fail_under
+
+
+def _default_max_warnings(ctx: ToolContext) -> JSONValue | None:
+    """Return the maximum warning allowance.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: Maximum warning allowance.
+    """
+
+    return ctx.cfg.severity.max_warnings
+
+
+def _default_strictness(ctx: ToolContext) -> JSONValue | None:
+    """Return the strictness profile as a string.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: Strictness profile representation.
+    """
+
+    profile = ctx.cfg.strictness.type_checking
+    if profile is None:
+        return None
+    value = getattr(profile, "value", profile)
+    return str(value)
+
+
+def _default_sql_dialect(ctx: ToolContext) -> JSONValue | None:
+    """Return the configured SQL dialect.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: SQL dialect configured for tooling.
+    """
+
+    return ctx.cfg.execution.sql_dialect
+
+
+def _default_tool_root(ctx: ToolContext) -> JSONValue | None:
+    """Return the tool root as a string path.
+
+    Args:
+        ctx: Tool execution context providing configuration defaults.
+
+    Returns:
+        JSONValue | None: String representation of the tool root path.
+    """
+
+    return str(ctx.root)
+
+
+_DEFAULT_REFERENCE_LOOKUP: Mapping[str, Callable[[ToolContext], JSONValue | None]] = {
+    "execution.line_length": _default_execution_line_length,
+    "complexity.max_complexity": _default_complexity_max,
+    "complexity.max_arguments": _default_complexity_arguments,
+    "severity.bandit_level": _default_bandit_level,
+    "severity.bandit_confidence": _default_bandit_confidence,
+    "severity.pylint_fail_under": _default_pylint_threshold,
+    "severity.max_warnings": _default_max_warnings,
+    "strictness.type_checking": _default_strictness,
+    "execution.sql_dialect": _default_sql_dialect,
+    "tool.root": _default_tool_root,
+}
+
+
+_DYNAMIC_REFERENCE_LOOKUP: Mapping[str, Callable[[ToolContext], JSONValue | None]] = {
+    "python.target_version_tag": lambda ctx: _python_version_tag(_python_target_version(ctx)),
+    "python.target_version": _python_target_version,
+    "python.target_version_number": lambda ctx: _python_version_number(_python_target_version(ctx)),
+    "python.discover_pylint_plugins": lambda ctx: tuple(_discover_pylint_plugins(ctx.root)),
+}

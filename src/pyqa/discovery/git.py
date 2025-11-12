@@ -7,8 +7,8 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
 
-from ..config import FileDiscoveryConfig
-from ..execution.worker import run_command
+from ..core.runtime.process import CommandOptions, run_command
+from ..interfaces.discovery import FileDiscoveryConfig
 from .base import DiscoveryStrategy, is_within_limits, resolve_limit_paths
 
 GitRunner = Callable[[Sequence[str], Path], list[str]]
@@ -27,6 +27,16 @@ class GitDiscovery(DiscoveryStrategy):
         """
 
         self._runner = runner or self._default_runner
+
+    @property
+    def identifier(self) -> str:
+        """Return the identifier for the git discovery strategy.
+
+        Returns:
+            str: Human-readable identifier associated with git discovery.
+        """
+
+        return "git"
 
     def discover(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
         """Return files discovered via git status/diff output.
@@ -57,7 +67,15 @@ class GitDiscovery(DiscoveryStrategy):
         return sorted(bounded)
 
     def __call__(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
-        """Delegate to :meth:`discover` to support callable semantics."""
+        """Delegate to :meth:`discover` to support callable semantics.
+
+        Args:
+            config: Discovery configuration supplied by the caller.
+            root: Repository root used to resolve relative paths.
+
+        Returns:
+            Iterable[Path]: Candidate paths returned by :meth:`discover`.
+        """
 
         return self.discover(config, root)
 
@@ -67,6 +85,9 @@ class GitDiscovery(DiscoveryStrategy):
         Args:
             config: Discovery configuration controlling diff behaviour.
             root: Repository root directory.
+
+        Returns:
+            Iterator[Path]: Iterator yielding resolved diff candidates.
 
         Yields:
             Path: Resolved candidate files reported by git.
@@ -96,6 +117,9 @@ class GitDiscovery(DiscoveryStrategy):
 
         Args:
             root: Repository root directory.
+
+        Returns:
+            Iterator[Path]: Iterator yielding resolved untracked file paths.
 
         Yields:
             Path: Resolved untracked file paths.
@@ -142,10 +166,10 @@ class GitDiscovery(DiscoveryStrategy):
             list[str]: Raw stdout lines produced by subprocess execution.
         """
 
-        cp = run_command(cmd, cwd=root)
+        cp = run_command(cmd, options=CommandOptions(cwd=root, capture_output=True, text=True, check=False))
         if cp.returncode != 0:
             return []
-        return cp.stdout.splitlines()
+        return (cp.stdout or "").splitlines()
 
 
 def list_tracked_files(root: Path) -> list[Path]:
@@ -157,7 +181,7 @@ def list_tracked_files(root: Path) -> list[Path]:
     Returns:
         list[Path]: Resolved, tracked file paths.
     """
-    cp = run_command(["git", "ls-files"], cwd=root)
+    cp = run_command(["git", "ls-files"], options=CommandOptions(cwd=root, capture_output=True, text=True, check=False))
     if cp.returncode != 0:
         return []
     files: list[Path] = []

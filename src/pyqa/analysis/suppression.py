@@ -8,28 +8,28 @@ from collections.abc import Iterable
 from enum import StrEnum
 from typing import Final
 
-from ..annotations import AnnotationEngine
-from ..models import Diagnostic, RunResult
+from ..core.models import Diagnostic, RunResult
+from ..interfaces.analysis import AnnotationProvider
 
 _TEST_PREFIXES: Final[tuple[str, ...]] = ("tests/", "test/")
 
 
 class SuppressionTool(StrEnum):
-    """Tools that support inline suppressions handled by pyqa."""
+    """Provide tools that support inline suppressions handled by pyqa."""
 
     RUFF = "ruff"
     PYLINT = "pylint"
 
 
 class AnnotationTool(StrEnum):
-    """Static analysis tools that emit annotation-related diagnostics."""
+    """Provide static analysis tools that emit annotation diagnostics."""
 
     MYPY = "mypy"
     PYRIGHT = "pyright"
 
 
 class DiagnosticSpanKind(StrEnum):
-    """Span kinds returned by :class:`AnnotationEngine`."""
+    """Provide span kinds returned by annotation providers."""
 
     ARGUMENT = "argument"
 
@@ -55,8 +55,8 @@ _TYPING_SUPPRESSION_TEMPLATE: Final[str] = (
 )
 
 
-def apply_suppression_hints(result: RunResult, engine: AnnotationEngine) -> None:
-    """Populate ``diagnostic.hints`` with suppression guidance.
+def apply_suppression_hints(result: RunResult, engine: AnnotationProvider) -> None:
+    """Populate diagnostic hints with suppression guidance.
 
     Args:
         result: Aggregated run result whose diagnostics should receive hints.
@@ -71,8 +71,8 @@ def apply_suppression_hints(result: RunResult, engine: AnnotationEngine) -> None
                 diag.hints = tuple(dict.fromkeys(hints))
 
 
-def _hints_for_diagnostic(diag: Diagnostic, engine: AnnotationEngine) -> Iterable[str]:
-    """Return suppression hints tailored to ``diag``.
+def _hints_for_diagnostic(diag: Diagnostic, engine: AnnotationProvider) -> Iterable[str]:
+    """Return suppression hints tailored to a diagnostic.
 
     Args:
         diag: Diagnostic requiring optional suppression guidance.
@@ -120,7 +120,11 @@ def _hints_for_diagnostic(diag: Diagnostic, engine: AnnotationEngine) -> Iterabl
         )
 
     annotation_tool = _resolve_annotation_tool(tool_name)
-    if annotation_tool in _ANNOTATION_TOOLS and _ANNOTATION_KEYWORD in diag.message.lower():
+    if (
+        annotation_tool is not None
+        and annotation_tool in _ANNOTATION_TOOLS
+        and _ANNOTATION_KEYWORD in diag.message.lower()
+    ):
         hints.append(
             _format_hint(
                 diag,
@@ -133,7 +137,7 @@ def _hints_for_diagnostic(diag: Diagnostic, engine: AnnotationEngine) -> Iterabl
 
 
 def _format_hint(diag: Diagnostic, suppression_key: str, guidance: str) -> str:
-    """Return a formatted hint string for ``diag``.
+    """Return a formatted hint string for a diagnostic.
 
     Args:
         diag: Diagnostic the hint refers to.
@@ -148,8 +152,8 @@ def _format_hint(diag: Diagnostic, suppression_key: str, guidance: str) -> str:
     return f"Suppression candidate ({suppression_key}) in {function}: {guidance}"
 
 
-def _extract_arguments(diag: Diagnostic, engine: AnnotationEngine) -> list[str]:
-    """Return argument identifiers highlighted in ``diag.message``.
+def _extract_arguments(diag: Diagnostic, engine: AnnotationProvider) -> list[str]:
+    """Identify argument identifiers highlighted in the diagnostic message.
 
     Args:
         diag: Diagnostic whose message spans should be inspected.
@@ -168,7 +172,15 @@ def _extract_arguments(diag: Diagnostic, engine: AnnotationEngine) -> list[str]:
 
 
 def _resolve_suppression_tool(tool_name: str) -> SuppressionTool | None:
-    """Return the suppression-aware tool enum for ``tool_name``."""
+    """Return the suppression-aware tool enum for the supplied tool name.
+
+    Args:
+        tool_name: Tool identifier sourced from a diagnostic payload.
+
+    Returns:
+        SuppressionTool | None: Matching suppression enum member when recognised,
+        otherwise ``None``.
+    """
 
     try:
         candidate = SuppressionTool(tool_name)
@@ -178,7 +190,15 @@ def _resolve_suppression_tool(tool_name: str) -> SuppressionTool | None:
 
 
 def _resolve_annotation_tool(tool_name: str) -> AnnotationTool | None:
-    """Return the annotation-aware tool enum for ``tool_name``."""
+    """Return the annotation-aware tool enum for the supplied tool name.
+
+    Args:
+        tool_name: Tool identifier sourced from a diagnostic payload.
+
+    Returns:
+        AnnotationTool | None: Matching annotation enum member when recognised,
+        otherwise ``None``.
+    """
 
     try:
         candidate = AnnotationTool(tool_name)

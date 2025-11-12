@@ -12,15 +12,15 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 from pyqa.cli.app import app
-from pyqa.cli.doctor import run_doctor
-from pyqa.cli.utils import (
+from pyqa.cli.commands.doctor.command import run_doctor
+from pyqa.cli.core.utils import (
     ToolAvailability,
     ToolExecutionDetails,
     ToolStatus,
     ToolVersionStatus,
 )
 from pyqa.config import Config
-from pyqa.config_loader import ConfigLoadResult
+from pyqa.core.config.loader import ConfigLoadResult
 from pyqa.tools.base import DeferredCommand, Tool, ToolAction
 from pyqa.tools.registry import DEFAULT_REGISTRY
 
@@ -32,7 +32,7 @@ def test_doctor_option(monkeypatch) -> None:
         print(f"doctor invoked for {root}")
         return 0
 
-    monkeypatch.setattr("pyqa.cli._lint_meta.run_doctor", fake_run_doctor)
+    monkeypatch.setattr("pyqa.cli.commands.lint.meta.run_doctor", fake_run_doctor)
 
     result = runner.invoke(app, ["lint", "--doctor"])
 
@@ -48,7 +48,7 @@ def test_run_doctor_catalog_initializes_registry(monkeypatch, tmp_path: Path) ->
         def load_with_trace(self, *, strict: bool = False) -> ConfigLoadResult:
             return load_result
 
-    monkeypatch.setattr("pyqa.cli.doctor.ConfigLoader.for_root", lambda root: FakeLoader())
+    monkeypatch.setattr("pyqa.cli.commands.doctor.command.ConfigLoader.for_root", lambda root: FakeLoader())
 
     def fake_initialize_registry(*, registry, catalog_root=None, schema_root=None):
         registry.reset()
@@ -66,7 +66,7 @@ def test_run_doctor_catalog_initializes_registry(monkeypatch, tmp_path: Path) ->
             ),
         )
 
-    monkeypatch.setattr("pyqa.cli.doctor.initialize_registry", fake_initialize_registry)
+    monkeypatch.setattr("pyqa.cli.commands.doctor.command.initialize_registry", fake_initialize_registry)
 
     def fake_check_tool_status(tool: Tool) -> ToolStatus:
         return ToolStatus(
@@ -78,7 +78,7 @@ def test_run_doctor_catalog_initializes_registry(monkeypatch, tmp_path: Path) ->
             raw_output=None,
         )
 
-    monkeypatch.setattr("pyqa.cli.doctor.check_tool_status", fake_check_tool_status)
+    monkeypatch.setattr("pyqa.cli.commands.doctor.command.check_tool_status", fake_check_tool_status)
 
     buffer = StringIO()
     console = Console(file=buffer, force_terminal=False, color_system=None, emoji=False)

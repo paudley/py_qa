@@ -9,7 +9,8 @@ from pathlib import Path
 import pytest
 
 from pyqa.config import ConfigError
-from pyqa.config_loader import ConfigLoader, generate_config_schema, load_config
+from pyqa.core.config.loader import ConfigLoader, generate_config_schema, load_config
+from pyqa.interfaces.config import ConfigSource
 
 
 def test_load_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -162,6 +163,66 @@ pr_summary_out = "${REPORT_DIR}/summary.md"
     cfg = ConfigLoader.for_root(project_root).load()
 
     assert cfg.output.pr_summary_out == (project_root / "artifacts/summary.md").resolve()
+
+
+def test_output_section_rejects_non_string_pretty_format(tmp_path: Path) -> None:
+    project_root = tmp_path / "workspace"
+    project_root.mkdir()
+
+    project_config = project_root / ".py_qa.toml"
+    project_config.write_text(
+        """
+[output]
+pretty_format = 123
+""".strip(),
+        encoding="utf-8",
+    )
+
+    loader = ConfigLoader.for_root(project_root, project_config=project_config)
+
+    with pytest.raises(ConfigError, match="pretty_format"):
+        loader.load()
+
+
+def test_execution_section_rejects_invalid_cache_dir(tmp_path: Path) -> None:
+    project_root = tmp_path / "workspace"
+    project_root.mkdir()
+
+    project_config = project_root / ".py_qa.toml"
+    project_config.write_text(
+        """
+[execution]
+cache_dir = 42
+""".strip(),
+        encoding="utf-8",
+    )
+
+    loader = ConfigLoader.for_root(project_root, project_config=project_config)
+
+    with pytest.raises(ConfigError, match="cache_dir"):
+        loader.load()
+
+
+class _StubConfigSource(ConfigSource):
+    def __init__(self, payload: dict[str, object], name: str = "stub") -> None:
+        self.name = name
+        self._payload = payload
+
+    def load(self) -> dict[str, object]:
+        return self._payload
+
+    def describe(self) -> str:
+        return f"Stub source {self.name}"
+
+
+def test_config_loader_accepts_protocol_sources(tmp_path: Path) -> None:
+    source = _StubConfigSource({"execution": {"jobs": 5}})
+    loader = ConfigLoader(project_root=tmp_path, sources=[source])
+
+    result = loader.load_with_trace()
+
+    assert result.config.execution.jobs == 5
+    assert source.name in result.snapshots
 
 
 def test_pyproject_tool_section_is_loaded(tmp_path: Path) -> None:

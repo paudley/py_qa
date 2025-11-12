@@ -8,9 +8,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+from pyqa.catalog import ToolCatalogLoader
+from pyqa.catalog.strategies import command_download_binary
 from pyqa.config import Config
-from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import command_download_binary
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PYQA_ROOT = Path(__file__).resolve().parents[1]
@@ -36,7 +36,7 @@ def test_lualint_command_build(tmp_path: Path) -> None:
     )
 
     with patch(
-        "pyqa.tooling.strategies._download_artifact_for_tool",
+        "pyqa.catalog.strategies._download_artifact_for_tool",
         return_value=tmp_path / "cache" / "lualint.lua",
     ):
         builder = command_download_binary(_lualint_config())

@@ -3,7 +3,7 @@
   "id": "command_project_scanner",
   "type": "command",
   "description": "Compose project-aware scanner commands with exclude and target planning.",
-  "implementation": "pyqa.tooling.strategies.command_project_scanner",
+  "implementation": "pyqa.catalog.strategies.command_project_scanner",
   "config": {
     "base": {
       "type": "array",

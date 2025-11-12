@@ -1,18 +1,17 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Blackcat Informatics® Inc.
 
-"""Behavioural tests for :mod:`pyqa.execution.action_executor`."""
+"""Behavioural tests for :mod:`pyqa.orchestration.action_executor`."""
 
 from __future__ import annotations
 
-from pathlib import Path
-from subprocess import CompletedProcess
-from typing import Sequence
-
-import pytest
-
 import sys
 import types
+from collections.abc import Sequence
+from pathlib import Path
+from subprocess import CompletedProcess
+
+import pytest
 
 _stub_spacy = types.ModuleType("spacy")
 _stub_spacy.__version__ = "0.0.0"
@@ -25,17 +24,18 @@ def _stub_load(name: str):  # pragma: no cover - helper for stub module
 _stub_spacy.load = _stub_load  # type: ignore[attr-defined]
 sys.modules.setdefault("spacy", _stub_spacy)
 
+from pyqa.analysis.providers import NullContextResolver
+from pyqa.cache.context import CacheContext
 from pyqa.config import Config
-from pyqa.execution.action_executor import (
+from pyqa.core.models import RawDiagnostic, ToolExitCategory, ToolOutcome
+from pyqa.orchestration.action_executor import (
     ActionExecutor,
     ActionInvocation,
     ExecutionEnvironment,
     ExecutionState,
     OutcomeRecord,
 )
-from pyqa.execution.cache_context import CacheContext
-from pyqa.models import RawDiagnostic, ToolOutcome
-from pyqa.tools.base import DeferredCommand, ToolAction, ToolContext
+from pyqa.tools.base import ActionExitCodes, DeferredCommand, ToolAction, ToolContext
 
 
 def _build_environment(tmp_path: Path) -> tuple[Config, ExecutionEnvironment]:
@@ -76,7 +76,7 @@ def _failing_runner(cmd: Sequence[str], *, options=None, **_kwargs) -> Completed
 def test_run_action_logs_warning_without_diagnostics(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     cfg, environment = _build_environment(tmp_path)
     invocation = _make_invocation(cfg, tmp_path)
-    executor = ActionExecutor(runner=_failing_runner, after_tool_hook=None)
+    executor = ActionExecutor(runner=_failing_runner, after_tool_hook=None, context_resolver=NullContextResolver())
 
     warnings: list[str] = []
 
@@ -84,12 +84,13 @@ def test_run_action_logs_warning_without_diagnostics(monkeypatch: pytest.MonkeyP
         del use_emoji, use_color
         warnings.append(msg)
 
-    monkeypatch.setattr("pyqa.execution.action_executor.warn", capture_warn)
+    monkeypatch.setattr("pyqa.orchestration.action_executor.warn", capture_warn)
 
     outcome = executor.run_action(invocation, environment)
 
     assert outcome.returncode != 0
     assert not outcome.diagnostics
+    assert outcome.exit_category == ToolExitCategory.UNKNOWN
     assert warnings
     message_lines = warnings[0].splitlines()
     assert message_lines[0] == "fake:lint failed (exit 2)"
@@ -129,7 +130,7 @@ def test_run_action_does_not_log_warning_when_diagnostics_present(
         del options
         return CompletedProcess(cmd, returncode=1, stdout="", stderr="")
 
-    executor = ActionExecutor(runner=runner, after_tool_hook=None)
+    executor = ActionExecutor(runner=runner, after_tool_hook=None, context_resolver=NullContextResolver())
 
     warnings: list[str] = []
 
@@ -137,12 +138,13 @@ def test_run_action_does_not_log_warning_when_diagnostics_present(
         del use_emoji, use_color
         warnings.append(msg)
 
-    monkeypatch.setattr("pyqa.execution.action_executor.warn", capture_warn)
+    monkeypatch.setattr("pyqa.orchestration.action_executor.warn", capture_warn)
 
     outcome = executor.run_action(invocation, environment)
 
     assert outcome.returncode != 0
     assert outcome.diagnostics
+    assert outcome.exit_category == ToolExitCategory.DIAGNOSTIC
     assert not warnings
 
 
@@ -164,14 +166,14 @@ def test_record_outcome_logs_cached_failure(monkeypatch: pytest.MonkeyPatch, tmp
         file_metrics=None,
         from_cache=True,
     )
-    executor = ActionExecutor(runner=_failing_runner, after_tool_hook=None)
+    executor = ActionExecutor(runner=_failing_runner, after_tool_hook=None, context_resolver=NullContextResolver())
     warnings: list[str] = []
 
     def capture_warn(msg: str, *, use_emoji: bool, use_color=None) -> None:  # type: ignore[override]
         del use_emoji, use_color
         warnings.append(msg)
 
-    monkeypatch.setattr("pyqa.execution.action_executor.warn", capture_warn)
+    monkeypatch.setattr("pyqa.orchestration.action_executor.warn", capture_warn)
 
     executor.record_outcome(ExecutionState(), environment, record)
 
@@ -192,7 +194,68 @@ def test_tombi_adjusts_exit_without_diagnostics(tmp_path: Path) -> None:
         env_overrides=invocation.env_overrides,
     )
 
-    executor = ActionExecutor(runner=_failing_runner, after_tool_hook=None)
+    executor = ActionExecutor(runner=_failing_runner, after_tool_hook=None, context_resolver=NullContextResolver())
     outcome = executor.run_action(invocation, environment)
 
     assert outcome.returncode == 0
+    assert outcome.exit_category == ToolExitCategory.SUCCESS
+
+
+def test_fix_action_exit_one_treated_as_success(tmp_path: Path) -> None:
+    cfg, environment = _build_environment(tmp_path)
+    action = ToolAction(
+        name="fix",
+        command=DeferredCommand(("fake",)),
+        append_files=False,
+        is_fix=True,
+    )
+    context = ToolContext(cfg=cfg, root=tmp_path)
+    invocation = ActionInvocation(
+        tool_name="fake",
+        action=action,
+        context=context,
+        command=("fake",),
+        env_overrides={},
+    )
+
+    def runner(cmd, *, options=None, **_kwargs):
+        del options
+        return CompletedProcess(cmd, returncode=1, stdout="", stderr="")
+
+    executor = ActionExecutor(runner=runner, after_tool_hook=None, context_resolver=NullContextResolver())
+    outcome = executor.run_action(invocation, environment)
+
+    assert outcome.returncode == 0
+    assert outcome.exit_category == ToolExitCategory.SUCCESS
+    assert not outcome.diagnostics
+
+
+def test_tool_failure_category_overrides_diagnostics(tmp_path: Path) -> None:
+    cfg, environment = _build_environment(tmp_path)
+    action = ToolAction(
+        name="lint",
+        command=DeferredCommand(("fake",)),
+        append_files=False,
+        parser=_DiagnosticParser(),
+        exit_codes=ActionExitCodes(tool_failure=(2,)),
+    )
+    context = ToolContext(cfg=cfg, root=tmp_path)
+    invocation = ActionInvocation(
+        tool_name="fake",
+        action=action,
+        context=context,
+        command=("fake",),
+        env_overrides={},
+    )
+
+    def runner(cmd, *, options=None, **_kwargs):
+        del options
+        return CompletedProcess(cmd, returncode=2, stdout="", stderr="")
+
+    executor = ActionExecutor(runner=runner, after_tool_hook=None, context_resolver=NullContextResolver())
+    outcome = executor.run_action(invocation, environment)
+
+    assert outcome.returncode == 2
+    assert outcome.exit_category == ToolExitCategory.TOOL_FAILURE
+    assert outcome.diagnostics
+    assert outcome.indicates_failure()

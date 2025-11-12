@@ -4,49 +4,37 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from ..config import FileDiscoveryConfig
+from ..interfaces.discovery import DiscoveryStrategy as DiscoveryStrategyProtocol
+from ..interfaces.discovery import (
+    FileDiscoveryConfig,
+)
 
 
 @runtime_checkable
-class DiscoveryStrategy(Protocol):
+class DiscoveryStrategy(DiscoveryStrategyProtocol, Protocol):
     """Protocol implemented by discovery strategies.
 
-    Implementers should provide lightweight file discovery routines that do
-    not mutate global state and are safe to execute repeatedly.
+    Concrete implementations should provide a lightweight :meth:`discover`
+    method that yields resolved file paths without mutating global state.
     """
 
-    def discover(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
-        """Yield discovered paths for ``root`` using ``config``.
-
-        Args:
-            config: File discovery configuration provided by the user.
-            root: Repository root against which relative paths are resolved.
-
-        Returns:
-            Iterable[Path]: Iterator over resolved filesystem paths.
-
-        Raises:
-            NotImplementedError: Always raised; method must be provided by
-                concrete strategy implementations.
-        """
-
-        raise NotImplementedError
-
     def __call__(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
-        """Invoke :meth:`discover` allowing strategies to be callable.
+        """Delegate to :meth:`discover` enabling callable semantics.
 
         Args:
-            config: File discovery configuration provided by the user.
-            root: Repository root against which relative paths are resolved.
+            config: Discovery configuration supplied by the caller.
+            root: Repository root used to resolve relative paths.
 
         Returns:
-            Iterable[Path]: Iterator over resolved filesystem paths.
+            Iterable[Path]: Iterable yielding resolved filesystem paths.
         """
-        raise NotImplementedError
+
+        return self.discover(config, root)
 
 
 class DiscoveryService:
@@ -82,25 +70,45 @@ class DiscoveryService:
         return results
 
     def __iter__(self) -> Iterator[DiscoveryStrategy]:
-        """Iterate over the composed discovery strategies."""
+        """Iterate over the composed discovery strategies.
+
+        Returns:
+            Iterator[DiscoveryStrategy]: Iterator yielding the configured strategies.
+        """
 
         return iter(self._strategies)
 
     def __len__(self) -> int:
-        """Return the number of configured discovery strategies."""
+        """Return the number of configured discovery strategies.
+
+        Returns:
+            int: Count of strategies participating in discovery.
+        """
 
         return len(self._strategies)
 
-    def __contains__(self, strategy: object) -> bool:
-        """Return whether ``strategy`` participates in this service."""
+    def __contains__(self, strategy: DiscoveryStrategy) -> bool:
+        """Return whether ``strategy`` participates in this service.
+
+        Args:
+            strategy: Discovery strategy to test for membership.
+
+        Returns:
+            bool: ``True`` when ``strategy`` is part of this service.
+        """
 
         return strategy in self._strategies
+
+
+class DiscoveryProtocolError(RuntimeError):
+    """Raised when discovery protocol methods are invoked without implementations."""
 
 
 @runtime_checkable
 class SupportsDiscovery(Protocol):
     """Duck-typed helper for components that expose a discovery interface."""
 
+    @abstractmethod
     def run(self, config: FileDiscoveryConfig, root: Path) -> list[Path]:
         """Execute discovery returning resolved filesystem paths.
 
@@ -112,15 +120,24 @@ class SupportsDiscovery(Protocol):
             list[Path]: Collection of resolved filesystem paths.
 
         Raises:
-            NotImplementedError: Always raised; method must be provided by
-                concrete discovery services.
+            DiscoveryProtocolError: Raised when the implementation does not override ``run``.
         """
 
-        raise NotImplementedError
+        msg = "SupportsDiscovery implementations must override run() to provide discovery behaviour."
+        raise DiscoveryProtocolError(msg)
 
     def __call__(self, config: FileDiscoveryConfig, root: Path) -> list[Path]:
-        """Delegate to :meth:`run` enabling callable services."""
-        raise NotImplementedError
+        """Delegate to :meth:`run` enabling callable services.
+
+        Args:
+            config: File discovery configuration supplied by the caller.
+            root: Repository root used to resolve relative paths.
+
+        Returns:
+            list[Path]: Results returned by :meth:`run`.
+        """
+
+        return self.run(config, root)
 
 
 def resolve_limit_paths(entries: Iterable[Path], root: Path) -> list[Path]:

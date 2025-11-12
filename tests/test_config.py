@@ -6,25 +6,26 @@ from pathlib import Path
 
 import pytest
 
-from pyqa.cli.config_builder import DEFAULT_TOOL_FILTERS, build_config
-from pyqa.cli.options import (
+from pyqa.cli.core.config_builder import DEFAULT_TOOL_FILTERS, build_config
+from pyqa.cli.core.options import (
     ExecutionFormattingOptions,
     ExecutionRuntimeOptions,
     LintComplexityOptions,
     LintDisplayOptions,
     LintExecutionOptions,
     LintGitOptions,
-    LintOptions,
     LintOptionBundles,
+    LintOptions,
+    LintOutputBundle,
     LintOverrideOptions,
     LintSelectionOptions,
     LintSeverityOptions,
     LintStrictnessOptions,
     LintSummaryOptions,
     LintTargetOptions,
-    LintOutputBundle,
 )
 from pyqa.config import Config
+from pyqa.interfaces.config import ConfigSource
 
 
 def _build_options(
@@ -35,6 +36,7 @@ def _build_options(
     dirs: list[Path] | None = None,
     exclude: list[Path] | None = None,
     paths_from_stdin: bool = False,
+    include_dotfiles: bool = False,
     changed_only: bool = False,
     diff_ref: str = "HEAD",
     include_untracked: bool = True,
@@ -80,6 +82,7 @@ def _build_options(
         dirs=list(dirs or []),
         exclude=list(exclude or []),
         paths_from_stdin=paths_from_stdin,
+        include_dotfiles=include_dotfiles,
     )
     git = LintGitOptions(
         changed_only=changed_only,
@@ -101,6 +104,7 @@ def _build_options(
         no_color=no_color,
         no_emoji=no_emoji,
         output_mode=output_mode,
+        debug=False,
         advice=advice,
     )
     summary = LintSummaryOptions(
@@ -156,6 +160,18 @@ def _build_options(
     return LintOptions(bundles=bundles, provided=provided or set())
 
 
+class _StubSource(ConfigSource):
+    def __init__(self, payload: dict[str, object], *, name: str = "stub") -> None:
+        self.name = name
+        self._payload = payload
+
+    def load(self) -> dict[str, object]:
+        return self._payload
+
+    def describe(self) -> str:
+        return f"Stub source {self.name}"
+
+
 def test_build_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure CLI option translation produces a fully populated config."""
     home_dir = tmp_path / "home"
@@ -209,6 +225,15 @@ def test_build_config_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert cfg.severity.pylint_fail_under == 9.5
     assert "ruff" in cfg.dedupe.dedupe_prefer
     assert "pyright" in cfg.dedupe.dedupe_prefer
+
+
+def test_build_config_accepts_protocol_sources(tmp_path: Path) -> None:
+    options = _build_options(tmp_path)
+    custom_source = _StubSource({"execution": {"jobs": 11}})
+
+    cfg = build_config(options, sources=[custom_source])
+
+    assert cfg.execution.jobs == 11
 
 
 def test_build_config_cli_overrides_complexity_and_strictness(

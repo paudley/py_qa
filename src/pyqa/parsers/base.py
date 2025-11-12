@@ -6,63 +6,107 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Iterator
-from collections.abc import Mapping as MappingABC
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import cast
 
-from ..models import RawDiagnostic
-from ..severity import Severity
-from ..tools.base import Parser, ToolContext
+from pyqa.core.serialization import JsonValue
+from pyqa.core.severity import Severity
 
-JsonTransform = Callable[[Any, ToolContext], Sequence[RawDiagnostic]]
+from ..core.models import RawDiagnostic
+from ..tools.interfaces import Parser, ToolContext
+
+JsonTransform = Callable[[JsonValue, ToolContext], Sequence[RawDiagnostic]]
 TextTransform = Callable[[Sequence[str], ToolContext], Sequence[RawDiagnostic]]
 
 
 def _ensure_lines(value: Sequence[str]) -> list[str]:
-    """Normalise string-based output into a list of lines."""
+    """Return a normalised list of lines from ``value``.
+
+    Args:
+        value: Sequence containing strings or other line-like values.
+
+    Returns:
+        list[str]: Normalised list of line strings.
+    """
+
     if isinstance(value, str):
         return value.splitlines()
     return [str(item) for item in value]
 
 
-def _load_json_stream(stdout: str) -> Any:
+def _load_json_stream(stdout: str) -> JsonValue:
+    """Return a JSON payload parsed from ``stdout``.
+
+    Args:
+        stdout: Raw standard-output string potentially containing JSON objects.
+
+    Returns:
+        JsonValue: Parsed JSON payload or a sequence of partial objects.
+    """
+
     stdout = stdout.strip()
     if not stdout:
         return []
     try:
-        return json.loads(stdout)
+        return cast(JsonValue, json.loads(stdout))
     except json.JSONDecodeError:
-        payload: list[Any] = []
+        payload: list[JsonValue] = []
         for raw_line in stdout.splitlines():
             trimmed = raw_line.strip()
             if not trimmed:
                 continue
             try:
-                payload.append(json.loads(trimmed))
+                payload.append(cast(JsonValue, json.loads(trimmed)))
             except json.JSONDecodeError:
                 continue
         return payload
 
 
-def _coerce_object_mapping(value: object) -> dict[str, object]:
-    if isinstance(value, MappingABC):
+def _coerce_object_mapping(value: JsonValue) -> dict[str, JsonValue]:
+    """Return a shallow copy of ``value`` when it behaves like a mapping.
+
+    Args:
+        value: JSON value potentially containing key/value pairs.
+
+    Returns:
+        dict[str, JsonValue]: Mapping with stringified keys when applicable.
+    """
+
+    if isinstance(value, Mapping):
         return {str(key): entry for key, entry in value.items()}
     return {}
 
 
-def _coerce_dict_sequence(value: object) -> list[dict[str, object]]:
+def _coerce_dict_sequence(value: JsonValue) -> list[dict[str, JsonValue]]:
+    """Return dictionaries extracted from ``value`` when it is a sequence.
+
+    Args:
+        value: JSON value potentially containing dictionary entries.
+
+    Returns:
+        list[dict[str, JsonValue]]: Sequence of normalised mapping entries.
+    """
+
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
         return []
-    collected: list[dict[str, object]] = []
+    collected: list[dict[str, JsonValue]] = []
     for item in value:
-        if isinstance(item, MappingABC):
+        if isinstance(item, Mapping):
             collected.append(_coerce_object_mapping(item))
     return collected
 
 
-def _coerce_optional_str(value: object | None) -> str | None:
+def _coerce_optional_str(value: JsonValue | None) -> str | None:
+    """Return ``value`` as a string when possible.
+
+    Args:
+        value: JSON scalar or ``None``.
+
+    Returns:
+        str | None: String representation or ``None`` when unavailable.
+    """
+
     if isinstance(value, str):
         return value
     if value is None:
@@ -70,17 +114,64 @@ def _coerce_optional_str(value: object | None) -> str | None:
     return str(value)
 
 
-def iter_dicts(value: object) -> Iterator[MappingABC[str, Any]]:
-    """Yield mapping items from ``value`` when it is a sequence of dict-like objects."""
+def mapping_sequence(value: JsonValue | None) -> tuple[Mapping[str, JsonValue], ...]:
+    """Return mapping entries extracted from ``value`` when possible.
+
+    Args:
+        value: JSON payload that may contain mapping entries.
+
+    Returns:
+        tuple[Mapping[str, JsonValue], ...]: Tuple of mapping entries discovered in *value*.
+    """
 
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        for item in value:
-            if isinstance(item, MappingABC):
-                yield item
+        return tuple(entry for entry in value if isinstance(entry, Mapping))
+    if isinstance(value, Mapping):
+        return (value,)
+    return ()
 
 
-def map_severity(label: object, mapping: MappingABC[str, Severity], default: Severity) -> Severity:
-    """Return a :class:`Severity` derived from ``label`` using ``mapping``."""
+def first_mapping(value: JsonValue | None) -> Mapping[str, JsonValue]:
+    """Return ``value`` when it is a mapping, otherwise an empty mapping.
+
+    Args:
+        value: JSON payload that may contain mapping data.
+
+    Returns:
+        Mapping[str, JsonValue]: Extracted mapping or an empty mapping when absent.
+    """
+
+    return value if isinstance(value, Mapping) else {}
+
+
+def iter_dicts(value: JsonValue) -> tuple[Mapping[str, JsonValue], ...]:
+    """Return mapping items from ``value`` when it is a sequence of dict-like objects.
+
+    Args:
+        value: JSON value that may contain dictionary entries.
+
+    Returns:
+        tuple[Mapping[str, JsonValue], ...]: Tuple containing mapping entries in ``value``.
+    """
+
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return tuple(item for item in value if isinstance(item, Mapping))
+    if isinstance(value, Mapping):
+        return (value,)
+    return ()
+
+
+def map_severity(label: JsonValue, mapping: Mapping[str, Severity], default: Severity) -> Severity:
+    """Return a :class:`Severity` derived from ``label`` using ``mapping``.
+
+    Args:
+        label: Raw severity label produced by the tool.
+        mapping: Case-insensitive mapping of labels to severities.
+        default: Fallback severity when ``label`` cannot be resolved.
+
+    Returns:
+        Severity: Mapped severity value or ``default`` when not found.
+    """
 
     if isinstance(label, str):
         return mapping.get(label.lower(), default)
@@ -115,7 +206,11 @@ class RawDiagnosticSpec:
     details: DiagnosticDetails
 
     def build(self) -> RawDiagnostic:
-        """Materialise the spec as a :class:`RawDiagnostic` instance."""
+        """Materialise the spec as a :class:`RawDiagnostic` instance.
+
+        Returns:
+            RawDiagnostic: Diagnostic instantiated from the specification.
+        """
 
         return RawDiagnostic(
             file=self.location.file,
@@ -197,8 +292,8 @@ def iter_pattern_matches(
     *,
     skip_prefixes: Sequence[str] = (),
     skip_blank: bool = True,
-) -> Iterator[re.Match[str]]:
-    """Yield regex matches from ``lines`` while filtering unwanted entries.
+) -> tuple[re.Match[str], ...]:
+    """Return regex matches from ``lines`` while filtering unwanted entries.
 
     Args:
         lines: Sequence of raw lines emitted by a tool.
@@ -206,11 +301,12 @@ def iter_pattern_matches(
         skip_prefixes: Optional prefixes that, when present, skip the line.
         skip_blank: When ``True`` blank lines are ignored.
 
-    Yields:
-        re.Match[str]: Match objects produced by ``pattern``.
+    Returns:
+        tuple[re.Match[str], ...]: Tuple of matches that satisfy ``pattern``.
     """
 
     forbidden = tuple(skip_prefixes)
+    matches: list[re.Match[str]] = []
     for raw_line in lines:
         line = raw_line.strip()
         if skip_blank and not line:
@@ -219,7 +315,8 @@ def iter_pattern_matches(
             continue
         match = pattern.match(line)
         if match:
-            yield match
+            matches.append(match)
+    return tuple(matches)
 
 
 @dataclass(slots=True)
@@ -235,6 +332,17 @@ class JsonParser(Parser):
         *,
         context: ToolContext,
     ) -> Sequence[RawDiagnostic]:
+        """Return diagnostics parsed from JSON ``stdout`` payloads.
+
+        Args:
+            stdout: Iterable of standard-output lines produced by the tool.
+            stderr: Iterable of standard-error lines (unused but part of the protocol).
+            context: Tool context describing configuration and execution root.
+
+        Returns:
+            Sequence[RawDiagnostic]: Normalised diagnostics emitted by ``transform``.
+        """
+
         del stderr  # retain signature compatibility without using the value
         stdout_text = "\n".join(_ensure_lines(stdout))
         payload = _load_json_stream(stdout_text)
@@ -254,6 +362,17 @@ class TextParser(Parser):
         *,
         context: ToolContext,
     ) -> Sequence[RawDiagnostic]:
+        """Return diagnostics derived from ``stdout`` text lines.
+
+        Args:
+            stdout: Iterable of standard-output lines produced by the tool.
+            stderr: Iterable of standard-error lines (ignored but retained for parity).
+            context: Tool context describing configuration and execution root.
+
+        Returns:
+            Sequence[RawDiagnostic]: Diagnostics computed by the transformation callable.
+        """
+
         del stderr
         lines = _ensure_lines(stdout)
         return self.transform(lines, context)
@@ -271,9 +390,11 @@ __all__ = [
     "JsonTransform",
     "TextParser",
     "TextTransform",
+    "first_mapping",
     "iter_dicts",
     "iter_pattern_matches",
     "map_severity",
+    "mapping_sequence",
     "_coerce_dict_sequence",
     "_coerce_object_mapping",
     "_coerce_optional_str",

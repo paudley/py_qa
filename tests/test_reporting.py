@@ -7,17 +7,20 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
-from pyqa.annotations import AnnotationEngine, MessageSpan
+from pyqa.analysis import AnnotationEngine, MessageSpan
 from pyqa.config import OutputConfig
-from pyqa.models import Diagnostic, RunResult, ToolOutcome
-from pyqa.reporting.advice import AdviceBuilder, AdviceEntry, generate_advice
-from pyqa.reporting.emitters import (
+from pyqa.core.models import Diagnostic, RunResult, ToolOutcome
+from pyqa.core.severity import Severity
+from pyqa.reporting import (
+    AdviceBuilder,
+    AdviceEntry,
+    generate_advice,
+    render,
     write_json_report,
     write_pr_summary,
     write_sarif_report,
 )
-from pyqa.reporting.formatters import render
-from pyqa.severity import Severity
+from pyqa.reporting.presenters.emitters import PRSummaryOptions
 
 
 def _run_result(tmp_path: Path) -> RunResult:
@@ -55,6 +58,13 @@ def _run_result(tmp_path: Path) -> RunResult:
     )
 
 
+def _captured_lines(capsys) -> list[str]:
+    """Return sanitized CLI output lines for assertions."""
+
+    captured = capsys.readouterr().out.splitlines()
+    return [line.strip() for line in captured if line.strip() and not line.strip().startswith("⚠️ spaCy model")]
+
+
 def test_write_json_report(tmp_path: Path) -> None:
     result = _run_result(tmp_path)
     result.analysis["refactor_navigator"] = [
@@ -88,10 +98,10 @@ def test_write_sarif_report(tmp_path: Path) -> None:
     assert runs[0]["results"][0]["ruleId"] == "F401"
 
 
-def test_write_pr_summary(tmp_path: Path) -> None:
+def test__write_summary(tmp_path: Path) -> None:
     result = _run_result(tmp_path)
     dest = tmp_path / "summary.md"
-    write_pr_summary(result, dest, limit=10)
+    _write_summary(result, dest, limit=10)
 
     content = dest.read_text(encoding="utf-8")
     assert "Lint Summary" in content
@@ -103,7 +113,7 @@ def test_write_pr_summary(tmp_path: Path) -> None:
 def test_write_pr_summary_with_filter_and_template(tmp_path: Path) -> None:
     result = _run_result(tmp_path)
     dest = tmp_path / "summary.md"
-    write_pr_summary(
+    _write_summary(
         result,
         dest,
         limit=5,
@@ -164,7 +174,7 @@ def test_write_pr_summary_can_include_advice(tmp_path: Path) -> None:
         tool_versions={},
     )
     dest = tmp_path / "summary.md"
-    write_pr_summary(result, dest, include_advice=True, advice_limit=3)
+    _write_summary(result, dest, include_advice=True, advice_limit=3)
 
     content = dest.read_text(encoding="utf-8")
     assert "## SOLID Advice" in content
@@ -218,7 +228,7 @@ def test_write_pr_summary_allows_advice_template_override(tmp_path: Path) -> Non
         tool_versions={},
     )
     dest = tmp_path / "summary.md"
-    write_pr_summary(
+    _write_summary(
         result,
         dest,
         include_advice=True,
@@ -280,7 +290,7 @@ def build_widget(foo, bar, baz):
         tool_versions={},
     )
     dest = tmp_path / "summary.md"
-    write_pr_summary(
+    _write_summary(
         result,
         dest,
         template="- {code}: {message} (Top: {advice_primary_category})",
@@ -342,7 +352,7 @@ def test_write_pr_summary_supports_custom_advice_builder(tmp_path: Path) -> None
         body = ", ".join(f"{entry.category}:{entry.body}" for entry in entries[:1])
         return ["", "## Custom Advice", "", f"* {body}"]
 
-    write_pr_summary(
+    _write_summary(
         result,
         dest,
         include_advice=True,
@@ -421,7 +431,7 @@ def test_write_pr_summary_custom_builder_respects_severity(tmp_path: Path) -> No
             return []
         return ["", "## Severity Advice", "", f"* total={len(entries)}"]
 
-    write_pr_summary(
+    _write_summary(
         result,
         dest,
         include_advice=True,
@@ -524,7 +534,7 @@ def typed_func(arg1, arg2):
             *[f"* {entry.category}: {entry.body}" for entry in entries[:2]],
         ]
 
-    write_pr_summary(
+    _write_summary(
         result,
         dest,
         include_advice=True,
@@ -547,7 +557,7 @@ def test_render_concise_shows_diagnostics_for_failures(tmp_path: Path, capsys) -
     result = _run_result(tmp_path)
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     panel_start = next(
         (idx for idx, line in enumerate(output_lines) if line.startswith("╭")),
         -1,
@@ -565,21 +575,21 @@ def test_render_concise_shows_diagnostics_for_failures(tmp_path: Path, capsys) -
         "ruff, src/app.py:10, F401, bad things",
         "ruff, src/app.py:20, W000, meh",
     ]
-    assert output_lines[-1] == ("Passed — 2 diagnostic(s) across 1 file(s); 0 failing action(s) out of 1")
+    assert output_lines[-1] == ("Failed — 2 diagnostic(s) across 1 file(s); 0 failing action(s) out of 1")
 
 
 def test_render_concise_omits_stats_when_disabled(tmp_path: Path, capsys) -> None:
     result = _run_result(tmp_path)
     config = OutputConfig(color=False, emoji=False, show_stats=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     assert all(not line.startswith("╭") for line in output_lines)
     normalised = [", ".join(part.strip() for part in line.split(",")) for line in output_lines[:2]]
     assert normalised == [
         "ruff, src/app.py:10, F401, bad things",
         "ruff, src/app.py:20, W000, meh",
     ]
-    assert output_lines[-1] == ("Passed — 2 diagnostic(s) across 1 file(s); 0 failing action(s) out of 1")
+    assert output_lines[-1] == ("Failed — 2 diagnostic(s) across 1 file(s); 0 failing action(s) out of 1")
 
 
 def test_render_concise_fallbacks_to_stderr(tmp_path: Path, capsys) -> None:
@@ -599,7 +609,7 @@ def test_render_concise_fallbacks_to_stderr(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     panel_lines = [
         line for line in output_lines if line.startswith("╭") or line.startswith("│") or line.startswith("╰")
     ]
@@ -633,7 +643,7 @@ def test_render_concise_trims_code_prefix(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     row = next(line for line in output_lines if line.startswith("pylint"))
     parts = [part.strip() for part in row.split(",")]
     assert parts[0] == "pylint"
@@ -715,7 +725,7 @@ def test_render_concise_trims_code_whitespace(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     row = next(line for line in output_lines if line.startswith("pylint"))
     parts = [part.strip() for part in row.split(",")]
     assert parts == [
@@ -753,7 +763,7 @@ def test_render_pretty_trims_code_whitespace(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False, output="pretty")
     render(result, config)
-    output = capsys.readouterr().out.splitlines()
+    output = _captured_lines(capsys)
     diag_line = next(line for line in output if "Line too long" in line)
     assert diag_line.strip().endswith("Line too long (130/120) [C0301]")
 
@@ -814,7 +824,7 @@ def test_render_concise_sorted_and_deduped(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     panel_start = next(
         (idx for idx, line in enumerate(output_lines) if line.startswith("╭")),
         -1,
@@ -826,7 +836,7 @@ def test_render_concise_sorted_and_deduped(tmp_path: Path, capsys) -> None:
         "bandit, a.py:5, B001, warn a",
         "ruff, b.py:2:resolve_b, F001, issue b",
     ]
-    assert output_lines[-1] == ("Passed — 3 diagnostic(s) across 0 file(s); 0 failing action(s) out of 1")
+    assert output_lines[-1] == ("Failed — 3 diagnostic(s) across 0 file(s); 0 failing action(s) out of 1")
 
 
 def test_render_concise_normalizes_paths(tmp_path: Path, capsys) -> None:
@@ -860,14 +870,14 @@ def test_render_concise_normalizes_paths(tmp_path: Path, capsys) -> None:
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     panel_start = next(
         (idx for idx, line in enumerate(output_lines) if line.startswith("╭")),
         -1,
     )
     assert panel_start != -1
     assert output_lines[0] == ("mypy, src/pkg/module.py:7:resolve_value, attr-defined, absolute issue")
-    assert output_lines[-1] == ("Passed — 1 diagnostic(s) across 0 file(s); 0 failing action(s) out of 1")
+    assert output_lines[-1] == ("Failed — 1 diagnostic(s) across 0 file(s); 0 failing action(s) out of 1")
 
 
 def test_render_concise_sanitizes_function_field(tmp_path: Path, capsys) -> None:
@@ -907,7 +917,7 @@ def test_render_concise_sanitizes_function_field(tmp_path: Path, capsys) -> None
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     assert output_lines[0] == ("pyright, pkg/mod.py:4, reportGeneralTypeIssues, multiline function noise")
     assert output_lines[1] == ("pyright, pkg/mod.py:9:Module.resolve, reportUndefinedVariable, legit")
 
@@ -943,7 +953,7 @@ def test_render_concise_merges_argument_annotations(tmp_path: Path, capsys) -> N
     )
     config = OutputConfig(color=False, emoji=False)
     render(result, config)
-    output_lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    output_lines = _captured_lines(capsys)
     assert output_lines[0] == (
         "ruff, tests/test_tool_info.py:21:fake_run_tool_info, ANN001, Missing type annotation for function argument cfg, console, root, tool_name"
     )
@@ -1241,6 +1251,103 @@ def test_render_advice_panel_covers_runtime_and_tests(tmp_path: Path, capsys) ->
     assert "Refactor Navigator" in output
 
 
+def test_generate_advice_includes_di_guidance() -> None:
+    diag = _advice_diag(
+        file="src/pyqa/core/runtime/di.py",
+        tool="pyqa-di",
+        code="pyqa:di",
+        message=(
+            "Service 'console_factory' registered from 'pyqa.core.runtime.di' "
+            "must move into an approved composition root."
+        ),
+    )
+    builder = AdviceBuilder()
+    advice_entries = generate_advice(
+        [
+            (
+                diag.file or "",
+                diag.line if diag.line is not None else -1,
+                diag.function or "",
+                diag.tool,
+                diag.code or "-",
+                diag.message,
+            )
+        ],
+        builder.annotation_engine,
+    )
+
+    di_entry = next(entry for entry in advice_entries if "CompositionRegistry" in entry.body)
+    assert di_entry.category == "Structure"
+    assert "pyqa.core.runtime.di" in di_entry.body
+    assert "pyqa.analysis.bootstrap" in di_entry.body
+    assert "*.bootstrap" in di_entry.body
+    assert "pyqa.app.di.configure_services" in di_entry.body
+    assert "test fixtures" in di_entry.body
+
+
+def test_generate_advice_includes_interface_guidance() -> None:
+    diag = _advice_diag(
+        file="src/pyqa/interfaces/core.py",
+        tool="pyqa-interfaces",
+        code="pyqa:interfaces",
+        message="Interfaces module 'pyqa.interfaces.core' must not define concrete class 'Example'",
+    )
+    builder = AdviceBuilder()
+    advice_entries = generate_advice(
+        [
+            (
+                diag.file or "",
+                diag.line if diag.line is not None else -1,
+                diag.function or "",
+                diag.tool,
+                diag.code or "-",
+                diag.message,
+            )
+        ],
+        builder.annotation_engine,
+    )
+
+    interface_entry = next(entry for entry in advice_entries if entry.category == "Interface")
+    assert "interfaces packages limited" in interface_entry.body
+
+
+def test_generate_advice_includes_python_hygiene_guidance() -> None:
+    builder = AdviceBuilder()
+    diagnostics = [
+        _advice_diag(
+            file="src/pyqa/catalog/metadata.py",
+            tool="pyqa-python-hygiene",
+            code="pyqa-python-hygiene:python-hygiene:print",
+            message="Replace print-style output with structured logging.",
+        ),
+        _advice_diag(
+            file="src/pyqa/library.py",
+            tool="pyqa-python-hygiene",
+            code="pyqa-python-hygiene:python-hygiene:system-exit",
+            message="Direct process termination bypasses orchestrator safeguards; use structured exit helpers.",
+        ),
+    ]
+    advice_entries = generate_advice(
+        [
+            (
+                diag.file or "",
+                diag.line if diag.line is not None else -1,
+                diag.function or "",
+                diag.tool,
+                diag.code or "-",
+                diag.message,
+            )
+            for diag in diagnostics
+        ],
+        builder.annotation_engine,
+    )
+
+    logging_entry = next(entry for entry in advice_entries if entry.category == "Logging")
+    assert "structured logging" in logging_entry.body
+    safety_entry = next(entry for entry in advice_entries if entry.category == "Runtime safety")
+    assert "SystemExit" in safety_entry.body or "exit" in safety_entry.body
+
+
 def test_advice_builder_delegates_to_generate_advice() -> None:
     entries = [
         (
@@ -1270,3 +1377,8 @@ def test_advice_builder_delegates_to_generate_advice() -> None:
 
     assert result == expected
     assert dummy.calls
+
+
+def _write_summary(result: RunResult, path: Path, **kwargs: object) -> None:
+    options = PRSummaryOptions(**kwargs)
+    write_pr_summary(result, path, options=options)

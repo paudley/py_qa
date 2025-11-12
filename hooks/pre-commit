@@ -109,7 +109,7 @@ if grep -n "print(" $STAGED_PY_FILES | grep -v "#.*print(" | grep -v "rprint" | 
 fi
 echo "✅ No debug print statements found"
 
-# Check for TODO comments that shouldn't be committed
+# Check for pre-commit blocker markers that shouldn't be committed
 echo ""
 echo "📋 Checking for uncommitted TODOs..."
 if grep -n "TODO BEFORE COMMIT\|FIXME BEFORE COMMIT\|XXX BEFORE COMMIT" $STAGED_PY_FILES; then

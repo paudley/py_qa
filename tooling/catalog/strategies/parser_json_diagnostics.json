@@ -3,7 +3,7 @@
   "id": "parser_json_diagnostics",
   "type": "parser",
   "description": "Parse JSON payloads into RawDiagnostic entries using catalog mappings.",
-  "implementation": "pyqa.tooling.strategies.parser_json_diagnostics",
+  "implementation": "pyqa.catalog.strategies.parser_json_diagnostics",
   "config": {
     "path": {
       "type": "string",

@@ -3,7 +3,7 @@
   "id": "parser_text",
   "type": "parser",
   "description": "Wrap a text transform callable in the standard TextParser adapter.",
-  "implementation": "pyqa.tooling.strategies.text_parser",
+  "implementation": "pyqa.catalog.strategies.text_parser",
   "config": {
     "transform": {
       "type": "string",

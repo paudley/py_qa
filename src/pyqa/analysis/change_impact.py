@@ -10,8 +10,10 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Final
 
-from ..context import TreeSitterContextResolver
-from ..models import Diagnostic, RunResult
+from ..core.models import Diagnostic, RunResult
+from ..interfaces.analysis import ContextResolver
+from .services import resolve_context_resolver
+from .warnings import record_tool_warning
 
 _DIFF_HEADER: Final[re.Pattern[str]] = re.compile(r"^\+\+\+ b/(.*)$")
 _HUNK_HEADER: Final[re.Pattern[str]] = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
@@ -19,17 +21,24 @@ _NEAR_CHANGE_RADIUS: Final[int] = 3
 _DEV_NULL_SENTINEL: Final[str] = "/dev/null"
 
 
-def apply_change_impact(result: RunResult) -> None:
-    """Attach impact metadata to diagnostics inside ``result``.
+def apply_change_impact(
+    result: RunResult,
+    *,
+    context_resolver: ContextResolver | None = None,
+) -> None:
+    """Add impact metadata to diagnostics inside ``result``.
 
     Args:
         result: Run outcome containing diagnostics to enrich.
+        context_resolver: Optional context resolver used to identify affected
+            functions from the diff. When omitted, the registered service
+            implementation is resolved.
     """
     changes = _collect_changed_lines(result.root)
     if not changes:
         return
 
-    resolver = TreeSitterContextResolver()
+    resolver = context_resolver or resolve_context_resolver()
     changed_functions: dict[str, set[str]] = {}
     for file_path, lines in changes.items():
         contexts = resolver.resolve_context_for_lines(
@@ -38,6 +47,9 @@ def apply_change_impact(result: RunResult) -> None:
             lines=lines,
         )
         changed_functions[file_path] = {ctx for ctx in contexts.values() if ctx}
+
+    for message in getattr(resolver, "consume_warnings", lambda: [])():
+        record_tool_warning(result, message)
 
     for outcome in result.outcomes:
         for diag in outcome.diagnostics:

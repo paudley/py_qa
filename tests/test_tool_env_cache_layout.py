@@ -5,12 +5,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 import pytest
 from pytest_bdd import given, scenarios, then, when
 
-from pyqa.tool_env import CommandPreparer, cache_layout
+from pyqa.core.environment.tool_env import CommandPreparer, cache_layout
 from pyqa.tools.base import Tool
 
 scenarios("tool_env/features/cache_layout.feature")
@@ -127,7 +129,8 @@ def _execute_preparer(workspace_state: dict[str, object]) -> None:
     tool = workspace_state.setdefault("tool", _make_tool())
 
     preparer = CommandPreparer()
-    result = preparer.prepare(
+    result = _legacy_prepare(
+        preparer,
         tool=tool,
         base_cmd=(tool.name,),
         root=root,
@@ -137,3 +140,11 @@ def _execute_preparer(workspace_state: dict[str, object]) -> None:
     )
     workspace_state["result"] = result
     workspace_state["layout"] = cache_layout(cache_dir)
+
+
+def _legacy_prepare(preparer: CommandPreparer, **kwargs: object):
+    return preparer.prepare_from_mapping(cast(Mapping[str, object], kwargs))
+
+
+def _legacy_prepare(preparer: CommandPreparer, **kwargs: object):
+    return preparer.prepare_from_mapping(cast(Mapping[str, object], kwargs))

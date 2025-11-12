@@ -11,11 +11,18 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from .base import ToolContext
+from pyqa.interfaces.tools import ToolContext
 
 
 def _is_plugin_available(module: str) -> bool:
-    """Return ``True`` when *module* can be imported and registers plugins."""
+    """Return whether ``module`` can be imported and exposes a plugin hook.
+
+    Args:
+        module: Dotted module path referencing a potential pylint plugin.
+
+    Returns:
+        bool: ``True`` when the module is importable and provides a ``register`` attribute.
+    """
 
     try:
         spec = importlib.util.find_spec(module)
@@ -28,13 +35,24 @@ def _is_plugin_available(module: str) -> bool:
 
 
 def _collect_plugins(candidates: Sequence[str]) -> set[str]:
-    """Return the subset of *candidates* that expose pylint plugin hooks."""
+    """Return the subset of ``candidates`` that expose pylint plugin hooks.
+
+    Args:
+        candidates: Candidate module names to evaluate.
+
+    Returns:
+        set[str]: Module names that can be imported and provide plugin registrations.
+    """
 
     return {plugin for plugin in candidates if _is_plugin_available(plugin)}
 
 
 def _collect_optional_plugins() -> set[str]:
-    """Return optional plugins when both requirement and plugin are importable."""
+    """Return optional pylint plugins discovered in the current environment.
+
+    Returns:
+        set[str]: Optional plugin modules whose dependency and plugin package are available.
+    """
 
     discovered: set[str] = set()
     for requirement, plugin in _OPTIONAL_PYLINT_PLUGINS.items():
@@ -81,7 +99,14 @@ _OPTIONAL_PYLINT_PLUGINS: dict[str, str] = {
 
 
 def _python_target_version(ctx: ToolContext) -> str:
-    """Return the configured Python version or fall back to the interpreter."""
+    """Return the configured Python version or fall back to the interpreter.
+
+    Args:
+        ctx: Tool context containing execution configuration.
+
+    Returns:
+        str: Python version expressed as ``major.minor``.
+    """
     version = getattr(ctx.cfg.execution, "python_version", None)
     if version:
         return str(version)
@@ -90,7 +115,14 @@ def _python_target_version(ctx: ToolContext) -> str:
 
 
 def _python_version_components(version: str) -> tuple[int, int]:
-    """Extract major/minor components from a Python version string."""
+    """Extract major/minor components from a Python version string.
+
+    Args:
+        version: Version string, optionally containing separators or prefixes.
+
+    Returns:
+        tuple[int, int]: Parsed ``(major, minor)`` components.
+    """
     match = re.search(r"(\d{1,2})(?:[._-]?(\d{1,2}))?", version)
     if not match:
         return sys.version_info.major, sys.version_info.minor
@@ -100,19 +132,40 @@ def _python_version_components(version: str) -> tuple[int, int]:
 
 
 def _python_version_tag(version: str) -> str:
-    """Convert *version* into ruff/black style ``pyXY`` tag."""
+    """Convert ``version`` into ruff/black style ``pyXY`` tag.
+
+    Args:
+        version: Python version string parsable by :func:`_python_version_components`.
+
+    Returns:
+        str: Version tag formatted as ``pyXY``.
+    """
     major, minor = _python_version_components(version)
     return f"py{major}{minor}"
 
 
 def _python_version_number(version: str) -> str:
-    """Convert *version* into isort style ``XY`` number without separator."""
+    """Convert ``version`` into isort style ``XY`` number without separator.
+
+    Args:
+        version: Python version string parsable by :func:`_python_version_components`.
+
+    Returns:
+        str: Version number formatted as ``XY``.
+    """
     major, minor = _python_version_components(version)
     return f"{major}{minor}"
 
 
 def _pyupgrade_flag_from_version(version: str) -> str:
-    """Map a Python version specifier to pyupgrade's ``--pyXY-plus`` flag."""
+    """Return the pyupgrade ``--pyXY-plus`` flag for ``version``.
+
+    Args:
+        version: Python version specifier accepted by pyupgrade.
+
+    Returns:
+        str: Flag string e.g. ``--py311-plus``.
+    """
     normalized = version.lower().lstrip("py").rstrip("+")
     if not normalized:
         normalized = f"{sys.version_info.major}.{sys.version_info.minor}"
@@ -128,7 +181,14 @@ def _pyupgrade_flag_from_version(version: str) -> str:
 
 
 def _discover_pylint_plugins(root: Path) -> tuple[str, ...]:
-    """Return default pylint plugins, discovering optional extras when present."""
+    """Return pylint plugins, discovering optional extras when present.
+
+    Args:
+        root: Repository root used to infer virtual environment locations.
+
+    Returns:
+        tuple[str, ...]: Sorted tuple of plugin module names.
+    """
 
     discovered = _collect_plugins(_BASE_PYLINT_PLUGINS)
     discovered.update(_collect_optional_plugins())

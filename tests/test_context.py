@@ -17,9 +17,9 @@ except ModuleNotFoundError:
 else:
     _ = tree_sitter
 
-from pyqa.context import TreeSitterContextResolver
-from pyqa.models import Diagnostic
-from pyqa.severity import Severity
+from pyqa.analysis.treesitter import TreeSitterContextResolver
+from pyqa.core.models import Diagnostic
+from pyqa.core.severity import Severity
 
 
 def test_python_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

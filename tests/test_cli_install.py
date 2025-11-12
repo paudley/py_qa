@@ -9,7 +9,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from pyqa.cli.app import app
-from pyqa.installs import InstallSummary
+from pyqa.runtime.installers import InstallSummary
 
 
 def test_install_cli_passes_flags(monkeypatch, tmp_path: Path) -> None:
@@ -20,14 +20,18 @@ def test_install_cli_passes_flags(monkeypatch, tmp_path: Path) -> None:
         root: Path,
         *,
         include_optional: bool,
-        generate_stubs: bool,
-        on_optional_stub=None,
-        on_stub_generation=None,
+        generate_typing_modules: bool,
+        on_optional_package=None,
+        on_module_generation=None,
     ) -> InstallSummary:
-        calls.append((root, include_optional, generate_stubs))
-        return InstallSummary((), (), root / ".lint-cache" / "marker.json")
+        calls.append((root, include_optional, generate_typing_modules))
+        return InstallSummary(
+            optional_typing_packages=(),
+            generated_typing_modules=(),
+            marker_path=root / ".lint-cache" / "marker.json",
+        )
 
-    monkeypatch.setattr("pyqa.cli.install.install_dev_environment", fake_install)
+    monkeypatch.setattr("pyqa.cli.commands.install.command.install_dev_environment", fake_install)
 
     result = runner.invoke(
         app,
@@ -54,17 +58,21 @@ def test_install_cli_emits_progress(monkeypatch, tmp_path: Path) -> None:
         root: Path,
         *,
         include_optional: bool,
-        generate_stubs: bool,
-        on_optional_stub=None,
-        on_stub_generation=None,
+        generate_typing_modules: bool,
+        on_optional_package=None,
+        on_module_generation=None,
     ) -> InstallSummary:
-        if on_optional_stub is not None:
-            on_optional_stub("types-requests")
-        if on_stub_generation is not None:
-            on_stub_generation("pyarrow")
-        return InstallSummary(("types-requests",), ("pyarrow",), root / "marker")
+        if on_optional_package is not None:
+            on_optional_package("types-requests")
+        if on_module_generation is not None:
+            on_module_generation("pyarrow")
+        return InstallSummary(
+            optional_typing_packages=("types-requests",),
+            generated_typing_modules=("pyarrow",),
+            marker_path=root / "marker",
+        )
 
-    monkeypatch.setattr("pyqa.cli.install.install_dev_environment", fake_install)
+    monkeypatch.setattr("pyqa.cli.commands.install.command.install_dev_environment", fake_install)
 
     result = runner.invoke(app, ["install", "--root", str(tmp_path), "--no-emoji"])
 

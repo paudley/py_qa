@@ -5,6 +5,7 @@
   "extends": ["npm_runtime"],
   "languages": ["css"],
   "phase": "lint",
+  "automatically_fix": true,
   "fileExtensions": [".css", ".scss", ".sass", ".less"],
   "runtime": {
     "type": "npm",

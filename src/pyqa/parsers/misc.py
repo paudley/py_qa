@@ -5,20 +5,23 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Iterator, Mapping, Sequence
-from typing import Any, Final
+from collections.abc import Mapping, Sequence
+from typing import Final
 
-from ..models import RawDiagnostic
-from ..serialization import coerce_optional_int
-from ..severity import Severity
-from ..tools.base import ToolContext
+from pyqa.core.severity import Severity
+
+from ..core.models import RawDiagnostic
+from ..core.serialization import JsonValue, coerce_optional_int, coerce_optional_str
+from ..interfaces.tools import ToolContext
 from .base import (
     DiagnosticDetails,
     DiagnosticLocation,
     append_diagnostic,
     create_spec,
+    first_mapping,
     iter_dicts,
     map_severity,
+    mapping_sequence,
 )
 
 SHFMT_DIFF_PREFIX_LENGTH: Final[int] = 4
@@ -79,7 +82,16 @@ PHPLINT_PATTERN = re.compile(
 
 
 def parse_phplint(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse phplint textual output."""
+    """Parse phplint textual output into diagnostics.
+
+    Args:
+        stdout: Sequence of phplint output lines using the standard format.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics describing parse errors reported by phplint.
+    """
+
     del context
     results: list[RawDiagnostic] = []
     for raw_line in stdout:
@@ -113,7 +125,16 @@ PERLCRITIC_PATTERN = re.compile(
 
 
 def parse_perlcritic(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse perlcritic textual output using custom verbose template."""
+    """Parse perlcritic textual output using the verbose template.
+
+    Args:
+        stdout: Sequence of perlcritic output lines.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics describing perlcritic findings.
+    """
+
     del context
     results: list[RawDiagnostic] = []
     for raw_line in stdout:
@@ -138,7 +159,7 @@ def parse_perlcritic(stdout: Sequence[str], context: ToolContext) -> Sequence[Ra
     return results
 
 
-def parse_checkmake(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_checkmake(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse checkmake JSON diagnostics into normalised objects.
 
     Args:
@@ -161,10 +182,18 @@ def parse_checkmake(payload: Any, context: ToolContext) -> Sequence[RawDiagnosti
 
 
 def _build_checkmake_diagnostic(
-    file_path: object,
-    issue: Mapping[str, Any],
+    file_path: JsonValue | None,
+    issue: Mapping[str, JsonValue],
 ) -> RawDiagnostic | None:
-    """Return a normalised checkmake diagnostic when ``issue`` is valid."""
+    """Return a normalised checkmake diagnostic when ``issue`` is valid.
+
+    Args:
+        file_path: File path associated with the diagnostic entry.
+        issue: Mapping describing a single checkmake issue.
+
+    Returns:
+        RawDiagnostic | None: Diagnostic built from ``issue`` or ``None`` when invalid.
+    """
 
     message = issue.get("message") or issue.get("description")
     if not message:
@@ -179,8 +208,8 @@ def _build_checkmake_diagnostic(
     path = str(file_path) if file_path else None
     location = DiagnosticLocation(
         file=path,
-        line=issue.get("line"),
-        column=issue.get("column") or issue.get("col"),
+        line=coerce_optional_int(issue.get("line")),
+        column=coerce_optional_int(issue.get("column") or issue.get("col")),
     )
     details = DiagnosticDetails(
         severity=severity,
@@ -191,11 +220,20 @@ def _build_checkmake_diagnostic(
     return create_spec(location=location, details=details).build()
 
 
-def _iter_checkmake_entries(payload: Any) -> Iterator[Mapping[str, Any]]:
-    """Yield checkmake file entries from ``payload``."""
+def _iter_checkmake_entries(payload: JsonValue) -> tuple[Mapping[str, JsonValue], ...]:
+    """Return checkmake file entries extracted from ``payload``.
 
-    candidates = payload.get("files") or payload.get("results") if isinstance(payload, Mapping) else payload
-    yield from iter_dicts(candidates)
+    Args:
+        payload: JSON payload emitted by checkmake.
+
+    Returns:
+        tuple[Mapping[str, JsonValue], ...]: Tuple containing per-file diagnostic entries.
+    """
+
+    if isinstance(payload, Mapping):
+        candidates = payload.get("files") or payload.get("results")
+        return tuple(mapping_sequence(candidates))
+    return tuple(mapping_sequence(payload))
 
 
 _CPPLINT_PATTERN = re.compile(
@@ -208,7 +246,16 @@ _CPPLINT_PATTERN = re.compile(
 
 
 def parse_cpplint(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse cpplint text diagnostics."""
+    """Parse cpplint textual diagnostics into normalised objects.
+
+    Args:
+        stdout: Sequence of cpplint output lines.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics representing cpplint rule violations.
+    """
+
     del context
     results: list[RawDiagnostic] = []
     for line in stdout:
@@ -256,7 +303,16 @@ TOMBI_SEVERITY_MAP: Final[dict[str, Severity]] = {
 
 
 def parse_tombi(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse tombi lint textual diagnostics."""
+    """Parse tombi textual diagnostics into canonical RawDiagnostic objects.
+
+    Args:
+        stdout: Sequence of tombi output lines containing ANSI highlighting.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics describing tombi lint findings.
+    """
+
     del context
     cleaned = _ANSI_ESCAPE_RE.sub("", "\n".join(stdout))
     results: list[RawDiagnostic] = []
@@ -267,25 +323,46 @@ def parse_tombi(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiag
     return results
 
 
-def _split_tombi_blocks(lines: Sequence[str]) -> Iterable[tuple[str, list[str]]]:
+def _split_tombi_blocks(lines: Sequence[str]) -> tuple[tuple[str, list[str]], ...]:
+    """Return (header, body) pairs for tombi diagnostic blocks.
+
+    Args:
+        lines: Sequence of tombi output lines stripped of ANSI escapes.
+
+    Returns:
+        tuple[tuple[str, list[str]], ...]: Tuple containing tombi diagnostic blocks.
+    """
+
     current_header: str | None = None
     current_body: list[str] = []
+    blocks: list[tuple[str, list[str]]] = []
     for raw_line in lines:
         line = raw_line.strip()
         header = _TOMBI_HEADER_RE.match(line)
         if header:
             if current_header is not None:
-                yield current_header, current_body
+                blocks.append((current_header, current_body))
             current_header = line
             current_body = []
             continue
         if current_header is not None and line:
             current_body.append(line)
     if current_header is not None:
-        yield current_header, current_body
+        blocks.append((current_header, current_body))
+    return tuple(blocks)
 
 
 def _build_tombi_diagnostic(header_line: str, body: Sequence[str]) -> RawDiagnostic | None:
+    """Return a RawDiagnostic derived from a tombi block.
+
+    Args:
+        header_line: First line of the tombi block containing severity/message.
+        body: Remaining lines describing location and supplemental context.
+
+    Returns:
+        RawDiagnostic | None: Diagnostic assembled from the block or ``None`` when parsing fails.
+    """
+
     header = _TOMBI_HEADER_RE.match(header_line)
     if not header:
         return None
@@ -315,7 +392,7 @@ def _build_tombi_diagnostic(header_line: str, body: Sequence[str]) -> RawDiagnos
     )
 
 
-def parse_golangci_lint(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
+def parse_golangci_lint(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
     """Parse golangci-lint JSON output into raw diagnostics.
 
     Args:
@@ -334,17 +411,34 @@ def parse_golangci_lint(payload: Any, context: ToolContext) -> Sequence[RawDiagn
     return results
 
 
-def _iter_golangci_entries(payload: Any) -> Iterator[Mapping[str, Any]]:
-    """Yield golangci-lint issue entries from ``payload``."""
+def _iter_golangci_entries(payload: JsonValue) -> tuple[Mapping[str, JsonValue], ...]:
+    """Return golangci-lint issue entries from ``payload``.
 
-    candidates = payload.get("Issues") or payload.get("issues") if isinstance(payload, Mapping) else payload
-    yield from iter_dicts(candidates)
+    Args:
+        payload: JSON payload emitted by golangci-lint.
+
+    Returns:
+        tuple[Mapping[str, JsonValue], ...]: Tuple containing golangci-lint issues.
+    """
+
+    if isinstance(payload, Mapping):
+        candidates = payload.get("Issues") or payload.get("issues")
+        return tuple(mapping_sequence(candidates))
+    return tuple(mapping_sequence(payload))
 
 
-def _build_golangci_diagnostic(issue: Mapping[str, Any]) -> RawDiagnostic | None:
-    """Return a golangci-lint diagnostic when ``issue`` contains data."""
+def _build_golangci_diagnostic(issue: Mapping[str, JsonValue]) -> RawDiagnostic | None:
+    """Return a golangci-lint diagnostic when ``issue`` contains data.
 
-    position = issue.get("Pos") or issue.get("position") or {}
+    Args:
+        issue: Mapping describing a single golangci-lint issue.
+
+    Returns:
+        RawDiagnostic | None: Diagnostic built from the issue or ``None`` when invalid.
+    """
+
+    position_value = issue.get("Pos") or issue.get("position")
+    position = position_value if isinstance(position_value, Mapping) else {}
     path = position.get("Filename") or position.get("filename") or issue.get("file")
     message = str(issue.get("Text", "") or issue.get("text", "")).strip()
     if not message:
@@ -358,9 +452,9 @@ def _build_golangci_diagnostic(issue: Mapping[str, Any]) -> RawDiagnostic | None
     sub_linter = issue.get("FromLinter") or issue.get("source") or "golangci-lint"
     code_value = issue.get("Code") or issue.get("code")
     location = DiagnosticLocation(
-        file=path,
-        line=position.get("Line") or position.get("line"),
-        column=position.get("Column") or position.get("column"),
+        file=str(path) if path else None,
+        line=coerce_optional_int(position.get("Line") or position.get("line")),
+        column=coerce_optional_int(position.get("Column") or position.get("column")),
     )
     details = DiagnosticDetails(
         severity=severity,
@@ -371,46 +465,47 @@ def _build_golangci_diagnostic(issue: Mapping[str, Any]) -> RawDiagnostic | None
     return create_spec(location=location, details=details).build()
 
 
-def parse_cargo_clippy(payload: Any, context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse Cargo clippy JSON payloads."""
+def parse_cargo_clippy(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse Cargo Clippy JSON payloads into RawDiagnostic objects.
+
+    Args:
+        payload: JSON payload emitted by Cargo Clippy.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics representing Clippy findings.
+    """
+
     del context
     results: list[RawDiagnostic] = []
-    if isinstance(payload, list):
-        source = payload
-    elif isinstance(payload, dict):
-        source = [payload]
-    else:
-        source = []
-    for record in iter_dicts(source):
+    for record in mapping_sequence(payload):
         if record.get("reason") != CARGO_CLIPPY_DIAGNOSTIC_REASON:
             continue
-        message = record.get("message", {})
-        if not isinstance(message, dict):
-            continue
-        level = message.get("level", "warning")
-        spans = message.get("spans") or []
+        message_mapping = first_mapping(record.get("message"))
+        level = str(message_mapping.get("level", "warning")).lower()
+        spans = mapping_sequence(message_mapping.get("spans"))
         primary = next(
             (span for span in spans if span.get("is_primary")),
             spans[0] if spans else None,
         )
-        file_name = primary.get("file_name") if isinstance(primary, dict) else None
-        line = primary.get("line_start") if isinstance(primary, dict) else None
-        column = primary.get("column_start") if isinstance(primary, dict) else None
-        code_obj = message.get("code") or {}
-        code = code_obj.get("code") if isinstance(code_obj, dict) else None
+        file_name = coerce_optional_str(primary.get("file_name")) if primary else None
+        line = coerce_optional_int(primary.get("line_start")) if primary else None
+        column = coerce_optional_int(primary.get("column_start")) if primary else None
+        code_mapping = first_mapping(message_mapping.get("code"))
+        code = coerce_optional_str(code_mapping.get("code"))
         sev_enum = {
             "error": Severity.ERROR,
             "warning": Severity.WARNING,
             "note": Severity.NOTE,
             "help": Severity.NOTE,
-        }.get(str(level).lower(), Severity.WARNING)
+        }.get(level, Severity.WARNING)
         results.append(
             RawDiagnostic(
                 file=file_name,
                 line=line,
                 column=column,
                 severity=sev_enum,
-                message=str(message.get("message", "")).strip(),
+                message=(coerce_optional_str(message_mapping.get("message")) or "").strip(),
                 code=code,
                 tool="cargo-clippy",
             ),

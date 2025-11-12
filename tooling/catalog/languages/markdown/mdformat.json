@@ -4,6 +4,7 @@
   "description": "Markdown formatter.",
   "languages": ["markdown"],
   "phase": "lint",
+  "automatically_fix": true,
   "runtime": {
     "type": "python",
     "package": "mdformat",

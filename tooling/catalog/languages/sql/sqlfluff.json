@@ -4,6 +4,7 @@
   "description": "SQL linter and formatter using sqlfluff.",
   "languages": ["sql"],
   "phase": "lint",
+  "automatically_fix": true,
   "runtime": {
     "type": "python",
     "package": "sqlfluff",

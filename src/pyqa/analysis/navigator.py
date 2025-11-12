@@ -5,14 +5,16 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Final, TypedDict
+from typing import Final, TypedDict, cast
 
-from ..annotations import AnnotationEngine
-from ..models import Diagnostic, RunResult
-from ..reporting.advice import _estimate_function_scale as _reporting_estimate_function_scale
+from ..core.models import Diagnostic, RunResult
+from ..core.serialization import SerializableValue, jsonify
+from ..interfaces.analysis import AnnotationProvider, FunctionScaleEstimator
+from .services import resolve_function_scale_estimator
 
 MAX_NAVIGATOR_ENTRIES: Final[int] = 10
 COMPLEXITY_CODES: Final[set[str]] = {"C901", "R0915", "PLR0915", "R1260"}
@@ -26,7 +28,7 @@ MAGIC_SIGNATURES: Final[set[str]] = {"magic"}
 
 
 class IssueTag(str, Enum):
-    """Enumerate recognised navigator issue tags."""
+    """Summarize recognised navigator issue tags."""
 
     COMPLEXITY = "complexity"
     TYPING = "typing"
@@ -35,7 +37,7 @@ class IssueTag(str, Enum):
 
 
 class NavigatorDiagnosticPayload(TypedDict):
-    """Typed representation of diagnostic details within the navigator."""
+    """Capture diagnostic details stored inside the navigator payload."""
 
     tool: str
     code: str
@@ -45,7 +47,7 @@ class NavigatorDiagnosticPayload(TypedDict):
 
 
 class NavigatorPayload(TypedDict):
-    """Typed representation of a refactor navigator entry."""
+    """Capture a refactor navigator entry in JSON-safe form."""
 
     file: str
     function: str
@@ -57,7 +59,7 @@ class NavigatorPayload(TypedDict):
 
 @dataclass(slots=True)
 class NavigatorDiagnosticEntry:
-    """Describe a diagnostic included in the refactor navigator payload."""
+    """Record a diagnostic included in the refactor navigator payload."""
 
     tool: str
     code: str
@@ -66,7 +68,11 @@ class NavigatorDiagnosticEntry:
     severity: str
 
     def to_payload(self) -> NavigatorDiagnosticPayload:
-        """Return a serialisable mapping for the diagnostic entry."""
+        """Build a serialisable mapping for the diagnostic entry.
+
+        Returns:
+            NavigatorDiagnosticPayload: JSON-safe mapping describing the diagnostic.
+        """
 
         return NavigatorDiagnosticPayload(
             tool=self.tool,
@@ -88,8 +94,31 @@ class NavigatorBucket:
     complexity: int | None = None
     diagnostics: list[NavigatorDiagnosticEntry] = field(default_factory=list)
 
+    def __len__(self) -> int:
+        """Compute the number of diagnostics aggregated within the bucket.
+
+        Returns:
+            int: Count of aggregated diagnostics.
+        """
+
+        return len(self.diagnostics)
+
+    def __iter__(self) -> Iterator[NavigatorDiagnosticEntry]:
+        """Return an iterator across diagnostics contained in the bucket.
+
+        Returns:
+            Iterator[NavigatorDiagnosticEntry]: Iterator across stored diagnostics.
+        """
+
+        return iter(self.diagnostics)
+
     def add_diagnostic(self, diag: Diagnostic, tag: IssueTag | None) -> None:
-        """Record ``diag`` in the bucket and increment the associated tag."""
+        """Add a diagnostic to the bucket and increment the associated tag.
+
+        Args:
+            diag: Diagnostic to store in the bucket.
+            tag: Issue tag derived from the diagnostic, when available.
+        """
 
         self.file = diag.file or self.file
         self.function = diag.function or self.function
@@ -107,12 +136,20 @@ class NavigatorBucket:
 
     @property
     def total_issue_count(self) -> int:
-        """Return the total number of issues aggregated under this bucket."""
+        """Return the total number of issues aggregated under this bucket.
+
+        Returns:
+            int: Total issue count across all detected tags.
+        """
 
         return sum(self.issue_tags.values())
 
     def to_payload(self) -> NavigatorPayload:
-        """Return a serialisable payload representing this bucket."""
+        """Build a serialisable payload representing this bucket.
+
+        Returns:
+            NavigatorPayload: JSON-safe structure describing the bucket.
+        """
 
         return NavigatorPayload(
             file=self.file,
@@ -124,16 +161,45 @@ class NavigatorBucket:
         )
 
 
-def build_refactor_navigator(result: RunResult, engine: AnnotationEngine) -> None:
-    """Populate ``result.analysis['refactor_navigator']`` with hotspot data.
+def build_refactor_navigator(
+    result: RunResult,
+    engine: AnnotationProvider,
+    *,
+    function_scale: FunctionScaleEstimator | None = None,
+) -> None:
+    """Populate the refactor navigator entry within the run analysis.
 
     Args:
         result: Run outcome containing diagnostics and analysis metadata.
         engine: Annotation engine used to derive diagnostic message signatures.
+        function_scale: Optional estimator used to approximate function size and
+            complexity for navigator prioritisation. When omitted, the
+            registered function scale estimator service is resolved.
+    """
+
+    estimator = function_scale or resolve_function_scale_estimator()
+    summary = _build_navigator_summary(result, engine, estimator)
+    navigator_payload = [bucket.to_payload() for bucket in summary[:MAX_NAVIGATOR_ENTRIES]]
+    result.analysis["refactor_navigator"] = jsonify(cast(SerializableValue, navigator_payload))
+
+
+def _build_navigator_summary(
+    result: RunResult,
+    engine: AnnotationProvider,
+    estimator: FunctionScaleEstimator,
+) -> list[NavigatorBucket]:
+    """Summarise diagnostics by function into navigator buckets.
+
+    Args:
+        result: Run outcome containing diagnostic data.
+        engine: Annotation engine used to derive diagnostic message signatures.
+        estimator: Callable used to approximate function size and complexity.
+
+    Returns:
+        list[NavigatorBucket]: Sorted list of navigator buckets ranked by severity.
     """
 
     hotspots: defaultdict[tuple[str, str], NavigatorBucket] = defaultdict(NavigatorBucket)
-
     for outcome in result.outcomes:
         for diag in outcome.diagnostics:
             tag = _issue_tag(diag, engine)
@@ -142,12 +208,12 @@ def build_refactor_navigator(result: RunResult, engine: AnnotationEngine) -> Non
             bucket = hotspots[(diag.file or "", diag.function or "")]
             bucket.add_diagnostic(diag, tag)
 
-    summary: list[NavigatorBucket] = []
     root_path = Path(result.root)
+    summary: list[NavigatorBucket] = []
     for (file_path, function), bucket in hotspots.items():
         if not bucket.issue_tags:
             continue
-        size, complexity = _estimate_function_scale(root_path / file_path, function)
+        size, complexity = estimator.estimate(root_path / file_path, function)
         bucket.size = size
         bucket.complexity = complexity
         summary.append(bucket)
@@ -159,11 +225,19 @@ def build_refactor_navigator(result: RunResult, engine: AnnotationEngine) -> Non
             f"{bucket.file}::{bucket.function}",
         ),
     )
-    result.analysis["refactor_navigator"] = [bucket.to_payload() for bucket in summary[:MAX_NAVIGATOR_ENTRIES]]
+    return summary
 
 
-def _issue_tag(diag: Diagnostic, engine: AnnotationEngine) -> IssueTag | None:
-    """Return the navigator issue tag for ``diag`` when recognised."""
+def _issue_tag(diag: Diagnostic, engine: AnnotationProvider) -> IssueTag | None:
+    """Return the navigator issue tag for a diagnostic when recognised.
+
+    Args:
+        diag: Diagnostic whose message should be classified.
+        engine: Annotation engine used to derive message signatures.
+
+    Returns:
+        IssueTag | None: Matching navigator issue tag when available.
+    """
 
     code = (diag.code or "").upper()
     signature = set(engine.message_signature(diag.message))
@@ -177,12 +251,6 @@ def _issue_tag(diag: Diagnostic, engine: AnnotationEngine) -> IssueTag | None:
     if code in MAGIC_CODES or MAGIC_SIGNATURES & signature:
         return IssueTag.MAGIC_NUMBER
     return None
-
-
-def _estimate_function_scale(path: Path, function: str) -> tuple[int | None, int | None]:
-    """Return the function length and complexity scores for ``function``."""
-
-    return _reporting_estimate_function_scale(path, function)
 
 
 __all__ = ["build_refactor_navigator"]

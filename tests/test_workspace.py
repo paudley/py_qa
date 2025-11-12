@@ -6,12 +6,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pyqa.workspace import is_py_qa_workspace
+from pyqa.platform.workspace import is_py_qa_workspace
 
 
 def test_is_py_qa_workspace_true(tmp_path: Path) -> None:
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text('[project]\nname = "py_qa"\n', encoding="utf-8")
+    (tmp_path / "src" / "pyqa").mkdir(parents=True)
+    (tmp_path / "src" / "pyqa" / "__init__.py").write_text("""""" "\n", encoding="utf-8")
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (tmp_path / "tooling").mkdir()
+    (docs_dir / "ARCHITECTURE.md").write_text("# architecture\n", encoding="utf-8")
 
     assert is_py_qa_workspace(tmp_path) is True
 
@@ -19,6 +25,12 @@ def test_is_py_qa_workspace_true(tmp_path: Path) -> None:
 def test_is_py_qa_workspace_accepts_variant(tmp_path: Path) -> None:
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text('[project]\nname = "pyqa"\n', encoding="utf-8")
+    (tmp_path / "src" / "pyqa").mkdir(parents=True)
+    (tmp_path / "src" / "pyqa" / "__init__.py").write_text("""""" "\n", encoding="utf-8")
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (tmp_path / "tooling").mkdir()
+    (docs_dir / "ARCHITECTURE.md").write_text("# architecture\n", encoding="utf-8")
 
     assert is_py_qa_workspace(tmp_path) is True
 

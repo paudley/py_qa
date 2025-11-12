@@ -4,6 +4,7 @@
   "description": "Rust formatter via cargo fmt.",
   "languages": ["rust"],
   "phase": "lint",
+  "automatically_fix": true,
   "runtime": {
     "type": "binary",
     "versionCommand": ["rustfmt", "--version"]

@@ -5,6 +5,7 @@
   "extends": ["python_defaults"],
   "languages": ["python"],
   "phase": "lint",
+  "automatically_fix": true,
   "fileExtensions": [".py", ".pyi"],
   "configFiles": ["pyproject.toml", "ruff.toml"],
   "runtime": {

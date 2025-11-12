@@ -12,7 +12,7 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 from pyqa.cli.app import app
-from pyqa.cli.tool_info import run_tool_info
+from pyqa.cli.commands.tool_info.command import run_tool_info
 from pyqa.config import Config
 from pyqa.tools.builtin_registry import initialize_registry
 from pyqa.tools.registry import DEFAULT_REGISTRY
@@ -25,7 +25,7 @@ def test_tool_info_option(monkeypatch) -> None:
         print(f"tool info for {tool_name} at {root}")
         return 0
 
-    monkeypatch.setattr("pyqa.cli._lint_meta.run_tool_info", fake_run_tool_info)
+    monkeypatch.setattr("pyqa.cli.commands.lint.meta.run_tool_info", fake_run_tool_info)
 
     result = runner.invoke(app, ["lint", "--tool-info", "ruff"])
 

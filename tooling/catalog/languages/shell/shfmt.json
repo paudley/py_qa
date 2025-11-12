@@ -5,6 +5,7 @@
   "extends": ["go_runtime"],
   "languages": ["shell"],
   "phase": "format",
+  "automatically_fix": true,
   "fileExtensions": [".sh", ".bash", ".zsh"],
   "runtime": {
     "type": "go",

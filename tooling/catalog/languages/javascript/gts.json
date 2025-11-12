@@ -4,6 +4,7 @@
   "description": "Google TypeScript style checker.",
   "languages": ["javascript"],
   "phase": "lint",
+  "automatically_fix": true,
   "runtime": {
     "type": "npm",
     "package": "gts@5.3.1",

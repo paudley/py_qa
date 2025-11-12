@@ -9,7 +9,7 @@ import os
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
-from ..constants import ALWAYS_EXCLUDE_DIRS
+from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS
 
 
 def iter_paths(
@@ -17,8 +17,36 @@ def iter_paths(
     *,
     skip_patterns: Iterable[str] | None = None,
 ) -> Iterator[tuple[Path, list[str], list[str]]]:
-    """Yield ``(directory, dirnames, filenames)`` honoring skip patterns and default exclusions."""
-    root = root.resolve()
+    """Return an iterator over ``(directory, dirnames, filenames)`` triples.
+
+    Args:
+        root: Root directory whose descendants should be traversed.
+        skip_patterns: Optional iterable of substrings that disqualify directories.
+
+    Returns:
+        Iterator[tuple[Path, list[str], list[str]]]: Iterator yielding directory walk tuples.
+    """
+
+    return _iter_paths(root.resolve(), skip_patterns)
+
+
+def _iter_paths(
+    root: Path,
+    skip_patterns: Iterable[str] | None,
+) -> Iterator[tuple[Path, list[str], list[str]]]:
+    """Yield directory traversal tuples while enforcing exclusions.
+
+    Args:
+        root: Resolved root directory to traverse.
+        skip_patterns: Optional iterable of substrings that disqualify directories.
+
+    Returns:
+        Iterator[tuple[Path, list[str], list[str]]]: Iterator yielding directory walk tuples.
+
+    Yields:
+        tuple[Path, list[str], list[str]]: Directory path, mutable directories, and filenames.
+    """
+
     for dirpath, dirnames, filenames in os.walk(root):
         directory = Path(dirpath)
         if _should_skip(directory, root, skip_patterns):
@@ -28,6 +56,17 @@ def iter_paths(
 
 
 def _should_skip(directory: Path, root: Path, skip_patterns: Iterable[str] | None) -> bool:
+    """Return whether ``directory`` should be excluded from traversal.
+
+    Args:
+        directory: Candidate directory encountered while walking ``root``.
+        root: Root directory used to derive relative paths.
+        skip_patterns: Optional iterable of substrings that trigger exclusion.
+
+    Returns:
+        bool: ``True`` when the directory should be pruned from traversal.
+    """
+
     try:
         relative = directory.relative_to(root)
     except ValueError:

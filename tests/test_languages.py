@@ -4,7 +4,7 @@
 
 from pathlib import Path
 
-from pyqa.languages import detect_languages
+from pyqa.platform.languages import detect_languages
 
 
 def test_detect_languages_by_extension(tmp_path: Path) -> None:

@@ -10,9 +10,10 @@ from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..config import FileDiscoveryConfig
-from ..constants import ALWAYS_EXCLUDE_DIRS, PY_QA_DIR_NAME
-from ..workspace import is_py_qa_workspace
+from pyqa.core.config.constants import ALWAYS_EXCLUDE_DIRS, PY_QA_DIR_NAME
+from pyqa.platform.workspace import is_py_qa_workspace
+
+from ..interfaces.discovery import FileDiscoveryConfig
 from .base import DiscoveryStrategy, is_within_limits, resolve_limit_paths
 
 
@@ -41,6 +42,16 @@ class FilesystemDiscovery(DiscoveryStrategy):
 
         self.follow_symlinks = follow_symlinks
 
+    @property
+    def identifier(self) -> str:
+        """Return the identifier for the filesystem discovery strategy.
+
+        Returns:
+            str: Human-readable identifier associated with this strategy.
+        """
+
+        return "filesystem"
+
     def discover(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
         """Yield files deemed discoverable under ``root``.
 
@@ -48,28 +59,27 @@ class FilesystemDiscovery(DiscoveryStrategy):
             config: User-provided discovery configuration.
             root: Repository root directory.
 
-        Yields:
-            Path: Absolute paths for files that satisfy discovery criteria.
+        Returns:
+            Iterable[Path]: Ordered collection of files that satisfy discovery rules.
         """
 
         limits = tuple(resolve_limit_paths(config.limit_to, root))
 
         explicit = list(self._yield_explicit_files(config, root, limits))
         if explicit:
-            yield from explicit
-            return
+            return explicit
 
         if config.paths_from_stdin:
-            yield from self._paths_from_stdin(root)
-            return
+            return list(self._paths_from_stdin(root))
 
+        results: list[Path] = []
         excludes = frozenset(root.joinpath(path).resolve() for path in config.excludes)
-        allow_root_py_qa = is_py_qa_workspace(root)
+        allow_root_py_qa = is_py_qa_workspace(root) or root.resolve().name == PY_QA_DIR_NAME
         for base in self._iter_root_candidates(config, root, limits):
             if base.is_file():
                 resolved = base.resolve()
                 if is_within_limits(resolved, limits):
-                    yield resolved
+                    results.append(resolved)
                 continue
             context = WalkContext(
                 base=base,
@@ -79,10 +89,19 @@ class FilesystemDiscovery(DiscoveryStrategy):
                 allow_root_py_qa=allow_root_py_qa,
                 follow_symlinks=self.follow_symlinks,
             )
-            yield from self._walk(context)
+            results.extend(self._walk(context))
+        return results
 
     def __call__(self, config: FileDiscoveryConfig, root: Path) -> Iterable[Path]:
-        """Delegate to :meth:`discover` enabling callable semantics."""
+        """Delegate to :meth:`discover` enabling callable semantics.
+
+        Args:
+            config: Discovery configuration supplied by the caller.
+            root: Repository root used to resolve relative paths.
+
+        Returns:
+            Iterable[Path]: Iterable yielding discovered filesystem paths.
+        """
 
         return self.discover(config, root)
 
@@ -98,6 +117,9 @@ class FilesystemDiscovery(DiscoveryStrategy):
             config: Discovery configuration with explicit entries.
             root: Repository root used to resolve relative paths.
             limits: Optional list of limit directories.
+
+        Returns:
+            Iterable[Path]: Iterable yielding resolved explicit file paths.
 
         Yields:
             Path: Resolved file paths that should be included.
@@ -124,6 +146,9 @@ class FilesystemDiscovery(DiscoveryStrategy):
             root: Repository root directory.
             limits: Normalised list of limit directories.
 
+        Returns:
+            Iterable[Path]: Iterable yielding candidate base directories.
+
         Yields:
             Path: Candidate base directories.
         """
@@ -143,6 +168,9 @@ class FilesystemDiscovery(DiscoveryStrategy):
             config: Discovery configuration with ``roots`` entries.
             root: Repository root directory.
 
+        Returns:
+            Iterator[Path]: Iterator yielding candidate root paths as configured.
+
         Yields:
             Path: Possibly unresolved candidate root paths.
         """
@@ -156,6 +184,9 @@ class FilesystemDiscovery(DiscoveryStrategy):
 
         Args:
             context: Immutable walk context containing traversal settings.
+
+        Returns:
+            Iterator[Path]: Iterator yielding files discovered during traversal.
 
         Yields:
             Path: Files that satisfy exclusion and limit rules.
@@ -180,6 +211,9 @@ class FilesystemDiscovery(DiscoveryStrategy):
 
         Args:
             root: Repository root directory.
+
+        Returns:
+            Iterator[Path]: Iterator yielding resolved candidate paths from STDIN.
 
         Yields:
             Path: Resolved candidate paths supplied via STDIN.

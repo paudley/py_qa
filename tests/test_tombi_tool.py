@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pyqa.catalog import ToolCatalogLoader
+from pyqa.catalog.strategies import command_project_scanner
 from pyqa.config import Config
-from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import command_project_scanner
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PYQA_ROOT = Path(__file__).resolve().parents[1]

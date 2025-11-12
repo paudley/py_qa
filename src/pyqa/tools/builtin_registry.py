@@ -4,32 +4,32 @@
 
 from __future__ import annotations
 
-import importlib
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final, Literal, cast
+from typing import Final, Literal, TypeAlias, cast
 
-from ..paths import get_pyqa_root
-from ..tooling import CatalogIntegrityError, CatalogSnapshot, ToolCatalogLoader
-from ..tooling.catalog.model_runtime import SUPPORTED_RUNTIME_TYPES
-from ..tooling.catalog.model_strategy import StrategyDefinition
-from .base import (
-    CommandBuilder,
-    DeferredCommand,
-    InstallerCallable,
-    Parser,
-    Tool,
-    ToolAction,
-    ToolDocumentation,
-    ToolDocumentationEntry,
-)
+from pyqa.platform.paths import get_pyqa_root
+from tooling_spec.catalog.model_actions import ActionDefinition
+from tooling_spec.catalog.types import JSONValue
+
+from ..catalog.errors import CatalogIntegrityError
+from ..catalog.loader import ToolCatalogLoader
+from ..catalog.model_catalog import CatalogSnapshot
+from ..catalog.model_diagnostics import SuppressionsDefinition
+from ..catalog.model_documentation import DocumentationBundle, DocumentationEntry
+from ..catalog.model_references import StrategyReference
+from ..catalog.model_runtime import SUPPORTED_RUNTIME_TYPES, RuntimeInstallDefinition, RuntimeType
+from ..catalog.model_strategy import StrategyCallable, StrategyDefinition
+from ..catalog.model_tool import ToolDefinition
+from .base import DeferredCommand, PhaseLiteral, Tool, ToolAction, ToolDocumentation, ToolDocumentationEntry
 from .builtin_helpers import (
     CARGO_AVAILABLE,
     CPANM_AVAILABLE,
     LUA_AVAILABLE,
     LUAROCKS_AVAILABLE,
 )
+from .interfaces import CommandBuilder, InstallerCallable, Parser
 from .registry import DEFAULT_REGISTRY, ToolRegistry
 
 ToolRuntimeKind = Literal["python", "npm", "binary", "go", "lua", "perl", "rust"]
@@ -38,7 +38,16 @@ COMMAND_STRATEGY: Final[str] = "command"
 PARSER_STRATEGY: Final[str] = "parser"
 INSTALLER_STRATEGY: Final[str] = "installer"
 
-VALID_RUNTIME_NAMES: Final[set[str]] = set(SUPPORTED_RUNTIME_TYPES)
+RUNTIME_LITERAL_MAP: Final[dict[str, ToolRuntimeKind]] = {name: name for name in SUPPORTED_RUNTIME_TYPES}
+PHASE_LITERAL_MAP: Final[dict[str, PhaseLiteral]] = {
+    "format": "format",
+    "lint": "lint",
+    "analysis": "analysis",
+    "security": "security",
+    "test": "test",
+    "coverage": "coverage",
+    "utility": "utility",
+}
 
 
 @dataclass(frozen=True)
@@ -51,6 +60,11 @@ class _CatalogCacheEntry:
 
 
 _CATALOG_CACHE: dict[tuple[Path, Path], _CatalogCacheEntry] = {}
+
+
+StrategyResult: TypeAlias = (
+    CommandBuilder | Parser | InstallerCallable | Sequence[str] | Mapping[str, JSONValue] | JSONValue | None
+)
 
 
 @dataclass(frozen=True)
@@ -70,7 +84,16 @@ def register_catalog_tools(
     catalog_root: Path | None = None,
     schema_root: Path | None = None,
 ) -> CatalogSnapshot:
-    """Register catalog-backed tools with the provided *registry*."""
+    """Register catalog-backed tools with the provided registry instance.
+
+    Args:
+        registry: Registry that receives catalog tools. Defaults to the global registry.
+        catalog_root: Optional path overriding the catalog root directory.
+        schema_root: Optional path overriding the schema root directory.
+
+    Returns:
+        CatalogSnapshot: Snapshot describing the registered catalog.
+    """
     target = registry if registry is not None else DEFAULT_REGISTRY
     loader = ToolCatalogLoader(
         catalog_root=_resolve_catalog_root(catalog_root),
@@ -91,7 +114,16 @@ def initialize_registry(
     catalog_root: Path | None = None,
     schema_root: Path | None = None,
 ) -> CatalogSnapshot:
-    """Initialise *registry* from the catalog and return the resulting snapshot."""
+    """Initialise ``registry`` from the catalog and return the resulting snapshot.
+
+    Args:
+        registry: Registry that receives catalog tools. Defaults to the global registry.
+        catalog_root: Optional path overriding the catalog root directory.
+        schema_root: Optional path overriding the schema root directory.
+
+    Returns:
+        CatalogSnapshot: Snapshot describing the registered catalog.
+    """
     target = registry if registry is not None else DEFAULT_REGISTRY
     return register_catalog_tools(
         target,
@@ -101,6 +133,18 @@ def initialize_registry(
 
 
 def _resolve_catalog_root(candidate: Path | None) -> Path:
+    """Return the catalog root directory derived from ``candidate``.
+
+    Args:
+        candidate: User-supplied catalog root or ``None`` to use the default path.
+
+    Returns:
+        Path: Resolved catalog root directory.
+
+    Raises:
+        FileNotFoundError: If the default catalog directory cannot be located.
+    """
+
     if candidate is not None:
         return candidate
     project_root = get_pyqa_root()
@@ -111,31 +155,40 @@ def _resolve_catalog_root(candidate: Path | None) -> Path:
 
 
 def _materialize_tool(
-    definition: Any,
+    definition: ToolDefinition,
     strategies: Mapping[str, StrategyDefinition],
 ) -> Tool:
+    """Return a :class:`Tool` instance derived from ``definition``.
+
+    Args:
+        definition: Catalog tool definition describing the runtime and actions.
+        strategies: Strategy definitions keyed by identifier.
+
+    Returns:
+        Tool: Materialised tool ready for registration.
+    """
+
     runtime_config = _extract_runtime(definition, strategies)
-    documentation_value = _convert_documentation(getattr(definition, "documentation", None))
-    suppressions_tuple = _extract_suppressions(
-        getattr(getattr(definition, "diagnostics_bundle", None), "suppressions", None),
-    )
+    documentation_value = _convert_documentation(definition.components.documentation)
+    suppressions_tuple = _extract_suppressions(definition.components.diagnostics_bundle.suppressions)
     actions = tuple(
         _materialize_action(action, strategies, context=f"{definition.name}:{action.name}")
-        for action in getattr(definition, "actions", ())
+        for action in definition.components.actions
     )
 
     tool = Tool(
         name=definition.name,
         actions=actions,
-        phase=getattr(definition, "phase", "lint"),
-        before=getattr(definition, "before", ()),
-        after=getattr(definition, "after", ()),
-        languages=getattr(definition, "languages", ()),
-        file_extensions=getattr(definition, "file_extensions", ()),
-        config_files=getattr(definition, "config_files", ()),
-        description=getattr(definition, "description", ""),
-        auto_install=getattr(definition, "auto_install", False),
-        default_enabled=getattr(definition, "default_enabled", True),
+        phase=_normalize_phase_literal(definition.phase, context=definition.name),
+        before=definition.before,
+        after=definition.after,
+        languages=definition.languages,
+        file_extensions=definition.file_extensions,
+        config_files=definition.config_files,
+        description=definition.description or "",
+        auto_install=definition.auto_install,
+        default_enabled=definition.default_enabled,
+        automatically_fix=definition.automatically_fix,
         runtime=runtime_config.kind,
         package=runtime_config.package,
         min_version=runtime_config.min_version,
@@ -152,6 +205,12 @@ def _materialize_tool(
 
 
 def _apply_environment_tags(tool: Tool) -> None:
+    """Update tool enablement based on environment-sensitive tags.
+
+    Args:
+        tool: Tool definition whose default enablement may change based on environment.
+    """
+
     if not tool.tags:
         return
     available_map = {
@@ -171,41 +230,68 @@ def _apply_environment_tags(tool: Tool) -> None:
 
 
 def _materialize_action(
-    action: Any,
+    action: ActionDefinition,
     strategies: Mapping[str, StrategyDefinition],
     *,
     context: str,
 ) -> ToolAction:
+    """Return a materialised :class:`ToolAction` derived from catalog metadata.
+
+    Args:
+        action: Action definition describing the command, parser, and execution.
+        strategies: Strategy definitions keyed by identifier.
+        context: Human-readable context used for error messages.
+
+    Returns:
+        ToolAction: Fully initialised tool action ready for registration.
+
+    Raises:
+        CatalogIntegrityError: If the associated command or parser strategies are invalid.
+    """
+
     command_builder = _instantiate_command(action.command.reference, strategies, context=context)
     parser_instance = None
     if action.parser is not None:
         parser_instance = _instantiate_parser(action.parser.reference, strategies, context=context)
 
-    env_mapping = {str(key): str(value) for key, value in getattr(action, "env", {}).items()}
-
-    description = getattr(action, "description", "") or ""
-    filters = tuple(getattr(action, "filters", ()))
+    env_mapping = dict(action.execution.env.items())
+    description = action.description or ""
+    filters = action.execution.filters
 
     return ToolAction(
         name=action.name,
         command=command_builder,
-        is_fix=getattr(action, "is_fix", False),
-        append_files=getattr(action, "append_files", True),
+        is_fix=action.execution.is_fix,
+        append_files=action.execution.append_files,
         filter_patterns=filters,
-        ignore_exit=getattr(action, "ignore_exit", False),
+        ignore_exit=action.execution.ignore_exit,
         description=description,
-        timeout_s=getattr(action, "timeout_seconds", None),
+        timeout_s=action.execution.timeout_seconds,
         env=env_mapping,
         parser=parser_instance,
     )
 
 
 def _instantiate_command(
-    reference: Any,
+    reference: StrategyReference,
     strategies: Mapping[str, StrategyDefinition],
     *,
     context: str,
 ) -> CommandBuilder:
+    """Return a command builder resolved from ``reference``.
+
+    Args:
+        reference: Strategy reference describing the command implementation.
+        strategies: Registry of available strategy definitions.
+        context: Human-readable context used for error messages.
+
+    Returns:
+        CommandBuilder: Builder instance used to derive command arguments.
+
+    Raises:
+        CatalogIntegrityError: If the strategy is missing or returns unexpected data.
+    """
+
     strategy_definition = strategies.get(reference.strategy)
     if strategy_definition is None:
         raise CatalogIntegrityError(f"{context}: unknown command strategy '{reference.strategy}'")
@@ -214,17 +300,31 @@ def _instantiate_command(
             f"{context}: strategy '{reference.strategy}' is not a command strategy",
         )
     factory = _resolve_strategy_callable(strategy_definition)
-    config = _as_plain_json(reference.config)
+    config = _materialize_strategy_config(reference.config)
     instance = _call_strategy_factory(factory, config)
     return _ensure_command_builder(instance, context=context)
 
 
 def _instantiate_parser(
-    reference: Any,
+    reference: StrategyReference,
     strategies: Mapping[str, StrategyDefinition],
     *,
     context: str,
 ) -> Parser:
+    """Return a parser instance resolved from ``reference``.
+
+    Args:
+        reference: Strategy reference describing the parser implementation.
+        strategies: Registry of available strategy definitions.
+        context: Human-readable context used for error messages.
+
+    Returns:
+        Parser: Parser implementation aligned with :class:`ToolAction`.
+
+    Raises:
+        CatalogIntegrityError: If the strategy is missing or does not return a parser.
+    """
+
     strategy_definition = strategies.get(reference.strategy)
     if strategy_definition is None:
         raise CatalogIntegrityError(f"{context}: unknown parser strategy '{reference.strategy}'")
@@ -233,19 +333,33 @@ def _instantiate_parser(
             f"{context}: strategy '{reference.strategy}' is not a parser strategy",
         )
     factory = _resolve_strategy_callable(strategy_definition)
-    config = _as_plain_json(reference.config)
-    parser = cast(Parser, _call_strategy_factory(factory, config))
-    if not hasattr(parser, "parse"):
+    config = _materialize_strategy_config(reference.config)
+    parser_candidate = _call_strategy_factory(factory, config)
+    if not isinstance(parser_candidate, Parser):
         raise CatalogIntegrityError(f"{context}: parser strategy did not return a parser instance")
-    return parser
+    return parser_candidate
 
 
 def _instantiate_installer(
-    reference: Any,
+    reference: RuntimeInstallDefinition,
     strategies: Mapping[str, StrategyDefinition],
     *,
     context: str,
 ) -> InstallerCallable:
+    """Return an installer callable resolved from ``reference``.
+
+    Args:
+        reference: Strategy reference describing the installer implementation.
+        strategies: Registry of available strategy definitions.
+        context: Human-readable context used for error messages.
+
+    Returns:
+        InstallerCallable: Callable invoked to provision runtime dependencies.
+
+    Raises:
+        CatalogIntegrityError: If the strategy is missing or does not return a callable.
+    """
+
     strategy_definition = strategies.get(reference.strategy)
     if strategy_definition is None:
         raise CatalogIntegrityError(f"{context}: unknown installer strategy '{reference.strategy}'")
@@ -254,7 +368,8 @@ def _instantiate_installer(
             f"{context}: strategy '{reference.strategy}' is not an installer strategy",
         )
     factory = _resolve_strategy_callable(strategy_definition)
-    config = _as_plain_json(getattr(reference, "config", {}))
+    raw_config = getattr(reference, "config", {})
+    config = _materialize_strategy_config(raw_config)
     installer = _call_strategy_factory(factory, config)
     if not callable(installer):
         raise CatalogIntegrityError(
@@ -263,54 +378,92 @@ def _instantiate_installer(
     return cast(InstallerCallable, installer)
 
 
-def _convert_documentation(bundle: Any) -> ToolDocumentation | None:
+def _convert_documentation(bundle: DocumentationBundle | None) -> ToolDocumentation | None:
+    """Convert catalog documentation bundle to :class:`ToolDocumentation`.
+
+    Args:
+        bundle: Documentation bundle provided by the catalog.
+
+    Returns:
+        ToolDocumentation | None: Structured documentation or ``None`` when absent.
+    """
+
     if bundle is None:
         return None
-    help_entry = _to_tool_doc_entry(getattr(bundle, "help", None))
-    command_entry = _to_tool_doc_entry(getattr(bundle, "command", None))
-    shared_entry = _to_tool_doc_entry(getattr(bundle, "shared", None))
+    help_entry = _to_tool_doc_entry(bundle.help)
+    command_entry = _to_tool_doc_entry(bundle.command)
+    shared_entry = _to_tool_doc_entry(bundle.shared)
     if help_entry is None and command_entry is None and shared_entry is None:
         return None
     return ToolDocumentation(help=help_entry, command=command_entry, shared=shared_entry)
 
 
-def _to_tool_doc_entry(entry: Any) -> ToolDocumentationEntry | None:
+def _to_tool_doc_entry(entry: DocumentationEntry | None) -> ToolDocumentationEntry | None:
+    """Convert a documentation entry into a :class:`ToolDocumentationEntry`.
+
+    Args:
+        entry: Catalog documentation entry or ``None``.
+
+    Returns:
+        ToolDocumentationEntry | None: Converted documentation entry, when present.
+    """
+
     if entry is None:
         return None
-    format_value = getattr(entry, "format", "text")
-    content_value = getattr(entry, "content", None)
-    if content_value is None:
+    content = entry.content.strip()
+    if not content:
         return None
-    return ToolDocumentationEntry(format=str(format_value), content=str(content_value))
+    return ToolDocumentationEntry(format=entry.format, content=content)
 
 
-def _resolve_strategy_callable(definition: StrategyDefinition) -> Callable[..., Any]:
-    if definition.entry is not None:
-        module = importlib.import_module(definition.implementation)
-        attribute = getattr(module, definition.entry)
-    else:
-        module_path, _, attribute_name = definition.implementation.rpartition(".")
-        module = importlib.import_module(module_path)
-        attribute = getattr(module, attribute_name)
-    if not callable(attribute):
-        raise CatalogIntegrityError(
-            f"Strategy implementation '{definition.implementation}' is not callable",
-        )
-    return cast(Callable[..., Any], attribute)
+def _resolve_strategy_callable(definition: StrategyDefinition) -> StrategyCallable:
+    """Return the callable factory associated with ``definition``.
+
+    Args:
+        definition: Strategy definition sourced from the catalog snapshot.
+
+    Returns:
+        StrategyCallable: Factory callable that materialises strategy payloads.
+    """
+
+    return definition.build_factory()
 
 
-def _call_strategy_factory(factory: Callable[..., Any], config: Mapping[str, Any]) -> Any:
-    try:
+def _call_strategy_factory(
+    factory: StrategyCallable,
+    config: Mapping[str, JSONValue],
+) -> StrategyResult:
+    """Invoke ``factory`` with ``config`` and return the resulting payload.
+
+    Args:
+        factory: Strategy callable resolved from catalog metadata.
+        config: Normalised configuration mapping to pass to the strategy.
+
+    Returns:
+        StrategyResult: Payload produced by the strategy evaluation.
+    """
+
+    if config:
         return factory(config)
-    except TypeError:
-        if config:
-            raise
-        return factory()
+    return factory()
 
 
-def _ensure_command_builder(instance: Any, *, context: str) -> CommandBuilder:
-    if hasattr(instance, "build") and callable(instance.build):
-        return cast(CommandBuilder, instance)
+def _ensure_command_builder(instance: StrategyResult, *, context: str) -> CommandBuilder:
+    """Return a validated command builder derived from ``instance``.
+
+    Args:
+        instance: Strategy payload describing or implementing a command.
+        context: Human-readable context used for error messages.
+
+    Returns:
+        CommandBuilder: Builder object capable of constructing command arguments.
+
+    Raises:
+        CatalogIntegrityError: If ``instance`` cannot be converted into a builder.
+    """
+
+    if isinstance(instance, CommandBuilder):
+        return instance
     if isinstance(instance, Sequence) and not isinstance(instance, (str, bytes, bytearray)):
         deferred = DeferredCommand(tuple(str(part) for part in instance))
         return cast(CommandBuilder, deferred)
@@ -319,7 +472,38 @@ def _ensure_command_builder(instance: Any, *, context: str) -> CommandBuilder:
     )
 
 
-def _as_plain_json(value: Any) -> Any:
+def _materialize_strategy_config(raw: Mapping[str, JSONValue] | JSONValue) -> Mapping[str, JSONValue]:
+    """Return a plain mapping of strategy configuration entries.
+
+    Args:
+        raw: Raw configuration payload sourced from catalog metadata.
+
+    Returns:
+        Mapping[str, JSONValue]: Mutable mapping suitable for strategy invocation.
+
+    Raises:
+        CatalogIntegrityError: If ``raw`` is neither a mapping nor ``None``.
+    """
+
+    if isinstance(raw, Mapping):
+        return {str(key): _as_plain_json(value) for key, value in raw.items()}
+    if raw is None:
+        return {}
+    if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes, bytearray)):
+        raise CatalogIntegrityError("Strategy configuration must be a mapping when provided")
+    raise CatalogIntegrityError("Strategy configuration must be a mapping or null")
+
+
+def _as_plain_json(value: JSONValue) -> JSONValue:
+    """Return a JSON-compatible structure detached from catalog frozen types.
+
+    Args:
+        value: Raw JSON value drawn from catalog metadata.
+
+    Returns:
+        JSONValue: Copy of ``value`` with nested mappings converted to native containers.
+    """
+
     if isinstance(value, Mapping):
         return {str(key): _as_plain_json(item) for key, item in value.items()}
     if isinstance(value, tuple):
@@ -391,25 +575,37 @@ def _catalog_cache_key(catalog_root: Path, schema_root: Path | None) -> tuple[Pa
 
 @dataclass(frozen=True, slots=True)
 class _SuppressionBundle:
+    """Container holding suppression identifiers grouped by scope."""
+
     tests: tuple[str, ...]
     general: tuple[str, ...]
     duplicates: tuple[str, ...]
 
 
 def _extract_runtime(
-    definition: Any,
+    definition: ToolDefinition,
     strategies: Mapping[str, StrategyDefinition],
 ) -> _RuntimeConfig:
-    runtime = getattr(definition, "runtime", None)
-    kind = _normalize_runtime_kind(getattr(runtime, "kind", None), context=definition.name)
-    package = getattr(runtime, "package", None) if runtime is not None else None
-    min_version = getattr(runtime, "min_version", None) if runtime is not None else None
+    """Return runtime configuration resolved from ``definition``.
+
+    Args:
+        definition: Catalog tool definition containing runtime metadata.
+        strategies: Strategy definitions keyed by identifier.
+
+    Returns:
+        _RuntimeConfig: Normalised runtime configuration for the tool.
+    """
+
+    runtime = definition.runtime
+    kind = _normalize_runtime_kind(runtime.kind if runtime is not None else None, context=definition.name)
+    package = runtime.package if runtime is not None else None
+    min_version = runtime.min_version if runtime is not None else None
     version_command = _normalize_version_command(
-        getattr(runtime, "version_command", None) if runtime is not None else None,
+        runtime.version_command if runtime is not None else None,
         context=definition.name,
     )
     installers: tuple[InstallerCallable, ...] = ()
-    if runtime is not None and getattr(runtime, "install", None) is not None:
+    if runtime is not None and runtime.install is not None:
         installers = (
             _instantiate_installer(
                 runtime.install,
@@ -419,26 +615,67 @@ def _extract_runtime(
         )
     return _RuntimeConfig(
         kind=kind,
-        package=str(package) if package is not None else None,
-        min_version=str(min_version) if min_version is not None else None,
+        package=package,
+        min_version=min_version,
         version_command=version_command,
         installers=installers,
     )
 
 
-def _normalize_runtime_kind(raw: Any, *, context: str) -> ToolRuntimeKind:
-    candidate = getattr(raw, "value", raw)
-    if candidate is None:
+def _normalize_phase_literal(raw: str, *, context: str) -> PhaseLiteral:
+    """Return the validated execution phase literal for ``raw``.
+
+    Args:
+        raw: Phase identifier sourced from catalog metadata.
+        context: Human-readable context used for error messages.
+
+    Returns:
+        PhaseLiteral: Validated execution phase.
+
+    Raises:
+        CatalogIntegrityError: If ``raw`` is not a supported phase identifier.
+    """
+
+    literal = PHASE_LITERAL_MAP.get(raw)
+    if literal is None:
+        raise CatalogIntegrityError(f"{context}: unsupported phase '{raw}'")
+    return literal
+
+
+def _normalize_runtime_kind(raw: RuntimeType | str | None, *, context: str) -> ToolRuntimeKind:
+    """Return the normalised runtime kind derived from ``raw``.
+
+    Args:
+        raw: Runtime kind specified by the catalog.
+        context: Human-readable context used for error reporting.
+
+    Returns:
+        ToolRuntimeKind: Validated runtime kind literal.
+
+    Raises:
+        CatalogIntegrityError: If ``raw`` cannot be mapped to a supported runtime kind.
+    """
+
+    if raw is None:
         return DEFAULT_RUNTIME_KIND
-    candidate_str = str(candidate)
-    if candidate_str not in VALID_RUNTIME_NAMES:
-        raise CatalogIntegrityError(
-            f"{context}: unsupported runtime '{candidate_str}'",
-        )
-    return cast(ToolRuntimeKind, candidate_str)
+    candidate = str(raw)
+    literal = RUNTIME_LITERAL_MAP.get(candidate)
+    if literal is None:
+        raise CatalogIntegrityError(f"{context}: unsupported runtime '{candidate}'")
+    return literal
 
 
-def _normalize_version_command(value: Any, *, context: str) -> tuple[str, ...] | None:
+def _normalize_version_command(value: Sequence[str] | str | None, *, context: str) -> tuple[str, ...] | None:
+    """Return a normalised version command tuple.
+
+    Args:
+        value: Command specification sourced from the catalog definition.
+        context: Human-readable context used for error reporting.
+
+    Returns:
+        tuple[str, ...] | None: Command arguments or ``None`` when not configured.
+    """
+
     if value is None:
         return None
     if isinstance(value, (list, tuple, set)):
@@ -450,11 +687,20 @@ def _normalize_version_command(value: Any, *, context: str) -> tuple[str, ...] |
     )
 
 
-def _extract_suppressions(bundle: Any) -> _SuppressionBundle:
+def _extract_suppressions(bundle: SuppressionsDefinition | None) -> _SuppressionBundle:
+    """Return suppression bundle extracted from the catalog diagnostics configuration.
+
+    Args:
+        bundle: Suppressions definition provided by the catalog, when present.
+
+    Returns:
+        _SuppressionBundle: Structured suppression identifiers grouped by scope.
+    """
+
     if bundle is None:
         return _SuppressionBundle(tests=(), general=(), duplicates=())
     return _SuppressionBundle(
-        tests=tuple(getattr(bundle, "tests", ()) or ()),
-        general=tuple(getattr(bundle, "general", ()) or ()),
-        duplicates=tuple(getattr(bundle, "duplicates", ()) or ()),
+        tests=tuple(bundle.tests),
+        general=tuple(bundle.general),
+        duplicates=tuple(bundle.duplicates),
     )

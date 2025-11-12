@@ -43,6 +43,11 @@
       "description": "Whether PyQA may attempt to install the runtime automatically.",
       "default": false
     },
+    "automatically_fix": {
+      "type": "boolean",
+      "description": "Indicates whether fix-capable actions should run without explicit opt-in.",
+      "default": false
+    },
     "phase": {
       "type": "string",
       "description": "Execution phase used to order this tool among others.",
@@ -259,6 +264,25 @@
           "description": "Allow non-zero exit codes without marking the run as failed.",
           "default": false
         },
+        "exitCodes": {
+          "type": "object",
+          "description": "Categorisation of exit codes emitted by the action command.",
+          "additionalProperties": false,
+          "properties": {
+            "success": {
+              "$ref": "#/definitions/ExitCodeArray",
+              "description": "Exit codes that indicate the action completed successfully (e.g. ruff fix returning 1 after applying changes)."
+            },
+            "diagnostic": {
+              "$ref": "#/definitions/ExitCodeArray",
+              "description": "Exit codes that indicate diagnostics were produced; these are treated as code failures rather than orchestration failures."
+            },
+            "toolFailure": {
+              "$ref": "#/definitions/ExitCodeArray",
+              "description": "Exit codes that should be treated as hard tool failures even if diagnostics are present."
+            }
+          }
+        },
         "command": {
           "$ref": "#/definitions/CommandDefinition",
           "description": "Command execution strategy metadata."
@@ -287,6 +311,13 @@
           }
         }
       }
+    },
+    "ExitCodeArray": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "description": "Collection of integer exit codes."
     },
     "CommandDefinition": {
       "type": "object",

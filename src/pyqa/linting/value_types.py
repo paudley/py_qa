@@ -1,0 +1,187 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+"""Ensure pyqa value-type helpers expose ergonomic dunder methods."""
+
+from __future__ import annotations
+
+import inspect
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from types import ModuleType
+
+from pyqa.core.models import Diagnostic
+from pyqa.core.severity import Severity
+from pyqa.filesystem.paths import normalize_path_key
+from pyqa.interfaces.linting import PreparedLintState
+
+from .base import InternalLintReport, build_internal_report
+
+
+@dataclass(frozen=True, slots=True)
+class _ValueTypeContract:
+    """Describe required dunder methods for a value-type helper."""
+
+    module_path: str
+    qualname: str
+    required_methods: tuple[str, ...]
+
+
+_CONTRACTS: tuple[_ValueTypeContract, ...] = (
+    _ValueTypeContract(
+        module_path="pyqa.analysis.navigator",
+        qualname="NavigatorBucket",
+        required_methods=("__len__",),
+    ),
+    _ValueTypeContract(
+        module_path="pyqa.clean.runner",
+        qualname="CleanResult",
+        required_methods=("__bool__",),
+    ),
+    _ValueTypeContract(
+        module_path="pyqa.core.runtime.di",
+        qualname="ServiceContainer",
+        required_methods=("__contains__", "__len__"),
+    ),
+)
+
+
+def run_value_type_linter(
+    state: PreparedLintState,
+    *,
+    emit_to_logger: bool = True,
+) -> InternalLintReport:
+    """Validate that critical helper classes expose ergonomic dunder methods.
+
+    Args:
+        state: Prepared lint state describing the active workspace.
+        emit_to_logger: Compatibility flag; retained to match the internal linter
+            protocol although no logger output is produced directly.
+
+    Returns:
+        InternalLintReport: Aggregated diagnostics describing missing dunder
+        implementations.
+    """
+
+    _ = emit_to_logger
+    diagnostics: list[Diagnostic] = []
+    stdout_lines: list[str] = []
+    suppressions = getattr(state, "suppressions", None)
+
+    for contract in _CONTRACTS:
+        missing = _missing_methods(contract)
+        if not missing:
+            continue
+        file_path, line_number = _definition_location(contract)
+        message = f"{contract.qualname} is missing required dunder methods: {', '.join(sorted(missing))}"
+        normalized = normalize_path_key(file_path, base_dir=state.root)
+        if suppressions is not None:
+            absolute_path = file_path if file_path.is_absolute() else (state.root / file_path).resolve()
+            if suppressions.should_suppress(
+                absolute_path,
+                line_number,
+                tool="pyqa-value-types",
+                code="pyqa-value-types:missing-methods",
+            ):
+                continue
+        diagnostics.append(
+            Diagnostic(
+                file=normalized,
+                line=line_number,
+                column=None,
+                severity=Severity.ERROR,
+                message=message,
+                tool="pyqa-value-types",
+                code="pyqa-value-types:missing-methods",
+            ),
+        )
+        stdout_lines.append(f"{normalized}:{line_number}: {message}")
+
+    return build_internal_report(
+        tool="pyqa-value-types",
+        stdout=stdout_lines,
+        diagnostics=diagnostics,
+        files=(),
+    )
+
+
+def _missing_methods(contract: _ValueTypeContract) -> Sequence[str]:
+    """Return required methods from ``contract`` that the class omits.
+
+    Args:
+        contract: Contract describing the module path, class, and required methods.
+
+    Returns:
+        Sequence[str]: Tuple of method names that are missing on the class definition.
+    """
+
+    module = _import_module(contract.module_path)
+    if module is None:
+        return contract.required_methods
+    cls = getattr(module, contract.qualname, None)
+    if cls is None:
+        return contract.required_methods
+
+    missing = [method for method in contract.required_methods if not hasattr(cls, method)]
+    return tuple(missing)
+
+
+def _definition_location(contract: _ValueTypeContract) -> tuple[Path, int]:
+    """Return the source file path and line number for ``contract``.
+
+    Args:
+        contract: Contract describing the class to inspect.
+
+    Returns:
+        tuple[Path, int]: Tuple containing the path to the source file and the first line number.
+    """
+
+    module = _import_module(contract.module_path)
+    if module is None:
+        return _fallback_location(contract)
+
+    cls = getattr(module, contract.qualname, None)
+    if cls is None:
+        return _fallback_location(contract)
+
+    source_path = inspect.getsourcefile(cls)
+    if source_path is None:
+        return _fallback_location(contract)
+
+    try:
+        line_number = inspect.getsourcelines(cls)[1]
+    except (OSError, TypeError, ValueError):
+        line_number = 1
+    return Path(source_path), line_number
+
+
+def _import_module(path: str) -> ModuleType | None:
+    """Return the imported module for ``path`` when available.
+
+    Args:
+        path: Dotted module path to import.
+
+    Returns:
+        ModuleType | None: Imported module when it exists, otherwise ``None``.
+    """
+
+    try:
+        return __import__(path, fromlist=[path.rsplit(".", 1)[-1]])
+    except ImportError:
+        return None
+
+
+def _fallback_location(contract: _ValueTypeContract) -> tuple[Path, int]:
+    """Return a conservative file/line tuple when introspection fails.
+
+    Args:
+        contract: Contract describing the class to inspect.
+
+    Returns:
+        tuple[Path, int]: Tuple containing the inferred path and a best-effort line number.
+    """
+
+    return Path(contract.module_path.replace(".", "/") + ".py"), 1
+
+
+__all__ = ["run_value_type_linter"]

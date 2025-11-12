@@ -6,11 +6,13 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from typing import Any, Final
+from typing import Final
 
-from ..models import RawDiagnostic
-from ..severity import Severity
-from ..tools.base import ToolContext
+from pyqa.core.serialization import JsonValue, coerce_optional_int, coerce_optional_str
+from pyqa.core.severity import Severity
+
+from ..core.models import RawDiagnostic
+from ..interfaces.tools import ToolContext
 
 _TSC_PATTERN = re.compile(
     r"^(?P<file>[^:(\n]+)\((?P<line>\d+),(?P<col>\d+)\):\s*"
@@ -21,32 +23,49 @@ _ESLINT_WARNING_LEVEL: Final[int] = 1
 _TSC_ERROR_LABEL: Final[str] = "error"
 
 
-def parse_eslint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse ESLint JSON output."""
-    items = payload if isinstance(payload, list) else []
+def parse_eslint(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse ESLint JSON diagnostics into raw diagnostic objects.
+
+    Args:
+        payload: JSON payload produced by ESLint when invoked with ``--format json``.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics derived from the ESLint result set.
+    """
+    del context
+    items = payload if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)) else []
     results: list[RawDiagnostic] = []
     for entry in items:
         if not isinstance(entry, dict):
             continue
-        path = entry.get("filePath") or entry.get("filename")
-        for message in entry.get("messages", []) or []:
+        path = coerce_optional_str(entry.get("filePath")) or coerce_optional_str(entry.get("filename"))
+        messages = entry.get("messages")
+        if not isinstance(messages, Sequence):
+            continue
+        for message in messages:
             if not isinstance(message, dict):
                 continue
-            severity = message.get("severity", _ESLINT_WARNING_LEVEL)
-            if severity == _ESLINT_ERROR_LEVEL:
+            severity_level = coerce_optional_int(message.get("severity"))
+            if severity_level is None:
+                severity_level = _ESLINT_WARNING_LEVEL
+            if severity_level == _ESLINT_ERROR_LEVEL:
                 sev_enum = Severity.ERROR
-            elif severity == _ESLINT_WARNING_LEVEL:
+            elif severity_level == _ESLINT_WARNING_LEVEL:
                 sev_enum = Severity.WARNING
             else:
                 sev_enum = Severity.NOTICE
-            code = message.get("ruleId")
+            code = coerce_optional_str(message.get("ruleId"))
+            line = coerce_optional_int(message.get("line"))
+            column = coerce_optional_int(message.get("column"))
+            text = coerce_optional_str(message.get("message")) or ""
             results.append(
                 RawDiagnostic(
                     file=path,
-                    line=message.get("line"),
-                    column=message.get("column"),
+                    line=line,
+                    column=column,
                     severity=sev_enum,
-                    message=str(message.get("message", "")).strip(),
+                    message=text.strip(),
                     code=code,
                     tool="eslint",
                 ),
@@ -54,21 +73,30 @@ def parse_eslint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]
     return results
 
 
-def parse_stylelint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse stylelint JSON output."""
-    items = payload if isinstance(payload, list) else []
+def parse_stylelint(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse stylelint JSON diagnostics into raw diagnostic objects.
+
+    Args:
+        payload: JSON payload produced by stylelint.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics describing stylelint findings.
+    """
+    del context
+    items = payload if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)) else []
     results: list[RawDiagnostic] = []
     for entry in items:
         if not isinstance(entry, dict):
             continue
-        source = entry.get("source") or entry.get("file")
+        source = coerce_optional_str(entry.get("source")) or coerce_optional_str(entry.get("file"))
         warnings = entry.get("warnings")
-        if not isinstance(warnings, list):
+        if not isinstance(warnings, Sequence):
             continue
         for warning in warnings:
             if not isinstance(warning, dict):
                 continue
-            message = str(warning.get("text", "")).strip()
+            message = coerce_optional_str(warning.get("text")) or ""
             if not message:
                 continue
             severity_label = str(warning.get("severity", "warning")).lower()
@@ -76,23 +104,32 @@ def parse_stylelint(payload: Any, _context: ToolContext) -> Sequence[RawDiagnost
                 "error": Severity.ERROR,
                 "warning": Severity.WARNING,
             }.get(severity_label, Severity.WARNING)
-            rule = warning.get("rule")
+            rule = coerce_optional_str(warning.get("rule"))
             results.append(
                 RawDiagnostic(
                     file=source,
-                    line=warning.get("line"),
-                    column=warning.get("column"),
+                    line=coerce_optional_int(warning.get("line")),
+                    column=coerce_optional_int(warning.get("column")),
                     severity=severity,
                     message=message,
-                    code=str(rule) if rule else None,
+                    code=rule,
                     tool="stylelint",
                 ),
             )
     return results
 
 
-def parse_tsc(stdout: Sequence[str], _context: ToolContext) -> Sequence[RawDiagnostic]:
-    """Parse TypeScript compiler text diagnostics."""
+def parse_tsc(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse TypeScript compiler textual diagnostics.
+
+    Args:
+        stdout: Sequence of textual TypeScript compiler diagnostics.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics surfaced by ``tsc`` execution.
+    """
+    del context
     results: list[RawDiagnostic] = []
     for line in stdout:
         match = _TSC_PATTERN.match(line.strip())

@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from pyqa.config import Config
-from pyqa.tooling.project_scanner import build_project_scanner
+from pyqa.discovery.planners import build_project_scanner
 from pyqa.tools.base import ToolContext
 
 

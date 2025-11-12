@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 Blackcat Informatics® Inc.
+
+"""Runtime helpers (dependency injection, service wiring, etc.)."""
+
+from .di import ServiceContainer, ServiceResolutionError, register_default_services
+
+__all__ = [
+    "ServiceContainer",
+    "ServiceResolutionError",
+    "register_default_services",
+]

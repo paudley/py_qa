@@ -7,16 +7,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
-from pyqa.tooling.loader import (
+from pyqa.catalog.loader import (
     CatalogIntegrityError,
     CatalogValidationError,
     JSONValue,
     ToolCatalogLoader,
 )
+from pyqa.catalog.model_strategy import StrategyDefinition
+from pyqa.catalog.model_tool import ToolDefinition
+from pyqa.catalog.plugins import CatalogContribution
 
 
 def _write_json(path: Path, payload: JSONValue) -> None:
@@ -107,6 +111,7 @@ def test_loader_reads_tool_and_strategy_catalog(tmp_path: Path, schema_root: Pat
     assert len(tool_defs) == 1
     assert tool_defs[0].name == "sample-tool"
     assert tool_defs[0].actions[0].command.reference.strategy == "sample_command"
+    assert tool_defs[0].automatically_fix is False
     suppressions = tool_defs[0].diagnostics_bundle.suppressions
     assert suppressions is not None
     assert suppressions.tests == ("tests/**",)
@@ -247,6 +252,102 @@ def test_loader_merges_fragments(tmp_path: Path, schema_root: Path) -> None:
     assert tool.runtime.min_version == "3.12"
     assert tool.runtime.max_version == "3.13"
     assert tool.actions[0].command.reference.strategy == "noop_command"
+
+
+def test_loader_merges_plugin_contributions(tmp_path: Path, schema_root: Path, monkeypatch) -> None:
+    """Plugin-provided definitions should extend the materialised snapshot."""
+
+    catalog_root = tmp_path / "catalog"
+    strategies_dir = catalog_root / "strategies"
+    strategies_dir.mkdir(parents=True)
+
+    _write_json(
+        strategies_dir / "sample_command.json",
+        {
+            "schemaVersion": "1.0.0",
+            "id": "sample_command",
+            "type": "command",
+            "implementation": "tests.tooling.sample_strategies.command_builder",
+            "config": {},
+        },
+    )
+    _write_json(
+        catalog_root / "base_tool.json",
+        {
+            "schemaVersion": "1.0.0",
+            "name": "base-tool",
+            "description": "Base tool defined in the on-disk catalog.",
+            "languages": ["python"],
+            "phase": "lint",
+            "actions": [
+                {
+                    "name": "lint",
+                    "command": {
+                        "strategy": "sample_command",
+                        "config": {"args": ["echo", "base"]},
+                    },
+                },
+            ],
+        },
+    )
+
+    loader = ToolCatalogLoader(catalog_root=catalog_root, schema_root=schema_root)
+    base_checksum = loader.compute_checksum()
+
+    plugin_invocations: list[str] = []
+
+    def plugin_factory(context):  # type: ignore[no-untyped-def]
+        plugin_invocations.append(context.checksum)
+        plugin_strategy = StrategyDefinition.from_mapping(
+            {
+                "schemaVersion": "1.0.0",
+                "id": "plugin_command",
+                "type": "command",
+                "implementation": "tests.tooling.sample_strategies.command_builder",
+                "config": {},
+            },
+            source=context.catalog_root / "plugins" / "plugin_command.json",
+        )
+        plugin_tool = ToolDefinition.from_mapping(
+            {
+                "schemaVersion": "1.0.0",
+                "name": "plugin-tool",
+                "description": "Tool provided by a plugin contribution.",
+                "languages": ["python"],
+                "phase": "lint",
+                "actions": [
+                    {
+                        "name": "lint",
+                        "command": {
+                            "strategy": "plugin_command",
+                            "config": {"args": ["echo", "plugin"]},
+                        },
+                    },
+                ],
+            },
+            source=context.catalog_root / "plugins" / "plugin_tool.json",
+            catalog_root=context.catalog_root,
+        )
+        return CatalogContribution(
+            strategies=(plugin_strategy,),
+            tools=(plugin_tool,),
+        )
+
+    monkeypatch.setattr("pyqa.catalog.plugins.load_catalog_plugins", lambda: (plugin_factory,))
+
+    snapshot = loader.load_snapshot()
+
+    tool_names = [tool.name for tool in snapshot.tools]
+    assert tool_names == ["base-tool", "plugin-tool"]
+    factory = snapshot.strategy("plugin_command")
+    command_builder = factory({"args": ["echo", "via-plugin"]})
+    is_sequence = isinstance(command_builder, Sequence) and not isinstance(
+        command_builder,
+        (str, bytes, bytearray),
+    )
+    assert hasattr(command_builder, "build") or callable(command_builder) or is_sequence
+    assert snapshot.checksum != base_checksum
+    assert plugin_invocations == [base_checksum]
 
 
 def test_loader_errors_on_unknown_fragment(tmp_path: Path, schema_root: Path) -> None:

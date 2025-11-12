@@ -3,7 +3,7 @@
   "id": "command_download_binary",
   "type": "command",
   "description": "Download a tool-specific binary and compose CLI arguments from option mappings.",
-  "implementation": "pyqa.tooling.strategies.command_download_binary",
+  "implementation": "pyqa.catalog.strategies.command_download_binary",
   "config": {
     "version": {
       "type": "string",

@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from pyqa.tooling import CatalogIntegrityError
-from pyqa.tooling.catalog.model_actions import actions_array
-from pyqa.tooling.catalog.model_documentation import documentation_entry
-from pyqa.tooling.catalog.model_tool import ToolDefinition
+from pyqa.catalog.errors import CatalogIntegrityError
+from pyqa.catalog.model_actions import actions_array
+from pyqa.catalog.model_documentation import documentation_entry
+from pyqa.catalog.model_tool import ToolDefinition
 
 
 def test_tool_definition_parses_augmented_mapping(tmp_path: Path) -> None:
@@ -41,6 +41,7 @@ def test_tool_definition_parses_augmented_mapping(tmp_path: Path) -> None:
         "configFiles": ["pyproject.toml"],
         "defaultEnabled": True,
         "autoInstall": False,
+        "automatically_fix": True,
         "runtime": {
             "type": "python",
             "package": "example",
@@ -113,6 +114,8 @@ def test_tool_definition_parses_augmented_mapping(tmp_path: Path) -> None:
     assert tool.documentation is not None
     assert tool.documentation.help is not None
     assert tool.documentation.help.content == "catalog help"
+    assert tool.automatically_fix is True
+    assert tool.automatically_fix is True
 
 
 def test_documentation_entry_resolves_relative_to_source(tmp_path: Path) -> None:

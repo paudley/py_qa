@@ -26,15 +26,19 @@ Tool definitions describe a single linter/formatter/utility and are grouped by
 language (or utility class) inside `tooling/catalog/languages`. The schema
 captures the following high level areas:
 
-* **Metadata** – tool name, description, language tags, default enablement, and
-  phase ordering (`phase`, `before`, `after`).
+* **Metadata** – tool name, description, language tags, default enablement,
+  automatic fix behaviour (`automatically_fix`), and phase ordering (`phase`,
+  `before`, `after`).
 * **Runtime** – describes how the tool is executed. This can represent Python
   packages, npm packages, Go modules, standalone binaries, etc. Runtime
   sections optionally include an `install` block that references an installer
   strategy (such as `installer_download_artifact`).
 * **Actions** – every executable entry point a tool exposes (e.g. `lint`, `fix`,
   `check`). Each action references a command strategy, an optional parser, and
-  metadata such as appended files, exit-code handling, and timeouts.
+  metadata such as appended files, exit-code handling, and timeouts. The new
+  `exitCodes` block lets authors categorise exit statuses into success,
+  diagnostic, and tool-failure buckets so the orchestrator can distinguish
+  between operational failures and tools that merely reported issues.
 * **Diagnostics** – severity mapping and dedupe hints used by the orchestrator
   to normalise diagnostics from the tool.
 * **Suppressions** – default suppressions for tests/general usage along with
@@ -71,7 +75,7 @@ registry with reusable command/parser/post-processing behaviour. Each strategy
 entry includes:
 
 * `id`, `type`, and `implementation` – these must match the callable exported
-  from `pyqa.tooling.strategies`.
+  from `pyqa.catalog.strategies`.
 * `config` – a description of the configuration keys that tool JSON files may
   supply when referencing the strategy. While the schema keeps this section
   deliberately open (to avoid duplicating every possible field), it ensures at

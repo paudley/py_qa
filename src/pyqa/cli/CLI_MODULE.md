@@ -14,8 +14,8 @@ refactoring the command-line entrypoints.
   structured input models (dataclasses or Typer dependencies), services that
   transform or enrich that data, and a thin orchestration function (Typer
   command) that wires everything together.
-* **Shared Infrastructure**: Common behaviours live in `cli/shared.py`
-  (logging adapter, CLIError, registration helpers) and `cli/typer_ext.py`
+* **Shared Infrastructure**: Common behaviours live in `cli/core/shared.py`
+  (logging adapter, CLIError, registration helpers) and `cli/core/typer_ext.py`
   (sorted Typer wrappers). Prefer using these helpers instead of duplicating
   behaviours.
 * **Catalog-Driven Configuration**: Tool metadata, language-specific settings,
@@ -25,14 +25,14 @@ refactoring the command-line entrypoints.
 
 ## Key Modules
 
-* `lint.py`: Orchestrates lint execution by building structured inputs (`_lint_cli_models.py`), preparing state (`_lint_preparation.py`), and delegating to
-  runtime services (`_lint_runtime.py`, `_lint_progress.py`, `_lint_reporting.py`, `_lint_meta.py`).
-* `config_cmd.py`: Provides inspection utilities using `_config_cmd_services.py`
-  for reusable functionality (snapshot rendering, diffs, markdown output).
-* `quality.py`: Main command uses `build_quality_options` for CLI inputs and
-  service helpers for discovery, checks, and rendering.
-* `tool_info.py`: Renders catalog-driven tool metadata using services in
-  `_tool_info_services.py`.
+* `commands/lint/`: Owns lint execution (input models, preparation, runtime,
+  progress, reporting, metadata export).
+* `commands/config/`: Provides configuration inspection utilities, including
+  snapshot rendering, diffs, markdown output, and export helpers.
+* `commands/quality/`: Implements repository quality enforcement and rendering
+  services.
+* `commands/tool_info/`: Renders catalog-driven tool metadata through presenters
+  and advice helpers.
 
 ## Patterns & Best Practices
 
@@ -69,7 +69,8 @@ refactoring the command-line entrypoints.
   (e.g. `LintCLIInputs`, `QualityCLIOptions`) to keep type hints clear and limit the number of Typer parameters per function.
 * **Laziness**: The package-level `app` export in `pyqa.cli` is resolved lazily to avoid `runpy` warnings. External users should continue importing `pyqa.cli.app` normally.
 * **Backwards Compatibility**: `_build_config` now requires a pre-constructed `LintOptions` instance, avoiding the fragile keyword-based constructor that previously triggered lint errors.
-* **Wrappers**: Root-level launchers (e.g. `./lint`, `./tool-info`) all delegate through `pyqa.cli._cli_launcher.launch`, which handles interpreter selection, `PYTHONPATH`, and optional `uv` fallback.
+* **Wrappers**: Root-level launchers (e.g. `./lint`, `./tool-info`) all delegate through `pyqa.cli.launcher.launch`, which handles interpreter selection, `PYTHONPATH`, and optional `uv` fallback.
+* **Plugin Loading**: `register_commands` automatically invokes entry points declared under `pyqa.cli.plugins`, allowing third-party packages to append commands without modifying the core registry.
 * **Wrapper troubleshooting**: When wrappers misbehave, enable `PYQA_WRAPPER_VERBOSE=1` to see interpreter detection, check `PYQA_PYTHON`/`PYQA_UV` overrides, and confirm `.lint-cache/uv` is writable for automatic downloads.
 * **Wrapper failure modes**: A successful probe requires Python ≥3.12 and imports resolving under `src/`; otherwise the launcher falls back to `uv --project … run python -m pyqa.cli.app`. Propagated exit codes make it safe to rely on wrappers within CI.
 
@@ -93,5 +94,5 @@ refactoring the command-line entrypoints.
 
 * [SOLID CLI Recovery Plan](../SOLID_CLI.md)
 * [Shebang Detection Plan](../SHEBANG.md)
-* `src/pyqa/cli/shared.py`, `src/pyqa/cli/typer_ext.py`
+* `src/pyqa/cli/core/shared.py`, `src/pyqa/cli/core/typer_ext.py`
 * `tooling/catalog/languages/`

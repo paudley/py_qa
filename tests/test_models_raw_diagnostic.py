@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from pyqa.models import RawDiagnostic
+from pyqa.core.models import RawDiagnostic
 
 
 def test_raw_diagnostic_normalizes_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

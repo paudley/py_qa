@@ -6,11 +6,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import subprocess
 import sys
 import types
-from unittest.mock import Mock
+from pathlib import Path
 
 _stub_spacy = types.ModuleType("spacy")
 _stub_spacy.__version__ = "0.0.0"
@@ -23,15 +22,16 @@ def _stub_load(name: str):  # pragma: no cover - helper for stub module
 _stub_spacy.load = _stub_load  # type: ignore[attr-defined]
 sys.modules.setdefault("spacy", _stub_spacy)
 
+from pyqa.analysis.providers import NullContextResolver
+from pyqa.cache.context import CacheContext
+from pyqa.catalog import ToolCatalogLoader
+from pyqa.catalog.strategies import command_option_map
 from pyqa.config import Config
-from pyqa.execution.action_executor import (
+from pyqa.orchestration.action_executor import (
     ActionExecutor,
     ActionInvocation,
     ExecutionEnvironment,
 )
-from pyqa.execution.cache_context import CacheContext
-from pyqa.tooling import ToolCatalogLoader
-from pyqa.tooling.strategies import command_option_map
 from pyqa.tools.base import ToolAction, ToolContext
 
 _PYQA_ROOT = Path(__file__).resolve().parents[1]
@@ -53,7 +53,7 @@ def _remark_config(action: str) -> dict[str, object]:
 
 
 def test_remark_lint_command_build(tmp_path: Path) -> None:
-    cfg = Mock()
+    cfg = Config()
     cfg.execution.line_length = 120
     ctx = ToolContext(
         cfg=cfg,
@@ -78,7 +78,7 @@ def test_remark_lint_command_build(tmp_path: Path) -> None:
 
 
 def test_remark_fix_command_build(tmp_path: Path) -> None:
-    cfg = Mock()
+    cfg = Config()
     cfg.execution.line_length = 120
     ctx = ToolContext(
         cfg=cfg,
@@ -143,7 +143,7 @@ def test_remark_fix_rewrites_file_in_place(tmp_path: Path) -> None:
 
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
 
-    executor = ActionExecutor(runner=fake_runner, after_tool_hook=None)
+    executor = ActionExecutor(runner=fake_runner, after_tool_hook=None, context_resolver=NullContextResolver())
     outcome = executor.run_action(invocation, environment)
 
     assert outcome.returncode == 0

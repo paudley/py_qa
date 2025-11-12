@@ -9,8 +9,8 @@ from typing import Final
 
 from ..config import Config
 from .app import app
-from .config_builder import build_config
-from .options import LintOptions
+from .core.config_builder import build_config
+from .core.options import LintOptions
 
 __all__: Final[list[str]] = ["LintOptions", "app", "build_config", "_build_config"]
 
