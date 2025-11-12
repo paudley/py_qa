@@ -170,7 +170,9 @@ def _apply_workspace_protections(context: QualityConfigContext) -> None:
     if extra_skip not in license_config.exceptions:
         license_config.exceptions.append(extra_skip)
 
-
+        updated_exceptions = list(license_config.exceptions)
+        updated_exceptions.append(extra_skip)
+        license_config.exceptions = updated_exceptions
 __all__ = [
     "run_quality_checks",
     "determine_checks",
