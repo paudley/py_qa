@@ -113,7 +113,7 @@ Run `pyqa --help` or `pyqa <command> --help` for detailed options.
 
 ## Feature Highlights
 
-- **Explainable selection**: `pyqa lint --explain-tools[--json]` renders the tool order, reasons, eligibility, and registry descriptions. Tests assert table + JSON output so UX changes stay stable.
+- **Explainable selection**: `pyqa lint --explain-tools [--json]` renders the tool order, reasons, eligibility, and registry descriptions. Tests assert table + JSON output so UX changes stay stable.
 - **SOLID advice + highlighting**: `--advice` adds the SOLID panel, Refactor Navigator stats, and tree-sitter/spaCy highlighting. Exporters can embed the same data via `pyqa.reporting.emitters.write_pr_summary(include_advice=True)`.
 - **Value-type analysis**: opt into `[tool.pyqa.generic_value_types]` in `pyproject.toml` and run `pyqa lint --check-value-types-general` to enforce structural traits (for example repositories must implement `__len__` + `__contains__`).
 - **Deterministic envs**: `uv` manages every dependency. PyQA reuses system binaries only when they are newer and you have not forced `--use-local-linters`.
