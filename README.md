@@ -5,7 +5,10 @@
 # PyQA Lint Orchestrator (`pyqa_lint`)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://github.com/paudley/pyqa_lint/actions/workflows/release.yml/badge.svg)](.github/workflows/release.yml)
+[![PyPI](https://img.shields.io/pypi/v/pyqa_lint.svg)](https://pypi.org/project/pyqa_lint/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/pyqa_lint.svg)](https://pypi.org/project/pyqa_lint/)
+[![CI](https://github.com/paudley/pyqa_lint/actions/workflows/ci.yml/badge.svg)](https://github.com/paudley/pyqa_lint/actions/workflows/ci.yml)
+[![Release](https://github.com/paudley/pyqa_lint/actions/workflows/release.yml/badge.svg)](https://github.com/paudley/pyqa_lint/actions/workflows/release.yml)
 
 PyQA is Blackcat Informatics Inc.'s opinionated quality-assurance harness. It ships as the `pyqa_lint` package (install via `pip install pyqa_lint`) and can also be vendored as a git submodule so teams can run the Typer-based CLI (`pyqa`) with zero external dependencies.
 
