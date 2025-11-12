@@ -31,10 +31,24 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
 
-      - name: Install build
-        run: uv run pip install build
+      - name: Run tests
+        run: uv run pytest
+
+      - name: Run quality checks
+        run: uv run pyqa check-quality
+
       - name: Build artifacts
-        run: uv run python -m build
+        run: uv build
+
+      - name: Test installed wheel
+        run: |
+          set -euo pipefail
+          WHEEL=$(ls dist/pyqa_lint-*.whl | head -n 1)
+          TEST_ENV=$(mktemp -d)
+          uv venv "$TEST_ENV"
+          source "$TEST_ENV/bin/activate"
+          uv pip install "$WHEEL"
+          pytest -q
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
