@@ -26,6 +26,7 @@ _KNOWN_SECTIONS: set[str] = {
     "severity_rules",
     "license",
     "quality",
+    "generic_value_types",
     "clean",
     "update",
     "tools",
