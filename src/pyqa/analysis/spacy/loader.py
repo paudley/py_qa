@@ -286,9 +286,22 @@ def _run_subprocess(command: list[str]) -> bool:
             capture_output=True,
             text=True,
         )
-    except OSError:  # pragma: no cover - environment-specific failure
+    except OSError as exc:  # pragma: no cover - environment-specific failure
+        log_warn(f"Command {command[0]} failed with OSError: {exc}")
         return False
-    return completed.returncode == 0
+
+    if completed.returncode != 0:
+        # Log failure details for debugging
+        stderr = completed.stderr.strip() if completed.stderr else ""
+        stdout = completed.stdout.strip() if completed.stdout else ""
+        log_warn(
+            f"Command failed (exit {completed.returncode}): {' '.join(command)}\n"
+            f"stdout: {stdout[:200] if stdout else '(empty)'}\n"
+            f"stderr: {stderr[:200] if stderr else '(empty)'}"
+        )
+        return False
+
+    return True
 
 
 def _attempt_load(
