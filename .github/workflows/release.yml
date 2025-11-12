@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: MIT
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  attestations: write
+  id-token: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Build artifacts
+        run: uv run python -m build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-artifacts
+          path: dist/*
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: "dist/*"
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          attestations: true
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
