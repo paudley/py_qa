@@ -1057,6 +1057,32 @@
       "type": "bool"
     }
   },
+  "shellcheck": {
+    "args": {
+      "description": "Additional arguments appended to shellcheck.",
+      "type": "list[str]"
+    },
+    "exclude": {
+      "description": "Rule identifiers (SC####) to ignore.",
+      "type": "list[str]"
+    },
+    "external-sources": {
+      "description": "Allow following source statements outside the current directory.",
+      "type": "bool"
+    },
+    "severity": {
+      "description": "Minimum severity to report (error, warning, info, style).",
+      "type": "str"
+    },
+    "shell": {
+      "description": "Explicit shell dialect (bash, sh, dash, ksh, zsh, mksh).",
+      "type": "str"
+    },
+    "source-path": {
+      "description": "Additional lookup path for sourced files.",
+      "type": "path"
+    }
+  },
   "speccy": {
     "args": {
       "description": "Additional arguments appended to speccy.",
