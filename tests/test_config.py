@@ -66,7 +66,7 @@ def _build_options(
     use_local_linters: bool = False,
     strict_config: bool = False,
     line_length: int = 120,
-    sql_dialect: str = "postgresql",
+    sql_dialect: str = "postgres",
     python_version: str | None = None,
     max_complexity: int | None = None,
     max_arguments: int | None = None,

@@ -117,6 +117,7 @@ def test_initialize_registry_real_catalog(schema_root: Path, tmp_path: Path) -> 
         "ruff",
         "ruff-format",
         "selene",
+        "shellcheck",
         "shfmt",
         "speccy",
         "sqlfluff",

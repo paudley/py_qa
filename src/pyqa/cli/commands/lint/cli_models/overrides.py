@@ -23,7 +23,7 @@ from .constants import (
 
 def _override_formatting_dependency(
     line_length: Annotated[int, typer.Option(120, "--line-length", help=LINE_LENGTH_HELP)],
-    sql_dialect: Annotated[str, typer.Option("postgresql", "--sql-dialect", help=SQL_DIALECT_HELP)],
+    sql_dialect: Annotated[str, typer.Option("postgres", "--sql-dialect", help=SQL_DIALECT_HELP)],
     python_version: Annotated[str | None, typer.Option(None, "--python-version", help=PYTHON_VERSION_HELP)],
 ) -> OverrideFormattingParams:
     """Return formatting overrides shared across compatible tools.

@@ -38,7 +38,7 @@ line-length = 88
     payload = json.loads(stdout)
     assert payload["execution"]["jobs"] == 3
     assert payload["execution"]["line_length"] == 120
-    assert payload["execution"]["sql_dialect"] == "postgresql"
+    assert payload["execution"]["sql_dialect"] == "postgres"
     assert payload["tool_settings"]["black"]["line-length"] == 88
 
 

@@ -112,11 +112,12 @@ Given a prepared lint state, tool selection proceeds as follows:
 ### Tool catalogue snapshot
 
 * **External** (catalog-sourced): black, isort, prettier, ruff-format, shfmt,
+  shellcheck,
   actionlint, bandit, cargo-clippy, cargo-fmt, checkmake, cpplint,
   dockerfilelint, dotenv-linter, eslint, gofmt, golangci-lint, gts, hadolint,
   luacheck, lualint, mdformat, perlcritic, perltidy, phplint, pylint,
   pyupgrade, remark-lint, ruff, selene, speccy, sqlfluff, stylelint, tombi,
-  tsc, yamllint, kube-linter, mypy, pyright (38 tools in total).
+  tsc, yamllint, kube-linter, mypy, pyright (39 tools in total).
 * **Internal** (phase‑8/10, repo-agnostic): docstrings, suppressions, types,
   closures, signatures, cache, value-types, license-header, copyright,
   python-hygiene, file-size.

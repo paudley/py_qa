@@ -10,7 +10,10 @@ name = "pyqa_lint"
 version = "0.3.0"
 description = "Polyglot lint orchestration toolkit"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = { text = "MIT License" }
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+]
 requires-python = ">=3.13"
 dependencies = [
     "autopep8>=2.3.2",
