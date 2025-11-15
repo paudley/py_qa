@@ -137,6 +137,12 @@
     "arguments": true,
     "strict": false
   },
+  "shellcheck": {
+    "line_length": false,
+    "complexity": false,
+    "arguments": true,
+    "strict": false
+  },
   "phplint": {
     "line_length": false,
     "complexity": false,

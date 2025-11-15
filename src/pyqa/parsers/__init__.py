@@ -21,6 +21,7 @@ from .misc import (
     parse_golangci_lint,
     parse_perlcritic,
     parse_phplint,
+    parse_shellcheck,
     parse_shfmt,
     parse_tombi,
 )
@@ -55,6 +56,7 @@ __all__ = [
     "parse_remark",
     "parse_ruff",
     "parse_selene",
+    "parse_shellcheck",
     "parse_shfmt",
     "parse_speccy",
     "parse_sqlfluff",

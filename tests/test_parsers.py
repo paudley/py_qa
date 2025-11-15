@@ -32,6 +32,7 @@ from pyqa.parsers import (
     parse_remark,
     parse_ruff,
     parse_selene,
+    parse_shellcheck,
     parse_shfmt,
     parse_speccy,
     parse_sqlfluff,
@@ -111,6 +112,23 @@ def test_parse_mypy_single_object() -> None:
     assert diag.line == 5
     assert diag.code == "assignment"
     assert diag.severity.value == "error"
+
+
+def test_parse_shellcheck() -> None:
+    parser = JsonParser(parse_shellcheck)
+    stdout = """
+    [
+      {"file": "scripts/run.sh", "line": 5, "column": 2, "level": "info", "code": 2086, "message": "Double quote to prevent globbing."}
+    ]
+    """
+    diags = parser.parse(stdout, "", context=_ctx())
+    assert len(diags) == 1
+    diag = diags[0]
+    assert diag.file == "scripts/run.sh"
+    assert diag.line == 5
+    assert diag.column == 2
+    assert diag.code == "SC2086"
+    assert diag.severity.value == "notice"
 
 
 def test_parse_actionlint() -> None:

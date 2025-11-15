@@ -37,6 +37,12 @@ CHECKMAKE_SEVERITY_MAP: Final[dict[str, Severity]] = {
     "warning": Severity.WARNING,
     "info": Severity.NOTICE,
 }
+SHELLCHECK_SEVERITY_MAP: Final[dict[str, Severity]] = {
+    "error": Severity.ERROR,
+    "warning": Severity.WARNING,
+    "info": Severity.NOTICE,
+    "style": Severity.NOTE,
+}
 
 
 def parse_shfmt(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDiagnostic]:
@@ -283,6 +289,71 @@ def parse_cpplint(stdout: Sequence[str], context: ToolContext) -> Sequence[RawDi
     return results
 
 
+def parse_shellcheck(payload: JsonValue, context: ToolContext) -> Sequence[RawDiagnostic]:
+    """Parse shellcheck JSON payload into canonical diagnostics.
+
+    Args:
+        payload: Parsed JSON payload emitted by shellcheck.
+        context: Tool execution context supplied by the orchestrator.
+
+    Returns:
+        Sequence[RawDiagnostic]: Diagnostics describing shellcheck findings.
+    """
+
+    del context
+    diagnostics: list[RawDiagnostic] = []
+    for entry in _iter_shellcheck_entries(payload):
+        message = coerce_optional_str(entry.get("message"))
+        if not message:
+            continue
+        severity = map_severity(
+            entry.get("level"),
+            SHELLCHECK_SEVERITY_MAP,
+            Severity.WARNING,
+        )
+        location = DiagnosticLocation(
+            file=coerce_optional_str(entry.get("file")),
+            line=coerce_optional_int(entry.get("line")),
+            column=coerce_optional_int(entry.get("column")),
+        )
+        details = DiagnosticDetails(
+            severity=severity,
+            message=message.strip(),
+            tool="shellcheck",
+            code=_format_shellcheck_code(entry.get("code")),
+        )
+        diagnostics.append(create_spec(location=location, details=details).build())
+    return diagnostics
+
+
+def _iter_shellcheck_entries(payload: JsonValue) -> tuple[Mapping[str, JsonValue], ...]:
+    """Return shellcheck diagnostic entries regardless of payload shape."""
+
+    if isinstance(payload, Mapping):
+        comments = payload.get("comments")
+        if comments is not None:
+            return tuple(mapping_sequence(comments))
+        return tuple(mapping_sequence(payload))
+    return tuple(mapping_sequence(payload))
+
+
+def _format_shellcheck_code(value: JsonValue | None) -> str | None:
+    """Return shellcheck rule identifiers prefixed with ``SC``."""
+
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return f"SC{value}"
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        numeric = int(text)
+    except ValueError:
+        return text
+    return f"SC{numeric}"
+
+
 _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
 _TOMBI_HEADER_RE = re.compile(
     r"^(?P<level>Error|Warning|Info|Hint|Note):\s*(?P<message>.+)$",
@@ -520,6 +591,7 @@ __all__ = [
     "parse_golangci_lint",
     "parse_perlcritic",
     "parse_phplint",
+    "parse_shellcheck",
     "parse_shfmt",
     "parse_tombi",
 ]

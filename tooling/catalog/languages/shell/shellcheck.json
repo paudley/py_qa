@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "shellcheck",
+  "description": "Static analysis for POSIX and bash shell scripts.",
+  "languages": ["shell"],
+  "phase": "lint",
+  "fileExtensions": [".sh", ".bash", ".zsh"],
+  "runtime": {
+    "type": "binary",
+    "versionCommand": ["shellcheck", "--version"]
+  },
+  "options": [
+    {
+      "name": "severity",
+      "type": "str",
+      "description": "Minimum severity to report (error, warning, info, style)."
+    },
+    {
+      "name": "shell",
+      "type": "str",
+      "description": "Explicit shell dialect (bash, sh, dash, ksh, zsh, mksh)."
+    },
+    {
+      "name": "exclude",
+      "type": "list[str]",
+      "description": "Rule identifiers (SC####) to ignore."
+    },
+    {
+      "name": "source-path",
+      "type": "path",
+      "aliases": ["source_path"],
+      "description": "Additional lookup path for sourced files."
+    },
+    {
+      "name": "external-sources",
+      "type": "bool",
+      "aliases": ["external_sources"],
+      "description": "Allow following source statements outside the current directory."
+    },
+    {
+      "name": "args",
+      "type": "list[str]",
+      "description": "Additional arguments appended to shellcheck."
+    }
+  ],
+  "actions": [
+    {
+      "name": "lint",
+      "command": {
+        "strategy": "command_option_map",
+        "config": {
+          "base": ["shellcheck", "--color=never", "--format=json"],
+          "appendFiles": false,
+          "options": [
+            {
+              "setting": "severity",
+              "type": "value",
+              "flag": "--severity="
+            },
+            {
+              "setting": "shell",
+              "type": "value",
+              "flag": "--shell="
+            },
+            {
+              "setting": "exclude",
+              "type": "args",
+              "flag": "--exclude",
+              "joinWith": ","
+            },
+            {
+              "setting": ["source-path", "source_path"],
+              "type": "path",
+              "flag": "--source-path"
+            },
+            {
+              "setting": ["external-sources", "external_sources"],
+              "type": "flag",
+              "flag": "--external-sources"
+            },
+            {
+              "setting": "args",
+              "type": "args"
+            }
+          ]
+        }
+      },
+      "parser": {
+        "strategy": "parser_json",
+        "config": {
+          "transform": "pyqa.parsers.misc.parse_shellcheck"
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "help": {
+      "path": "docs/shellcheck_help.txt",
+      "format": "text"
+    },
+    "commandHelp": {
+      "path": "docs/shellcheck_cmd_help.txt",
+      "format": "text"
+    }
+  }
+}

@@ -1,4 +1,4 @@
-sqlfluff lint --format json --dialect postgresql --help
+sqlfluff lint --format json --dialect postgres --help
 
 Usage: sqlfluff lint [OPTIONS] [PATHS]...
 
